@@ -1,0 +1,4 @@
+sdk.dir=C:\Android\Sdk
+car.api.token=
+car.api.primary=http://100.82.19.36:8790
+car.api.secondary=http://192.168.68.66:8790

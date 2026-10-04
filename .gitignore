@@ -1,0 +1,47 @@
+# Gradle and build outputs
+.gradle/
+.kotlin/
+build/
+app/build/
+
+# Local configuration, keys, and secrets
+local.properties
+secrets.properties
+*.keystore
+*.jks
+
+# IDE and native build caches
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Distribution and APK builds
+dist/
+*.apk
+_installed_*.apk
+
+# Root logs, dumps, and temporary scratch files
+*.log
+*.tmp
+*.part
+*.xml
+_count_tests.py
+_direct_smoke_*.txt
+_media_session_*.txt
+_v062_android_test.txt
+backup/
+debug/
+
+# Python bridge runtime, secrets, and caches (preserving bridge source code)
+bridge/.venv/
+bridge/.env
+bridge/data/
+bridge/cache/
+bridge/logs/
+bridge/__pycache__/
+bridge/**/__pycache__/
+*.session
+*.session-journal
+*.session-*
