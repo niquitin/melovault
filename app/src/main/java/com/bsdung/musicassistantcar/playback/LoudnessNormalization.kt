@@ -14,11 +14,8 @@ import kotlin.math.pow
  *
  * For valid metadata:
  *   raw_gain_db = TARGET_LUFS - integrated_lufs
- *   if raw_gain_db > 0:
- *       safe_gain_db = TRUE_PEAK_CEILING_DBTP - true_peak_dbtp
- *       applied_gain_db = min(raw_gain_db, safe_gain_db)
- *   else:
- *       applied_gain_db = raw_gain_db
+ *   peak_safe_gain_db = TRUE_PEAK_CEILING_DBTP - true_peak_dbtp
+ *   applied_gain_db = min(raw_gain_db, peak_safe_gain_db)
  *
  * Any missing, invalid, or unsupported metadata returns 0.0 dB (bypass / unity).
  */
@@ -49,12 +46,8 @@ object LoudnessNormalization {
         if (analysisVersion == null || analysisVersion != SUPPORTED_ANALYSIS_VERSION) return 0.0f
 
         val rawGainDb = TARGET_LUFS - integratedLufs
-        val appliedGainDb = if (rawGainDb > 0.0) {
-            val safeGainDb = TRUE_PEAK_CEILING_DBTP - truePeakDbtp
-            min(rawGainDb, safeGainDb)
-        } else {
-            rawGainDb
-        }
+        val peakSafeGainDb = TRUE_PEAK_CEILING_DBTP - truePeakDbtp
+        val appliedGainDb = min(rawGainDb, peakSafeGainDb)
 
         if (!appliedGainDb.isFinite()) return 0.0f
         return appliedGainDb.toFloat()
