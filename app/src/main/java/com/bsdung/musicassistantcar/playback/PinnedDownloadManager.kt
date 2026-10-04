@@ -113,14 +113,13 @@ class PinnedDownloadManager(
             return
         }
 
-        val streamUrl = apiClient.streamUri(track.id).toString()
-        val headers = apiClient.authorizationHeaders()
-
         notifyStarted(trackId)
 
         executor.submit {
             var partFile: File? = null
             try {
+                val streamUrl = apiClient.streamUri(track.id).toString()
+                val headers = apiClient.authorizationHeaders()
                 val storageDir = store.getStorageDirectory()
                 if (!storageDir.exists()) {
                     storageDir.mkdirs()
