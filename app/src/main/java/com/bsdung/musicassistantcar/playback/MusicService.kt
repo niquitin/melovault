@@ -2,6 +2,7 @@ package com.bsdung.musicassistantcar.playback
 
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -16,7 +17,10 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
@@ -51,6 +55,20 @@ class MusicService : MediaLibraryService() {
         private const val KEY_QUEUE_POSITION_MS = "resume_queue_position_ms"
         private const val PERSIST_INTERVAL_MS = 10_000L
         private const val NETWORK_RECOVERY_COOLDOWN_MS = 5_000L
+        const val KEY_LOUDNESS_NORMALIZATION = "loudness_normalization"
+    }
+
+    val gainAudioProcessor = GainAudioProcessor()
+
+    private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+        if (key == KEY_LOUDNESS_NORMALIZATION) {
+            val enabled = prefs.getBoolean(KEY_LOUDNESS_NORMALIZATION, true)
+            Log.i(TAG, "Loudness normalization preference changed: enabled=$enabled")
+            gainAudioProcessor.isNormalizationEnabled = enabled
+            if (::player.isInitialized) {
+                applyNormalizationForMediaItem(player.currentMediaItem)
+            }
+        }
     }
 
     private lateinit var player: ExoPlayer
@@ -99,13 +117,16 @@ class MusicService : MediaLibraryService() {
 
         trackResumeStore = TrackResumeStore.create(this)
 
-        val mobile = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-            .getBoolean("mobile_320", false)
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        val mobile = prefs.getBoolean("mobile_320", false)
         PlaybackQuality.current = if (mobile) {
             StreamQuality.MOBILE_320
         } else {
             StreamQuality.ORIGINAL
         }
+        val normEnabled = prefs.getBoolean(KEY_LOUDNESS_NORMALIZATION, true)
+        gainAudioProcessor.isNormalizationEnabled = normEnabled
+        prefs.registerOnSharedPreferenceChangeListener(prefsListener)
 
         catalog = RemoteCatalog()
         historyTracker = PlayHistoryTracker { mediaId ->
@@ -147,7 +168,22 @@ class MusicService : MediaLibraryService() {
             )
             .build()
 
+        val renderersFactory = object : DefaultRenderersFactory(this) {
+            override fun buildAudioSink(
+                context: Context,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean,
+            ): AudioSink {
+                return DefaultAudioSink.Builder(context)
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .setAudioProcessors(arrayOf(gainAudioProcessor))
+                    .build()
+            }
+        }
+
         player = ExoPlayer.Builder(this)
+            .setRenderersFactory(renderersFactory)
             .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
             .build()
@@ -188,6 +224,7 @@ class MusicService : MediaLibraryService() {
                 if (playbackState == Player.STATE_READY) {
                     val currentIndex = player.currentMediaItemIndex
                     val queueSize = player.mediaItemCount
+                    applyNormalizationForMediaItem(player.currentMediaItem)
                     lazyResolveDriveFile(currentIndex)
                     val nextIndex = currentIndex + 1
                     if (nextIndex < queueSize) {
@@ -316,6 +353,7 @@ class MusicService : MediaLibraryService() {
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                applyNormalizationForMediaItem(mediaItem)
                 val reasonName = when (reason) {
                     Player.MEDIA_ITEM_TRANSITION_REASON_AUTO -> "AUTO"
                     Player.MEDIA_ITEM_TRANSITION_REASON_SEEK -> "SEEK"
@@ -667,6 +705,9 @@ class MusicService : MediaLibraryService() {
                 val current = runCatching { player.getMediaItemAt(index) }.getOrNull()
                 if (current?.mediaId == mediaId) {
                     player.replaceMediaItem(index, resolved)
+                    if (index == player.currentMediaItemIndex) {
+                        applyNormalizationForMediaItem(resolved)
+                    }
                     Log.i(TAG, "lazyResolveDriveFile: replaceMediaItem index=$index id=$driveFileId")
                 } else {
                     Log.i(
@@ -807,8 +848,24 @@ class MusicService : MediaLibraryService() {
         controllerInfo: MediaSession.ControllerInfo,
     ): MediaLibrarySession? = librarySession
 
+    fun applyNormalizationForMediaItem(mediaItem: MediaItem?) {
+        gainAudioProcessor.resetGain()
+        gainAudioProcessor.applyMediaItem(mediaItem, gainAudioProcessor.isNormalizationEnabled)
+        val mediaId = mediaItem?.mediaId ?: "none"
+        val appliedGain = gainAudioProcessor.appliedGainDb
+        Log.i(
+            TAG,
+            "applyNormalizationForMediaItem: mediaId=$mediaId, " +
+                "enabled=${gainAudioProcessor.isNormalizationEnabled}, " +
+                "appliedGainDb=${appliedGain}dB, mult=${gainAudioProcessor.gainMultiplier}",
+        )
+    }
+
     override fun onDestroy() {
         Log.i(TAG, "onDestroy: Tearing down MusicService")
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            .unregisterOnSharedPreferenceChangeListener(prefsListener)
+        gainAudioProcessor.reset()
         persistHandler.removeCallbacks(persistRunnable)
         persistPlaybackState()
         saveCurrentTrackResume()

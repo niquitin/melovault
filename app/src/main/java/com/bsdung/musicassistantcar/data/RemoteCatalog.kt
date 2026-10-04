@@ -391,7 +391,7 @@ class RemoteCatalog(
             page.coerceAtLeast(0) * pageSize,
         ).map(::trackItem)
 
-    fun trackItem(track: CarTrack): MediaItem {
+    fun trackExtras(track: CarTrack): android.os.Bundle {
         val extras = android.os.Bundle()
         if (track.duration != null && track.duration > 0.0) {
             extras.putLong("duration_ms", (track.duration * 1000).toLong())
@@ -403,6 +403,15 @@ class RemoteCatalog(
         track.sourceSampleRate?.let { extras.putInt("sample_rate", it) }
         track.sourceChannels?.let { extras.putInt("channels", it) }
         track.sourceType?.let { extras.putString("source_type", it) }
+        track.loudnessLufs?.let { extras.putDouble("loudness_lufs", it) }
+        track.truePeakDbtp?.let { extras.putDouble("true_peak_dbtp", it) }
+        track.loudnessRangeLu?.let { extras.putDouble("loudness_range_lu", it) }
+        track.loudnessAnalysisVersion?.let { extras.putInt("loudness_analysis_version", it) }
+        return extras
+    }
+
+    fun trackItem(track: CarTrack): MediaItem {
+        val extras = trackExtras(track)
         return MediaItem.Builder()
             .setMediaId("$TRACK_PREFIX${track.id}")
             .setUri(api.streamUri(track.id))

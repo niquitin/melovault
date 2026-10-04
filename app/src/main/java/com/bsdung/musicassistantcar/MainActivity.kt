@@ -616,6 +616,10 @@ class MainActivity : AppCompatActivity() {
         binding.signalPathButton?.setOnClickListener {
             showSignalPathSheet()
         }
+        binding.signalPathButton?.setOnLongClickListener {
+            showLoudnessSettingsDialog()
+            true
+        }
         binding.technicalInfoView.setOnClickListener {
             showSignalPathSheet()
         }
@@ -2246,11 +2250,46 @@ class MainActivity : AppCompatActivity() {
         bindingDialog.stageNetworkTitle.text = networkStage
 
         // 5. PLAYER
-        bindingDialog.stagePlayerTitle.text = "Media3 / ExoPlayer"
+        val isNormEnabled = getSharedPreferences("music_assistant_car", MODE_PRIVATE)
+            .getBoolean("loudness_normalization", true)
+        val normState = if (isNormEnabled) {
+            getString(R.string.loudness_normalization_on)
+        } else {
+            getString(R.string.loudness_normalization_off)
+        }
+        bindingDialog.stagePlayerTitle.text = "Media3 / ExoPlayer (Chuẩn hóa: $normState)"
+        bindingDialog.stagePlayerTitle.setOnClickListener {
+            showLoudnessSettingsDialog()
+        }
 
         // 6. OUTPUT
         bindingDialog.stageOutputPipeline.text = "Android system audio pipeline"
         bindingDialog.stageOutputBitPerfect.text = "Bit-perfect: Not verified"
+    }
+
+    private fun showLoudnessSettingsDialog() {
+        val prefs = getSharedPreferences("music_assistant_car", MODE_PRIVATE)
+        val current = prefs.getBoolean("loudness_normalization", true)
+        val options = arrayOf(
+            getString(R.string.loudness_normalization_on),
+            getString(R.string.loudness_normalization_off),
+        )
+        val checkedItem = if (current) 0 else 1
+        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            .setTitle(R.string.loudness_normalization_title)
+            .setSingleChoiceItems(options, checkedItem) { dialog, which ->
+                val enabled = (which == 0)
+                prefs.edit().putBoolean("loudness_normalization", enabled).apply()
+                dialog.dismiss()
+                Toast.makeText(
+                    this,
+                    "${getString(R.string.loudness_normalization_title)}: ${options[which]}",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                renderSignalPathInDialog()
+            }
+            .setNegativeButton("Đóng", null)
+            .show()
     }
 
     private fun showTrackActionSheet(track: LibraryItem.Track) {

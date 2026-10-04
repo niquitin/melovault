@@ -1,4 +1,7 @@
 <resources>
     <string name="app_name">MeloVault</string>
     <string name="tagline">Your Personal Music Vault</string>
+    <string name="loudness_normalization_title">Chuẩn hóa âm lượng</string>
+    <string name="loudness_normalization_on">Bật</string>
+    <string name="loudness_normalization_off">Tắt</string>
 </resources>

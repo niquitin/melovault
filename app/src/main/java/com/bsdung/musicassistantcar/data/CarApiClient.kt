@@ -50,6 +50,10 @@ data class CarTrack(
     val sourceSampleRate: Int? = null,
     val sourceChannels: Int? = null,
     val sourceType: String? = null,
+    val loudnessLufs: Double? = null,
+    val truePeakDbtp: Double? = null,
+    val loudnessRangeLu: Double? = null,
+    val loudnessAnalysisVersion: Int? = null,
 )
 
 data class DriveRoot(
@@ -858,7 +862,7 @@ class CarApiClient {
             }
         }
 
-    private fun parseTrack(item: JSONObject): CarTrack {
+    internal fun parseTrack(item: JSONObject): CarTrack {
         val sourceFormat = cleanString(item, "source_format").takeIf { it.isNotBlank() }
         val sourceSizeBytes = if (item.has("source_size_bytes") && !item.isNull("source_size_bytes")) {
             item.optLong("source_size_bytes")
@@ -882,6 +886,26 @@ class CarApiClient {
             null
         }
         val sourceType = cleanString(item, "source_type").takeIf { it.isNotBlank() }
+        val loudnessLufs = if (item.has("loudness_lufs") && !item.isNull("loudness_lufs")) {
+            runCatching { item.getDouble("loudness_lufs") }.getOrNull()
+        } else {
+            null
+        }
+        val truePeakDbtp = if (item.has("true_peak_dbtp") && !item.isNull("true_peak_dbtp")) {
+            runCatching { item.getDouble("true_peak_dbtp") }.getOrNull()
+        } else {
+            null
+        }
+        val loudnessRangeLu = if (item.has("loudness_range_lu") && !item.isNull("loudness_range_lu")) {
+            runCatching { item.getDouble("loudness_range_lu") }.getOrNull()
+        } else {
+            null
+        }
+        val loudnessAnalysisVersion = if (item.has("loudness_analysis_version") && !item.isNull("loudness_analysis_version")) {
+            runCatching { item.getInt("loudness_analysis_version") }.getOrNull()
+        } else {
+            null
+        }
 
         return CarTrack(
             id = item.getInt("id"),
@@ -908,7 +932,75 @@ class CarApiClient {
             sourceSampleRate = sourceSampleRate,
             sourceChannels = sourceChannels,
             sourceType = sourceType,
+            loudnessLufs = loudnessLufs,
+            truePeakDbtp = truePeakDbtp,
+            loudnessRangeLu = loudnessRangeLu,
+            loudnessAnalysisVersion = loudnessAnalysisVersion,
         )
+    }
+
+    internal fun parseTrack(map: Map<String, Any?>): CarTrack {
+        fun cleanStr(key: String, fallback: String = ""): String {
+            val v = map[key]?.toString()?.trim() ?: fallback
+            return if (v.equals("null", ignoreCase = true)) fallback else v
+        }
+
+        val sourceFormat = cleanStr("source_format").takeIf { it.isNotBlank() }
+        val sourceSizeBytes = (map["source_size_bytes"] as? Number)?.toLong()?.takeIf { it > 0 }
+        val sourceCodec = cleanStr("source_codec").takeIf { it.isNotBlank() }
+        val sourceBitrate = (map["source_bitrate"] as? Number)?.toInt()?.takeIf { it > 0 }
+        val sourceSampleRate = (map["source_sample_rate"] as? Number)?.toInt()?.takeIf { it > 0 }
+        val sourceChannels = (map["source_channels"] as? Number)?.toInt()?.takeIf { it > 0 }
+        val sourceType = cleanStr("source_type").takeIf { it.isNotBlank() }
+        val loudnessLufs = (map["loudness_lufs"] as? Number)?.toDouble()
+        val truePeakDbtp = (map["true_peak_dbtp"] as? Number)?.toDouble()
+        val loudnessRangeLu = (map["loudness_range_lu"] as? Number)?.toDouble()
+        val loudnessAnalysisVersion = (map["loudness_analysis_version"] as? Number)?.toInt()
+
+        return CarTrack(
+            id = (map["id"] as? Number)?.toInt() ?: 0,
+            title = cleanStr("title", "Chưa xác định"),
+            artist = cleanStr("artist"),
+            album = cleanStr("album"),
+            status = cleanStr("status"),
+            duration = (map["duration"] as? Number)?.toDouble(),
+            sourceFormat = sourceFormat,
+            sourceSizeBytes = sourceSizeBytes,
+            sourceCodec = sourceCodec,
+            sourceBitrate = sourceBitrate,
+            sourceSampleRate = sourceSampleRate,
+            sourceChannels = sourceChannels,
+            sourceType = sourceType,
+            loudnessLufs = loudnessLufs,
+            truePeakDbtp = truePeakDbtp,
+            loudnessRangeLu = loudnessRangeLu,
+            loudnessAnalysisVersion = loudnessAnalysisVersion,
+        )
+    }
+
+    internal fun parseTrackJson(json: String): CarTrack {
+        val pattern = Regex(""""([^"]+)"\s*:\s*(?:"([^"]*)"|(null)|(true|false)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?))""")
+        val result = mutableMapOf<String, Any?>()
+        pattern.findAll(json).forEach { match ->
+            val key = match.groupValues[1]
+            val strVal = match.groups[2]?.value
+            val nullVal = match.groups[3]?.value
+            val boolVal = match.groups[4]?.value
+            val numVal = match.groups[5]?.value
+            when {
+                strVal != null -> result[key] = strVal
+                nullVal != null -> result[key] = null
+                boolVal != null -> result[key] = boolVal.toBoolean()
+                numVal != null -> {
+                    result[key] = if (numVal.contains(".") || numVal.contains("e") || numVal.contains("E")) {
+                        numVal.toDoubleOrNull()
+                    } else {
+                        numVal.toLongOrNull()?.let { if (it in Int.MIN_VALUE..Int.MAX_VALUE) it.toInt() else it }
+                    }
+                }
+            }
+        }
+        return parseTrack(result)
     }
 
     private fun getJson(path: String): JSONObject {
