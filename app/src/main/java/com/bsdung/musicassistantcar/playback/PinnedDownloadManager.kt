@@ -229,7 +229,8 @@ class PinnedDownloadManager(
         val file = store.getTrackFile(record)
         val fileUri = Uri.fromFile(file)
         val extras = Bundle().apply {
-            putLong("track_id", record.trackId)
+            putInt("track_id", record.trackId.toInt())
+            putLong("track_id_long", record.trackId)
             putLong("duration_ms", record.durationMs)
             putLong("size_bytes", record.fileSizeBytes)
             record.format?.let { putString("format", it) }

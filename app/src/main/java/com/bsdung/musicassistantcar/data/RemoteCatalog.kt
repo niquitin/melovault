@@ -75,8 +75,12 @@ class RemoteCatalog(
          * No title/artist fuzzy matching is performed.
          */
         fun canonicalTrackMediaId(item: MediaItem): String? {
-            val trackIdFromExtras = item.mediaMetadata.extras?.getInt("track_id", 0)
-                ?.takeIf { it > 0 }
+            val extras = item.mediaMetadata.extras
+            val trackIdFromExtras = runCatching {
+                extras?.getInt("track_id", 0)?.takeIf { it > 0 }
+            }.getOrNull() ?: runCatching {
+                extras?.getLong("track_id", 0L)?.takeIf { it > 0 }?.toInt()
+            }.getOrNull()
             return resolveCanonicalTrackMediaId(item.mediaId, trackIdFromExtras)
         }
     }
