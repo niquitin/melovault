@@ -19,14 +19,14 @@ captures/
 
 # Distribution and APK builds
 dist/
-*.apk
-_installed_*.apk
+/*.apk
+/_installed_*.apk
 
 # Root logs, dumps, and temporary scratch files
-*.log
-*.tmp
-*.part
-*.xml
+/*.log
+/*.tmp
+/*.part
+/*.xml
 _count_tests.py
 _direct_smoke_*.txt
 _media_session_*.txt

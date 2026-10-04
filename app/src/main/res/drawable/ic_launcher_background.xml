@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="54"
+                android:startY="0"
+                android:endX="54"
+                android:endY="108">
+                <item android:offset="0.0" android:color="#FF141A29" />
+                <item android:offset="0.55" android:color="#FF0C101A" />
+                <item android:offset="1.0" android:color="#FF080A10" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Ambient radial cyan glow behind symbol -->
+    <path
+        android:pathData="M54,16 A38,38 0 1 1 53.99,16 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="54"
+                android:centerY="54"
+                android:gradientRadius="38">
+                <item android:offset="0.0" android:color="#2600E5FF" />
+                <item android:offset="0.6" android:color="#0F00A3FF" />
+                <item android:offset="1.0" android:color="#00000000" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

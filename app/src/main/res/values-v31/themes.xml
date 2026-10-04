@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.MusicAssistantCar.Splash" parent="Theme.MusicAssistantCar">
+        <item name="android:windowBackground">@drawable/bg_splash</item>
+        <item name="android:windowSplashScreenBackground">@color/bg_base</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_melovault_symbol</item>
+        <item name="android:statusBarColor">@color/bg_base</item>
+        <item name="android:navigationBarColor">@color/bg_base</item>
+    </style>
+</resources>

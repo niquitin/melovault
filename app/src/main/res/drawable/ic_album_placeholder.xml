@@ -1,0 +1,32 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Dark square base -->
+    <path
+        android:fillColor="#13161F"
+        android:pathData="M0,0h200v200h-200z" />
+    <!-- Outer disc groove -->
+    <path
+        android:strokeColor="#1D2230"
+        android:strokeWidth="2"
+        android:pathData="M100,24 A76,76 0 1,0 100,176 A76,76 0 1,0 100,24 Z" />
+    <!-- Middle disc groove -->
+    <path
+        android:strokeColor="#202738"
+        android:strokeWidth="1.5"
+        android:pathData="M100,50 A50,50 0 1,0 100,150 A50,50 0 1,0 100,50 Z" />
+    <!-- Center disc label hub -->
+    <path
+        android:fillColor="#1A202E"
+        android:pathData="M100,72 A28,28 0 1,0 100,128 A28,28 0 1,0 100,72 Z" />
+    <!-- Center spindle hole -->
+    <path
+        android:fillColor="#13161F"
+        android:pathData="M100,94 A6,6 0 1,0 100,106 A6,6 0 1,0 100,94 Z" />
+    <!-- Subtle slate music note -->
+    <path
+        android:fillColor="#5A6882"
+        android:pathData="M102,89v11.5c-0.6,-0.3 -1.3,-0.5 -2,-0.5 -2.2,0 -4,1.8 -4,4s1.8,4 4,4 4,-1.8 4,-4V93h4V89h-6z" />
+</vector>
