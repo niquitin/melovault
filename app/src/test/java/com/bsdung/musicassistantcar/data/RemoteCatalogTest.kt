@@ -63,4 +63,12 @@ class RemoteCatalogTest {
             root.map { it.mediaId },
         )
     }
+
+    @Test
+    fun testOfflineStartupExposesLocalCategoriesWhenApiFails() {
+        val catalog = RemoteCatalog()
+        val root = catalog.rootChildren()
+        org.junit.Assert.assertTrue(root.any { it.mediaId == RemoteCatalog.DEVICE_LOCAL_ID })
+        org.junit.Assert.assertTrue(root.any { it.mediaId == RemoteCatalog.DOWNLOADED_ID })
+    }
 }

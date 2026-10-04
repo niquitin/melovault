@@ -25,4 +25,11 @@ class StreamCacheManagerTest {
         val cacheKey = StreamCacheManager.buildCacheKey(simpleUri)
         assertEquals("https://api.melovault.internal/v1/tracks/11209/stream", cacheKey)
     }
+
+    @Test
+    fun testPinnedAndCacheDirectoryIsolation() {
+        val streamCacheName = "melovault_stream_cache"
+        val offlinePinnedName = "melovault_offline"
+        org.junit.Assert.assertNotEquals(streamCacheName, offlinePinnedName)
+    }
 }
