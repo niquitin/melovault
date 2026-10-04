@@ -6,9 +6,13 @@ import androidx.media3.common.MediaMetadata
 
 class RemoteCatalog(
     private val api: CarApiClient = CarApiClient(),
+    private val localRepoSupplier: () -> LocalMediaRepository? = { null },
+    private val downloadManagerSupplier: () -> com.bsdung.musicassistantcar.playback.PinnedDownloadManager? = { null },
 ) {
     companion object {
         const val ROOT_ID = "root"
+        const val DEVICE_LOCAL_ID = "category:device_local"
+        const val DOWNLOADED_ID = "category:downloaded"
         const val RECENT_ID = "category:recent"
         const val ALL_ID = "source:all"
         const val DRIVE_ID = "source:drive"
@@ -16,6 +20,7 @@ class RemoteCatalog(
         const val PLAYLISTS_ID = "category:playlists"
         const val PLAYLIST_PREFIX = "playlist:"
         const val TRACK_PREFIX = "track:"
+        const val DEVICE_PREFIX = "device:"
         const val DRIVE_ROOT_PREFIX = "drive-root:"
         const val DRIVE_FOLDER_PREFIX = "drive-folder:"
         const val DRIVE_FILE_PREFIX = "drive-file:"
@@ -85,6 +90,16 @@ class RemoteCatalog(
 
     fun rootChildren(): List<MediaItem> = listOf(
         browsableItem(
+            DEVICE_LOCAL_ID,
+            "Nhạc trên thiết bị",
+            "Bộ nhớ máy",
+        ),
+        browsableItem(
+            DOWNLOADED_ID,
+            "Đã tải về",
+            "Phát offline",
+        ),
+        browsableItem(
             RECENT_ID,
             "Recent",
             "Nghe gần đây",
@@ -118,6 +133,18 @@ class RemoteCatalog(
         sort: String = "",
     ): List<MediaItem> {
         val offset = page.coerceAtLeast(0) * pageSize
+
+        if (parentId == DEVICE_LOCAL_ID) {
+            val repo = localRepoSupplier() ?: return emptyList()
+            return repo.getLocalTracks(page, pageSize, sort)
+        }
+
+        if (parentId == DOWNLOADED_ID) {
+            val dm = downloadManagerSupplier() ?: return emptyList()
+            val allDownloaded = dm.getAllDownloadedMediaItems()
+            if (offset >= allDownloaded.size) return emptyList()
+            return allDownloaded.subList(offset, (offset + pageSize).coerceAtMost(allDownloaded.size))
+        }
 
         if (parentId == PLAYLISTS_ID) {
             val playlists = api.playlists()
@@ -331,11 +358,24 @@ class RemoteCatalog(
             .firstOrNull { it.mediaId == mediaId }
             ?.let { return it }
 
+        if (mediaId.startsWith(DEVICE_PREFIX)) {
+            val repo = localRepoSupplier()
+            return repo?.getLocalTrack(mediaId)
+        }
+
         if (mediaId.startsWith(TRACK_PREFIX)) {
             val id = mediaId
                 .removePrefix(TRACK_PREFIX)
                 .toIntOrNull()
                 ?: return null
+
+            val dm = downloadManagerSupplier()
+            if (dm != null && dm.isDownloaded(id.toLong())) {
+                val record = dm.getRecord(id.toLong())
+                if (record != null) {
+                    return dm.toMediaItem(record)
+                }
+            }
             return trackItem(api.track(id))
         }
 
@@ -488,6 +528,14 @@ class RemoteCatalog(
             .build()
     }
     fun withCurrentQuality(item: MediaItem): MediaItem {
+        if (item.mediaMetadata.extras?.getBoolean("is_offline_download") == true ||
+            item.mediaMetadata.extras?.getBoolean("is_device_local") == true ||
+            item.localConfiguration?.uri?.scheme == "file" ||
+            item.localConfiguration?.uri?.scheme == "content"
+        ) {
+            return item
+        }
+
         val uri = when {
             item.mediaId.startsWith(TRACK_PREFIX) -> {
                 val id = item.mediaId

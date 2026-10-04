@@ -311,4 +311,16 @@
         </LinearLayout>
     </ScrollView>
 
+    <!-- Clear Stream Cache button -->
+    <TextView
+        android:id="@+id/btnClearStreamCache"
+        android:layout_width="match_parent"
+        android:layout_height="44dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/bg_button_control"
+        android:gravity="center"
+        android:text="Xóa bộ nhớ đệm phát nhạc (Stream Cache)"
+        android:textColor="@color/text_secondary"
+        android:textSize="13sp" />
+
 </LinearLayout>

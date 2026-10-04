@@ -27,6 +27,8 @@ class RemoteCatalogTest {
     @Test
     fun catalogPrefixesAreStandardized() {
         assertEquals("root", RemoteCatalog.ROOT_ID)
+        assertEquals("category:device_local", RemoteCatalog.DEVICE_LOCAL_ID)
+        assertEquals("category:downloaded", RemoteCatalog.DOWNLOADED_ID)
         assertEquals("category:recent", RemoteCatalog.RECENT_ID)
         assertEquals("source:all", RemoteCatalog.ALL_ID)
         assertEquals("source:drive", RemoteCatalog.DRIVE_ID)
@@ -36,6 +38,7 @@ class RemoteCatalogTest {
         assertEquals("drive-root:", RemoteCatalog.DRIVE_ROOT_PREFIX)
         assertEquals("drive-folder:", RemoteCatalog.DRIVE_FOLDER_PREFIX)
         assertEquals("track:", RemoteCatalog.TRACK_PREFIX)
+        assertEquals("device:", RemoteCatalog.DEVICE_PREFIX)
     }
 
     @Test
@@ -46,7 +49,18 @@ class RemoteCatalogTest {
         root.forEach { item ->
             println("ITEM: id=${item.mediaId}, title=${item.mediaMetadata.title}, browsable=${item.mediaMetadata.isBrowsable}")
         }
-        assertEquals(5, root.size)
-        assertEquals(listOf("category:recent", "source:all", "source:drive", "source:telegram", "category:playlists"), root.map { it.mediaId })
+        assertEquals(7, root.size)
+        assertEquals(
+            listOf(
+                "category:device_local",
+                "category:downloaded",
+                "category:recent",
+                "source:all",
+                "source:drive",
+                "source:telegram",
+                "category:playlists",
+            ),
+            root.map { it.mediaId },
+        )
     }
 }

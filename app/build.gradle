@@ -26,8 +26,8 @@ android {
         applicationId 'com.bsdung.musicassistantcar'
         minSdk 26
         targetSdk 36
-        versionCode 38
-        versionName '0.6.18'
+        versionCode 39
+        versionName '0.6.19'
 
         buildConfigField 'String', 'CAR_API_TOKEN',
             '"' + carApiToken.replace('\\', '\\\\').replace('"', '\\"') + '"'
@@ -77,6 +77,7 @@ dependencies {
     implementation "androidx.media3:media3-exoplayer:$media3Version"
     implementation "androidx.media3:media3-session:$media3Version"
     implementation "androidx.media3:media3-datasource:$media3Version"
+    implementation "androidx.media3:media3-database:$media3Version"
 
     testImplementation 'junit:junit:4.13.2'
 }

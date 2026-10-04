@@ -40,6 +40,7 @@ import com.bsdung.musicassistantcar.databinding.DialogTrackActionsBinding
 import com.bsdung.musicassistantcar.databinding.DialogPlaylistChooserBinding
 import com.bsdung.musicassistantcar.databinding.DialogSignalPathBinding
 import com.bsdung.musicassistantcar.ui.adapter.PlaylistChoiceAdapter
+import com.bsdung.musicassistantcar.data.CarApiClient
 import com.bsdung.musicassistantcar.data.PlaybackQuality
 import com.bsdung.musicassistantcar.data.RemoteCatalog
 import com.bsdung.musicassistantcar.data.StreamQuality
@@ -124,7 +125,13 @@ class MainActivity : AppCompatActivity() {
     private var isEditMode: Boolean = false
     private var libraryItemTouchHelper: ItemTouchHelper? = null
     private val navManager = NavigationManager()
-    private val uiCatalog = RemoteCatalog()
+    private val uiCatalog by lazy {
+        RemoteCatalog(
+            api = CarApiClient(),
+            localRepoSupplier = { com.bsdung.musicassistantcar.data.LocalMediaRepository.getDefault(this) },
+            downloadManagerSupplier = { com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this) },
+        )
+    }
     private val uiExecutor = Executors.newSingleThreadExecutor()
     private val prewarmExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -379,7 +386,13 @@ class MainActivity : AppCompatActivity() {
             onCategoryClick = { category ->
                 if (isEditMode) exitEditMode()
                 captureCurrentScroll()
-                loadChildren(category.id, 0, category.title)
+                if (category.id == RemoteCatalog.DEVICE_LOCAL_ID) {
+                    checkAndRequestLocalAudioPermission {
+                        loadChildren(category.id, 0, category.title)
+                    }
+                } else {
+                    loadChildren(category.id, 0, category.title)
+                }
             },
             onFolderClick = { folder ->
                 if (isEditMode) exitEditMode()
@@ -404,6 +417,9 @@ class MainActivity : AppCompatActivity() {
             },
             onSelectionChanged = { count ->
                 updateEditSelectionUi(count)
+            },
+            onDownloadClick = { track ->
+                handleTrackDownloadClick(track)
             },
         )
         val libraryTouchCallback = object : ItemTouchHelper.SimpleCallback(
@@ -775,6 +791,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         updateHeaderAndBreadcrumbs()
+        com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this).addListener(downloadListener)
     }
 
 
@@ -1006,6 +1023,8 @@ class MainActivity : AppCompatActivity() {
             when {
                 id.startsWith("source:") || id.startsWith("category:") -> {
                     val iconRes = when (id) {
+                        "category:device_local" -> R.drawable.ic_phone_android
+                        "category:downloaded" -> R.drawable.ic_download_done
                         "category:recent" -> R.drawable.ic_history
                         "source:all" -> R.drawable.ic_library_music
                         "source:drive" -> R.drawable.ic_cloud
@@ -2070,6 +2089,110 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var pendingAudioPermissionAction: (() -> Unit)? = null
+    private val REQUEST_CODE_AUDIO_PERMISSION = 2002
+
+    private fun checkAndRequestLocalAudioPermission(onGranted: () -> Unit) {
+        val permission = if (Build.VERSION.SDK_INT >= 33) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        if (checkSelfPermission(permission) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            onGranted()
+        } else {
+            pendingAudioPermissionAction = onGranted
+            requestPermissions(arrayOf(permission), REQUEST_CODE_AUDIO_PERMISSION)
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_CODE_AUDIO_PERMISSION) {
+            if (grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                pendingAudioPermissionAction?.invoke()
+            } else {
+                Toast.makeText(this, "Cần cấp quyền truy cập để đọc nhạc trên thiết bị", Toast.LENGTH_LONG).show()
+            }
+            pendingAudioPermissionAction = null
+        }
+    }
+
+    private val downloadListener = object : com.bsdung.musicassistantcar.playback.PinnedDownloadManager.DownloadListener {
+        override fun onDownloadStarted(trackId: Long) {
+            runOnUiThread { libraryAdapter.notifyDataSetChanged() }
+        }
+        override fun onDownloadProgress(trackId: Long, bytesDownloaded: Long) {}
+        override fun onDownloadCompleted(trackId: Long, record: com.bsdung.musicassistantcar.playback.OfflineTrackRecord) {
+            runOnUiThread {
+                libraryAdapter.notifyDataSetChanged()
+                Toast.makeText(this@MainActivity, "Đã tải xong: ${record.title}", Toast.LENGTH_SHORT).show()
+            }
+        }
+        override fun onDownloadFailed(trackId: Long, error: String) {
+            runOnUiThread {
+                libraryAdapter.notifyDataSetChanged()
+                if (error != "Deleted") {
+                    Toast.makeText(this@MainActivity, "Tải thất bại: $error", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun handleTrackDownloadClick(track: LibraryItem.Track) {
+        val canonicalId = RemoteCatalog.canonicalTrackMediaId(track.mediaItem) ?: track.id
+        val trackId = canonicalId.removePrefix(RemoteCatalog.TRACK_PREFIX).toLongOrNull() ?: return
+        val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
+
+        if (dm.isDownloading(trackId)) {
+            Toast.makeText(this, "Đang tải bài hát...", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (dm.isDownloaded(trackId)) {
+            AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                .setTitle("Xóa bài hát đã tải?")
+                .setMessage("Bài hát \"${MetadataDisplayHelper.cleanTitle(track.title)}\" sẽ bị xóa khỏi bộ nhớ máy.")
+                .setPositiveButton("Xóa") { _, _ ->
+                    dm.deleteDownload(trackId)
+                    libraryAdapter.notifyDataSetChanged()
+                    Toast.makeText(this, "Đã xóa bản tải về", Toast.LENGTH_SHORT).show()
+                    if (navManager.currentParentId == RemoteCatalog.DOWNLOADED_ID) {
+                        loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
+                    }
+                }
+                .setNegativeButton("Hủy", null)
+                .show()
+            return
+        }
+
+        Toast.makeText(this, "Bắt đầu tải về...", Toast.LENGTH_SHORT).show()
+        val carTrack = com.bsdung.musicassistantcar.data.CarTrack(
+            id = trackId.toInt(),
+            title = track.title,
+            artist = track.artist,
+            album = track.album.orEmpty(),
+            status = "ready",
+            duration = (track.durationMs ?: 0L) / 1000.0,
+            sourceFormat = track.format,
+            sourceSizeBytes = track.sizeBytes,
+            sourceCodec = track.codec,
+            sourceBitrate = track.bitrate,
+            sourceSampleRate = track.sampleRate,
+            sourceChannels = track.channels,
+            loudnessLufs = track.mediaItem.mediaMetadata.extras?.takeIf { it.containsKey("loudness_lufs") }?.getDouble("loudness_lufs"),
+            truePeakDbtp = track.mediaItem.mediaMetadata.extras?.takeIf { it.containsKey("true_peak_dbtp") }?.getDouble("true_peak_dbtp"),
+            loudnessRangeLu = track.mediaItem.mediaMetadata.extras?.takeIf { it.containsKey("loudness_range_lu") }?.getDouble("loudness_range_lu"),
+            loudnessAnalysisVersion = track.mediaItem.mediaMetadata.extras?.takeIf { it.containsKey("loudness_analysis_version") }?.getInt("loudness_analysis_version"),
+        )
+        dm.startDownload(carTrack)
+        libraryAdapter.notifyDataSetChanged()
+    }
+
     override fun onStart() {
         super.onStart()
         logWindowMetrics("onStart")
@@ -2265,6 +2388,11 @@ class MainActivity : AppCompatActivity() {
         // 6. OUTPUT
         bindingDialog.stageOutputPipeline.text = "Android system audio pipeline"
         bindingDialog.stageOutputBitPerfect.text = "Bit-perfect: Not verified"
+
+        bindingDialog.btnClearStreamCache.setOnClickListener {
+            com.bsdung.musicassistantcar.playback.StreamCacheManager.clearCache(this)
+            Toast.makeText(this, "Đã xóa toàn bộ bộ nhớ đệm phát nhạc", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun showLoudnessSettingsDialog() {
@@ -2324,6 +2452,30 @@ class MainActivity : AppCompatActivity() {
             }
         } else {
             bindingDialog.actionPlayFromHere.visibility = View.GONE
+        }
+
+        // Download Action
+        val canonicalId = RemoteCatalog.canonicalTrackMediaId(track.mediaItem) ?: track.id
+        val trackId = canonicalId.removePrefix(RemoteCatalog.TRACK_PREFIX).toLongOrNull()
+        val isDeviceTrack = track.id.startsWith(RemoteCatalog.DEVICE_PREFIX)
+
+        if (trackId != null && !isDeviceTrack) {
+            val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
+            val isDownloaded = dm.isDownloaded(trackId)
+            bindingDialog.actionDownload.visibility = View.VISIBLE
+            if (isDownloaded) {
+                bindingDialog.actionDownloadIcon.setImageResource(R.drawable.ic_delete)
+                bindingDialog.actionDownloadText.text = "Xóa bản tải về"
+            } else {
+                bindingDialog.actionDownloadIcon.setImageResource(R.drawable.ic_download)
+                bindingDialog.actionDownloadText.text = "Tải về thiết bị"
+            }
+            bindingDialog.actionDownload.setOnClickListener {
+                dialog.dismiss()
+                handleTrackDownloadClick(track)
+            }
+        } else {
+            bindingDialog.actionDownload.visibility = View.GONE
         }
 
         val isInPlaylist = currentParent.startsWith("playlist:")
@@ -2726,6 +2878,7 @@ class MainActivity : AppCompatActivity() {
         browserFuture?.takeIf { !it.isDone }?.cancel(true)
         browserFuture = null
         searchDebounceRunnable?.let { mainHandler.removeCallbacks(it) }
+        com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this).removeListener(downloadListener)
         uiExecutor.shutdownNow()
         super.onDestroy()
     }

@@ -28,6 +28,7 @@ import androidx.media3.session.MediaLibraryService.LibraryParams
 import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionCommand
+import com.bsdung.musicassistantcar.data.CarApiClient
 import com.bsdung.musicassistantcar.data.PlaybackQuality
 import com.bsdung.musicassistantcar.data.RemoteCatalog
 import com.bsdung.musicassistantcar.data.StreamQuality
@@ -128,7 +129,11 @@ class MusicService : MediaLibraryService() {
         gainAudioProcessor.isNormalizationEnabled = normEnabled
         prefs.registerOnSharedPreferenceChangeListener(prefsListener)
 
-        catalog = RemoteCatalog()
+        catalog = RemoteCatalog(
+            api = CarApiClient(),
+            localRepoSupplier = { com.bsdung.musicassistantcar.data.LocalMediaRepository.getDefault(this) },
+            downloadManagerSupplier = { PinnedDownloadManager.getDefault(this) },
+        )
         historyTracker = PlayHistoryTracker { mediaId ->
             Log.i(TAG, "Track reached >=10s playback, reporting history: $mediaId")
             executor.execute {
@@ -150,9 +155,10 @@ class MusicService : MediaLibraryService() {
             .setDefaultRequestProperties(
                 catalog.authorizationHeaders()
             )
+        val dataSourceFactory = StreamCacheManager.createDataSourceFactory(this, httpFactory)
         val mediaSourceFactory =
             DefaultMediaSourceFactory(this)
-                .setDataSourceFactory(httpFactory)
+                .setDataSourceFactory(dataSourceFactory)
 
         val attributes = AudioAttributes.Builder()
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
@@ -1130,6 +1136,9 @@ private class LibraryCallback(
             mediaItems.mapNotNull { requested ->
                 val mediaId = requested.mediaId
                 when {
+                    mediaId.startsWith(RemoteCatalog.DEVICE_PREFIX) -> {
+                        if (requested.localConfiguration != null) requested else catalog.item(mediaId)
+                    }
                     // Media3 IPC may strip localConfiguration/URI from controller MediaItems.
                     // Rebuild the deterministic drive stream URI locally without any network/detail
                     // request, then resolve authoritative metadata lazily after playback starts.
@@ -1143,6 +1152,16 @@ private class LibraryCallback(
                             )
                         }
                         catalog.withCurrentQuality(requested)
+                    }
+                    // Local file or content URI: keep as-is.
+                    requested.localConfiguration?.uri?.scheme == "file" ||
+                    requested.localConfiguration?.uri?.scheme == "content" -> requested
+                    // If track is downloaded locally: resolve to file:// with loudness metadata!
+                    mediaId.startsWith(RemoteCatalog.TRACK_PREFIX) &&
+                        PinnedDownloadManager.getDefault(context).isDownloaded(
+                            mediaId.removePrefix(RemoteCatalog.TRACK_PREFIX).toLongOrNull() ?: -1L
+                        ) -> {
+                        catalog.item(mediaId) ?: requested
                     }
                     // Non-drive items already fully resolved (stream URI set): keep as-is.
                     requested.localConfiguration != null -> requested

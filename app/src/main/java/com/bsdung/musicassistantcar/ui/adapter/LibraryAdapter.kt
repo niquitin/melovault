@@ -9,6 +9,7 @@ import androidx.media3.common.MediaItem
 import androidx.recyclerview.widget.RecyclerView
 import com.bsdung.musicassistantcar.R
 import com.bsdung.musicassistantcar.data.MediaTechnicalSummary
+import com.bsdung.musicassistantcar.data.RemoteCatalog
 import com.bsdung.musicassistantcar.databinding.ItemLibraryCategoryBinding
 import com.bsdung.musicassistantcar.databinding.ItemLibraryFolderBinding
 import com.bsdung.musicassistantcar.databinding.ItemLibraryTrackBinding
@@ -26,6 +27,7 @@ class LibraryAdapter(
     private val onFolderLongClick: ((LibraryItem.Folder) -> Unit)? = null,
     private val onStartDrag: ((RecyclerView.ViewHolder) -> Unit)? = null,
     private val onSelectionChanged: ((Int) -> Unit)? = null,
+    private val onDownloadClick: ((LibraryItem.Track) -> Unit)? = null,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
@@ -310,6 +312,8 @@ class LibraryAdapter(
             }
 
             if (isEditMode) {
+                binding.btnDownload.visibility = View.GONE
+                binding.btnDownload.setOnClickListener(null)
                 binding.trackCheckbox.visibility = View.VISIBLE
                 binding.trackCheckbox.isChecked = selectedMediaIds.contains(item.id)
                 if (canReorder) {
@@ -334,6 +338,44 @@ class LibraryAdapter(
                 binding.trackCheckbox.visibility = View.GONE
                 binding.dragHandle.visibility = View.GONE
                 binding.dragHandle.setOnTouchListener(null)
+
+                val canonicalId = RemoteCatalog.canonicalTrackMediaId(item.mediaItem) ?: item.id
+                val trackId = canonicalId.removePrefix(RemoteCatalog.TRACK_PREFIX).toLongOrNull()
+                val isDeviceTrack = item.id.startsWith(RemoteCatalog.DEVICE_PREFIX)
+
+                if (trackId != null && !isDeviceTrack) {
+                    val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(context)
+                    val isDownloaded = dm.isDownloaded(trackId)
+                    val isDownloading = dm.isDownloading(trackId)
+
+                    binding.btnDownload.visibility = View.VISIBLE
+                    when {
+                        isDownloading -> {
+                            binding.btnDownload.setImageResource(R.drawable.ic_download)
+                            binding.btnDownload.setColorFilter(ContextCompat.getColor(context, R.color.accent_primary))
+                            binding.btnDownload.setOnClickListener {
+                                onDownloadClick?.invoke(item)
+                            }
+                        }
+                        isDownloaded -> {
+                            binding.btnDownload.setImageResource(R.drawable.ic_download_done)
+                            binding.btnDownload.setColorFilter(ContextCompat.getColor(context, R.color.accent_primary))
+                            binding.btnDownload.setOnClickListener {
+                                onDownloadClick?.invoke(item)
+                            }
+                        }
+                        else -> {
+                            binding.btnDownload.setImageResource(R.drawable.ic_download)
+                            binding.btnDownload.setColorFilter(ContextCompat.getColor(context, R.color.text_tertiary))
+                            binding.btnDownload.setOnClickListener {
+                                onDownloadClick?.invoke(item)
+                            }
+                        }
+                    }
+                } else {
+                    binding.btnDownload.visibility = View.GONE
+                    binding.btnDownload.setOnClickListener(null)
+                }
 
                 binding.root.setOnClickListener {
                     // Collect only playable track items in current list for full queue playback
