@@ -312,7 +312,8 @@ class LibraryAdapter(
             }
 
             if (isEditMode) {
-                binding.btnDownload.visibility = View.GONE
+                binding.downloadContainer.visibility = View.GONE
+                binding.txtDownloadStatus.setOnClickListener(null)
                 binding.btnDownload.setOnClickListener(null)
                 binding.trackCheckbox.visibility = View.VISIBLE
                 binding.trackCheckbox.isChecked = selectedMediaIds.contains(item.id)
@@ -345,35 +346,83 @@ class LibraryAdapter(
 
                 if (trackId != null && !isDeviceTrack) {
                     val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(context)
-                    val isDownloaded = dm.isDownloaded(trackId)
-                    val isDownloading = dm.isDownloading(trackId)
+                    val status = dm.getDownloadStatus(trackId)
 
-                    binding.btnDownload.visibility = View.VISIBLE
-                    when {
-                        isDownloading -> {
-                            binding.btnDownload.setImageResource(R.drawable.ic_download)
-                            binding.btnDownload.setColorFilter(ContextCompat.getColor(context, R.color.accent_primary))
-                            binding.btnDownload.setOnClickListener {
-                                onDownloadClick?.invoke(item)
-                            }
-                        }
-                        isDownloaded -> {
-                            binding.btnDownload.setImageResource(R.drawable.ic_download_done)
-                            binding.btnDownload.setColorFilter(ContextCompat.getColor(context, R.color.accent_primary))
-                            binding.btnDownload.setOnClickListener {
-                                onDownloadClick?.invoke(item)
-                            }
-                        }
-                        else -> {
+                    binding.downloadContainer.visibility = View.VISIBLE
+                    when (status.state) {
+                        com.bsdung.musicassistantcar.playback.DownloadState.NOT_DOWNLOADED -> {
+                            binding.downloadProgressLayout.visibility = View.GONE
+                            binding.txtDownloadStatus.visibility = View.VISIBLE
+                            binding.txtDownloadStatus.text = "↓ Tải về"
+                            binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
+                            binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
+                            binding.btnDownload.visibility = View.VISIBLE
                             binding.btnDownload.setImageResource(R.drawable.ic_download)
                             binding.btnDownload.setColorFilter(ContextCompat.getColor(context, R.color.text_tertiary))
-                            binding.btnDownload.setOnClickListener {
-                                onDownloadClick?.invoke(item)
-                            }
+                            binding.btnDownload.contentDescription = "↓ Tải về"
+                            binding.btnDownload.setOnClickListener { onDownloadClick?.invoke(item) }
+                        }
+                        com.bsdung.musicassistantcar.playback.DownloadState.QUEUED -> {
+                            binding.downloadProgressLayout.visibility = View.GONE
+                            binding.txtDownloadStatus.visibility = View.VISIBLE
+                            binding.txtDownloadStatus.text = "Đang chờ tải"
+                            binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
+                            binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
+                            binding.btnDownload.visibility = View.GONE
+                            binding.btnDownload.setOnClickListener(null)
+                        }
+                        com.bsdung.musicassistantcar.playback.DownloadState.DOWNLOADING -> {
+                            binding.txtDownloadStatus.visibility = View.GONE
+                            binding.txtDownloadStatus.setOnClickListener(null)
+                            binding.btnDownload.visibility = View.GONE
+                            binding.btnDownload.setOnClickListener(null)
+                            binding.downloadProgressLayout.visibility = View.VISIBLE
+                            val total = status.totalBytes
+                            val downloaded = status.bytesDownloaded
+                            val pct = if (total > 0L) ((downloaded * 100L) / total).toInt().coerceIn(0, 100) else 0
+                            binding.downloadProgressBar.progress = pct
+                            val dlMb = String.format(java.util.Locale.US, "%.1f", downloaded / (1024.0 * 1024.0))
+                            val totMb = String.format(java.util.Locale.US, "%.1f", total / (1024.0 * 1024.0))
+                            binding.txtDownloadProgress.text = "$pct% ($dlMb / $totMb MB)"
+                            binding.downloadProgressLayout.setOnClickListener { onDownloadClick?.invoke(item) }
+                        }
+                        com.bsdung.musicassistantcar.playback.DownloadState.FINALIZING -> {
+                            binding.downloadProgressLayout.visibility = View.GONE
+                            binding.txtDownloadStatus.visibility = View.VISIBLE
+                            binding.txtDownloadStatus.text = "Đang hoàn tất..."
+                            binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.accent_primary))
+                            binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
+                            binding.btnDownload.visibility = View.GONE
+                            binding.btnDownload.setOnClickListener(null)
+                        }
+                        com.bsdung.musicassistantcar.playback.DownloadState.OFFLINE_READY -> {
+                            binding.downloadProgressLayout.visibility = View.GONE
+                            binding.txtDownloadStatus.visibility = View.VISIBLE
+                            binding.txtDownloadStatus.text = "✓ Offline"
+                            binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.accent_primary))
+                            binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
+                            binding.btnDownload.visibility = View.VISIBLE
+                            binding.btnDownload.setImageResource(R.drawable.ic_download_done)
+                            binding.btnDownload.setColorFilter(ContextCompat.getColor(context, R.color.accent_primary))
+                            binding.btnDownload.contentDescription = "✓ Offline"
+                            binding.btnDownload.setOnClickListener { onDownloadClick?.invoke(item) }
+                        }
+                        com.bsdung.musicassistantcar.playback.DownloadState.FAILED -> {
+                            binding.downloadProgressLayout.visibility = View.GONE
+                            binding.txtDownloadStatus.visibility = View.VISIBLE
+                            binding.txtDownloadStatus.text = "! Tải lỗi"
+                            binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.status_offline))
+                            binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
+                            binding.btnDownload.visibility = View.VISIBLE
+                            binding.btnDownload.setImageResource(R.drawable.ic_download)
+                            binding.btnDownload.setColorFilter(ContextCompat.getColor(context, R.color.status_offline))
+                            binding.btnDownload.contentDescription = "Thử lại"
+                            binding.btnDownload.setOnClickListener { onDownloadClick?.invoke(item) }
                         }
                     }
                 } else {
-                    binding.btnDownload.visibility = View.GONE
+                    binding.downloadContainer.visibility = View.GONE
+                    binding.txtDownloadStatus.setOnClickListener(null)
                     binding.btnDownload.setOnClickListener(null)
                 }
 

@@ -179,6 +179,7 @@ class OfflineMetadataStore(private val storageDir: File) {
                 records[trackId] = record
             }
             isLoaded = true
+            reconcile()
         } catch (e: Exception) {
             Log.w(TAG, "Failed to parse offline metadata JSON: ${e.message}, creating backup", e)
             try {
@@ -239,10 +240,30 @@ class OfflineMetadataStore(private val storageDir: File) {
     }
 
     @Synchronized
+    fun reconcile(): List<Long> {
+        val staleIds = mutableListOf<Long>()
+        val iterator = records.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            val record = entry.value
+            val file = File(storageDir, record.relativeFileName)
+            if (!file.exists() || !file.isFile || file.length() <= 0L || file.length() != record.fileSizeBytes) {
+                staleIds.add(entry.key)
+                iterator.remove()
+            }
+        }
+        if (staleIds.isNotEmpty()) {
+            Log.w(TAG, "Reconciled metadata: removed ${staleIds.size} stale/mismatched records: $staleIds")
+            persist()
+        }
+        return staleIds
+    }
+
+    @Synchronized
     fun hasTrack(trackId: Long): Boolean {
         val rec = records[trackId] ?: return false
         val file = File(storageDir, rec.relativeFileName)
-        return file.exists() && file.length() > 0L
+        return file.exists() && file.isFile && file.length() > 0L && file.length() == rec.fileSizeBytes
     }
 
     @Synchronized
@@ -252,13 +273,23 @@ class OfflineMetadataStore(private val storageDir: File) {
 
     @Synchronized
     fun removeRecord(trackId: Long): Boolean {
-        val existing = records.remove(trackId) ?: return false
-        val file = File(storageDir, existing.relativeFileName)
-        if (file.exists()) {
-            file.delete()
+        val existing = records.remove(trackId)
+        if (existing != null) {
+            val file = File(storageDir, existing.relativeFileName)
+            if (file.exists()) {
+                file.delete()
+            }
         }
-        persist()
-        return true
+        // Ensure stale .part and other files for this track are also cleaned
+        storageDir.listFiles { _, name ->
+            name.startsWith("track_${trackId}.")
+        }?.forEach { it.delete() }
+
+        if (existing != null) {
+            persist()
+            return true
+        }
+        return false
     }
 
     fun getTrackFile(record: OfflineTrackRecord): File {

@@ -21,6 +21,23 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
+enum class DownloadState {
+    NOT_DOWNLOADED,
+    QUEUED,
+    DOWNLOADING,
+    FINALIZING,
+    OFFLINE_READY,
+    FAILED,
+}
+
+data class DownloadStatus(
+    val trackId: Long,
+    val state: DownloadState,
+    val bytesDownloaded: Long = 0L,
+    val totalBytes: Long = 0L,
+    val errorMessage: String? = null,
+)
+
 class PinnedDownloadManager(
     private val store: OfflineMetadataStore,
     private val executor: ExecutorService = Executors.newFixedThreadPool(2),
@@ -34,6 +51,7 @@ class PinnedDownloadManager(
     ) : this(store, executor) {
         this.context = context
     }
+
     companion object {
         private const val TAG = "PinnedDownloadManager"
         const val DOWNLOADED_PREFIX = "downloaded:"
@@ -62,14 +80,20 @@ class PinnedDownloadManager(
     }
 
     interface DownloadListener {
-        fun onDownloadStarted(trackId: Long)
-        fun onDownloadProgress(trackId: Long, bytesDownloaded: Long)
-        fun onDownloadCompleted(trackId: Long, record: OfflineTrackRecord)
-        fun onDownloadFailed(trackId: Long, error: String)
+        fun onDownloadStarted(trackId: Long) {}
+        fun onDownloadProgress(trackId: Long, bytesDownloaded: Long) {}
+        fun onDownloadProgress(trackId: Long, bytesDownloaded: Long, totalBytes: Long) {
+            onDownloadProgress(trackId, bytesDownloaded)
+        }
+        fun onDownloadFinalizing(trackId: Long) {}
+        fun onDownloadCompleted(trackId: Long, record: OfflineTrackRecord) {}
+        fun onDownloadFailed(trackId: Long, error: String) {}
+        fun onDownloadDeleted(trackId: Long) {}
     }
 
     private val listeners = Collections.synchronizedSet(mutableSetOf<DownloadListener>())
-    private val activeDownloads = ConcurrentHashMap<Long, Boolean>()
+    private val activeDownloads = ConcurrentHashMap<Long, DownloadStatus>()
+    private val failedDownloads = ConcurrentHashMap<Long, String>()
 
     fun addListener(listener: DownloadListener) {
         listeners.add(listener)
@@ -80,11 +104,49 @@ class PinnedDownloadManager(
     }
 
     fun isDownloading(trackId: Long): Boolean {
-        return activeDownloads[trackId] == true
+        return activeDownloads.containsKey(trackId)
+    }
+
+    fun isOfflineReady(trackId: Long): Boolean {
+        if (activeDownloads.containsKey(trackId)) {
+            return false
+        }
+        val record = store.getRecord(trackId) ?: return false
+        if (record.sha256.isBlank()) {
+            return false
+        }
+        if (record.fileSizeBytes <= 0L) {
+            return false
+        }
+        val storageDir = store.getStorageDirectory()
+        val partFile = File(storageDir, "track_${trackId}.part")
+        if (partFile.exists()) {
+            return false
+        }
+        val finalFile = store.getTrackFile(record)
+        if (!finalFile.exists() || !finalFile.isFile) {
+            return false
+        }
+        val currentLength = finalFile.length()
+        if (currentLength <= 0L || currentLength != record.fileSizeBytes) {
+            return false
+        }
+        return true
     }
 
     fun isDownloaded(trackId: Long): Boolean {
-        return store.hasTrack(trackId)
+        return isOfflineReady(trackId)
+    }
+
+    fun getDownloadStatus(trackId: Long): DownloadStatus {
+        activeDownloads[trackId]?.let { return it }
+        failedDownloads[trackId]?.let { return DownloadStatus(trackId, DownloadState.FAILED, errorMessage = it) }
+        if (isOfflineReady(trackId)) {
+            val record = store.getRecord(trackId)
+            val size = record?.fileSizeBytes ?: 0L
+            return DownloadStatus(trackId, DownloadState.OFFLINE_READY, bytesDownloaded = size, totalBytes = size)
+        }
+        return DownloadStatus(trackId, DownloadState.NOT_DOWNLOADED)
     }
 
     fun getRecord(trackId: Long): OfflineTrackRecord? {
@@ -92,9 +154,17 @@ class PinnedDownloadManager(
     }
 
     fun deleteDownload(trackId: Long): Boolean {
+        val storageDir = store.getStorageDirectory()
+        val partFile = File(storageDir, "track_${trackId}.part")
+        if (partFile.exists()) {
+            partFile.delete()
+        }
         val removed = store.removeRecord(trackId)
+        activeDownloads.remove(trackId)
+        failedDownloads.remove(trackId)
         if (removed) {
             notifyFailed(trackId, "Deleted")
+            notifyDeleted(trackId)
         }
         return removed
     }
@@ -104,15 +174,20 @@ class PinnedDownloadManager(
         apiClient: CarApiClient = CarApiClient(),
     ) {
         val trackId = track.id.toLong()
-        if (isDownloaded(trackId)) {
-            Log.i(TAG, "Track $trackId already downloaded, skipping")
+        if (isOfflineReady(trackId)) {
+            Log.i(TAG, "Track $trackId already offline-ready, skipping")
             return
         }
-        if (activeDownloads.putIfAbsent(trackId, true) != null) {
+        val queuedStatus = DownloadStatus(
+            trackId = trackId,
+            state = DownloadState.QUEUED,
+            totalBytes = track.sourceSizeBytes ?: 0L,
+        )
+        if (activeDownloads.putIfAbsent(trackId, queuedStatus) != null) {
             Log.i(TAG, "Track $trackId is already downloading")
             return
         }
-
+        failedDownloads.remove(trackId)
         notifyStarted(trackId)
 
         executor.submit {
@@ -147,17 +222,40 @@ class PinnedDownloadManager(
                     throw IOException("HTTP error $responseCode downloading track $trackId")
                 }
 
+                val expectedLength = conn.contentLengthLong
                 val digest = MessageDigest.getInstance("SHA-256")
                 var totalBytesRead = 0L
+
+                val totalTarget = if (expectedLength > 0L) expectedLength else (track.sourceSizeBytes ?: 0L)
+                activeDownloads[trackId] = DownloadStatus(
+                    trackId = trackId,
+                    state = DownloadState.DOWNLOADING,
+                    bytesDownloaded = 0L,
+                    totalBytes = totalTarget,
+                )
+                notifyProgress(trackId, 0L, totalTarget)
 
                 conn.inputStream.use { input ->
                     FileOutputStream(partFile).use { output ->
                         val buffer = ByteArray(16 * 1024)
                         var bytesRead: Int
+                        var lastProgressNotifyMs = System.currentTimeMillis()
                         while (input.read(buffer).also { bytesRead = it } != -1) {
                             output.write(buffer, 0, bytesRead)
                             digest.update(buffer, 0, bytesRead)
                             totalBytesRead += bytesRead
+
+                            val now = System.currentTimeMillis()
+                            if (now - lastProgressNotifyMs >= 100) {
+                                lastProgressNotifyMs = now
+                                activeDownloads[trackId] = DownloadStatus(
+                                    trackId = trackId,
+                                    state = DownloadState.DOWNLOADING,
+                                    bytesDownloaded = totalBytesRead,
+                                    totalBytes = totalTarget,
+                                )
+                                notifyProgress(trackId, totalBytesRead, totalTarget)
+                            }
                         }
                         output.flush()
                     }
@@ -167,16 +265,35 @@ class PinnedDownloadManager(
                     throw IOException("Downloaded empty file for track $trackId")
                 }
 
+                if (expectedLength > 0L && totalBytesRead != expectedLength) {
+                    throw IOException("Content-Length mismatch: expected $expectedLength, got $totalBytesRead")
+                }
+
+                // Transition to FINALIZING
+                activeDownloads[trackId] = DownloadStatus(
+                    trackId = trackId,
+                    state = DownloadState.FINALIZING,
+                    bytesDownloaded = totalBytesRead,
+                    totalBytes = totalBytesRead,
+                )
+                notifyFinalizing(trackId)
+
                 val sha256 = bytesToHex(digest.digest())
+                if (sha256.isBlank()) {
+                    throw IOException("Failed to calculate SHA-256 for track $trackId")
+                }
 
                 // Atomic rename from .part to final
                 if (finalFile.exists()) {
                     finalFile.delete()
                 }
                 if (!partFile.renameTo(finalFile)) {
-                    // Fallback rename
                     partFile.copyTo(finalFile, overwrite = true)
                     partFile.delete()
+                }
+
+                if (!finalFile.exists() || finalFile.length() != totalBytesRead) {
+                    throw IOException("Final file verification failed after rename")
                 }
 
                 val record = OfflineTrackRecord(
@@ -201,14 +318,20 @@ class PinnedDownloadManager(
                 )
 
                 store.saveRecord(record)
+                activeDownloads.remove(trackId)
+
+                if (!isOfflineReady(trackId)) {
+                    throw IOException("Offline ready verification failed after saving record")
+                }
+
                 Log.i(TAG, "Successfully downloaded track $trackId ($totalBytesRead bytes, sha256=${sha256.take(8)}...)")
                 notifyCompleted(trackId, record)
             } catch (e: Exception) {
                 Log.e(TAG, "Download failed for track $trackId: ${e.message}", e)
                 partFile?.let { if (it.exists()) it.delete() }
-                notifyFailed(trackId, e.message ?: "Download failed")
-            } finally {
                 activeDownloads.remove(trackId)
+                failedDownloads[trackId] = e.message ?: "Download failed"
+                notifyFailed(trackId, e.message ?: "Download failed")
             }
         }
     }
@@ -217,12 +340,26 @@ class PinnedDownloadManager(
         listeners.toList().forEach { it.onDownloadStarted(trackId) }
     }
 
+    private fun notifyProgress(trackId: Long, bytesDownloaded: Long, totalBytes: Long) {
+        listeners.toList().forEach {
+            it.onDownloadProgress(trackId, bytesDownloaded, totalBytes)
+        }
+    }
+
+    private fun notifyFinalizing(trackId: Long) {
+        listeners.toList().forEach { it.onDownloadFinalizing(trackId) }
+    }
+
     private fun notifyCompleted(trackId: Long, record: OfflineTrackRecord) {
         listeners.toList().forEach { it.onDownloadCompleted(trackId, record) }
     }
 
     private fun notifyFailed(trackId: Long, error: String) {
         listeners.toList().forEach { it.onDownloadFailed(trackId, error) }
+    }
+
+    private fun notifyDeleted(trackId: Long) {
+        listeners.toList().forEach { it.onDownloadDeleted(trackId) }
     }
 
     fun toMediaItem(record: OfflineTrackRecord): MediaItem {
@@ -244,6 +381,7 @@ class PinnedDownloadManager(
             record.loudnessRangeLu?.let { putDouble("loudness_range_lu", it) }
             record.analysisVersion?.let { putInt("loudness_analysis_version", it) }
             putBoolean("is_offline_download", true)
+            putString("playback_source", "PINNED_DOWNLOAD")
         }
 
         return MediaItem.Builder()
@@ -263,8 +401,9 @@ class PinnedDownloadManager(
     }
 
     fun getAllDownloadedMediaItems(): List<MediaItem> {
+        store.reconcile()
         return store.getAllRecords()
-            .filter { store.hasTrack(it.trackId) }
+            .filter { isOfflineReady(it.trackId) }
             .map { toMediaItem(it) }
     }
 }

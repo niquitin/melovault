@@ -369,10 +369,19 @@ class MusicService : MediaLibraryService() {
                 }
                 val currentIndex = player.currentMediaItemIndex
                 val queueSize = player.mediaItemCount
+                val playbackSource = when {
+                    mediaItem?.mediaMetadata?.extras?.getBoolean("is_offline_download") == true ||
+                    mediaItem?.mediaMetadata?.extras?.getString("playback_source") == "PINNED_DOWNLOAD" ||
+                    mediaItem?.localConfiguration?.uri?.scheme == "file" -> "PINNED_DOWNLOAD"
+                    mediaItem?.localConfiguration?.uri?.scheme?.startsWith("http") == true -> "REMOTE_STREAM"
+                    else -> "DEVICE_LOCAL"
+                }
+                Log.i(TAG, "Playback source: $playbackSource")
                 Log.i(
                     TAG,
                     "onMediaItemTransition: mediaId=${mediaItem?.mediaId}, " +
                         "title=${mediaItem?.mediaMetadata?.title}, " +
+                        "playback_source=$playbackSource, " +
                         "reason=$reasonName, " +
                         "index=$currentIndex/$queueSize",
                 )
@@ -1144,24 +1153,37 @@ private class LibraryCallback(
                     // request, then resolve authoritative metadata lazily after playback starts.
                     // This keeps queue setup at 0 detail requests and preserves fast track switching.
                     mediaId.startsWith(RemoteCatalog.DRIVE_FILE_PREFIX) -> {
-                        if (requested.localConfiguration == null) {
-                            Log.i(
-                                TAG,
-                                "onAddMediaItems: drive-file URI missing across IPC; " +
-                                    "rebuilding locally for mediaId=$mediaId",
-                            )
+                        val trackId = requested.mediaMetadata.extras?.getInt("track_id", 0)?.toLong() ?: 0L
+                        val dm = PinnedDownloadManager.getDefault(context)
+                        if (trackId > 0L && dm.isOfflineReady(trackId)) {
+                            dm.getRecord(trackId)?.let { dm.toMediaItem(it) } ?: catalog.withCurrentQuality(requested)
+                        } else {
+                            if (requested.localConfiguration == null) {
+                                Log.i(
+                                    TAG,
+                                    "onAddMediaItems: drive-file URI missing across IPC; " +
+                                        "rebuilding locally for mediaId=$mediaId",
+                                )
+                            }
+                            catalog.withCurrentQuality(requested)
                         }
-                        catalog.withCurrentQuality(requested)
                     }
                     // Local file or content URI: keep as-is.
                     requested.localConfiguration?.uri?.scheme == "file" ||
                     requested.localConfiguration?.uri?.scheme == "content" -> requested
                     // If track is downloaded locally: resolve to file:// with loudness metadata!
                     mediaId.startsWith(RemoteCatalog.TRACK_PREFIX) &&
-                        PinnedDownloadManager.getDefault(context).isDownloaded(
+                        PinnedDownloadManager.getDefault(context).isOfflineReady(
                             mediaId.removePrefix(RemoteCatalog.TRACK_PREFIX).toLongOrNull() ?: -1L
                         ) -> {
-                        catalog.item(mediaId) ?: requested
+                        val trackId = mediaId.removePrefix(RemoteCatalog.TRACK_PREFIX).toLongOrNull() ?: -1L
+                        val dm = PinnedDownloadManager.getDefault(context)
+                        val rec = dm.getRecord(trackId)
+                        if (rec != null) {
+                            dm.toMediaItem(rec)
+                        } else {
+                            catalog.item(mediaId) ?: requested
+                        }
                     }
                     // Non-drive items already fully resolved (stream URI set): keep as-is.
                     requested.localConfiguration != null -> requested

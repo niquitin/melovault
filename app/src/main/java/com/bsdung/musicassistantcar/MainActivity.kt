@@ -2178,11 +2178,19 @@ class MainActivity : AppCompatActivity() {
         override fun onDownloadStarted(trackId: Long) {
             runOnUiThread { libraryAdapter.notifyDataSetChanged() }
         }
-        override fun onDownloadProgress(trackId: Long, bytesDownloaded: Long) {}
+        override fun onDownloadProgress(trackId: Long, bytesDownloaded: Long, totalBytes: Long) {
+            runOnUiThread { libraryAdapter.notifyDataSetChanged() }
+        }
+        override fun onDownloadFinalizing(trackId: Long) {
+            runOnUiThread { libraryAdapter.notifyDataSetChanged() }
+        }
         override fun onDownloadCompleted(trackId: Long, record: com.bsdung.musicassistantcar.playback.OfflineTrackRecord) {
             runOnUiThread {
                 libraryAdapter.notifyDataSetChanged()
                 Toast.makeText(this@MainActivity, "Đã tải xong: ${record.title}", Toast.LENGTH_SHORT).show()
+                if (navManager.currentParentId == RemoteCatalog.DOWNLOADED_ID) {
+                    loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
+                }
             }
         }
         override fun onDownloadFailed(trackId: Long, error: String) {
@@ -2190,6 +2198,14 @@ class MainActivity : AppCompatActivity() {
                 libraryAdapter.notifyDataSetChanged()
                 if (error != "Deleted") {
                     Toast.makeText(this@MainActivity, "Tải thất bại: $error", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+        override fun onDownloadDeleted(trackId: Long) {
+            runOnUiThread {
+                libraryAdapter.notifyDataSetChanged()
+                if (navManager.currentParentId == RemoteCatalog.DOWNLOADED_ID) {
+                    loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
                 }
             }
         }
@@ -2205,14 +2221,23 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        if (dm.isDownloaded(trackId)) {
+        if (dm.isOfflineReady(trackId)) {
             AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
-                .setTitle("Xóa bài hát đã tải?")
-                .setMessage("Bài hát \"${MetadataDisplayHelper.cleanTitle(track.title)}\" sẽ bị xóa khỏi bộ nhớ máy.")
+                .setTitle("Xóa bản tải offline")
+                .setMessage("Chỉ xóa bản lưu trên thiết bị. Bài hát vẫn còn trong kho MeloVault và có thể phát trực tuyến.")
                 .setPositiveButton("Xóa") { _, _ ->
+                    // Section 23: Delete while playing safety policy
+                    val currentItem = browser?.currentMediaItem
+                    val currentTrackId = currentItem?.mediaMetadata?.extras?.getLong("track_id_long")
+                        ?: currentItem?.mediaMetadata?.extras?.getInt("track_id")?.toLong()
+                        ?: currentItem?.mediaId?.removePrefix(RemoteCatalog.TRACK_PREFIX)?.toLongOrNull()
+                    if (currentTrackId == trackId) {
+                        Log.i("MainActivity", "Track $trackId is currently playing, stopping playback before deleting offline copy")
+                        browser?.stop()
+                    }
                     dm.deleteDownload(trackId)
                     libraryAdapter.notifyDataSetChanged()
-                    Toast.makeText(this, "Đã xóa bản tải về", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "Đã xóa bản tải offline", Toast.LENGTH_SHORT).show()
                     if (navManager.currentParentId == RemoteCatalog.DOWNLOADED_ID) {
                         loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
                     }
@@ -2484,6 +2509,18 @@ class MainActivity : AppCompatActivity() {
         bindingDialog.dialogTrackTitle.text = track.title
         bindingDialog.dialogTrackArtist.text = track.artist.ifBlank { "Nghệ sĩ không rõ" }
 
+        bindingDialog.actionPlayTrack.setOnClickListener {
+            dialog.dismiss()
+            val playableTracks = libraryAdapter.getItems().filterIsInstance<LibraryItem.Track>().map { it.mediaItem }
+            val trackIndex = playableTracks.indexOfFirst { it.mediaId == track.mediaItem.mediaId }.coerceAtLeast(0)
+            if (playableTracks.isNotEmpty()) {
+                playQueue(playableTracks, trackIndex)
+            } else {
+                val prepared = uiCatalog.withCurrentQuality(track.mediaItem)
+                playQueue(listOf(prepared), 0)
+            }
+        }
+
         bindingDialog.actionPlayNext.setOnClickListener {
             dialog.dismiss()
             playNext(track)
@@ -2513,20 +2550,31 @@ class MainActivity : AppCompatActivity() {
 
         if (trackId != null && !isDeviceTrack) {
             val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
-            val isDownloaded = dm.isDownloaded(trackId)
+            val isOffline = dm.isOfflineReady(trackId)
             bindingDialog.actionDownload.visibility = View.VISIBLE
-            if (isDownloaded) {
+            if (isOffline) {
+                bindingDialog.layoutOfflineInfo.visibility = View.VISIBLE
+                bindingDialog.txtOfflineState.text = "Có thể nghe offline"
+                val record = dm.getRecord(trackId)
+                val sizeMb = String.format(java.util.Locale.US, "%.1f MB", (record?.fileSizeBytes ?: 0L) / (1024.0 * 1024.0))
+                val dateStr = record?.downloadedAtMs?.let {
+                    java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it))
+                } ?: ""
+                bindingDialog.txtOfflineDetails.text = "Dung lượng: $sizeMb • Đã tải: $dateStr"
+
                 bindingDialog.actionDownloadIcon.setImageResource(R.drawable.ic_delete)
-                bindingDialog.actionDownloadText.text = "Xóa bản tải về"
+                bindingDialog.actionDownloadText.text = "Xóa bản tải offline"
             } else {
+                bindingDialog.layoutOfflineInfo.visibility = View.GONE
                 bindingDialog.actionDownloadIcon.setImageResource(R.drawable.ic_download)
-                bindingDialog.actionDownloadText.text = "Tải về thiết bị"
+                bindingDialog.actionDownloadText.text = "↓ Tải về"
             }
             bindingDialog.actionDownload.setOnClickListener {
                 dialog.dismiss()
                 handleTrackDownloadClick(track)
             }
         } else {
+            bindingDialog.layoutOfflineInfo.visibility = View.GONE
             bindingDialog.actionDownload.visibility = View.GONE
         }
 

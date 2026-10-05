@@ -131,7 +131,7 @@ data class SignalPathInfo(
     val compatibilityTo: String? = null,
 )
 
-class CarApiClient {
+open class CarApiClient {
     private fun cleanString(
         item: JSONObject,
         key: String,
@@ -201,7 +201,7 @@ class CarApiClient {
         )
     }
 
-    fun playlists(): List<CarPlaylist> {
+    open fun playlists(): List<CarPlaylist> {
         val json = getJson("/v1/playlists")
         val items = json.getJSONArray("items")
         return buildList {
@@ -428,7 +428,7 @@ class CarApiClient {
         offset: Int,
     ): List<CarTrack> = playlistTracksWithTotal(playlistId, limit, offset).first
 
-    fun playlistTracksWithTotal(
+    open fun playlistTracksWithTotal(
         playlistId: Int,
         limit: Int,
         offset: Int,
@@ -499,12 +499,12 @@ class CarApiClient {
         )
     }
 
-    fun track(trackId: Int): CarTrack {
+    open fun track(trackId: Int): CarTrack {
         val item = getJson("/v1/tracks/$trackId")
         return parseTrack(item)
     }
 
-    fun streamUri(trackId: Int): Uri =
+    open fun streamUri(trackId: Int): Uri =
         Uri.parse(
             "${baseUrl()}/v1/tracks/$trackId/stream" +
                 "?quality=${PlaybackQuality.current.queryValue}"

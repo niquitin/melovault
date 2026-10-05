@@ -94,18 +94,72 @@
         android:visibility="gone"
         android:text="00:00" />
 
-    <!-- Download Button / Status Indicator -->
-    <ImageView
-        android:id="@+id/btnDownload"
-        android:layout_width="36dp"
-        android:layout_height="36dp"
-        android:padding="7dp"
-        android:layout_marginStart="4dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:src="@drawable/ic_download"
-        android:tint="@color/text_tertiary"
-        android:visibility="gone"
-        android:contentDescription="Tải về" />
+    <!-- Download Status Container -->
+    <LinearLayout
+        android:id="@+id/downloadContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginStart="6dp"
+        android:visibility="gone">
+
+        <!-- DOWNLOADING progress layout -->
+        <LinearLayout
+            android:id="@+id/downloadProgressLayout"
+            android:layout_width="96dp"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:id="@+id/downloadProgressBar"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="4dp"
+                android:max="100" />
+
+            <TextView
+                android:id="@+id/txtDownloadProgress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="10sp"
+                android:textColor="@color/text_tertiary"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:layout_marginTop="2dp"
+                android:text="0%" />
+        </LinearLayout>
+
+        <!-- Status Badge: "↓ Tải về", "Đang chờ tải", "Đang hoàn tất...", "✓ Offline", "! Tải lỗi" -->
+        <TextView
+            android:id="@+id/txtDownloadStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:paddingTop="4dp"
+            android:paddingBottom="4dp"
+            android:background="@drawable/bg_button_tertiary"
+            android:textColor="@color/text_secondary"
+            android:visibility="gone" />
+
+        <!-- Icon button: can be clicked to start download, retry, or delete -->
+        <ImageView
+            android:id="@+id/btnDownload"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:padding="7dp"
+            android:layout_marginStart="2dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_download"
+            android:tint="@color/text_tertiary"
+            android:visibility="gone"
+            android:contentDescription="Tải về" />
+    </LinearLayout>
 
     <!-- Now Playing Indicator (Play / Pause) -->
     <ImageView

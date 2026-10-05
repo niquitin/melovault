@@ -408,7 +408,7 @@ class RemoteCatalog(
                 ?: return null
 
             val dm = downloadManagerSupplier()
-            if (dm != null && dm.isDownloaded(id.toLong())) {
+            if (dm != null && dm.isOfflineReady(id.toLong())) {
                 val record = dm.getRecord(id.toLong())
                 if (record != null) {
                     return dm.toMediaItem(record)
