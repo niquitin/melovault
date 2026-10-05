@@ -20,6 +20,7 @@ import android.os.SystemClock
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.activity.OnBackPressedCallback
+import java.util.Locale
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
@@ -801,6 +802,41 @@ class MainActivity : AppCompatActivity() {
             triggerCollectionAddToQueue()
         }
 
+        binding.collectionDownloadAllButton.setOnClickListener {
+            triggerCollectionDownloadAll()
+        }
+
+        binding.collectionDeleteOfflineButton.setOnClickListener {
+            triggerPlaylistDeleteOffline()
+        }
+
+        binding.btnCancelPendingQueue.setOnClickListener {
+            val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
+            val cancelled = dm.cancelPendingQueue()
+            Toast.makeText(this, "Đã hủy các bài trong hàng đợi ($cancelled bài)", Toast.LENGTH_SHORT).show()
+            updateDownloadQueueHeader()
+            if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
+                loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
+            }
+        }
+
+        binding.btnCancelAllDownloads.setOnClickListener {
+            AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                .setTitle("Hủy tất cả lượt tải?")
+                .setMessage("Dừng lượt tải đang thực hiện và hủy toàn bộ hàng đợi? Các bài hát đã tải hoàn tất trước đó sẽ không bị xóa.")
+                .setPositiveButton("Hủy tất cả") { _, _ ->
+                    val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
+                    val cancelled = dm.cancelAllJobs()
+                    Toast.makeText(this, "Đã hủy toàn bộ lượt tải ($cancelled bài)", Toast.LENGTH_SHORT).show()
+                    updateDownloadQueueHeader()
+                    if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
+                        loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
+                    }
+                }
+                .setNegativeButton("Đóng", null)
+                .show()
+        }
+
         updateHeaderAndBreadcrumbs()
         com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this).addListener(downloadListener)
     }
@@ -1139,6 +1175,9 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        updateCollectionActionBar()
+        updateDownloadQueueHeader()
+
         val showPagination = !navManager.isAtRoot
         binding.pageBar.visibility = if (showPagination) View.VISIBLE else View.GONE
         binding.previousPageButton.visibility =
@@ -1196,6 +1235,7 @@ class MainActivity : AppCompatActivity() {
 
         updateCollectionActionBar()
         updateCollectionSortButton()
+        updateDownloadQueueHeader()
     }
 
     private fun updateCollectionSortButton() {
@@ -1263,6 +1303,23 @@ class MainActivity : AppCompatActivity() {
         val parentId = navManager.currentParentId
         val showBar = !isEditMode && !isQueueVisible && isCollectionContext(parentId)
         binding.collectionActionBar.visibility = if (showBar) View.VISIBLE else View.GONE
+        if (showBar) {
+            val isPlaylist = parentId.startsWith(RemoteCatalog.PLAYLIST_PREFIX)
+            binding.collectionDownloadAllButton.text = if (isPlaylist) "↓ Tải playlist" else "↓ Tải tất cả"
+
+            if (isPlaylist) {
+                val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
+                val currentItems = libraryAdapter.getItems().filterIsInstance<LibraryItem.Track>()
+                val hasOffline = currentItems.any { track ->
+                    val tid = RemoteCatalog.canonicalTrackMediaId(track.mediaItem)?.removePrefix(RemoteCatalog.TRACK_PREFIX)?.toLongOrNull()
+                        ?: track.id.removePrefix(RemoteCatalog.TRACK_PREFIX).toLongOrNull()
+                    tid != null && dm.isOfflineReady(tid)
+                }
+                binding.collectionDeleteOfflineButton.visibility = if (hasOffline) View.VISIBLE else View.GONE
+            } else {
+                binding.collectionDeleteOfflineButton.visibility = View.GONE
+            }
+        }
     }
 
     /** Returns true if [parentId] is a browseable collection that supports Play All / Shuffle. */
@@ -1523,6 +1580,245 @@ class MainActivity : AppCompatActivity() {
                     Toast.makeText(this, "Không thể tải danh sách phát", Toast.LENGTH_SHORT).show()
                 }
             }
+        }
+    }
+
+    private fun triggerCollectionDownloadAll() {
+        val parentId = navManager.currentParentId
+        val params = buildCollectionParams(parentId)
+        val isPlaylist = parentId.startsWith(RemoteCatalog.PLAYLIST_PREFIX)
+        val collectionTitle = navManager.currentLabel.ifBlank { if (isPlaylist) "Playlist" else "Bộ sưu tập" }
+        val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
+
+        fun onTracksReady(tracks: List<com.bsdung.musicassistantcar.data.CarTrack>) {
+            if (tracks.isEmpty()) {
+                Toast.makeText(this, "Không có bài hát để tải", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            val classification = dm.classifyTracksForDownload(tracks)
+            val total = classification.totalTracks
+            val alreadyOffline = classification.alreadyOfflineTracks.size
+            val inProgress = classification.inProgressTracks.size
+            val eligibleNew = classification.eligibleNewTracks.size
+            val knownBytes = classification.knownTotalBytes
+            val unknownCount = classification.unknownSizeCount
+
+            if (eligibleNew == 0) {
+                if (alreadyOffline == total) {
+                    Toast.makeText(this, "Tất cả bài hát đã được tải offline", Toast.LENGTH_SHORT).show()
+                } else if (inProgress > 0) {
+                    Toast.makeText(this, "Tất cả bài hát còn lại đang trong hàng đợi tải", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(this, "Không có bài hát mới cần tải", Toast.LENGTH_SHORT).show()
+                }
+                return
+            }
+
+            val availableBytes = dm.getAvailableStorageBytes()
+            val mbFormat = { bytes: Long ->
+                String.format(Locale.US, "%.1f MB", bytes.toDouble() / (1024.0 * 1024.0))
+            }
+
+            if (knownBytes > 0L && availableBytes > 0L && knownBytes > availableBytes) {
+                AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                    .setTitle("Không đủ dung lượng bộ nhớ")
+                    .setMessage("Cần khoảng ${mbFormat(knownBytes)} nhưng bộ nhớ thiết bị chỉ còn ${mbFormat(availableBytes)} khả dụng.\n\nVui lòng giải phóng bộ nhớ trước khi tải.")
+                    .setPositiveButton("Đã hiểu", null)
+                    .show()
+                return
+            }
+
+            val msgBuilder = StringBuilder()
+            msgBuilder.append("Danh sách gồm $total bài hát:\n")
+            if (alreadyOffline > 0) {
+                msgBuilder.append("• $alreadyOffline bài đã tải xong (sẽ bỏ qua)\n")
+            }
+            if (inProgress > 0) {
+                msgBuilder.append("• $inProgress bài đang trong hàng đợi (sẽ bỏ qua)\n")
+            }
+            msgBuilder.append("• $eligibleNew bài sẽ được thêm vào hàng đợi tải")
+            if (knownBytes > 0L) {
+                msgBuilder.append(" (~${mbFormat(knownBytes)})")
+            }
+            if (unknownCount > 0) {
+                msgBuilder.append(" [có $unknownCount bài chưa rõ dung lượng]")
+            }
+            msgBuilder.append("\n\nTiếp tục tải?")
+
+            val dialogTitle = if (isPlaylist) "Tải offline playlist" else "Tải offline danh sách"
+            AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                .setTitle(dialogTitle)
+                .setMessage(msgBuilder.toString())
+                .setPositiveButton("Tải về") { _, _ ->
+                    val sourceType = if (isPlaylist) "PLAYLIST" else (params?.kind?.uppercase() ?: "CURRENT_REMOTE_LIST")
+                    val sourceId = if (isPlaylist) (params?.playlistId?.toString() ?: parentId) else parentId
+                    val batch = com.bsdung.musicassistantcar.playback.DownloadBatch(
+                        sourceType = sourceType,
+                        sourceId = sourceId,
+                        sourceDisplayName = collectionTitle,
+                        trackIds = tracks.map { it.id.toLong() },
+                        initialEligibleCount = eligibleNew,
+                        knownTotalBytes = knownBytes,
+                        hasUnknownSizes = unknownCount > 0,
+                    )
+                    val enqueued = dm.enqueueBatch(batch, classification.eligibleNewTracks)
+                    libraryAdapter.notifyDataSetChanged()
+                    Toast.makeText(this, "Đã thêm $enqueued bài vào hàng đợi tải offline", Toast.LENGTH_SHORT).show()
+                    if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
+                        loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
+                    }
+                }
+                .setNegativeButton("Hủy", null)
+                .show()
+        }
+
+        if (params != null) {
+            binding.collectionDownloadAllButton.isEnabled = false
+            collectionFetchExecutor.submit {
+                val result = runCatching {
+                    val effectiveSort = if (params.kind == "playlist") "" else navManager.currentSort
+                    uiCatalog.fetchCollectionPlayback(
+                        kind = params.kind,
+                        artist = params.artist,
+                        album = params.album,
+                        root = params.root,
+                        path = params.path,
+                        playlistId = params.playlistId,
+                        sort = effectiveSort,
+                    )
+                }
+                runOnUiThread {
+                    binding.collectionDownloadAllButton.isEnabled = true
+                    result.onSuccess { res ->
+                        onTracksReady(res.items)
+                    }.onFailure { exc ->
+                        Toast.makeText(this, "Không thể lấy danh sách bài hát: ${exc.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        } else {
+            val tracks = libraryAdapter.getItems().filterIsInstance<LibraryItem.Track>().map { track ->
+                val tid = RemoteCatalog.canonicalTrackMediaId(track.mediaItem)?.removePrefix(RemoteCatalog.TRACK_PREFIX)?.toIntOrNull()
+                    ?: track.id.removePrefix(RemoteCatalog.TRACK_PREFIX).toIntOrNull() ?: 0
+                com.bsdung.musicassistantcar.data.CarTrack(
+                    id = tid,
+                    title = track.title,
+                    artist = track.artist,
+                    album = track.album.orEmpty(),
+                    status = "ready",
+                    duration = (track.durationMs ?: 0L) / 1000.0,
+                    sourceFormat = track.format,
+                    sourceSizeBytes = track.sizeBytes,
+                    sourceCodec = track.codec,
+                    sourceBitrate = track.bitrate,
+                    sourceSampleRate = track.sampleRate,
+                    sourceChannels = track.channels,
+                    loudnessLufs = track.mediaItem.mediaMetadata.extras?.takeIf { it.containsKey("loudness_lufs") }?.getDouble("loudness_lufs"),
+                    truePeakDbtp = track.mediaItem.mediaMetadata.extras?.takeIf { it.containsKey("true_peak_dbtp") }?.getDouble("true_peak_dbtp"),
+                    loudnessRangeLu = track.mediaItem.mediaMetadata.extras?.takeIf { it.containsKey("loudness_range_lu") }?.getDouble("loudness_range_lu"),
+                    loudnessAnalysisVersion = track.mediaItem.mediaMetadata.extras?.takeIf { it.containsKey("loudness_analysis_version") }?.getInt("loudness_analysis_version"),
+                )
+            }
+            onTracksReady(tracks)
+        }
+    }
+
+    private fun triggerPlaylistDeleteOffline() {
+        val parentId = navManager.currentParentId
+        if (!parentId.startsWith(RemoteCatalog.PLAYLIST_PREFIX)) return
+        val playlistTitle = navManager.currentLabel.ifBlank { "Playlist" }
+        val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
+
+        val currentItems = libraryAdapter.getItems().filterIsInstance<LibraryItem.Track>()
+        val offlineTrackIds = currentItems.mapNotNull { track ->
+            val tid = RemoteCatalog.canonicalTrackMediaId(track.mediaItem)?.removePrefix(RemoteCatalog.TRACK_PREFIX)?.toLongOrNull()
+                ?: track.id.removePrefix(RemoteCatalog.TRACK_PREFIX).toLongOrNull()
+            tid?.takeIf { dm.isOfflineReady(it) }
+        }
+
+        if (offlineTrackIds.isEmpty()) {
+            Toast.makeText(this, "Không có bài hát offline nào trong danh sách này", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            .setTitle("Xóa bản offline của playlist")
+            .setMessage("Xóa ${offlineTrackIds.size} bài hát đã tải offline trong \"$playlistTitle\" khỏi bộ nhớ thiết bị?\n\nCác bài hát trong kho MeloVault vẫn được giữ nguyên và có thể phát trực tuyến.")
+            .setPositiveButton("Xóa bản offline") { _, _ ->
+                val currentItem = browser?.currentMediaItem
+                val currentTrackId = currentItem?.mediaMetadata?.extras?.getLong("track_id_long")
+                    ?: currentItem?.mediaMetadata?.extras?.getInt("track_id")?.toLong()
+                    ?: currentItem?.mediaId?.removePrefix(RemoteCatalog.TRACK_PREFIX)?.toLongOrNull()
+                if (currentTrackId != null && offlineTrackIds.contains(currentTrackId)) {
+                    Log.i("MainActivity", "Track $currentTrackId is in deleted playlist offline set, stopping playback before deleting offline copies")
+                    browser?.stop()
+                    browser?.clearMediaItems()
+                }
+                val deleted = dm.deleteOfflinePlaylist(offlineTrackIds)
+                libraryAdapter.notifyDataSetChanged()
+                updateCollectionActionBar()
+                Toast.makeText(this, "Đã xóa bản offline của $deleted bài hát", Toast.LENGTH_SHORT).show()
+                loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
+    }
+
+    private fun updateDownloadQueueHeader() {
+        if (navManager.currentParentId != RemoteCatalog.DOWNLOADING_ID) {
+            binding.downloadQueueHeader.visibility = View.GONE
+            return
+        }
+
+        binding.downloadQueueHeader.visibility = View.VISIBLE
+        val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
+        val progress = dm.getActiveBatchProgress()
+
+        if (progress != null) {
+            val title = progress.sourceDisplayName.ifBlank { "Hàng đợi tải offline" }
+            binding.queueBatchTitle.text = title
+            binding.queueTrackCount.text = "${progress.completedTracks}/${progress.totalTracks} bài"
+
+            val currTitle = progress.currentTrackTitle
+            val currProgress = progress.currentTrackProgress
+            if (currTitle != null) {
+                val dlMb = String.format(Locale.US, "%.1f", (currProgress?.bytesDownloaded ?: 0L) / (1024.0 * 1024.0))
+                val totBytes = currProgress?.totalBytes ?: 0L
+                val infoText = if (totBytes > 0L) {
+                    val totMb = String.format(Locale.US, "%.1f", totBytes / (1024.0 * 1024.0))
+                    val pct = (((currProgress?.bytesDownloaded ?: 0L) * 100L) / totBytes).toInt().coerceIn(0, 100)
+                    "Đang tải: $currTitle · $pct% ($dlMb / $totMb MB)"
+                } else {
+                    "Đang tải: $currTitle · $dlMb MB"
+                }
+                binding.queueCurrentTrackText.text = infoText
+            } else if (progress.inProgressTracks > 0) {
+                binding.queueCurrentTrackText.text = "Đang chờ tải..."
+            } else {
+                binding.queueCurrentTrackText.text = "Hàng đợi hoàn tất"
+            }
+
+            if (progress.totalBytesKnown > 0L) {
+                val pct = ((progress.downloadedBytes * 100L) / progress.totalBytesKnown).toInt().coerceIn(0, 100)
+                binding.queueProgressBar.isIndeterminate = false
+                binding.queueProgressBar.progress = pct
+            } else {
+                val pct = if (progress.totalTracks > 0) {
+                    ((progress.completedTracks * 100) / progress.totalTracks).coerceIn(0, 100)
+                } else {
+                    0
+                }
+                binding.queueProgressBar.isIndeterminate = false
+                binding.queueProgressBar.progress = pct
+            }
+        } else {
+            val allJobs = dm.getActiveJobMediaItems()
+            binding.queueBatchTitle.text = "Hàng đợi tải offline"
+            binding.queueTrackCount.text = "${allJobs.size} bài"
+            binding.queueCurrentTrackText.text = if (allJobs.isNotEmpty()) "Đang xử lý hàng đợi" else "Không có tác vụ tải"
+            binding.queueProgressBar.isIndeterminate = false
+            binding.queueProgressBar.progress = 0
         }
     }
 
@@ -2182,6 +2478,7 @@ class MainActivity : AppCompatActivity() {
         override fun onDownloadStarted(trackId: Long) {
             runOnUiThread {
                 libraryAdapter.notifyDataSetChanged()
+                updateDownloadQueueHeader()
                 if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
                     loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
                 }
@@ -2190,16 +2487,24 @@ class MainActivity : AppCompatActivity() {
         override fun onDownloadProgress(trackId: Long, bytesDownloaded: Long, totalBytes: Long) {
             runOnUiThread {
                 libraryAdapter.notifyDataSetChanged()
+                if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
+                    updateDownloadQueueHeader()
+                }
             }
         }
         override fun onDownloadFinalizing(trackId: Long) {
             runOnUiThread {
                 libraryAdapter.notifyDataSetChanged()
+                if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
+                    updateDownloadQueueHeader()
+                }
             }
         }
         override fun onDownloadCompleted(trackId: Long, record: com.bsdung.musicassistantcar.playback.OfflineTrackRecord) {
             runOnUiThread {
                 libraryAdapter.notifyDataSetChanged()
+                updateCollectionActionBar()
+                updateDownloadQueueHeader()
                 Toast.makeText(this@MainActivity, "Đã tải xong: ${record.title}", Toast.LENGTH_SHORT).show()
                 if (navManager.currentParentId == RemoteCatalog.DOWNLOADED_ID || navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
                     loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
@@ -2209,6 +2514,7 @@ class MainActivity : AppCompatActivity() {
         override fun onDownloadFailed(trackId: Long, error: String) {
             runOnUiThread {
                 libraryAdapter.notifyDataSetChanged()
+                updateDownloadQueueHeader()
                 if (error != "Deleted") {
                     Toast.makeText(this@MainActivity, "Tải thất bại: $error", Toast.LENGTH_SHORT).show()
                 }
@@ -2220,6 +2526,7 @@ class MainActivity : AppCompatActivity() {
         override fun onDownloadCancelled(trackId: Long) {
             runOnUiThread {
                 libraryAdapter.notifyDataSetChanged()
+                updateDownloadQueueHeader()
                 if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
                     loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
                 }
@@ -2228,6 +2535,8 @@ class MainActivity : AppCompatActivity() {
         override fun onDownloadDeleted(trackId: Long) {
             runOnUiThread {
                 libraryAdapter.notifyDataSetChanged()
+                updateCollectionActionBar()
+                updateDownloadQueueHeader()
                 if (navManager.currentParentId == RemoteCatalog.DOWNLOADED_ID || navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
                     loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
                 }

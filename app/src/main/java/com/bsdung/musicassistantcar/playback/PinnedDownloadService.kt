@@ -187,6 +187,60 @@ class PinnedDownloadService : Service() {
     }
 
     private fun buildNotification(title: String, bytesDownloaded: Long, totalBytes: Long): Notification {
+        val contentIntent = PendingIntent.getActivity(
+            this,
+            0,
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
+        )
+
+        val manager = PinnedDownloadManager.getDefault(applicationContext)
+        val batchProgress = manager.getActiveBatchProgress()
+
+        if (batchProgress != null && batchProgress.totalTracks > 1) {
+            val completed = batchProgress.completedTracks
+            val total = batchProgress.totalTracks
+            val currentTrack = batchProgress.currentTrackTitle ?: title.ifBlank { "Chuẩn bị tải..." }
+            val notifTitle = "Đang tải offline"
+            val contentText = "$completed/$total bài · $currentTrack"
+            val subText = batchProgress.sourceDisplayName.ifBlank { "MeloVault" }
+
+            val builder = NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentTitle(notifTitle)
+                .setContentText(contentText)
+                .setSubText(subText)
+                .setContentIntent(contentIntent)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+
+            if (batchProgress.totalBytesKnown > 0L) {
+                val pct = ((batchProgress.downloadedBytes * 100L) / batchProgress.totalBytesKnown).coerceIn(0L, 100L).toInt()
+                val dlMb = batchProgress.downloadedBytes.toDouble() / (1024.0 * 1024.0)
+                val totMb = batchProgress.totalBytesKnown.toDouble() / (1024.0 * 1024.0)
+                val progressText = String.format(Locale.US, "%d%% · %.1f / %.1f MB", pct, dlMb, totMb)
+                builder.setStyle(
+                    NotificationCompat.BigTextStyle()
+                        .setBigContentTitle(notifTitle)
+                        .setSummaryText(subText)
+                        .bigText("$completed/$total bài · $currentTrack\nTiến độ: $progressText")
+                )
+                builder.setProgress(100, pct, false)
+            } else {
+                val pct = if (total > 0) ((completed * 100) / total).coerceIn(0, 100) else 0
+                builder.setStyle(
+                    NotificationCompat.BigTextStyle()
+                        .setBigContentTitle(notifTitle)
+                        .setSummaryText(subText)
+                        .bigText("$completed/$total bài · $currentTrack")
+                )
+                builder.setProgress(100, pct, false)
+            }
+            return builder.build()
+        }
+
         val downloadedMb = bytesDownloaded.toDouble() / (1024.0 * 1024.0)
         val progressText = if (totalBytes > 0L) {
             val totalMb = totalBytes.toDouble() / (1024.0 * 1024.0)
@@ -197,15 +251,6 @@ class PinnedDownloadService : Service() {
         }
 
         val displayTitle = title.ifBlank { "Đang tải nhạc offline" }
-
-        val contentIntent = PendingIntent.getActivity(
-            this,
-            0,
-            Intent(this, MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            },
-            PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
-        )
 
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download)

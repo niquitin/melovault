@@ -51,6 +51,43 @@ data class DownloadJob(
     @Volatile var isCancelled: Boolean = false,
     val enqueuedAtMs: Long = System.currentTimeMillis(),
     val attemptId: Long = 0L,
+    val batchId: String? = null,
+)
+
+data class DownloadBatch(
+    val batchId: String = "download_batch:${java.util.UUID.randomUUID()}",
+    val sourceType: String, // "PLAYLIST", "CURRENT_REMOTE_LIST", "ALBUM", "ARTIST", "DRIVE_FOLDER"
+    val sourceId: String,
+    val sourceDisplayName: String,
+    val createdAt: Long = System.currentTimeMillis(),
+    val trackIds: List<Long>,
+    val initialEligibleCount: Int,
+    val knownTotalBytes: Long,
+    val hasUnknownSizes: Boolean,
+)
+
+data class BulkClassificationResult(
+    val totalTracks: Int,
+    val alreadyOfflineTracks: List<CarTrack>,
+    val inProgressTracks: List<CarTrack>,
+    val eligibleNewTracks: List<CarTrack>,
+    val knownTotalBytes: Long,
+    val unknownSizeCount: Int,
+)
+
+data class BatchProgress(
+    val batchId: String,
+    val sourceDisplayName: String,
+    val totalTracks: Int,
+    val completedTracks: Int,
+    val failedTracks: Int,
+    val cancelledTracks: Int,
+    val inProgressTracks: Int,
+    val totalBytesKnown: Long,
+    val downloadedBytes: Long,
+    val hasUnknownSizes: Boolean,
+    val currentTrackTitle: String?,
+    val currentTrackProgress: DownloadStatus?,
 )
 
 interface DownloadWakeLock {
@@ -142,10 +179,6 @@ open class PinnedDownloadManager(
         this.context = context.applicationContext
     }
 
-    init {
-        cleanOrphanParts()
-    }
-
     companion object {
         private const val TAG = "PinnedDownloadManager"
         const val DOWNLOADED_PREFIX = "downloaded:"
@@ -199,6 +232,13 @@ open class PinnedDownloadManager(
     private val listeners = Collections.synchronizedSet(mutableSetOf<DownloadListener>())
     private val jobs = ConcurrentHashMap<Long, DownloadJob>()
     private val activeStreams = ConcurrentHashMap<Long, InputStream>()
+    @Volatile
+    private var activeBatch: DownloadBatch? = null
+
+    init {
+        cleanOrphanParts()
+        restoreQueueState()
+    }
 
     fun cleanOrphanParts(): Int {
         val storageDir = store.getStorageDirectory()
@@ -323,6 +363,7 @@ open class PinnedDownloadManager(
         if (!hasActiveJobs()) {
             serviceController?.onQueueIdle()
         }
+        persistQueueState()
         return removed
     }
 
@@ -345,6 +386,7 @@ open class PinnedDownloadManager(
                     serviceController?.onQueueIdle()
                 }
             }
+            persistQueueState()
             return true
         }
     }
@@ -365,10 +407,12 @@ open class PinnedDownloadManager(
             state = DownloadState.QUEUED,
             totalBytes = existingJob.track.sourceSizeBytes ?: 0L,
             attemptId = attemptCounter.incrementAndGet(),
+            batchId = existingJob.batchId,
         )
         jobs[trackId] = newJob
         notifyStarted(trackId)
         serviceController?.onQueueActive()
+        persistQueueState()
         executor.submit { runDownloadJob(newJob, apiClient) }
         return true
     }
@@ -404,8 +448,248 @@ open class PinnedDownloadManager(
         jobs[trackId] = job
         notifyStarted(trackId)
         serviceController?.onQueueActive()
+        persistQueueState()
 
         executor.submit { runDownloadJob(job, apiClient) }
+    }
+
+    fun classifyTracksForDownload(tracks: List<CarTrack>): BulkClassificationResult {
+        val distinctTracks = tracks.distinctBy { it.id }
+        val alreadyOffline = mutableListOf<CarTrack>()
+        val inProgress = mutableListOf<CarTrack>()
+        val eligibleNew = mutableListOf<CarTrack>()
+
+        for (t in distinctTracks) {
+            val trackId = t.id.toLong()
+            if (isOfflineReady(trackId)) {
+                alreadyOffline.add(t)
+            } else {
+                val job = jobs[trackId]
+                if (job != null && (job.state == DownloadState.QUEUED ||
+                        job.state == DownloadState.DOWNLOADING ||
+                        job.state == DownloadState.FINALIZING)) {
+                    inProgress.add(t)
+                } else {
+                    eligibleNew.add(t)
+                }
+            }
+        }
+
+        var knownBytes = 0L
+        var unknownCount = 0
+        for (t in eligibleNew) {
+            val size = t.sourceSizeBytes
+            if (size != null && size > 0L) {
+                knownBytes += size
+            } else {
+                unknownCount++
+            }
+        }
+
+        return BulkClassificationResult(
+            totalTracks = distinctTracks.size,
+            alreadyOfflineTracks = alreadyOffline,
+            inProgressTracks = inProgress,
+            eligibleNewTracks = eligibleNew,
+            knownTotalBytes = knownBytes,
+            unknownSizeCount = unknownCount,
+        )
+    }
+
+    fun getAvailableStorageBytes(): Long {
+        return try {
+            store.getStorageDirectory().usableSpace
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
+    fun hasSufficientStorage(requiredBytes: Long): Boolean {
+        if (requiredBytes <= 0L) return true
+        return getAvailableStorageBytes() >= requiredBytes
+    }
+
+    fun getActiveBatch(): DownloadBatch? = activeBatch
+
+    fun setActiveBatch(batch: DownloadBatch?) {
+        activeBatch = batch
+    }
+
+    fun getActiveBatchProgress(): BatchProgress? {
+        val batch = activeBatch ?: return null
+        val trackIds = batch.trackIds
+        var completedCount = 0
+        var failedCount = 0
+        var cancelledCount = 0
+        var inProgressCount = 0
+        var currentDownloadingTrack: CarTrack? = null
+        var currentDownloadingStatus: DownloadStatus? = null
+        var downloadedBytesSum = 0L
+
+        for (id in trackIds) {
+            val job = jobs[id]
+            if (isOfflineReady(id)) {
+                completedCount++
+                val record = store.getRecord(id)
+                downloadedBytesSum += (record?.fileSizeBytes ?: 0L)
+            } else if (job != null) {
+                when (job.state) {
+                    DownloadState.QUEUED -> {
+                        inProgressCount++
+                    }
+                    DownloadState.DOWNLOADING, DownloadState.FINALIZING -> {
+                        inProgressCount++
+                        if (currentDownloadingTrack == null) {
+                            currentDownloadingTrack = job.track
+                            currentDownloadingStatus = DownloadStatus(
+                                trackId = id,
+                                state = job.state,
+                                bytesDownloaded = job.bytesDownloaded,
+                                totalBytes = job.totalBytes,
+                                errorMessage = job.errorMessage,
+                                title = job.track.title,
+                                artist = job.track.artist,
+                            )
+                        }
+                        downloadedBytesSum += job.bytesDownloaded
+                    }
+                    DownloadState.FAILED -> {
+                        failedCount++
+                    }
+                    DownloadState.CANCELLED -> {
+                        cancelledCount++
+                    }
+                    DownloadState.OFFLINE_READY -> {
+                        completedCount++
+                        val record = store.getRecord(id)
+                        downloadedBytesSum += (record?.fileSizeBytes ?: 0L)
+                    }
+                    DownloadState.NOT_DOWNLOADED -> {}
+                }
+            }
+        }
+
+        return BatchProgress(
+            batchId = batch.batchId,
+            sourceDisplayName = batch.sourceDisplayName,
+            totalTracks = trackIds.size,
+            completedTracks = completedCount,
+            failedTracks = failedCount,
+            cancelledTracks = cancelledCount,
+            inProgressTracks = inProgressCount,
+            totalBytesKnown = batch.knownTotalBytes,
+            downloadedBytes = downloadedBytesSum,
+            hasUnknownSizes = batch.hasUnknownSizes,
+            currentTrackTitle = currentDownloadingTrack?.title,
+            currentTrackProgress = currentDownloadingStatus,
+        )
+    }
+
+    fun enqueueBatch(
+        batch: DownloadBatch,
+        tracksToEnqueue: List<CarTrack>,
+        apiClient: CarApiClient = CarApiClient(),
+    ): Int {
+        activeBatch = batch
+        var enqueuedCount = 0
+        val distinctTracks = tracksToEnqueue.distinctBy { it.id }
+
+        for (track in distinctTracks) {
+            val trackId = track.id.toLong()
+            if (isOfflineReady(trackId)) {
+                continue
+            }
+            val existingJob = jobs[trackId]
+            if (existingJob != null && (existingJob.state == DownloadState.QUEUED ||
+                    existingJob.state == DownloadState.DOWNLOADING ||
+                    existingJob.state == DownloadState.FINALIZING)) {
+                continue
+            }
+
+            val storageDir = store.getStorageDirectory()
+            val partFile = File(storageDir, "track_${trackId}.part")
+            if (partFile.exists()) {
+                partFile.delete()
+            }
+
+            val total = track.sourceSizeBytes ?: 0L
+            val job = DownloadJob(
+                track = track,
+                state = DownloadState.QUEUED,
+                totalBytes = total,
+                attemptId = attemptCounter.incrementAndGet(),
+                batchId = batch.batchId,
+            )
+            jobs[trackId] = job
+            enqueuedCount++
+            notifyStarted(trackId)
+            executor.submit { runDownloadJob(job, apiClient) }
+        }
+
+        if (enqueuedCount > 0) {
+            serviceController?.onQueueActive()
+        }
+        persistQueueState()
+        return enqueuedCount
+    }
+
+    fun cancelPendingQueue(): Int {
+        var cancelledCount = 0
+        for (job in jobs.values) {
+            synchronized(job) {
+                if (job.state == DownloadState.QUEUED) {
+                    job.isCancelled = true
+                    job.state = DownloadState.CANCELLED
+                    notifyCancelled(job.track.id.toLong())
+                    cancelledCount++
+                }
+            }
+        }
+        if (!hasActiveJobs()) {
+            serviceController?.onQueueIdle()
+        }
+        persistQueueState()
+        return cancelledCount
+    }
+
+    fun cancelAllJobs(): Int {
+        var cancelledCount = 0
+        val storageDir = store.getStorageDirectory()
+        for ((trackId, job) in jobs) {
+            synchronized(job) {
+                if (job.state == DownloadState.QUEUED || job.state == DownloadState.DOWNLOADING || job.state == DownloadState.FINALIZING) {
+                    job.isCancelled = true
+                    val wasActive = (job.state == DownloadState.DOWNLOADING || job.state == DownloadState.FINALIZING)
+                    job.state = DownloadState.CANCELLED
+                    activeStreams.remove(trackId)?.let { runCatching { it.close() } }
+                    val partFile = File(storageDir, "track_${trackId}.part")
+                    if (partFile.exists()) {
+                        partFile.delete()
+                    }
+                    if (!wasActive) {
+                        notifyCancelled(trackId)
+                    }
+                    cancelledCount++
+                }
+            }
+        }
+        if (!hasActiveJobs()) {
+            serviceController?.onQueueIdle()
+        }
+        persistQueueState()
+        return cancelledCount
+    }
+
+    fun deleteOfflinePlaylist(trackIds: List<Long>): Int {
+        var count = 0
+        for (trackId in trackIds.distinct()) {
+            if (isOfflineReady(trackId)) {
+                if (deleteDownload(trackId)) {
+                    count++
+                }
+            }
+        }
+        return count
     }
 
     private fun runDownloadJob(job: DownloadJob, apiClient: CarApiClient) {
@@ -593,6 +877,9 @@ open class PinnedDownloadManager(
             wakeLock?.release()
             if (committed) {
                 Log.i(TAG, "Successfully downloaded track $trackId ($totalBytesRead bytes, sha256=${sha256.take(8)}...)")
+                if (!hasActiveJobs()) {
+                    serviceController?.onQueueIdle()
+                }
                 notifyCompleted(trackId, record)
             }
         } catch (e: Exception) {
@@ -604,12 +891,21 @@ open class PinnedDownloadManager(
                 finalFile?.let { if (it.exists() && !isOfflineReady(trackId)) it.delete() }
                 if (job.isCancelled) {
                     job.state = DownloadState.CANCELLED
+                    if (!hasActiveJobs()) {
+                        serviceController?.onQueueIdle()
+                    }
                     notifyCancelled(trackId)
                 } else {
-                    Log.e(TAG, "Download failed for track $trackId: ${e.message}", e)
+                    val isNoSpace = e.message?.contains("ENOSPC", ignoreCase = true) == true ||
+                        e.message?.contains("No space left", ignoreCase = true) == true
+                    val errorMsg = if (isNoSpace) "Không đủ dung lượng bộ nhớ" else (e.message ?: "Download failed")
+                    Log.e(TAG, "Download failed for track $trackId: $errorMsg", e)
                     job.state = DownloadState.FAILED
-                    job.errorMessage = e.message ?: "Download failed"
-                    notifyFailed(trackId, job.errorMessage ?: "Download failed")
+                    job.errorMessage = errorMsg
+                    if (!hasActiveJobs()) {
+                        serviceController?.onQueueIdle()
+                    }
+                    notifyFailed(trackId, errorMsg)
                 }
             } else {
                 partFile?.let { if (it.exists()) it.delete() }
@@ -623,6 +919,7 @@ open class PinnedDownloadManager(
             if (!hasActiveJobs()) {
                 serviceController?.onQueueIdle()
             }
+            persistQueueState()
         }
     }
 
@@ -728,5 +1025,265 @@ open class PinnedDownloadManager(
                     )
                     .build()
             }
+    }
+
+    private fun escapeJson(str: String): String {
+        val sb = StringBuilder()
+        for (ch in str) {
+            when (ch) {
+                '\\' -> sb.append("\\\\")
+                '"' -> sb.append("\\\"")
+                '\b' -> sb.append("\\b")
+                '\n' -> sb.append("\\n")
+                '\r' -> sb.append("\\r")
+                '\t' -> sb.append("\\t")
+                else -> sb.append(ch)
+            }
+        }
+        return sb.toString()
+    }
+
+    private fun unescapeJson(str: String): String {
+        val sb = StringBuilder()
+        var i = 0
+        while (i < str.length) {
+            val c = str[i]
+            if (c == '\\' && i + 1 < str.length) {
+                when (val next = str[i + 1]) {
+                    '\\' -> sb.append('\\')
+                    '"' -> sb.append('"')
+                    'b' -> sb.append('\b')
+                    'n' -> sb.append('\n')
+                    'r' -> sb.append('\r')
+                    't' -> sb.append('\t')
+                    '/' -> sb.append('/')
+                    else -> sb.append(next)
+                }
+                i += 2
+            } else {
+                sb.append(c)
+                i++
+            }
+        }
+        return sb.toString()
+    }
+
+    @Synchronized
+    fun persistQueueState() {
+        try {
+            val storageDir = store.getStorageDirectory()
+            val stateFile = File(storageDir, "download_queue_state.json")
+            val tmpFile = File(storageDir, "download_queue_state.json.tmp")
+
+            val activeJobs = jobs.values.filter {
+                it.state == DownloadState.QUEUED ||
+                it.state == DownloadState.DOWNLOADING ||
+                it.state == DownloadState.FINALIZING
+            }
+
+            if (activeJobs.isEmpty()) {
+                if (stateFile.exists()) stateFile.delete()
+                if (tmpFile.exists()) tmpFile.delete()
+                return
+            }
+
+            val sb = StringBuilder()
+            sb.append("{\n")
+            val b = activeBatch
+            if (b != null) {
+                sb.append("  \"batch\": {\n")
+                sb.append("    \"batch_id\": \"${escapeJson(b.batchId)}\",\n")
+                sb.append("    \"source_type\": \"${escapeJson(b.sourceType)}\",\n")
+                sb.append("    \"source_id\": \"${escapeJson(b.sourceId)}\",\n")
+                sb.append("    \"source_display_name\": \"${escapeJson(b.sourceDisplayName)}\",\n")
+                sb.append("    \"created_at\": ${b.createdAt},\n")
+                sb.append("    \"track_ids\": [${b.trackIds.joinToString(",")}],\n")
+                sb.append("    \"initial_eligible_count\": ${b.initialEligibleCount},\n")
+                sb.append("    \"known_total_bytes\": ${b.knownTotalBytes},\n")
+                sb.append("    \"has_unknown_sizes\": ${b.hasUnknownSizes}\n")
+                sb.append("  },\n")
+            }
+            sb.append("  \"jobs\": [\n")
+            val jobStrings = activeJobs.map { j ->
+                val t = j.track
+                val fields = mutableListOf<String>()
+                fields.add("      \"track_id\": ${t.id}")
+                fields.add("      \"title\": \"${escapeJson(t.title)}\"")
+                fields.add("      \"artist\": \"${escapeJson(t.artist)}\"")
+                fields.add("      \"album\": \"${escapeJson(t.album)}\"")
+                fields.add("      \"duration\": ${t.duration ?: 0.0}")
+                t.sourceSizeBytes?.let { fields.add("      \"source_size_bytes\": $it") }
+                t.sourceFormat?.let { fields.add("      \"source_format\": \"${escapeJson(it)}\"") }
+                t.sourceCodec?.let { fields.add("      \"source_codec\": \"${escapeJson(it)}\"") }
+                t.sourceBitrate?.let { fields.add("      \"source_bitrate\": $it") }
+                t.sourceSampleRate?.let { fields.add("      \"source_sample_rate\": $it") }
+                t.sourceChannels?.let { fields.add("      \"source_channels\": $it") }
+                t.loudnessLufs?.let { fields.add("      \"loudness_lufs\": $it") }
+                t.truePeakDbtp?.let { fields.add("      \"true_peak_dbtp\": $it") }
+                t.loudnessRangeLu?.let { fields.add("      \"loudness_range_lu\": $it") }
+                t.loudnessAnalysisVersion?.let { fields.add("      \"loudness_analysis_version\": $it") }
+                j.batchId?.let { fields.add("      \"batch_id\": \"${escapeJson(it)}\"") }
+                fields.add("      \"enqueued_at_ms\": ${j.enqueuedAtMs}")
+                "    {\n" + fields.joinToString(",\n") + "\n    }"
+            }
+            sb.append(jobStrings.joinToString(",\n"))
+            sb.append("\n  ]\n}")
+
+            tmpFile.writeText(sb.toString(), Charsets.UTF_8)
+            if (stateFile.exists()) {
+                stateFile.delete()
+            }
+            if (!tmpFile.renameTo(stateFile)) {
+                tmpFile.copyTo(stateFile, overwrite = true)
+                tmpFile.delete()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to persist queue state", e)
+        }
+    }
+
+    @Synchronized
+    fun restoreQueueState(apiClient: CarApiClient = CarApiClient()): Int {
+        val storageDir = store.getStorageDirectory()
+        val stateFile = File(storageDir, "download_queue_state.json")
+        if (!stateFile.exists() || stateFile.length() == 0L) {
+            return 0
+        }
+
+        var restoredCount = 0
+        try {
+            val content = stateFile.readText(Charsets.UTF_8).trim()
+            if (!content.startsWith("{") || !content.endsWith("}")) {
+                stateFile.delete()
+                return 0
+            }
+
+            val propRegex = Regex(""""([^"]+)"\s*:\s*(?:"((?:\\.|[^"\\])*)"|(null)|(true|false)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?))""")
+
+            // Parse batch if present
+            val batchStart = content.indexOf("\"batch\"")
+            if (batchStart != -1) {
+                val batchObjStart = content.indexOf('{', batchStart)
+                val batchObjEnd = content.indexOf('}', batchObjStart)
+                if (batchObjStart != -1 && batchObjEnd != -1 && batchObjEnd > batchObjStart) {
+                    val batchBlock = content.substring(batchObjStart + 1, batchObjEnd)
+                    val map = mutableMapOf<String, String?>()
+                    for (prop in propRegex.findAll(batchBlock)) {
+                        val key = prop.groupValues[1]
+                        val strVal = prop.groups[2]?.value
+                        val nullVal = prop.groups[3]?.value
+                        val boolVal = prop.groups[4]?.value
+                        val numVal = prop.groups[5]?.value
+                        when {
+                            strVal != null -> map[key] = unescapeJson(strVal)
+                            nullVal != null -> map[key] = null
+                            boolVal != null -> map[key] = boolVal
+                            numVal != null -> map[key] = numVal
+                        }
+                    }
+
+                    // Parse track_ids array
+                    val trackIdsStart = content.indexOf("\"track_ids\"", batchObjStart)
+                    val trackIdsList = mutableListOf<Long>()
+                    if (trackIdsStart in batchObjStart..batchObjEnd) {
+                        val arrStart = content.indexOf('[', trackIdsStart)
+                        val arrEnd = content.indexOf(']', arrStart)
+                        if (arrStart != -1 && arrEnd != -1 && arrEnd > arrStart) {
+                            val nums = content.substring(arrStart + 1, arrEnd).split(',')
+                            for (n in nums) {
+                                n.trim().toLongOrNull()?.let { trackIdsList.add(it) }
+                            }
+                        }
+                    }
+
+                    val bId = map["batch_id"] ?: "download_batch:${java.util.UUID.randomUUID()}"
+                    activeBatch = DownloadBatch(
+                        batchId = bId,
+                        sourceType = map["source_type"] ?: "PLAYLIST",
+                        sourceId = map["source_id"] ?: "",
+                        sourceDisplayName = map["source_display_name"] ?: "",
+                        createdAt = map["created_at"]?.toLongOrNull() ?: System.currentTimeMillis(),
+                        trackIds = trackIdsList,
+                        initialEligibleCount = map["initial_eligible_count"]?.toIntOrNull() ?: trackIdsList.size,
+                        knownTotalBytes = map["known_total_bytes"]?.toLongOrNull() ?: 0L,
+                        hasUnknownSizes = map["has_unknown_sizes"]?.toBooleanStrictOrNull() ?: false,
+                    )
+                }
+            }
+
+            // Parse jobs
+            val jobsStart = content.indexOf("\"jobs\"")
+            if (jobsStart != -1) {
+                val arrayStart = content.indexOf('[', jobsStart)
+                val arrayEnd = content.lastIndexOf(']')
+                if (arrayStart != -1 && arrayEnd != -1 && arrayEnd > arrayStart) {
+                    val jobsBlock = content.substring(arrayStart + 1, arrayEnd)
+                    val objRegex = Regex("""\{([^{}]+)\}""")
+                    for (match in objRegex.findAll(jobsBlock)) {
+                        val block = match.groupValues[1]
+                        val map = mutableMapOf<String, String?>()
+                        for (prop in propRegex.findAll(block)) {
+                            val key = prop.groupValues[1]
+                            val strVal = prop.groups[2]?.value
+                            val nullVal = prop.groups[3]?.value
+                            val boolVal = prop.groups[4]?.value
+                            val numVal = prop.groups[5]?.value
+                            when {
+                                strVal != null -> map[key] = unescapeJson(strVal)
+                                nullVal != null -> map[key] = null
+                                boolVal != null -> map[key] = boolVal
+                                numVal != null -> map[key] = numVal
+                            }
+                        }
+                        val trackId = map["track_id"]?.toLongOrNull() ?: continue
+                        if (trackId <= 0L) continue
+
+                        // Skip if already offline ready
+                        if (isOfflineReady(trackId)) continue
+
+                        val track = CarTrack(
+                            id = trackId.toInt(),
+                            title = map["title"] ?: "",
+                            artist = map["artist"] ?: "",
+                            album = map["album"] ?: "",
+                            status = "ready",
+                            duration = map["duration"]?.toDoubleOrNull() ?: 0.0,
+                            sourceSizeBytes = map["source_size_bytes"]?.toLongOrNull(),
+                            sourceFormat = map["source_format"],
+                            sourceCodec = map["source_codec"],
+                            sourceBitrate = map["source_bitrate"]?.toIntOrNull(),
+                            sourceSampleRate = map["source_sample_rate"]?.toIntOrNull(),
+                            sourceChannels = map["source_channels"]?.toIntOrNull(),
+                            loudnessLufs = map["loudness_lufs"]?.toDoubleOrNull(),
+                            truePeakDbtp = map["true_peak_dbtp"]?.toDoubleOrNull(),
+                            loudnessRangeLu = map["loudness_range_lu"]?.toDoubleOrNull(),
+                            loudnessAnalysisVersion = map["loudness_analysis_version"]?.toIntOrNull(),
+                        )
+
+                        val bId = map["batch_id"]
+                        val newJob = DownloadJob(
+                            track = track,
+                            state = DownloadState.QUEUED,
+                            totalBytes = track.sourceSizeBytes ?: 0L,
+                            attemptId = attemptCounter.incrementAndGet(),
+                            batchId = bId,
+                        )
+                        jobs[trackId] = newJob
+                        restoredCount++
+                        notifyStarted(trackId)
+                        executor.submit { runDownloadJob(newJob, apiClient) }
+                    }
+                }
+            }
+
+            if (restoredCount > 0) {
+                serviceController?.onQueueActive()
+            }
+            persistQueueState()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to restore queue state", e)
+            try { stateFile.delete() } catch (ignored: Exception) {}
+        }
+        return restoredCount
     }
 }

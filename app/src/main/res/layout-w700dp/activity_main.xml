@@ -694,13 +694,143 @@
                 android:minHeight="0dp"
                 android:minWidth="0dp"
                 android:paddingStart="8dp"
-                android:paddingEnd="8dp"
+                android:paddingEnd="4dp"
                 android:text="+ Hàng đợi"
                 android:textAllCaps="false"
-                android:textSize="12sp"
+                android:textSize="11sp"
                 android:textColor="@color/text_secondary"
+                android:background="@drawable/bg_button_control"
+                android:layout_marginEnd="4dp" />
+
+            <!-- Download All -->
+            <Button
+                android:id="@+id/collectionDownloadAllButton"
+                android:layout_width="0dp"
+                android:layout_height="36dp"
+                android:layout_weight="1.2"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="4dp"
+                android:paddingEnd="4dp"
+                android:text="↓ Tải tất cả"
+                android:textAllCaps="false"
+                android:textSize="11sp"
+                android:textColor="@color/text_primary"
                 android:background="@drawable/bg_button_control" />
 
+            <!-- Delete Playlist Offline (shown only when playlist has offline tracks) -->
+            <Button
+                android:id="@+id/collectionDeleteOfflineButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:text="🗑 Xóa offline"
+                android:textAllCaps="false"
+                android:textSize="11sp"
+                android:textColor="@color/status_offline"
+                android:background="@drawable/bg_button_control"
+                android:visibility="gone"
+                android:layout_marginStart="4dp" />
+
+        </LinearLayout>
+
+        <!-- Download Queue Header — shown when browsing category:downloading -->
+        <LinearLayout
+            android:id="@+id/downloadQueueHeader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_surface_card"
+            android:padding="12dp"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/queueBatchTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Hàng đợi tải offline"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+
+                <TextView
+                    android:id="@+id/queueTrackCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0 bài"
+                    android:textSize="12sp"
+                    android:textColor="@color/accent_primary" />
+            </LinearLayout>
+
+            <ProgressBar
+                android:id="@+id/queueProgressBar"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="4dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="6dp"
+                android:max="100"
+                android:progressTint="@color/accent_primary" />
+
+            <TextView
+                android:id="@+id/queueCurrentTrackText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Đang chờ..."
+                android:textSize="11sp"
+                android:textColor="@color/text_secondary"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="8dp"
+                android:gravity="end">
+
+                <Button
+                    android:id="@+id/btnCancelPendingQueue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:text="Hủy hàng đợi"
+                    android:textAllCaps="false"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_primary"
+                    android:background="@drawable/bg_button_control"
+                    android:layout_marginEnd="8dp" />
+
+                <Button
+                    android:id="@+id/btnCancelAllDownloads"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:text="Hủy tất cả"
+                    android:textAllCaps="false"
+                    android:textSize="11sp"
+                    android:textColor="@color/status_offline"
+                    android:background="@drawable/bg_button_control" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- Scrollable RecyclerView fills remaining height -->
