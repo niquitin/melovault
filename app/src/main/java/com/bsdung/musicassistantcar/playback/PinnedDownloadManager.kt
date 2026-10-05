@@ -3,6 +3,7 @@ package com.bsdung.musicassistantcar.playback
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
+import android.os.PowerManager
 import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -52,10 +53,81 @@ data class DownloadJob(
     val attemptId: Long = 0L,
 )
 
+interface DownloadWakeLock {
+    fun acquire()
+    fun release()
+    val isHeld: Boolean
+}
+
+class AndroidDownloadWakeLock(private val context: Context) : DownloadWakeLock {
+    private val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+    private var wakeLock: PowerManager.WakeLock? = null
+
+    @Synchronized
+    override fun acquire() {
+        try {
+            if (wakeLock == null) {
+                wakeLock = powerManager?.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK,
+                    "melovault:pinned_download_wakelock"
+                )?.apply {
+                    setReferenceCounted(false)
+                }
+            }
+            wakeLock?.let {
+                if (!it.isHeld) {
+                    it.acquire(30 * 60 * 1000L)
+                    Log.d("DownloadWakeLock", "PARTIAL_WAKE_LOCK acquired")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("DownloadWakeLock", "Failed to acquire wake lock", e)
+        }
+    }
+
+    @Synchronized
+    override fun release() {
+        try {
+            wakeLock?.let {
+                if (it.isHeld) {
+                    it.release()
+                    Log.d("DownloadWakeLock", "PARTIAL_WAKE_LOCK released")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("DownloadWakeLock", "Failed to release wake lock", e)
+        }
+    }
+
+    override val isHeld: Boolean
+        get() = wakeLock?.isHeld == true
+}
+
+interface DownloadServiceController {
+    fun onQueueActive()
+    fun onQueueIdle()
+    val isServiceActive: Boolean
+}
+
+class AndroidDownloadServiceController(private val context: Context) : DownloadServiceController {
+    override fun onQueueActive() {
+        PinnedDownloadService.start(context)
+    }
+
+    override fun onQueueIdle() {
+        PinnedDownloadService.stop(context)
+    }
+
+    override val isServiceActive: Boolean
+        get() = PinnedDownloadService.isServiceRunning
+}
+
 open class PinnedDownloadManager(
     private val store: OfflineMetadataStore,
     private val executor: ExecutorService = Executors.newSingleThreadExecutor(),
     private val streamOpener: ((track: CarTrack, apiClient: CarApiClient) -> Pair<InputStream, Long?>)? = null,
+    private val wakeLock: DownloadWakeLock? = null,
+    private val serviceController: DownloadServiceController? = null,
 ) {
     private var context: Context? = null
     private val attemptCounter = java.util.concurrent.atomic.AtomicLong(1L)
@@ -64,8 +136,10 @@ open class PinnedDownloadManager(
         context: Context,
         store: OfflineMetadataStore = OfflineMetadataStore.getDefault(context),
         executor: ExecutorService = Executors.newSingleThreadExecutor(),
-    ) : this(store, executor, null) {
-        this.context = context
+        wakeLock: DownloadWakeLock? = AndroidDownloadWakeLock(context.applicationContext),
+        serviceController: DownloadServiceController? = AndroidDownloadServiceController(context.applicationContext),
+    ) : this(store, executor, null, wakeLock, serviceController) {
+        this.context = context.applicationContext
     }
 
     init {
@@ -81,10 +155,20 @@ open class PinnedDownloadManager(
 
         fun getDefault(context: Context): PinnedDownloadManager {
             return defaultInstance ?: synchronized(this) {
-                defaultInstance ?: PinnedDownloadManager(context.applicationContext).also {
+                defaultInstance ?: PinnedDownloadManager(
+                    context = context.applicationContext,
+                    store = OfflineMetadataStore.getDefault(context),
+                    executor = Executors.newSingleThreadExecutor(),
+                    wakeLock = AndroidDownloadWakeLock(context.applicationContext),
+                    serviceController = AndroidDownloadServiceController(context.applicationContext),
+                ).also {
                     defaultInstance = it
                 }
             }
+        }
+
+        fun setInstanceForTesting(instance: PinnedDownloadManager?) {
+            defaultInstance = instance
         }
 
         private fun bytesToHex(bytes: ByteArray): String {
@@ -144,6 +228,20 @@ open class PinnedDownloadManager(
         return job.state == DownloadState.QUEUED ||
             job.state == DownloadState.DOWNLOADING ||
             job.state == DownloadState.FINALIZING
+    }
+
+    fun hasActiveJobs(): Boolean {
+        return jobs.values.any {
+            it.state == DownloadState.QUEUED ||
+            it.state == DownloadState.DOWNLOADING ||
+            it.state == DownloadState.FINALIZING
+        }
+    }
+
+    fun getCurrentActiveJob(): DownloadJob? {
+        return jobs.values.firstOrNull {
+            it.state == DownloadState.DOWNLOADING || it.state == DownloadState.FINALIZING
+        } ?: jobs.values.firstOrNull { it.state == DownloadState.QUEUED }
     }
 
     fun isOfflineReady(trackId: Long): Boolean {
@@ -222,6 +320,9 @@ open class PinnedDownloadManager(
             notifyFailed(trackId, "Deleted")
             notifyDeleted(trackId)
         }
+        if (!hasActiveJobs()) {
+            serviceController?.onQueueIdle()
+        }
         return removed
     }
 
@@ -240,6 +341,9 @@ open class PinnedDownloadManager(
                     partFile.delete()
                 }
                 notifyCancelled(trackId)
+                if (!hasActiveJobs()) {
+                    serviceController?.onQueueIdle()
+                }
             }
             return true
         }
@@ -264,6 +368,7 @@ open class PinnedDownloadManager(
         )
         jobs[trackId] = newJob
         notifyStarted(trackId)
+        serviceController?.onQueueActive()
         executor.submit { runDownloadJob(newJob, apiClient) }
         return true
     }
@@ -298,6 +403,7 @@ open class PinnedDownloadManager(
         )
         jobs[trackId] = job
         notifyStarted(trackId)
+        serviceController?.onQueueActive()
 
         executor.submit { runDownloadJob(job, apiClient) }
     }
@@ -314,6 +420,9 @@ open class PinnedDownloadManager(
             if (jobs[trackId] === job) {
                 job.state = DownloadState.CANCELLED
                 notifyCancelled(trackId)
+                if (!hasActiveJobs()) {
+                    serviceController?.onQueueIdle()
+                }
             }
             return
         }
@@ -322,6 +431,7 @@ open class PinnedDownloadManager(
         var finalFile: File? = null
         var stream: InputStream? = null
         try {
+            wakeLock?.acquire()
             job.state = DownloadState.DOWNLOADING
             val storageDir = store.getStorageDirectory()
             if (!storageDir.exists()) {
@@ -480,11 +590,13 @@ open class PinnedDownloadManager(
                 committed = true
             }
 
+            wakeLock?.release()
             if (committed) {
                 Log.i(TAG, "Successfully downloaded track $trackId ($totalBytesRead bytes, sha256=${sha256.take(8)}...)")
                 notifyCompleted(trackId, record)
             }
         } catch (e: Exception) {
+            wakeLock?.release()
             activeStreams.remove(trackId)
             runCatching { stream?.close() }
             if (jobs[trackId] === job) {
@@ -507,6 +619,10 @@ open class PinnedDownloadManager(
         } finally {
             activeStreams.remove(trackId)
             runCatching { stream?.close() }
+            wakeLock?.release()
+            if (!hasActiveJobs()) {
+                serviceController?.onQueueIdle()
+            }
         }
     }
 
