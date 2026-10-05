@@ -90,6 +90,42 @@ data class BatchProgress(
     val currentTrackProgress: DownloadStatus?,
 )
 
+data class OfflineStorageSummary(
+    val trackCount: Int,
+    val usedBytes: Long,
+    val availableBytes: Long,
+    val totalBytes: Long,
+    val capBytes: Long,
+)
+
+enum class StoragePrecheckStatus {
+    ALLOWED,
+    BLOCKED_CAP_EXCEEDED,
+    BLOCKED_LOW_FREE_SPACE,
+}
+
+data class StoragePrecheckResult(
+    val status: StoragePrecheckStatus,
+    val currentUsedBytes: Long,
+    val requiredBytes: Long,
+    val capBytes: Long,
+    val availableBytes: Long,
+    val reserveBytes: Long = PinnedDownloadManager.MIN_FREE_RESERVE_BYTES,
+    val title: String? = null,
+    val message: String? = null,
+) {
+    val isAllowed: Boolean
+        get() = status == StoragePrecheckStatus.ALLOWED
+}
+
+data class DeleteAllResult(
+    val success: Boolean,
+    val deletedTrackCount: Int,
+    val freedBytes: Long,
+    val blockedByActiveDownloads: Boolean = false,
+    val errorMessage: String? = null,
+)
+
 interface DownloadWakeLock {
     fun acquire()
     fun release()
@@ -168,6 +204,12 @@ open class PinnedDownloadManager(
 ) {
     private var context: Context? = null
     private val attemptCounter = java.util.concurrent.atomic.AtomicLong(1L)
+    @Volatile
+    private var inMemoryStorageCapBytes: Long = CAP_UNLIMITED
+    @Volatile
+    private var inMemorySortKey: String = SORT_DATE_DESC
+    @Volatile
+    private var availableSpaceProvider: (() -> Long)? = null
 
     constructor(
         context: Context,
@@ -177,11 +219,32 @@ open class PinnedDownloadManager(
         serviceController: DownloadServiceController? = AndroidDownloadServiceController(context.applicationContext),
     ) : this(store, executor, null, wakeLock, serviceController) {
         this.context = context.applicationContext
+        val prefs = this.context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs != null) {
+            inMemoryStorageCapBytes = prefs.getLong(PREF_OFFLINE_STORAGE_CAP_BYTES, CAP_UNLIMITED)
+            inMemorySortKey = prefs.getString(PREF_DOWNLOADED_SORT, SORT_DATE_DESC) ?: SORT_DATE_DESC
+        }
     }
 
     companion object {
         private const val TAG = "PinnedDownloadManager"
         const val DOWNLOADED_PREFIX = "downloaded:"
+        const val PREFS_NAME = "music_assistant_car"
+        const val PREF_OFFLINE_STORAGE_CAP_BYTES = "offline_storage_cap_bytes"
+        const val PREF_DOWNLOADED_SORT = "downloaded_music_sort"
+
+        const val MIN_FREE_RESERVE_BYTES = 500L * 1024L * 1024L
+        const val CAP_UNLIMITED = 0L
+        const val CAP_5_GB = 5L * 1024L * 1024L * 1024L
+        const val CAP_10_GB = 10L * 1024L * 1024L * 1024L
+        const val CAP_20_GB = 20L * 1024L * 1024L * 1024L
+        const val CAP_50_GB = 50L * 1024L * 1024L * 1024L
+
+        const val SORT_NAME_ASC = "name_asc"
+        const val SORT_DATE_DESC = "date_desc"
+        const val SORT_DATE_ASC = "date_asc"
+        const val SORT_SIZE_DESC = "size_desc"
+        const val SORT_SIZE_ASC = "size_asc"
 
         @Volatile
         private var defaultInstance: PinnedDownloadManager? = null
@@ -496,17 +559,235 @@ open class PinnedDownloadManager(
         )
     }
 
+    fun setAvailableSpaceProviderForTesting(provider: (() -> Long)?) {
+        availableSpaceProvider = provider
+    }
+
     fun getAvailableStorageBytes(): Long {
         return try {
-            store.getStorageDirectory().usableSpace
+            availableSpaceProvider?.invoke() ?: store.getStorageDirectory().usableSpace
         } catch (e: Exception) {
             0L
         }
     }
 
+    fun getTotalStorageBytes(): Long {
+        return try {
+            store.getStorageDirectory().totalSpace
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
+    fun getOfflineStorageCapBytes(): Long {
+        val prefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs != null) {
+            inMemoryStorageCapBytes = prefs.getLong(PREF_OFFLINE_STORAGE_CAP_BYTES, inMemoryStorageCapBytes)
+        }
+        return inMemoryStorageCapBytes.coerceAtLeast(0L)
+    }
+
+    fun setOfflineStorageCapBytes(capBytes: Long) {
+        val normalized = capBytes.coerceAtLeast(0L)
+        inMemoryStorageCapBytes = normalized
+        context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            ?.edit()
+            ?.putLong(PREF_OFFLINE_STORAGE_CAP_BYTES, normalized)
+            ?.apply()
+    }
+
+    fun getDownloadedSortKey(): String {
+        val prefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs != null) {
+            inMemorySortKey = prefs.getString(PREF_DOWNLOADED_SORT, inMemorySortKey) ?: inMemorySortKey
+        }
+        return inMemorySortKey
+    }
+
+    fun setDownloadedSortKey(sortKey: String) {
+        inMemorySortKey = sortKey
+        context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            ?.edit()
+            ?.putString(PREF_DOWNLOADED_SORT, sortKey)
+            ?.apply()
+    }
+
+    fun getEffectiveRecordSizeBytes(record: OfflineTrackRecord): Long {
+        if (isDownloading(record.trackId)) return 0L
+        return store.getEffectiveFileSizeBytes(record)
+    }
+
+    fun getEffectiveTrackSizeBytes(trackId: Long): Long {
+        if (isDownloading(trackId)) return 0L
+        val record = store.getRecord(trackId) ?: return 0L
+        return store.getEffectiveFileSizeBytes(record)
+    }
+
+    fun getPinnedUsedBytes(excludeTrackId: Long? = null): Long {
+        var sum = 0L
+        for (record in store.getAllRecords()) {
+            if (excludeTrackId != null && record.trackId == excludeTrackId) continue
+            if (isDownloading(record.trackId)) continue
+            val bytes = store.getEffectiveFileSizeBytes(record)
+            if (bytes > 0L) {
+                sum += bytes
+            }
+        }
+        return sum
+    }
+
+    fun getStorageSummary(repairStaleMetadata: Boolean = true): OfflineStorageSummary {
+        if (repairStaleMetadata) {
+            store.reconcileMissingAndUnsafe()
+        }
+        var count = 0
+        var used = 0L
+        for (record in store.getAllRecords()) {
+            if (isDownloading(record.trackId)) continue
+            val bytes = store.getEffectiveFileSizeBytes(record)
+            if (bytes > 0L) {
+                count++
+                used += bytes
+            }
+        }
+        return OfflineStorageSummary(
+            trackCount = count,
+            usedBytes = used,
+            availableBytes = getAvailableStorageBytes(),
+            totalBytes = getTotalStorageBytes(),
+            capBytes = getOfflineStorageCapBytes(),
+        )
+    }
+
+    fun formatStorageBytes(bytes: Long): String {
+        val safeBytes = bytes.coerceAtLeast(0L)
+        if (safeBytes == 0L) return "0 MB"
+        val oneGb = 1024L * 1024L * 1024L
+        val oneMb = 1024L * 1024L
+        return when {
+            safeBytes >= oneGb -> {
+                if (safeBytes % oneGb == 0L) {
+                    "${safeBytes / oneGb} GB"
+                } else {
+                    val gb = safeBytes.toDouble() / oneGb.toDouble()
+                    val twoDecimals = String.format(java.util.Locale.US, "%.2f", gb)
+                    val trimmed = if (twoDecimals.endsWith("0")) twoDecimals.dropLast(1) else twoDecimals
+                    "$trimmed GB"
+                }
+            }
+            safeBytes >= 100L * 1024L -> {
+                if (safeBytes % oneMb == 0L) {
+                    "${safeBytes / oneMb} MB"
+                } else {
+                    val mb = safeBytes.toDouble() / oneMb.toDouble()
+                    String.format(java.util.Locale.US, "%.1f MB", mb)
+                }
+            }
+            else -> {
+                val kb = safeBytes.toDouble() / 1024.0
+                String.format(java.util.Locale.US, "%.1f KB", kb)
+            }
+        }
+    }
+
+    fun formatCapLabel(capBytes: Long = getOfflineStorageCapBytes()): String {
+        return if (capBytes <= 0L) "Không giới hạn" else formatStorageBytes(capBytes)
+    }
+
+    fun formatDownloadDate(timestampMs: Long): String {
+        if (timestampMs <= 0L) return ""
+        return try {
+            val sdf = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.US)
+            sdf.format(java.util.Date(timestampMs))
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
+    fun evaluateStorageForDownload(knownRequiredBytes: Long): StoragePrecheckResult {
+        val currentUsed = getPinnedUsedBytes()
+        val cap = getOfflineStorageCapBytes()
+        val available = getAvailableStorageBytes()
+        val req = knownRequiredBytes.coerceAtLeast(0L)
+
+        // 1. Offline storage cap check
+        if (cap > 0L) {
+            val capExceeded = if (req > 0L) {
+                currentUsed >= cap || req > (cap - currentUsed)
+            } else {
+                currentUsed >= cap
+            }
+            if (capExceeded) {
+                val title = "Vượt giới hạn dung lượng offline"
+                val reqText = if (req > 0L) formatStorageBytes(req) else "Không rõ dung lượng"
+                val message = buildString {
+                    append("Vượt giới hạn dung lượng offline\n\n")
+                    append("Đang dùng: ${formatStorageBytes(currentUsed)}\n")
+                    append("Cần thêm: $reqText\n")
+                    append("Giới hạn: ${formatStorageBytes(cap)}")
+                }
+                return StoragePrecheckResult(
+                    status = StoragePrecheckStatus.BLOCKED_CAP_EXCEEDED,
+                    currentUsedBytes = currentUsed,
+                    requiredBytes = req,
+                    capBytes = cap,
+                    availableBytes = available,
+                    title = title,
+                    message = message,
+                )
+            }
+        }
+
+        // 2. Device 500 MB free-space reserve check for known-size downloads
+        if (req > 0L) {
+            if (available < req || (available - req) < MIN_FREE_RESERVE_BYTES) {
+                val title = "Không đủ dung lượng bộ nhớ"
+                val message = buildString {
+                    append("Không đủ dung lượng bộ nhớ\n\n")
+                    append("Cần: ${formatStorageBytes(req)}\n")
+                    append("Còn trống: ${formatStorageBytes(available)}\n")
+                    append("Dự phòng hệ thống: 500 MB")
+                }
+                return StoragePrecheckResult(
+                    status = StoragePrecheckStatus.BLOCKED_LOW_FREE_SPACE,
+                    currentUsedBytes = currentUsed,
+                    requiredBytes = req,
+                    capBytes = cap,
+                    availableBytes = available,
+                    title = title,
+                    message = message,
+                )
+            }
+        }
+
+        return StoragePrecheckResult(
+            status = StoragePrecheckStatus.ALLOWED,
+            currentUsedBytes = currentUsed,
+            requiredBytes = req,
+            capBytes = cap,
+            availableBytes = available,
+        )
+    }
+
+    fun checkSingleDownloadStorage(track: CarTrack): StoragePrecheckResult {
+        val knownBytes = track.sourceSizeBytes?.takeIf { it > 0L } ?: 0L
+        return evaluateStorageForDownload(knownBytes)
+    }
+
+    fun checkBulkDownloadStorage(eligibleNewTracks: List<CarTrack>): StoragePrecheckResult {
+        var knownBytes = 0L
+        for (t in eligibleNewTracks) {
+            val s = t.sourceSizeBytes
+            if (s != null && s > 0L) {
+                knownBytes += s
+            }
+        }
+        return evaluateStorageForDownload(knownBytes)
+    }
+
     fun hasSufficientStorage(requiredBytes: Long): Boolean {
         if (requiredBytes <= 0L) return true
-        return getAvailableStorageBytes() >= requiredBytes
+        return evaluateStorageForDownload(requiredBytes).isAllowed
     }
 
     fun getActiveBatch(): DownloadBatch? = activeBatch
@@ -692,6 +973,51 @@ open class PinnedDownloadManager(
         return count
     }
 
+    fun deleteMultipleDownloads(trackIds: Collection<Long>): Int {
+        var count = 0
+        for (trackId in trackIds.distinct()) {
+            if (isDownloading(trackId)) {
+                continue
+            }
+            if (store.getRecord(trackId) != null || isOfflineReady(trackId)) {
+                if (deleteDownload(trackId)) {
+                    count++
+                }
+            }
+        }
+        return count
+    }
+
+    fun deleteAllOfflineDownloads(): DeleteAllResult {
+        if (hasActiveJobs()) {
+            return DeleteAllResult(
+                success = false,
+                deletedTrackCount = 0,
+                freedBytes = 0L,
+                blockedByActiveDownloads = true,
+                errorMessage = "Đang có tiến trình tải xuống. Vui lòng hủy hoặc chờ tải xong trước khi xóa tất cả nhạc offline.",
+            )
+        }
+        val freedBytes = getPinnedUsedBytes()
+        val allRecords = store.getAllRecords()
+        var deletedCount = 0
+        for (record in allRecords) {
+            if (store.removeRecord(record.trackId)) {
+                deletedCount++
+                notifyDeleted(record.trackId)
+            }
+        }
+        cleanOrphanParts()
+        jobs.clear()
+        activeBatch = null
+        persistQueueState()
+        return DeleteAllResult(
+            success = true,
+            deletedTrackCount = deletedCount,
+            freedBytes = freedBytes,
+        )
+    }
+
     private fun runDownloadJob(job: DownloadJob, apiClient: CarApiClient) {
         val track = job.track
         val trackId = track.id.toLong()
@@ -732,6 +1058,12 @@ open class PinnedDownloadManager(
                 partFile.delete()
             }
 
+            val basePinnedUsedBytes = getPinnedUsedBytes(excludeTrackId = trackId)
+            val initialCapBytes = getOfflineStorageCapBytes()
+            if (initialCapBytes > 0L && basePinnedUsedBytes >= initialCapBytes) {
+                throw IOException("Vượt giới hạn dung lượng offline")
+            }
+
             val (input, reportedLength) = if (streamOpener != null) {
                 streamOpener.invoke(track, apiClient)
             } else {
@@ -763,6 +1095,12 @@ open class PinnedDownloadManager(
             // If Content-Length is absent, totalTarget is 0L (indeterminate). Do not invent a percentage from metadata sourceSizeBytes.
             val totalTarget = (reportedLength?.takeIf { it > 0L }) ?: 0L
             job.totalBytes = totalTarget
+
+            val capOnOpen = getOfflineStorageCapBytes()
+            if (capOnOpen > 0L && totalTarget > 0L && (basePinnedUsedBytes >= capOnOpen || totalTarget > (capOnOpen - basePinnedUsedBytes))) {
+                throw IOException("Vượt giới hạn dung lượng offline")
+            }
+
             if (jobs[trackId] === job) {
                 notifyProgress(trackId, 0L, totalTarget)
             }
@@ -777,6 +1115,10 @@ open class PinnedDownloadManager(
                 while (input.read(buffer).also { bytesRead = it } != -1) {
                     if (job.isCancelled || jobs[trackId] !== job) {
                         throw IOException("Download cancelled")
+                    }
+                    val activeCap = getOfflineStorageCapBytes()
+                    if (activeCap > 0L && (basePinnedUsedBytes + totalBytesRead + bytesRead) > activeCap) {
+                        throw IOException("Vượt giới hạn dung lượng offline")
                     }
                     output.write(buffer, 0, bytesRead)
                     digest.update(buffer, 0, bytesRead)
@@ -897,8 +1239,14 @@ open class PinnedDownloadManager(
                     notifyCancelled(trackId)
                 } else {
                     val isNoSpace = e.message?.contains("ENOSPC", ignoreCase = true) == true ||
-                        e.message?.contains("No space left", ignoreCase = true) == true
-                    val errorMsg = if (isNoSpace) "Không đủ dung lượng bộ nhớ" else (e.message ?: "Download failed")
+                        e.message?.contains("No space left", ignoreCase = true) == true ||
+                        e.message?.contains("Không đủ dung lượng bộ nhớ", ignoreCase = true) == true
+                    val isCapExceeded = e.message?.contains("Vượt giới hạn dung lượng offline", ignoreCase = true) == true
+                    val errorMsg = when {
+                        isCapExceeded -> "Vượt giới hạn dung lượng offline"
+                        isNoSpace -> "Không đủ dung lượng bộ nhớ"
+                        else -> (e.message ?: "Download failed")
+                    }
                     Log.e(TAG, "Download failed for track $trackId: $errorMsg", e)
                     job.state = DownloadState.FAILED
                     job.errorMessage = errorMsg
@@ -953,14 +1301,57 @@ open class PinnedDownloadManager(
         listeners.toList().forEach { it.onDownloadDeleted(trackId) }
     }
 
+    fun sortDownloadedRecords(
+        records: List<OfflineTrackRecord>,
+        sortKey: String = getDownloadedSortKey(),
+    ): List<OfflineTrackRecord> {
+        val collator = java.text.Collator.getInstance(java.util.Locale("vi", "VN")).apply {
+            strength = java.text.Collator.PRIMARY
+        }
+        val comparator = when (sortKey) {
+            SORT_NAME_ASC -> Comparator<OfflineTrackRecord> { a, b ->
+                val cmp = collator.compare(a.title.lowercase(), b.title.lowercase())
+                if (cmp != 0) cmp else a.trackId.compareTo(b.trackId)
+            }
+            SORT_DATE_DESC -> Comparator<OfflineTrackRecord> { a, b ->
+                val cmp = b.downloadedAtMs.compareTo(a.downloadedAtMs)
+                if (cmp != 0) cmp else a.trackId.compareTo(b.trackId)
+            }
+            SORT_DATE_ASC -> Comparator<OfflineTrackRecord> { a, b ->
+                val cmp = a.downloadedAtMs.compareTo(b.downloadedAtMs)
+                if (cmp != 0) cmp else a.trackId.compareTo(b.trackId)
+            }
+            SORT_SIZE_DESC -> Comparator<OfflineTrackRecord> { a, b ->
+                val sizeA = getEffectiveRecordSizeBytes(a)
+                val sizeB = getEffectiveRecordSizeBytes(b)
+                val cmp = sizeB.compareTo(sizeA)
+                if (cmp != 0) cmp else a.trackId.compareTo(b.trackId)
+            }
+            SORT_SIZE_ASC -> Comparator<OfflineTrackRecord> { a, b ->
+                val sizeA = getEffectiveRecordSizeBytes(a)
+                val sizeB = getEffectiveRecordSizeBytes(b)
+                val cmp = sizeA.compareTo(sizeB)
+                if (cmp != 0) cmp else a.trackId.compareTo(b.trackId)
+            }
+            else -> Comparator<OfflineTrackRecord> { a, b ->
+                val cmp = b.downloadedAtMs.compareTo(a.downloadedAtMs)
+                if (cmp != 0) cmp else a.trackId.compareTo(b.trackId)
+            }
+        }
+        return records.sortedWith(comparator)
+    }
+
     fun toMediaItem(record: OfflineTrackRecord): MediaItem {
         val file = store.getTrackFile(record)
         val fileUri = Uri.fromFile(file)
+        val effectiveSize = getEffectiveRecordSizeBytes(record).takeIf { it > 0L } ?: record.fileSizeBytes
         val extras = Bundle().apply {
             putInt("track_id", record.trackId.toInt())
             putLong("track_id_long", record.trackId)
             putLong("duration_ms", record.durationMs)
-            putLong("size_bytes", record.fileSizeBytes)
+            putLong("size_bytes", effectiveSize)
+            putLong("downloaded_at_ms", record.downloadedAtMs)
+            putString("downloaded_date_str", formatDownloadDate(record.downloadedAtMs))
             record.format?.let { putString("format", it) }
             record.codec?.let { putString("codec", it) }
             record.bitrate?.let { putInt("bitrate", it) }
@@ -990,11 +1381,10 @@ open class PinnedDownloadManager(
             .build()
     }
 
-    fun getAllDownloadedMediaItems(): List<MediaItem> {
+    fun getAllDownloadedMediaItems(sortKey: String = getDownloadedSortKey()): List<MediaItem> {
         store.reconcile()
-        return store.getAllRecords()
-            .filter { isOfflineReady(it.trackId) }
-            .map { toMediaItem(it) }
+        val readyRecords = store.getAllRecords().filter { isOfflineReady(it.trackId) }
+        return sortDownloadedRecords(readyRecords, sortKey).map { toMediaItem(it) }
     }
 
     fun getActiveJobMediaItems(): List<MediaItem> {

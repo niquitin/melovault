@@ -169,7 +169,8 @@ class RemoteCatalog(
         if (parentId == DOWNLOADED_ID) {
             val dm = downloadManagerSupplier() ?: return emptyList()
             val allJobs = dm.getActiveJobMediaItems()
-            val allDownloaded = dm.getAllDownloadedMediaItems()
+            val effectiveSort = sort.takeIf { it.isNotBlank() } ?: dm.getDownloadedSortKey()
+            val allDownloaded = dm.getAllDownloadedMediaItems(effectiveSort)
             val result = mutableListOf<MediaItem>()
             if (page == 0 && allJobs.isNotEmpty()) {
                 result.add(

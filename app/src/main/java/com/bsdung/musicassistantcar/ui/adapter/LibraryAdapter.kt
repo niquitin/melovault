@@ -56,7 +56,15 @@ class LibraryAdapter(
         runCatching { notifyDataSetChanged() }
     }
 
+    private fun isSelectableInEditMode(item: LibraryItem.Track): Boolean {
+        if (item.id.startsWith("download_job:")) return false
+        val extras = item.mediaItem.mediaMetadata.extras
+        if (extras?.getBoolean("is_download_job", false) == true) return false
+        return true
+    }
+
     fun toggleSelection(mediaId: String) {
+        if (mediaId.startsWith("download_job:")) return
         if (selectedMediaIds.contains(mediaId)) {
             selectedMediaIds.remove(mediaId)
         } else {
@@ -66,7 +74,9 @@ class LibraryAdapter(
     }
 
     fun selectAllTracks() {
-        val trackIds = items.filterIsInstance<LibraryItem.Track>().map { it.id }
+        val trackIds = items.filterIsInstance<LibraryItem.Track>()
+            .filter { isSelectableInEditMode(it) }
+            .map { it.id }
         if (selectedMediaIds.size == trackIds.size && trackIds.isNotEmpty()) {
             selectedMediaIds.clear()
         } else {
@@ -315,24 +325,32 @@ class LibraryAdapter(
                 binding.downloadContainer.visibility = View.GONE
                 binding.txtDownloadStatus.setOnClickListener(null)
                 binding.btnDownload.setOnClickListener(null)
-                binding.trackCheckbox.visibility = View.VISIBLE
-                binding.trackCheckbox.isChecked = selectedMediaIds.contains(item.id)
-                if (canReorder) {
-                    binding.dragHandle.visibility = View.VISIBLE
-                    binding.dragHandle.setOnTouchListener { _, event ->
-                        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                            onStartDrag?.invoke(this@TrackViewHolder)
+                val selectable = isSelectableInEditMode(item)
+                if (selectable) {
+                    binding.trackCheckbox.visibility = View.VISIBLE
+                    binding.trackCheckbox.isChecked = selectedMediaIds.contains(item.id)
+                    if (canReorder) {
+                        binding.dragHandle.visibility = View.VISIBLE
+                        binding.dragHandle.setOnTouchListener { _, event ->
+                            if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                                onStartDrag?.invoke(this@TrackViewHolder)
+                            }
+                            false
                         }
-                        false
+                    } else {
+                        binding.dragHandle.visibility = View.GONE
+                        binding.dragHandle.setOnTouchListener(null)
+                    }
+
+                    binding.root.setOnClickListener {
+                        toggleSelection(item.id)
+                        binding.trackCheckbox.isChecked = selectedMediaIds.contains(item.id)
                     }
                 } else {
+                    binding.trackCheckbox.visibility = View.GONE
                     binding.dragHandle.visibility = View.GONE
                     binding.dragHandle.setOnTouchListener(null)
-                }
-
-                binding.root.setOnClickListener {
-                    toggleSelection(item.id)
-                    binding.trackCheckbox.isChecked = selectedMediaIds.contains(item.id)
+                    binding.root.setOnClickListener(null)
                 }
                 binding.root.setOnLongClickListener(null)
             } else {
@@ -411,7 +429,21 @@ class LibraryAdapter(
                         com.bsdung.musicassistantcar.playback.DownloadState.OFFLINE_READY -> {
                             binding.downloadProgressLayout.visibility = View.GONE
                             binding.txtDownloadStatus.visibility = View.VISIBLE
-                            binding.txtDownloadStatus.text = "✓ Offline"
+                            val isOfflineRow = item.mediaItem.mediaMetadata.extras?.getBoolean("is_offline_download", false) == true
+                            if (isOfflineRow) {
+                                val rec = dm.getRecord(trackId)
+                                val actualBytes = dm.getEffectiveTrackSizeBytes(trackId).takeIf { it > 0L }
+                                    ?: (rec?.fileSizeBytes ?: 0L)
+                                val sizeStr = if (actualBytes > 0L) " · ${dm.formatStorageBytes(actualBytes)}" else ""
+                                val dateStr = if ((rec?.downloadedAtMs ?: 0L) > 0L) {
+                                    "\n${dm.formatDownloadDate(rec!!.downloadedAtMs)}"
+                                } else {
+                                    ""
+                                }
+                                binding.txtDownloadStatus.text = "✓ Offline$sizeStr$dateStr"
+                            } else {
+                                binding.txtDownloadStatus.text = "✓ Offline"
+                            }
                             binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.accent_primary))
                             binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
                             binding.btnDownload.visibility = View.VISIBLE

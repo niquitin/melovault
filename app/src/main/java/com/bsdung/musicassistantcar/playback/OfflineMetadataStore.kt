@@ -239,6 +239,85 @@ class OfflineMetadataStore(private val storageDir: File) {
         return records[trackId]
     }
 
+    fun isSafeRelativeFileName(fileName: String): Boolean {
+        val trimmed = fileName.trim()
+        if (trimmed.isEmpty()) return false
+        if (trimmed.contains("..") || trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains(':')) {
+            return false
+        }
+        val lower = trimmed.lowercase()
+        if (lower.startsWith(".") ||
+            lower.endsWith(".part") ||
+            lower.endsWith(".json") ||
+            lower.endsWith(".tmp") ||
+            lower.endsWith(".bak")
+        ) {
+            return false
+        }
+        return try {
+            val rootCanonical = storageDir.canonicalFile
+            val targetCanonical = File(storageDir, trimmed).canonicalFile
+            targetCanonical.parentFile == rootCanonical
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    fun resolveSafeTrackFile(fileName: String): File? {
+        if (!isSafeRelativeFileName(fileName)) return null
+        return File(storageDir, fileName.trim())
+    }
+
+    @Synchronized
+    fun getEffectiveFileSizeBytes(record: OfflineTrackRecord): Long {
+        if (record.sha256.isBlank()) return 0L
+        val partFile = File(storageDir, "track_${record.trackId}.part")
+        if (partFile.exists()) return 0L
+        val safeFile = resolveSafeTrackFile(record.relativeFileName) ?: return 0L
+        if (!safeFile.exists() || !safeFile.isFile) return 0L
+        val actualLen = safeFile.length()
+        return if (actualLen > 0L) actualLen else 0L
+    }
+
+    @Synchronized
+    fun reconcileMissingAndUnsafe(): List<Long> {
+        val removedIds = mutableListOf<Long>()
+        val iterator = records.entries.iterator()
+        while (iterator.hasNext()) {
+            val entry = iterator.next()
+            val record = entry.value
+            val file = resolveSafeTrackFile(record.relativeFileName)
+            if (file == null || !file.exists() || !file.isFile || file.length() <= 0L) {
+                removedIds.add(entry.key)
+                iterator.remove()
+            }
+        }
+        if (removedIds.isNotEmpty()) {
+            Log.w(TAG, "Removed ${removedIds.size} missing/unsafe offline records: $removedIds")
+            persist()
+        }
+        return removedIds
+    }
+
+    @Synchronized
+    fun repairMismatchedSizes(): Int {
+        var repairedCount = 0
+        for ((trackId, record) in records.entries.toList()) {
+            val safeFile = resolveSafeTrackFile(record.relativeFileName) ?: continue
+            if (safeFile.exists() && safeFile.isFile) {
+                val actualLen = safeFile.length()
+                if (actualLen > 0L && actualLen != record.fileSizeBytes) {
+                    records[trackId] = record.copy(fileSizeBytes = actualLen)
+                    repairedCount++
+                }
+            }
+        }
+        if (repairedCount > 0) {
+            persist()
+        }
+        return repairedCount
+    }
+
     @Synchronized
     fun reconcile(): List<Long> {
         val staleIds = mutableListOf<Long>()
@@ -246,8 +325,8 @@ class OfflineMetadataStore(private val storageDir: File) {
         while (iterator.hasNext()) {
             val entry = iterator.next()
             val record = entry.value
-            val file = File(storageDir, record.relativeFileName)
-            if (!file.exists() || !file.isFile || file.length() <= 0L || file.length() != record.fileSizeBytes) {
+            val file = resolveSafeTrackFile(record.relativeFileName)
+            if (file == null || !file.exists() || !file.isFile || file.length() <= 0L || file.length() != record.fileSizeBytes) {
                 staleIds.add(entry.key)
                 iterator.remove()
             }
@@ -262,7 +341,7 @@ class OfflineMetadataStore(private val storageDir: File) {
     @Synchronized
     fun hasTrack(trackId: Long): Boolean {
         val rec = records[trackId] ?: return false
-        val file = File(storageDir, rec.relativeFileName)
+        val file = resolveSafeTrackFile(rec.relativeFileName) ?: return false
         return file.exists() && file.isFile && file.length() > 0L && file.length() == rec.fileSizeBytes
     }
 
@@ -275,15 +354,21 @@ class OfflineMetadataStore(private val storageDir: File) {
     fun removeRecord(trackId: Long): Boolean {
         val existing = records.remove(trackId)
         if (existing != null) {
-            val file = File(storageDir, existing.relativeFileName)
-            if (file.exists()) {
-                file.delete()
+            val safeFile = resolveSafeTrackFile(existing.relativeFileName)
+            if (safeFile != null && safeFile.exists() && safeFile.isFile) {
+                safeFile.delete()
             }
         }
-        // Ensure stale .part and other files for this track are also cleaned
+        // Ensure stale .part and other files for this track inside storageDir are also cleaned safely
         storageDir.listFiles { _, name ->
-            name.startsWith("track_${trackId}.")
-        }?.forEach { it.delete() }
+            name.startsWith("track_${trackId}.") && !name.contains("..") && !name.contains('/') && !name.contains('\\')
+        }?.forEach { candidate ->
+            try {
+                if (candidate.canonicalFile.parentFile == storageDir.canonicalFile) {
+                    candidate.delete()
+                }
+            } catch (ignored: Exception) {}
+        }
 
         if (existing != null) {
             persist()
@@ -293,7 +378,8 @@ class OfflineMetadataStore(private val storageDir: File) {
     }
 
     fun getTrackFile(record: OfflineTrackRecord): File {
-        return File(storageDir, record.relativeFileName)
+        return resolveSafeTrackFile(record.relativeFileName)
+            ?: File(storageDir, "invalid_track_${record.trackId}")
     }
 
     fun getStorageDirectory(): File = storageDir
