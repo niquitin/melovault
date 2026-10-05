@@ -386,9 +386,16 @@ class MainActivity : AppCompatActivity() {
             onCategoryClick = { category ->
                 if (isEditMode) exitEditMode()
                 captureCurrentScroll()
-                if (category.id == RemoteCatalog.DEVICE_LOCAL_ID) {
+                if (category.id == RemoteCatalog.DEVICE_LOCAL_ID ||
+                    category.id == RemoteCatalog.DEVICE_LOCAL_ALL_ID ||
+                    category.id == RemoteCatalog.DEVICE_LOCAL_FOLDERS_ID
+                ) {
                     checkAndRequestLocalAudioPermission {
-                        loadChildren(category.id, 0, category.title)
+                        if (category.id == RemoteCatalog.DEVICE_LOCAL_FOLDERS_ID) {
+                            handleDeviceLocalFoldersClick(category)
+                        } else {
+                            loadChildren(category.id, 0, category.title)
+                        }
                     }
                 } else {
                     loadChildren(category.id, 0, category.title)
@@ -867,6 +874,15 @@ class MainActivity : AppCompatActivity() {
             return
         }
         navManager.navigateTo(parentId, label, page, sort)
+        if (parentId.startsWith(RemoteCatalog.DEVICE_FOLDER_PREFIX)) {
+            val payload = parentId.removePrefix(RemoteCatalog.DEVICE_FOLDER_PREFIX)
+            val colonIdx = payload.indexOf(':')
+            val vol = if (colonIdx >= 0) payload.substring(0, colonIdx) else payload
+            val path = if (colonIdx >= 0) payload.substring(colonIdx + 1) else ""
+            com.bsdung.musicassistantcar.data.LocalMediaRepository.getDefault(this).saveLastBrowsedFolder(vol, path)
+        } else if (parentId == RemoteCatalog.DEVICE_LOCAL_FOLDERS_ID) {
+            com.bsdung.musicassistantcar.data.LocalMediaRepository.getDefault(this).clearLastBrowsedFolder()
+        }
         updateHeaderAndBreadcrumbs()
 
         binding.loadingView.visibility = View.VISIBLE
@@ -1024,6 +1040,8 @@ class MainActivity : AppCompatActivity() {
                 id.startsWith("source:") || id.startsWith("category:") -> {
                     val iconRes = when (id) {
                         "category:device_local" -> R.drawable.ic_phone_android
+                        "category:device_local_all" -> R.drawable.ic_music_note
+                        "category:device_local_folders" -> R.drawable.ic_folder
                         "category:downloaded" -> R.drawable.ic_download_done
                         "category:recent" -> R.drawable.ic_history
                         "source:all" -> R.drawable.ic_library_music
@@ -2119,6 +2137,40 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "Cần cấp quyền truy cập để đọc nhạc trên thiết bị", Toast.LENGTH_LONG).show()
             }
             pendingAudioPermissionAction = null
+        }
+    }
+
+    private fun handleDeviceLocalFoldersClick(category: LibraryItem.Category) {
+        val repo = com.bsdung.musicassistantcar.data.LocalMediaRepository.getDefault(this)
+        val last = repo.getLastBrowsedFolder()
+        if (last != null && repo.folderExists(last.first, last.second)) {
+            resumeToDeviceFolder(last.first, last.second)
+        } else {
+            repo.clearLastBrowsedFolder()
+            loadChildren(category.id, 0, category.title)
+        }
+    }
+
+    private fun resumeToDeviceFolder(volume: String, path: String) {
+        val repo = com.bsdung.musicassistantcar.data.LocalMediaRepository.getDefault(this)
+        val normalizedPath = com.bsdung.musicassistantcar.data.LocalMediaRepository.normalizeRelativePath(path)
+        val volLabel = repo.getVolumeDisplayName(volume)
+
+        navManager.navigateTo(RemoteCatalog.DEVICE_LOCAL_FOLDERS_ID, "Theo thư mục", 0)
+        navManager.navigateTo("${RemoteCatalog.DEVICE_FOLDER_PREFIX}$volume:", volLabel, 0)
+
+        if (normalizedPath.isNotBlank()) {
+            val segments = normalizedPath.split('/')
+            var currentSubPath = ""
+            for (i in 0 until segments.lastIndex) {
+                val segment = segments[i]
+                currentSubPath = if (currentSubPath.isEmpty()) segment else "$currentSubPath/$segment"
+                navManager.navigateTo("${RemoteCatalog.DEVICE_FOLDER_PREFIX}$volume:$currentSubPath", segment, 0)
+            }
+            val targetSegment = segments.last()
+            loadChildren("${RemoteCatalog.DEVICE_FOLDER_PREFIX}$volume:$normalizedPath", 0, targetSegment)
+        } else {
+            loadChildren("${RemoteCatalog.DEVICE_FOLDER_PREFIX}$volume:", 0, volLabel)
         }
     }
 

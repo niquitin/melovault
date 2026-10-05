@@ -12,6 +12,8 @@ class RemoteCatalog(
     companion object {
         const val ROOT_ID = "root"
         const val DEVICE_LOCAL_ID = "category:device_local"
+        const val DEVICE_LOCAL_ALL_ID = "category:device_local_all"
+        const val DEVICE_LOCAL_FOLDERS_ID = "category:device_local_folders"
         const val DOWNLOADED_ID = "category:downloaded"
         const val RECENT_ID = "category:recent"
         const val ALL_ID = "source:all"
@@ -21,6 +23,7 @@ class RemoteCatalog(
         const val PLAYLIST_PREFIX = "playlist:"
         const val TRACK_PREFIX = "track:"
         const val DEVICE_PREFIX = "device:"
+        const val DEVICE_FOLDER_PREFIX = "device_folder:"
         const val DRIVE_ROOT_PREFIX = "drive-root:"
         const val DRIVE_FOLDER_PREFIX = "drive-folder:"
         const val DRIVE_FILE_PREFIX = "drive-file:"
@@ -140,7 +143,26 @@ class RemoteCatalog(
 
         if (parentId == DEVICE_LOCAL_ID) {
             val repo = localRepoSupplier() ?: return emptyList()
+            return repo.getDeviceMusicCategories()
+        }
+
+        if (parentId == DEVICE_LOCAL_ALL_ID) {
+            val repo = localRepoSupplier() ?: return emptyList()
             return repo.getLocalTracks(page, pageSize, sort)
+        }
+
+        if (parentId == DEVICE_LOCAL_FOLDERS_ID) {
+            val repo = localRepoSupplier() ?: return emptyList()
+            return repo.getDeviceFolderRoots()
+        }
+
+        if (parentId.startsWith(DEVICE_FOLDER_PREFIX)) {
+            val repo = localRepoSupplier() ?: return emptyList()
+            val payload = parentId.removePrefix(DEVICE_FOLDER_PREFIX)
+            val colonIdx = payload.indexOf(':')
+            val volume = if (colonIdx >= 0) payload.substring(0, colonIdx) else payload
+            val relPath = if (colonIdx >= 0) payload.substring(colonIdx + 1) else ""
+            return repo.getFolderContents(volume, relPath, page, pageSize)
         }
 
         if (parentId == DOWNLOADED_ID) {
@@ -361,6 +383,18 @@ class RemoteCatalog(
         rootChildren()
             .firstOrNull { it.mediaId == mediaId }
             ?.let { return it }
+
+        if (mediaId == DEVICE_LOCAL_ALL_ID) {
+            return browsableItem(DEVICE_LOCAL_ALL_ID, "Tất cả bài hát", "Toàn bộ bài hát trên thiết bị")
+        }
+        if (mediaId == DEVICE_LOCAL_FOLDERS_ID) {
+            return browsableItem(DEVICE_LOCAL_FOLDERS_ID, "Theo thư mục", "Duyệt theo cấu trúc thư mục")
+        }
+
+        if (mediaId.startsWith(DEVICE_FOLDER_PREFIX)) {
+            val repo = localRepoSupplier()
+            return repo?.getFolderItem(mediaId)
+        }
 
         if (mediaId.startsWith(DEVICE_PREFIX)) {
             val repo = localRepoSupplier()
