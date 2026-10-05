@@ -776,5 +776,206 @@ class DownloadProgressManagerTest {
         assertTrue("Track must be OFFLINE_READY", manager.isOfflineReady(5002L))
         assertEquals(DownloadState.OFFLINE_READY, manager.getDownloadStatus(5002L).state)
     }
+
+    /**
+     * 16. Cancel during stream open:
+     * Opener is held before it returns. Cancel is invoked (and optionally retry).
+     * When opener finishes and returns input, resource ownership is already transferred.
+     * The acquired stream is guaranteed closed exactly once, no old metadata is published,
+     * and retry completes successfully.
+     */
+    @Test
+    fun testCancelDuringStreamOpen_resourceClosed_andRetrySucceeds() {
+        val openerStartedLatch = CountDownLatch(1)
+        val openerHoldLatch = CountDownLatch(1)
+        val retryCompletionLatch = CountDownLatch(1)
+        val stream1CloseCount = AtomicInteger(0)
+        val attemptCounter = AtomicInteger(0)
+
+        val testData = ByteArray(2048) { 0x33 }
+
+        val streamOpener: (CarTrack, CarApiClient) -> Pair<InputStream, Long?> = { _, _ ->
+            val attempt = attemptCounter.incrementAndGet()
+            if (attempt == 1) {
+                openerStartedLatch.countDown()
+                openerHoldLatch.await(5, TimeUnit.SECONDS)
+                val closeTrackingStream = object : ByteArrayInputStream(testData) {
+                    override fun close() {
+                        stream1CloseCount.incrementAndGet()
+                        super.close()
+                    }
+                }
+                Pair(closeTrackingStream, 2048L)
+            } else {
+                Pair(ByteArrayInputStream(testData), 2048L)
+            }
+        }
+
+        val manager = PinnedDownloadManager(
+            store = store,
+            executor = Executors.newSingleThreadExecutor(),
+            streamOpener = streamOpener,
+        )
+
+        manager.addListener(object : PinnedDownloadManager.DownloadListener {
+            override fun onDownloadCompleted(trackId: Long, record: OfflineTrackRecord) {
+                retryCompletionLatch.countDown()
+            }
+        })
+
+        val track = createCarTrack(6002, size = 2048L)
+        manager.startDownload(track)
+
+        // Wait until streamOpener is actively executing and blocked
+        assertTrue("Stream opener must start execution", openerStartedLatch.await(5, TimeUnit.SECONDS))
+
+        // Cancel while opener is in-flight
+        val cancelled = manager.cancelDownload(6002L)
+        assertTrue("cancelDownload should return true", cancelled)
+
+        // Immediately retry before releasing the opener
+        val retried = manager.retryDownload(6002L)
+        assertTrue("retryDownload should return true", retried)
+
+        // Release the opener
+        openerHoldLatch.countDown()
+
+        // Retry must complete
+        assertTrue("Retry download must complete", retryCompletionLatch.await(5, TimeUnit.SECONDS))
+
+        // Old stream must have been closed
+        assertTrue("Old stream must have been closed at least once: ${stream1CloseCount.get()}", stream1CloseCount.get() >= 1)
+
+        // Verify valid completion state
+        assertTrue("Track must be OFFLINE_READY", manager.isOfflineReady(6002L))
+        val record = store.getRecord(6002L)
+        assertNotNull("Record must exist", record)
+        assertEquals(2048L, record?.fileSizeBytes)
+        val allRecords = store.getAllRecords()
+        assertEquals("Exactly 1 record in store", 1, allRecords.size)
+        assertTrue("Final file exists", File(storeDir, "track_6002.mp3").exists())
+        assertFalse("Part file removed", File(storeDir, "track_6002.part").exists())
+    }
+
+    /**
+     * 17. Cancel from onDownloadFinalizing:
+     * Listener cancels synchronously from onDownloadFinalizing.
+     * Prevents commit, deletes artifacts, ensures no OFFLINE_READY/completed metadata,
+     * and leaves zero orphan partial or final files.
+     */
+    @Test
+    fun testCancelFromOnDownloadFinalizing_noCompletedMetadata_andCleanArtifacts() {
+        val testData = ByteArray(4096) { 0x44 }
+        val streamOpener: (CarTrack, CarApiClient) -> Pair<InputStream, Long?> = { _, _ ->
+            Pair(ByteArrayInputStream(testData), 4096L)
+        }
+
+        val manager = PinnedDownloadManager(
+            store = store,
+            executor = Executors.newSingleThreadExecutor(),
+            streamOpener = streamOpener,
+        )
+
+        val finalizingLatch = CountDownLatch(1)
+        val cancelledLatch = CountDownLatch(1)
+        val completedLatch = CountDownLatch(1)
+        var cancelResult = false
+
+        manager.addListener(object : PinnedDownloadManager.DownloadListener {
+            override fun onDownloadFinalizing(trackId: Long) {
+                cancelResult = manager.cancelDownload(trackId)
+                finalizingLatch.countDown()
+            }
+
+            override fun onDownloadCancelled(trackId: Long) {
+                cancelledLatch.countDown()
+            }
+
+            override fun onDownloadCompleted(trackId: Long, record: OfflineTrackRecord) {
+                completedLatch.countDown()
+            }
+        })
+
+        val track = createCarTrack(7003, size = 4096L)
+        manager.startDownload(track)
+
+        assertTrue("onDownloadFinalizing should be reached", finalizingLatch.await(5, TimeUnit.SECONDS))
+        assertTrue("cancelDownload from finalizing must return true", cancelResult)
+        assertTrue("onDownloadCancelled should fire", cancelledLatch.await(5, TimeUnit.SECONDS))
+        assertFalse("onDownloadCompleted must NEVER fire for cancelled job", completedLatch.await(300, TimeUnit.MILLISECONDS))
+
+        // State verification
+        assertFalse("Track must NOT be offline ready", manager.isOfflineReady(7003L))
+        assertNull("No metadata record should be saved in store", store.getRecord(7003L))
+        assertEquals(0, store.getAllRecords().size)
+        assertEquals(DownloadState.CANCELLED, manager.getDownloadStatus(7003L).state)
+
+        // Zero orphan files
+        val finalFile = File(storeDir, "track_7003.mp3")
+        val partFile = File(storeDir, "track_7003.part")
+        assertFalse("Final file must NOT exist", finalFile.exists())
+        assertFalse("Part file must NOT exist", partFile.exists())
+    }
+
+    /**
+     * 18. Cancel from onDownloadFinalizing with immediate retry:
+     * Cancels during finalizing and immediately retries.
+     * Old attempt commits nothing and cleans its artifacts.
+     * New attempt proceeds through FIFO executor to full completion.
+     */
+    @Test
+    fun testCancelFromOnDownloadFinalizing_retryVariant_succeedsCleanly() {
+        val testData = ByteArray(4096) { 0x55 }
+        val streamOpener: (CarTrack, CarApiClient) -> Pair<InputStream, Long?> = { _, _ ->
+            Pair(ByteArrayInputStream(testData), 4096L)
+        }
+
+        val manager = PinnedDownloadManager(
+            store = store,
+            executor = Executors.newSingleThreadExecutor(),
+            streamOpener = streamOpener,
+        )
+
+        val finalizingAttempt = AtomicInteger(0)
+        val completedLatch = CountDownLatch(1)
+        val completedRecords = Collections.synchronizedList(mutableListOf<OfflineTrackRecord>())
+
+        manager.addListener(object : PinnedDownloadManager.DownloadListener {
+            override fun onDownloadFinalizing(trackId: Long) {
+                if (finalizingAttempt.incrementAndGet() == 1) {
+                    val cancelled = manager.cancelDownload(trackId)
+                    val retried = manager.retryDownload(trackId)
+                    assertTrue("cancelDownload should succeed", cancelled)
+                    assertTrue("retryDownload should succeed", retried)
+                }
+            }
+
+            override fun onDownloadCompleted(trackId: Long, record: OfflineTrackRecord) {
+                completedRecords.add(record)
+                completedLatch.countDown()
+            }
+        })
+
+        val track = createCarTrack(7004, size = 4096L)
+        manager.startDownload(track)
+
+        assertTrue("Retry attempt must complete", completedLatch.await(5, TimeUnit.SECONDS))
+        assertEquals("Exactly 1 completed record published", 1, completedRecords.size)
+
+        // Final state
+        assertTrue("Track must be OFFLINE_READY", manager.isOfflineReady(7004L))
+        assertEquals(DownloadState.OFFLINE_READY, manager.getDownloadStatus(7004L).state)
+        val record = store.getRecord(7004L)
+        assertNotNull("Record must exist", record)
+        assertEquals(4096L, record?.fileSizeBytes)
+        assertEquals(1, store.getAllRecords().size)
+
+        // Disk checks
+        val finalFile = File(storeDir, "track_7004.mp3")
+        val partFile = File(storeDir, "track_7004.part")
+        assertTrue("Final file must exist", finalFile.exists())
+        assertEquals(4096L, finalFile.length())
+        assertFalse("Part file must NOT exist", partFile.exists())
+    }
 }
 

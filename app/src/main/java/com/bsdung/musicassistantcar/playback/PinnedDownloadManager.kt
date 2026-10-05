@@ -227,20 +227,22 @@ open class PinnedDownloadManager(
 
     fun cancelDownload(trackId: Long): Boolean {
         val job = jobs[trackId] ?: return false
-        if (job.state == DownloadState.OFFLINE_READY) return false
-        job.isCancelled = true
-        val wasDownloading = (job.state == DownloadState.DOWNLOADING || job.state == DownloadState.FINALIZING)
-        job.state = DownloadState.CANCELLED
-        activeStreams.remove(trackId)?.let { runCatching { it.close() } }
-        val storageDir = store.getStorageDirectory()
-        val partFile = File(storageDir, "track_${trackId}.part")
-        if (!wasDownloading) {
-            if (partFile.exists()) {
-                partFile.delete()
+        synchronized(job) {
+            if (job.state == DownloadState.OFFLINE_READY) return false
+            job.isCancelled = true
+            val wasActive = (job.state == DownloadState.DOWNLOADING || job.state == DownloadState.FINALIZING)
+            job.state = DownloadState.CANCELLED
+            activeStreams.remove(trackId)?.let { runCatching { it.close() } }
+            val storageDir = store.getStorageDirectory()
+            val partFile = File(storageDir, "track_${trackId}.part")
+            if (!wasActive) {
+                if (partFile.exists()) {
+                    partFile.delete()
+                }
+                notifyCancelled(trackId)
             }
-            notifyCancelled(trackId)
+            return true
         }
-        return true
     }
 
     fun retryDownload(
@@ -317,6 +319,7 @@ open class PinnedDownloadManager(
         }
 
         var partFile: File? = null
+        var finalFile: File? = null
         var stream: InputStream? = null
         try {
             job.state = DownloadState.DOWNLOADING
@@ -329,7 +332,7 @@ open class PinnedDownloadManager(
             val finalFileName = "track_${trackId}.$ext"
             val partFileName = "track_${trackId}.part"
             partFile = File(storageDir, partFileName)
-            val finalFile = File(storageDir, finalFileName)
+            finalFile = File(storageDir, finalFileName)
 
             if (partFile.exists()) {
                 partFile.delete()
@@ -354,12 +357,13 @@ open class PinnedDownloadManager(
                 Pair(conn.inputStream, conn.contentLengthLong.takeIf { it > 0L })
             }
 
+            // Transfer resource ownership immediately before cancellation/supersession check
+            stream = input
+            activeStreams[trackId] = input
+
             if (job.isCancelled || jobs[trackId] !== job) {
                 throw IOException("Download cancelled")
             }
-
-            stream = input
-            activeStreams[trackId] = input
 
             // REQUIREMENT 1: Use ONLY a valid HTTP response-reported length for active transfer percentage.
             // If Content-Length is absent, totalTarget is 0L (indeterminate). Do not invent a percentage from metadata sourceSizeBytes.
@@ -411,25 +415,17 @@ open class PinnedDownloadManager(
             job.state = DownloadState.FINALIZING
             job.bytesDownloaded = totalBytesRead
             job.totalBytes = totalBytesRead
-            if (jobs[trackId] === job) {
+            if (jobs[trackId] === job && !job.isCancelled) {
                 notifyFinalizing(trackId)
+            }
+
+            if (job.isCancelled || jobs[trackId] !== job) {
+                throw IOException("Download cancelled during finalization")
             }
 
             val sha256 = bytesToHex(digest.digest())
             if (sha256.isBlank()) {
                 throw IOException("Failed to calculate SHA-256 for track $trackId")
-            }
-
-            if (finalFile.exists()) {
-                finalFile.delete()
-            }
-            if (!partFile.renameTo(finalFile)) {
-                partFile.copyTo(finalFile, overwrite = true)
-                partFile.delete()
-            }
-
-            if (!finalFile.exists() || finalFile.length() != totalBytesRead) {
-                throw IOException("Final file verification failed after rename")
             }
 
             val record = OfflineTrackRecord(
@@ -453,18 +449,39 @@ open class PinnedDownloadManager(
                 channels = track.sourceChannels,
             )
 
-            store.saveRecord(record)
-            if (jobs[trackId] === job) {
+            var committed = false
+            synchronized(job) {
+                if (job.isCancelled || jobs[trackId] !== job) {
+                    throw IOException("Download cancelled before commit")
+                }
+
+                if (finalFile.exists()) {
+                    finalFile.delete()
+                }
+                if (!partFile.renameTo(finalFile)) {
+                    partFile.copyTo(finalFile, overwrite = true)
+                    partFile.delete()
+                }
+
+                if (!finalFile.exists() || finalFile.length() != totalBytesRead) {
+                    throw IOException("Final file verification failed after rename")
+                }
+
+                store.saveRecord(record)
                 job.state = DownloadState.OFFLINE_READY
                 jobs.remove(trackId)
+
+                if (!isOfflineReady(trackId)) {
+                    if (finalFile.exists()) finalFile.delete()
+                    store.removeRecord(trackId)
+                    throw IOException("Offline ready verification failed after saving record")
+                }
+
+                committed = true
             }
 
-            if (!isOfflineReady(trackId)) {
-                throw IOException("Offline ready verification failed after saving record")
-            }
-
-            Log.i(TAG, "Successfully downloaded track $trackId ($totalBytesRead bytes, sha256=${sha256.take(8)}...)")
-            if (jobs[trackId] === job || !jobs.containsKey(trackId)) {
+            if (committed) {
+                Log.i(TAG, "Successfully downloaded track $trackId ($totalBytesRead bytes, sha256=${sha256.take(8)}...)")
                 notifyCompleted(trackId, record)
             }
         } catch (e: Exception) {
@@ -472,6 +489,7 @@ open class PinnedDownloadManager(
             runCatching { stream?.close() }
             if (jobs[trackId] === job) {
                 partFile?.let { if (it.exists()) it.delete() }
+                finalFile?.let { if (it.exists() && !isOfflineReady(trackId)) it.delete() }
                 if (job.isCancelled) {
                     job.state = DownloadState.CANCELLED
                     notifyCancelled(trackId)
@@ -483,6 +501,7 @@ open class PinnedDownloadManager(
                 }
             } else {
                 partFile?.let { if (it.exists()) it.delete() }
+                finalFile?.let { if (it.exists() && !isOfflineReady(trackId)) it.delete() }
                 Log.i(TAG, "Attempt ${job.attemptId} for track $trackId superseded; suppressed late failure publication")
             }
         } finally {
