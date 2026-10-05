@@ -49,6 +49,7 @@ data class DownloadJob(
     @Volatile var errorMessage: String? = null,
     @Volatile var isCancelled: Boolean = false,
     val enqueuedAtMs: Long = System.currentTimeMillis(),
+    val attemptId: Long = 0L,
 )
 
 open class PinnedDownloadManager(
@@ -57,6 +58,7 @@ open class PinnedDownloadManager(
     private val streamOpener: ((track: CarTrack, apiClient: CarApiClient) -> Pair<InputStream, Long?>)? = null,
 ) {
     private var context: Context? = null
+    private val attemptCounter = java.util.concurrent.atomic.AtomicLong(1L)
 
     constructor(
         context: Context,
@@ -245,19 +247,22 @@ open class PinnedDownloadManager(
         trackId: Long,
         apiClient: CarApiClient = CarApiClient(),
     ): Boolean {
-        val job = jobs[trackId] ?: return false
-        if (job.state != DownloadState.FAILED && job.state != DownloadState.CANCELLED) return false
+        val existingJob = jobs[trackId] ?: return false
+        if (existingJob.state != DownloadState.FAILED && existingJob.state != DownloadState.CANCELLED) return false
         val storageDir = store.getStorageDirectory()
         val partFile = File(storageDir, "track_${trackId}.part")
         if (partFile.exists()) {
             partFile.delete()
         }
-        job.isCancelled = false
-        job.state = DownloadState.QUEUED
-        job.bytesDownloaded = 0L
-        job.errorMessage = null
+        val newJob = DownloadJob(
+            track = existingJob.track,
+            state = DownloadState.QUEUED,
+            totalBytes = existingJob.track.sourceSizeBytes ?: 0L,
+            attemptId = attemptCounter.incrementAndGet(),
+        )
+        jobs[trackId] = newJob
         notifyStarted(trackId)
-        executor.submit { runDownloadJob(job, apiClient) }
+        executor.submit { runDownloadJob(newJob, apiClient) }
         return true
     }
 
@@ -287,6 +292,7 @@ open class PinnedDownloadManager(
             track = track,
             state = DownloadState.QUEUED,
             totalBytes = total,
+            attemptId = attemptCounter.incrementAndGet(),
         )
         jobs[trackId] = job
         notifyStarted(trackId)
@@ -298,9 +304,15 @@ open class PinnedDownloadManager(
         val track = job.track
         val trackId = track.id.toLong()
 
+        if (jobs[trackId] !== job) {
+            return
+        }
+
         if (job.isCancelled) {
-            job.state = DownloadState.CANCELLED
-            notifyCancelled(trackId)
+            if (jobs[trackId] === job) {
+                job.state = DownloadState.CANCELLED
+                notifyCancelled(trackId)
+            }
             return
         }
 
@@ -342,13 +354,20 @@ open class PinnedDownloadManager(
                 Pair(conn.inputStream, conn.contentLengthLong.takeIf { it > 0L })
             }
 
+            if (job.isCancelled || jobs[trackId] !== job) {
+                throw IOException("Download cancelled")
+            }
+
             stream = input
             activeStreams[trackId] = input
 
-            val expectedLength = reportedLength ?: (track.sourceSizeBytes?.takeIf { it > 0L })
-            val totalTarget = expectedLength ?: 0L
+            // REQUIREMENT 1: Use ONLY a valid HTTP response-reported length for active transfer percentage.
+            // If Content-Length is absent, totalTarget is 0L (indeterminate). Do not invent a percentage from metadata sourceSizeBytes.
+            val totalTarget = (reportedLength?.takeIf { it > 0L }) ?: 0L
             job.totalBytes = totalTarget
-            notifyProgress(trackId, 0L, totalTarget)
+            if (jobs[trackId] === job) {
+                notifyProgress(trackId, 0L, totalTarget)
+            }
 
             val digest = MessageDigest.getInstance("SHA-256")
             var totalBytesRead = 0L
@@ -358,7 +377,7 @@ open class PinnedDownloadManager(
                 var bytesRead: Int
                 var lastProgressNotifyMs = System.currentTimeMillis()
                 while (input.read(buffer).also { bytesRead = it } != -1) {
-                    if (job.isCancelled) {
+                    if (job.isCancelled || jobs[trackId] !== job) {
                         throw IOException("Download cancelled")
                     }
                     output.write(buffer, 0, bytesRead)
@@ -369,13 +388,15 @@ open class PinnedDownloadManager(
                     val now = System.currentTimeMillis()
                     if (now - lastProgressNotifyMs >= 100) {
                         lastProgressNotifyMs = now
-                        notifyProgress(trackId, totalBytesRead, totalTarget)
+                        if (jobs[trackId] === job) {
+                            notifyProgress(trackId, totalBytesRead, totalTarget)
+                        }
                     }
                 }
                 output.flush()
             }
 
-            if (job.isCancelled) {
+            if (job.isCancelled || jobs[trackId] !== job) {
                 throw IOException("Download cancelled")
             }
 
@@ -390,7 +411,9 @@ open class PinnedDownloadManager(
             job.state = DownloadState.FINALIZING
             job.bytesDownloaded = totalBytesRead
             job.totalBytes = totalBytesRead
-            notifyFinalizing(trackId)
+            if (jobs[trackId] === job) {
+                notifyFinalizing(trackId)
+            }
 
             val sha256 = bytesToHex(digest.digest())
             if (sha256.isBlank()) {
@@ -431,27 +454,36 @@ open class PinnedDownloadManager(
             )
 
             store.saveRecord(record)
-            job.state = DownloadState.OFFLINE_READY
-            jobs.remove(trackId)
+            if (jobs[trackId] === job) {
+                job.state = DownloadState.OFFLINE_READY
+                jobs.remove(trackId)
+            }
 
             if (!isOfflineReady(trackId)) {
                 throw IOException("Offline ready verification failed after saving record")
             }
 
             Log.i(TAG, "Successfully downloaded track $trackId ($totalBytesRead bytes, sha256=${sha256.take(8)}...)")
-            notifyCompleted(trackId, record)
+            if (jobs[trackId] === job || !jobs.containsKey(trackId)) {
+                notifyCompleted(trackId, record)
+            }
         } catch (e: Exception) {
             activeStreams.remove(trackId)
             runCatching { stream?.close() }
-            partFile?.let { if (it.exists()) it.delete() }
-            if (job.isCancelled) {
-                job.state = DownloadState.CANCELLED
-                notifyCancelled(trackId)
+            if (jobs[trackId] === job) {
+                partFile?.let { if (it.exists()) it.delete() }
+                if (job.isCancelled) {
+                    job.state = DownloadState.CANCELLED
+                    notifyCancelled(trackId)
+                } else {
+                    Log.e(TAG, "Download failed for track $trackId: ${e.message}", e)
+                    job.state = DownloadState.FAILED
+                    job.errorMessage = e.message ?: "Download failed"
+                    notifyFailed(trackId, job.errorMessage ?: "Download failed")
+                }
             } else {
-                Log.e(TAG, "Download failed for track $trackId: ${e.message}", e)
-                job.state = DownloadState.FAILED
-                job.errorMessage = e.message ?: "Download failed"
-                notifyFailed(trackId, job.errorMessage ?: "Download failed")
+                partFile?.let { if (it.exists()) it.delete() }
+                Log.i(TAG, "Attempt ${job.attemptId} for track $trackId superseded; suppressed late failure publication")
             }
         } finally {
             activeStreams.remove(trackId)

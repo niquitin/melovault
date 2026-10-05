@@ -16,9 +16,11 @@ import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
+import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 class DownloadProgressManagerTest {
 
@@ -586,4 +588,193 @@ class DownloadProgressManagerTest {
             assertFalse("Extras key must not contain secret tokens: $key", lowerKey.contains("token") || lowerKey.contains("auth"))
         }
     }
+
+    /**
+     * 14. Unknown Content-Length with positive track.sourceSizeBytes (> 0):
+     * Progress must remain indeterminate (totalBytes <= 0L) during active transfer.
+     * No fake percentages must be computed from track.sourceSizeBytes.
+     * On completion, actual downloaded bytes, SHA256, and offline metadata must be recorded.
+     */
+    @Test
+    fun testUnknownContentLength_indeterminateProgress_noFakePercentage() {
+        val actualTransferBytes = 32_768L // 32 KB
+        val fakeMetadataSizeBytes = 100_000L // sourceSizeBytes is positive and different
+        val testData = ByteArray(actualTransferBytes.toInt()) { (it % 128).toByte() }
+
+        val reportedTotalBytesList = Collections.synchronizedList(mutableListOf<Long>())
+        val downloadedBytesList = Collections.synchronizedList(mutableListOf<Long>())
+        val completionLatch = CountDownLatch(1)
+
+        val streamOpener: (CarTrack, CarApiClient) -> Pair<InputStream, Long?> = { _, _ ->
+            // HTTP response does not provide Content-Length (reportedLength = null)
+            Pair(ByteArrayInputStream(testData), null)
+        }
+
+        val manager = PinnedDownloadManager(
+            store = store,
+            executor = Executors.newSingleThreadExecutor(),
+            streamOpener = streamOpener,
+        )
+
+        manager.addListener(object : PinnedDownloadManager.DownloadListener {
+            override fun onDownloadProgress(trackId: Long, bytesDownloaded: Long, totalBytes: Long) {
+                reportedTotalBytesList.add(totalBytes)
+                downloadedBytesList.add(bytesDownloaded)
+            }
+
+            override fun onDownloadCompleted(trackId: Long, record: OfflineTrackRecord) {
+                completionLatch.countDown()
+            }
+        })
+
+        // Track has positive sourceSizeBytes > 0, but stream has reportedLength = null
+        val track = createCarTrack(1003, size = fakeMetadataSizeBytes)
+        manager.startDownload(track)
+
+        assertTrue("Download should complete within timeout", completionLatch.await(5, TimeUnit.SECONDS))
+        assertTrue("Progress events must be recorded", reportedTotalBytesList.isNotEmpty())
+
+        // Every progress event during download must report totalBytes <= 0L (indeterminate), NOT fakeMetadataSizeBytes
+        for (total in reportedTotalBytesList) {
+            assertTrue("Total bytes must be indeterminate (<= 0L) during transfer, got $total", total <= 0L)
+            assertFalse("Must not use fake track.sourceSizeBytes ($fakeMetadataSizeBytes) as totalBytes", total == fakeMetadataSizeBytes)
+        }
+
+        // Verify completion state: offline ready, actual size recorded (not fake size)
+        assertTrue("Track must be OFFLINE_READY", manager.isOfflineReady(1003L))
+        val status = manager.getDownloadStatus(1003L)
+        assertEquals(DownloadState.OFFLINE_READY, status.state)
+        assertEquals(actualTransferBytes, status.bytesDownloaded)
+        assertEquals(actualTransferBytes, status.totalBytes)
+
+        val record = store.getRecord(1003L)
+        assertNotNull(record)
+        assertEquals(actualTransferBytes, record?.fileSizeBytes)
+        assertFalse("Metadata record fileSizeBytes must match actual data, not fake size", record?.fileSizeBytes == fakeMetadataSizeBytes)
+        assertTrue("SHA256 must be computed and present", !record?.sha256.isNullOrBlank())
+        assertEquals(64, record?.sha256?.length)
+
+        val savedFile = File(storeDir, "track_1003.mp3")
+        assertTrue("Saved file must exist", savedFile.exists())
+        assertEquals(actualTransferBytes, savedFile.length())
+    }
+
+    /**
+     * 15. Cancel then immediate retry handoff:
+     * Old worker is held in stream read during unwinding.
+     * When cancelled and immediately retried, new attempt gets incremented attemptId.
+     * Superseded worker's catch block does NOT publish FAILED or CANCELLED over new job.
+     * Partial-file races are prevented, and exactly 1 final file and metadata record exist.
+     */
+    @Test
+    fun testCancelThenImmediateRetry_attemptIdentity_cleanHandoff() {
+        val worker1ReadingLatch = CountDownLatch(1)
+        val worker1HoldLatch = CountDownLatch(1)
+        val completionLatch = CountDownLatch(1)
+        val failedEvents = Collections.synchronizedList(mutableListOf<String>())
+        val completedRecords = Collections.synchronizedList(mutableListOf<OfflineTrackRecord>())
+
+        val testData = ByteArray(2048) { 0x5a }
+        val callCount = AtomicInteger(0)
+
+        val streamOpener: (CarTrack, CarApiClient) -> Pair<InputStream, Long?> = { track, _ ->
+            val attemptNum = callCount.incrementAndGet()
+            if (attemptNum == 1) {
+                val stream1 = object : InputStream() {
+                    @Volatile var closed = false
+                    override fun read(): Int {
+                        worker1ReadingLatch.countDown()
+                        if (!worker1HoldLatch.await(5, TimeUnit.SECONDS)) {
+                            throw IOException("Timed out waiting for worker1 release")
+                        }
+                        if (closed) {
+                            throw IOException("Stream closed by cancellation")
+                        }
+                        return 0x42
+                    }
+
+                    override fun read(b: ByteArray, off: Int, len: Int): Int {
+                        worker1ReadingLatch.countDown()
+                        if (!worker1HoldLatch.await(5, TimeUnit.SECONDS)) {
+                            throw IOException("Timed out waiting for worker1 release")
+                        }
+                        if (closed) {
+                            throw IOException("Stream closed by cancellation")
+                        }
+                        b[off] = 0x42
+                        return 1
+                    }
+
+                    override fun close() {
+                        closed = true
+                    }
+                }
+                Pair(stream1, 2048L)
+            } else {
+                Pair(ByteArrayInputStream(testData), 2048L)
+            }
+        }
+
+        val manager = PinnedDownloadManager(
+            store = store,
+            executor = Executors.newSingleThreadExecutor(),
+            streamOpener = streamOpener,
+        )
+
+        manager.addListener(object : PinnedDownloadManager.DownloadListener {
+            override fun onDownloadFailed(trackId: Long, error: String) {
+                failedEvents.add(error)
+            }
+
+            override fun onDownloadCompleted(trackId: Long, record: OfflineTrackRecord) {
+                completedRecords.add(record)
+                completionLatch.countDown()
+            }
+        })
+
+        val track = createCarTrack(5002, size = 2048L)
+        manager.startDownload(track)
+
+        // Wait until worker 1 has started reading
+        assertTrue("Worker 1 must start reading", worker1ReadingLatch.await(5, TimeUnit.SECONDS))
+
+        // Cancel while worker 1 is active
+        val cancelled = manager.cancelDownload(5002L)
+        assertTrue("cancelDownload should succeed", cancelled)
+
+        // Immediately retry before releasing worker 1
+        val retried = manager.retryDownload(5002L)
+        assertTrue("retryDownload should succeed", retried)
+
+        // Now unblock worker 1 to finish unwinding
+        worker1HoldLatch.countDown()
+
+        // Wait for worker 2 to complete
+        assertTrue("Retry download must complete", completionLatch.await(5, TimeUnit.SECONDS))
+
+        // Old worker must not publish failure over the new attempt
+        assertTrue("Superseded worker must not publish failure events: $failedEvents", failedEvents.isEmpty())
+        assertEquals("Exactly 1 completed record notified", 1, completedRecords.size)
+
+        // Exactly 1 final file on disk, matching expected size
+        val finalFile = File(storeDir, "track_5002.mp3")
+        assertTrue("Final file must exist", finalFile.exists())
+        assertEquals(2048L, finalFile.length())
+
+        // No part file left on disk
+        val partFile = File(storeDir, "track_5002.part")
+        assertFalse("Part file must not remain", partFile.exists())
+
+        // Exactly 1 record in metadata store
+        val allRecords = store.getAllRecords()
+        assertEquals("Exactly 1 metadata record must exist in store", 1, allRecords.size)
+        val record = store.getRecord(5002L)
+        assertNotNull(record)
+        assertEquals(2048L, record?.fileSizeBytes)
+
+        // Manager state must be OFFLINE_READY
+        assertTrue("Track must be OFFLINE_READY", manager.isOfflineReady(5002L))
+        assertEquals(DownloadState.OFFLINE_READY, manager.getDownloadStatus(5002L).state)
+    }
 }
+
