@@ -15,6 +15,7 @@ class RemoteCatalog(
         const val DEVICE_LOCAL_ALL_ID = "category:device_local_all"
         const val DEVICE_LOCAL_FOLDERS_ID = "category:device_local_folders"
         const val DOWNLOADED_ID = "category:downloaded"
+        const val DOWNLOADING_ID = "category:downloading"
         const val RECENT_ID = "category:recent"
         const val ALL_ID = "source:all"
         const val DRIVE_ID = "source:drive"
@@ -167,9 +168,29 @@ class RemoteCatalog(
 
         if (parentId == DOWNLOADED_ID) {
             val dm = downloadManagerSupplier() ?: return emptyList()
+            val allJobs = dm.getActiveJobMediaItems()
             val allDownloaded = dm.getAllDownloadedMediaItems()
-            if (offset >= allDownloaded.size) return emptyList()
-            return allDownloaded.subList(offset, (offset + pageSize).coerceAtMost(allDownloaded.size))
+            val result = mutableListOf<MediaItem>()
+            if (page == 0 && allJobs.isNotEmpty()) {
+                result.add(
+                    browsableItem(
+                        DOWNLOADING_ID,
+                        "Đang tải (${allJobs.size})",
+                        "Xem tiến trình tải",
+                    )
+                )
+            }
+            if (offset < allDownloaded.size) {
+                result.addAll(allDownloaded.subList(offset, (offset + pageSize).coerceAtMost(allDownloaded.size)))
+            }
+            return result
+        }
+
+        if (parentId == DOWNLOADING_ID) {
+            val dm = downloadManagerSupplier() ?: return emptyList()
+            val allJobs = dm.getActiveJobMediaItems()
+            if (offset >= allJobs.size) return emptyList()
+            return allJobs.subList(offset, (offset + pageSize).coerceAtMost(allJobs.size))
         }
 
         if (parentId == PLAYLISTS_ID) {

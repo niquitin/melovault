@@ -410,8 +410,12 @@ class MainActivity : AppCompatActivity() {
                     loadChildren(folder.id, 0, folder.title)
                 }
             },
-            onTrackClick = { _, tracks, index ->
-                playQueue(tracks, index)
+            onTrackClick = { item, tracks, index ->
+                if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID || item.mediaItem.mediaMetadata.extras?.getBoolean("is_download_job") == true) {
+                    handleTrackDownloadClick(item)
+                } else {
+                    playQueue(tracks, index)
+                }
             },
             onTrackLongClick = { track ->
                 showTrackActionSheet(track)
@@ -2176,7 +2180,12 @@ class MainActivity : AppCompatActivity() {
 
     private val downloadListener = object : com.bsdung.musicassistantcar.playback.PinnedDownloadManager.DownloadListener {
         override fun onDownloadStarted(trackId: Long) {
-            runOnUiThread { libraryAdapter.notifyDataSetChanged() }
+            runOnUiThread {
+                libraryAdapter.notifyDataSetChanged()
+                if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
+                    loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
+                }
+            }
         }
         override fun onDownloadProgress(trackId: Long, bytesDownloaded: Long, totalBytes: Long) {
             runOnUiThread { libraryAdapter.notifyDataSetChanged() }
@@ -2188,7 +2197,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 libraryAdapter.notifyDataSetChanged()
                 Toast.makeText(this@MainActivity, "Đã tải xong: ${record.title}", Toast.LENGTH_SHORT).show()
-                if (navManager.currentParentId == RemoteCatalog.DOWNLOADED_ID) {
+                if (navManager.currentParentId == RemoteCatalog.DOWNLOADED_ID || navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
                     loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
                 }
             }
@@ -2199,12 +2208,23 @@ class MainActivity : AppCompatActivity() {
                 if (error != "Deleted") {
                     Toast.makeText(this@MainActivity, "Tải thất bại: $error", Toast.LENGTH_SHORT).show()
                 }
+                if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
+                    loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
+                }
+            }
+        }
+        override fun onDownloadCancelled(trackId: Long) {
+            runOnUiThread {
+                libraryAdapter.notifyDataSetChanged()
+                if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
+                    loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
+                }
             }
         }
         override fun onDownloadDeleted(trackId: Long) {
             runOnUiThread {
                 libraryAdapter.notifyDataSetChanged()
-                if (navManager.currentParentId == RemoteCatalog.DOWNLOADED_ID) {
+                if (navManager.currentParentId == RemoteCatalog.DOWNLOADED_ID || navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
                     loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
                 }
             }
@@ -2213,13 +2233,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleTrackDownloadClick(track: LibraryItem.Track) {
         val canonicalId = RemoteCatalog.canonicalTrackMediaId(track.mediaItem) ?: track.id
-        val trackId = canonicalId.removePrefix(RemoteCatalog.TRACK_PREFIX).toLongOrNull() ?: return
+        val trackId = canonicalId.removePrefix("download_job:").removePrefix(RemoteCatalog.TRACK_PREFIX).toLongOrNull() ?: return
         val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
-
-        if (dm.isDownloading(trackId)) {
-            Toast.makeText(this, "Đang tải bài hát...", Toast.LENGTH_SHORT).show()
-            return
-        }
 
         if (dm.isOfflineReady(trackId)) {
             AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
@@ -2238,13 +2253,45 @@ class MainActivity : AppCompatActivity() {
                     dm.deleteDownload(trackId)
                     libraryAdapter.notifyDataSetChanged()
                     Toast.makeText(this, "Đã xóa bản tải offline", Toast.LENGTH_SHORT).show()
-                    if (navManager.currentParentId == RemoteCatalog.DOWNLOADED_ID) {
+                    if (navManager.currentParentId == RemoteCatalog.DOWNLOADED_ID || navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
                         loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
                     }
                 }
                 .setNegativeButton("Hủy", null)
                 .show()
             return
+        }
+
+        val status = dm.getDownloadStatus(trackId)
+        when (status.state) {
+            com.bsdung.musicassistantcar.playback.DownloadState.DOWNLOADING,
+            com.bsdung.musicassistantcar.playback.DownloadState.QUEUED -> {
+                AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                    .setTitle("Hủy tải bài hát?")
+                    .setMessage("Dừng và hủy tiến trình tải bài hát \"${MetadataDisplayHelper.cleanTitle(track.title)}\".")
+                    .setPositiveButton("Hủy tải") { _, _ ->
+                        dm.cancelDownload(trackId)
+                        libraryAdapter.notifyDataSetChanged()
+                        Toast.makeText(this, "Đã hủy tải bài hát", Toast.LENGTH_SHORT).show()
+                        if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
+                            loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
+                        }
+                    }
+                    .setNegativeButton("Đóng", null)
+                    .show()
+                return
+            }
+            com.bsdung.musicassistantcar.playback.DownloadState.FAILED,
+            com.bsdung.musicassistantcar.playback.DownloadState.CANCELLED -> {
+                dm.retryDownload(trackId)
+                libraryAdapter.notifyDataSetChanged()
+                Toast.makeText(this, "Đang thử lại...", Toast.LENGTH_SHORT).show()
+                if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
+                    loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
+                }
+                return
+            }
+            else -> {}
         }
 
         Toast.makeText(this, "Bắt đầu tải về...", Toast.LENGTH_SHORT).show()
@@ -2268,7 +2315,11 @@ class MainActivity : AppCompatActivity() {
         )
         dm.startDownload(carTrack)
         libraryAdapter.notifyDataSetChanged()
+        if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
+            loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
+        }
     }
+
 
     override fun onStart() {
         super.onStart()
@@ -2550,24 +2601,39 @@ class MainActivity : AppCompatActivity() {
 
         if (trackId != null && !isDeviceTrack) {
             val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
-            val isOffline = dm.isOfflineReady(trackId)
+            val status = dm.getDownloadStatus(trackId)
             bindingDialog.actionDownload.visibility = View.VISIBLE
-            if (isOffline) {
-                bindingDialog.layoutOfflineInfo.visibility = View.VISIBLE
-                bindingDialog.txtOfflineState.text = "Có thể nghe offline"
-                val record = dm.getRecord(trackId)
-                val sizeMb = String.format(java.util.Locale.US, "%.1f MB", (record?.fileSizeBytes ?: 0L) / (1024.0 * 1024.0))
-                val dateStr = record?.downloadedAtMs?.let {
-                    java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it))
-                } ?: ""
-                bindingDialog.txtOfflineDetails.text = "Dung lượng: $sizeMb • Đã tải: $dateStr"
+            when (status.state) {
+                com.bsdung.musicassistantcar.playback.DownloadState.OFFLINE_READY -> {
+                    bindingDialog.layoutOfflineInfo.visibility = View.VISIBLE
+                    bindingDialog.txtOfflineState.text = "Có thể nghe offline"
+                    val record = dm.getRecord(trackId)
+                    val sizeMb = String.format(java.util.Locale.US, "%.1f MB", (record?.fileSizeBytes ?: 0L) / (1024.0 * 1024.0))
+                    val dateStr = record?.downloadedAtMs?.let {
+                        java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it))
+                    } ?: ""
+                    bindingDialog.txtOfflineDetails.text = "Dung lượng: $sizeMb • Đã tải: $dateStr"
 
-                bindingDialog.actionDownloadIcon.setImageResource(R.drawable.ic_delete)
-                bindingDialog.actionDownloadText.text = "Xóa bản tải offline"
-            } else {
-                bindingDialog.layoutOfflineInfo.visibility = View.GONE
-                bindingDialog.actionDownloadIcon.setImageResource(R.drawable.ic_download)
-                bindingDialog.actionDownloadText.text = "↓ Tải về"
+                    bindingDialog.actionDownloadIcon.setImageResource(R.drawable.ic_delete)
+                    bindingDialog.actionDownloadText.text = "Xóa bản tải offline"
+                }
+                com.bsdung.musicassistantcar.playback.DownloadState.DOWNLOADING,
+                com.bsdung.musicassistantcar.playback.DownloadState.QUEUED -> {
+                    bindingDialog.layoutOfflineInfo.visibility = View.GONE
+                    bindingDialog.actionDownloadIcon.setImageResource(R.drawable.ic_close)
+                    bindingDialog.actionDownloadText.text = "Hủy tải bài hát"
+                }
+                com.bsdung.musicassistantcar.playback.DownloadState.FAILED,
+                com.bsdung.musicassistantcar.playback.DownloadState.CANCELLED -> {
+                    bindingDialog.layoutOfflineInfo.visibility = View.GONE
+                    bindingDialog.actionDownloadIcon.setImageResource(R.drawable.ic_download)
+                    bindingDialog.actionDownloadText.text = "Thử lại tải về"
+                }
+                else -> {
+                    bindingDialog.layoutOfflineInfo.visibility = View.GONE
+                    bindingDialog.actionDownloadIcon.setImageResource(R.drawable.ic_download)
+                    bindingDialog.actionDownloadText.text = "↓ Tải về"
+                }
             }
             bindingDialog.actionDownload.setOnClickListener {
                 dialog.dismiss()
