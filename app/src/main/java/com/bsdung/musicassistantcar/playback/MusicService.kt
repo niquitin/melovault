@@ -1168,23 +1168,30 @@ private class LibraryCallback(
                             catalog.withCurrentQuality(requested)
                         }
                     }
+                    // MeloVault remote tracks: resolve to offline file IF offline ready, otherwise remote stream!
+                    mediaId.startsWith(RemoteCatalog.TRACK_PREFIX) -> {
+                        val trackId = mediaId.removePrefix(RemoteCatalog.TRACK_PREFIX).toLongOrNull() ?: -1L
+                        val dm = PinnedDownloadManager.getDefault(context)
+                        if (trackId > 0L && dm.isOfflineReady(trackId)) {
+                            val rec = dm.getRecord(trackId)
+                            if (rec != null) {
+                                dm.toMediaItem(rec)
+                            } else {
+                                catalog.item(mediaId) ?: requested
+                            }
+                        } else {
+                            // If track is NOT offline ready (or local download was deleted):
+                            // discard any stale file:// URI and resolve fresh remote stream from catalog.
+                            if (requested.localConfiguration?.uri?.scheme == "file" || requested.localConfiguration == null) {
+                                catalog.item(mediaId) ?: requested
+                            } else {
+                                requested
+                            }
+                        }
+                    }
                     // Local file or content URI: keep as-is.
                     requested.localConfiguration?.uri?.scheme == "file" ||
                     requested.localConfiguration?.uri?.scheme == "content" -> requested
-                    // If track is downloaded locally: resolve to file:// with loudness metadata!
-                    mediaId.startsWith(RemoteCatalog.TRACK_PREFIX) &&
-                        PinnedDownloadManager.getDefault(context).isOfflineReady(
-                            mediaId.removePrefix(RemoteCatalog.TRACK_PREFIX).toLongOrNull() ?: -1L
-                        ) -> {
-                        val trackId = mediaId.removePrefix(RemoteCatalog.TRACK_PREFIX).toLongOrNull() ?: -1L
-                        val dm = PinnedDownloadManager.getDefault(context)
-                        val rec = dm.getRecord(trackId)
-                        if (rec != null) {
-                            dm.toMediaItem(rec)
-                        } else {
-                            catalog.item(mediaId) ?: requested
-                        }
-                    }
                     // Non-drive items already fully resolved (stream URI set): keep as-is.
                     requested.localConfiguration != null -> requested
                     // track:/category: items without a URI: resolve via catalog.item().

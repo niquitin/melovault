@@ -2188,10 +2188,14 @@ class MainActivity : AppCompatActivity() {
             }
         }
         override fun onDownloadProgress(trackId: Long, bytesDownloaded: Long, totalBytes: Long) {
-            runOnUiThread { libraryAdapter.notifyDataSetChanged() }
+            runOnUiThread {
+                libraryAdapter.notifyDataSetChanged()
+            }
         }
         override fun onDownloadFinalizing(trackId: Long) {
-            runOnUiThread { libraryAdapter.notifyDataSetChanged() }
+            runOnUiThread {
+                libraryAdapter.notifyDataSetChanged()
+            }
         }
         override fun onDownloadCompleted(trackId: Long, record: com.bsdung.musicassistantcar.playback.OfflineTrackRecord) {
             runOnUiThread {
@@ -2249,6 +2253,7 @@ class MainActivity : AppCompatActivity() {
                     if (currentTrackId == trackId) {
                         Log.i("MainActivity", "Track $trackId is currently playing, stopping playback before deleting offline copy")
                         browser?.stop()
+                        browser?.clearMediaItems()
                     }
                     dm.deleteDownload(trackId)
                     libraryAdapter.notifyDataSetChanged()
