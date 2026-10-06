@@ -447,8 +447,11 @@ class LibraryAdapter(
                                 val actualBytes = dm.getEffectiveTrackSizeBytes(trackId).takeIf { it > 0L }
                                     ?: (rec?.fileSizeBytes ?: 0L)
                                 val sizeStr = if (actualBytes > 0L) " · ${dm.formatStorageBytes(actualBytes)}" else ""
+                                val targetStr = rec?.storageTarget?.let { " · ${dm.formatStorageTargetLabel(it)}" } ?: ""
                                 val dateStr = if ((rec?.downloadedAtMs ?: 0L) > 0L) {
-                                    "\n${dm.formatDownloadDate(rec!!.downloadedAtMs)}"
+                                    "\n${dm.formatDownloadDate(rec!!.downloadedAtMs)}$targetStr"
+                                } else if (targetStr.isNotEmpty()) {
+                                    "\n${targetStr.removePrefix(" · ")}"
                                 } else {
                                     ""
                                 }
@@ -462,6 +465,30 @@ class LibraryAdapter(
                             binding.btnDownload.setImageResource(R.drawable.ic_download_done)
                             binding.btnDownload.setColorFilter(ContextCompat.getColor(context, R.color.accent_primary))
                             binding.btnDownload.contentDescription = "✓ Offline"
+                            binding.btnDownload.setOnClickListener { onDownloadClick?.invoke(item) }
+                        }
+                        com.bsdung.musicassistantcar.playback.DownloadState.OFFLINE_MEDIA_UNAVAILABLE -> {
+                            binding.downloadProgressLayout.visibility = View.GONE
+                            binding.txtDownloadStatus.visibility = View.VISIBLE
+                            binding.txtDownloadStatus.text = "Thẻ nhớ SD không khả dụng"
+                            binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.status_offline))
+                            binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
+                            binding.btnDownload.visibility = View.VISIBLE
+                            binding.btnDownload.setImageResource(R.drawable.ic_download_done)
+                            binding.btnDownload.setColorFilter(ContextCompat.getColor(context, R.color.status_offline))
+                            binding.btnDownload.contentDescription = "Thẻ nhớ SD không khả dụng"
+                            binding.btnDownload.setOnClickListener { onDownloadClick?.invoke(item) }
+                        }
+                        com.bsdung.musicassistantcar.playback.DownloadState.STORAGE_TARGET_UNAVAILABLE -> {
+                            binding.downloadProgressLayout.visibility = View.GONE
+                            binding.txtDownloadStatus.visibility = View.VISIBLE
+                            binding.txtDownloadStatus.text = "! Thẻ nhớ SD không khả dụng"
+                            binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.status_offline))
+                            binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
+                            binding.btnDownload.visibility = View.VISIBLE
+                            binding.btnDownload.setImageResource(R.drawable.ic_download)
+                            binding.btnDownload.setColorFilter(ContextCompat.getColor(context, R.color.status_offline))
+                            binding.btnDownload.contentDescription = "Thử lại"
                             binding.btnDownload.setOnClickListener { onDownloadClick?.invoke(item) }
                         }
                         com.bsdung.musicassistantcar.playback.DownloadState.FAILED -> {

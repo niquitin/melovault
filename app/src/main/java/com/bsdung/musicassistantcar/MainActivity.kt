@@ -924,6 +924,16 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        binding.btnOfflineStorageTarget.setOnClickListener {
+            showOfflineStorageTargetDialog()
+        }
+        binding.txtOfflineStorageTarget.setOnClickListener {
+            showOfflineStorageTargetDialog()
+        }
+        binding.offlineStorageTargetRow.setOnClickListener {
+            showOfflineStorageTargetDialog()
+        }
+
         binding.btnOfflineStorageCap.setOnClickListener {
             showOfflineStorageCapDialog()
         }
@@ -1430,11 +1440,168 @@ class MainActivity : AppCompatActivity() {
         binding.txtOfflineStorageCap.text = dm.formatCapLabel(summary.capBytes)
         binding.txtOfflineNetworkPolicy.text = dm.formatNetworkPolicyLabel()
 
+        val activeTarget = summary.selectedTarget
+        val isSdSelected = activeTarget == com.bsdung.musicassistantcar.playback.OfflineStorageTarget.REMOVABLE_SD
+        if (isSdSelected && !summary.sdAvailable) {
+            binding.txtOfflineStorageTarget.text = "Thẻ nhớ SD — Không khả dụng"
+            binding.txtOfflineStorageTarget.setTextColor(ContextCompat.getColor(this, R.color.status_offline))
+        } else {
+            binding.txtOfflineStorageTarget.text = dm.formatStorageTargetLabel(activeTarget)
+            binding.txtOfflineStorageTarget.setTextColor(ContextCompat.getColor(this, R.color.accent_primary))
+        }
+
+        val internalDot = if (!isSdSelected) "●" else "○"
+        val sdDot = if (isSdSelected) "●" else "○"
+        val internalLine = "$internalDot Bộ nhớ trong: Đã dùng ${dm.formatStorageBytes(summary.internalUsedBytes)} · Còn trống: ${dm.formatStorageBytes(summary.internalAvailableBytes)}"
+        val sdLine = if (summary.sdAvailable) {
+            "$sdDot Thẻ nhớ SD: Đã dùng ${dm.formatStorageBytes(summary.sdUsedBytes)} · Còn trống: ${dm.formatStorageBytes(summary.sdAvailableBytes)}"
+        } else {
+            "$sdDot Thẻ nhớ SD — Không khả dụng"
+        }
+        binding.txtOfflineVolumeDetails.text = "$internalLine\n$sdLine"
+
         val hasTracks = summary.trackCount > 0
         binding.btnOfflineMultiSelect.isEnabled = hasTracks
         binding.btnOfflineMultiSelect.alpha = if (hasTracks) 1.0f else 0.5f
         binding.btnDeleteAllOffline.isEnabled = hasTracks
         binding.btnDeleteAllOffline.alpha = if (hasTracks) 1.0f else 0.5f
+    }
+
+    private fun showOfflineStorageTargetDialog() {
+        val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
+        val summary = dm.getStorageSummary(repairStaleMetadata = false)
+        val currentTarget = summary.selectedTarget
+
+        val density = resources.displayMetrics.density
+        val padH = (20 * density).toInt()
+        val padV = (12 * density).toInt()
+        val container = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(padH, padV, padH, (4 * density).toInt())
+        }
+
+        val descView = android.widget.TextView(this).apply {
+            text = "Chọn nơi lưu cho các bản nhạc offline tải mới. Các bài đã tải trước đó vẫn hoạt động bình thường ở vị trí hiện tại."
+            textSize = 13f
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_secondary))
+            setPadding(0, 0, 0, (12 * density).toInt())
+        }
+        container.addView(descView)
+
+        var dialogRef: AlertDialog? = null
+
+        fun addTargetRow(
+            target: com.bsdung.musicassistantcar.playback.OfflineStorageTarget,
+            titleText: String,
+            subtitleText: String,
+            enabled: Boolean,
+        ) {
+            val isSelected = (target == currentTarget)
+            val rowLayout = android.widget.LinearLayout(this).apply {
+                orientation = android.widget.LinearLayout.VERTICAL
+                setPadding((10 * density).toInt(), (10 * density).toInt(), (10 * density).toInt(), (10 * density).toInt())
+                isEnabled = enabled
+                alpha = if (enabled) 1.0f else 0.55f
+                if (enabled) {
+                    setBackgroundResource(R.drawable.bg_button_control)
+                    setOnClickListener {
+                        dialogRef?.dismiss()
+                        if (target != currentTarget) {
+                            showConfirmChangeStorageTargetDialog(target)
+                        }
+                    }
+                }
+            }
+            val dot = if (isSelected) "●" else "○"
+            val titleView = android.widget.TextView(this).apply {
+                text = "$dot $titleText"
+                textSize = 15f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(
+                    ContextCompat.getColor(
+                        this@MainActivity,
+                        if (isSelected) R.color.accent_primary else if (enabled) R.color.text_primary else R.color.text_secondary,
+                    ),
+                )
+            }
+            val subView = android.widget.TextView(this).apply {
+                text = subtitleText
+                textSize = 12f
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_secondary))
+                setPadding((18 * density).toInt(), (2 * density).toInt(), 0, 0)
+            }
+            rowLayout.addView(titleView)
+            rowLayout.addView(subView)
+            val lp = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+            ).apply {
+                bottomMargin = (8 * density).toInt()
+            }
+            container.addView(rowLayout, lp)
+        }
+
+        addTargetRow(
+            target = com.bsdung.musicassistantcar.playback.OfflineStorageTarget.INTERNAL,
+            titleText = "Bộ nhớ trong",
+            subtitleText = "Đã dùng: ${dm.formatStorageBytes(summary.internalUsedBytes)} (${summary.internalTrackCount} bài) · Còn trống: ${dm.formatStorageBytes(summary.internalAvailableBytes)}",
+            enabled = true,
+        )
+
+        if (summary.sdAvailable) {
+            addTargetRow(
+                target = com.bsdung.musicassistantcar.playback.OfflineStorageTarget.REMOVABLE_SD,
+                titleText = "Thẻ nhớ SD",
+                subtitleText = "Đã dùng: ${dm.formatStorageBytes(summary.sdUsedBytes)} (${summary.sdTrackCount} bài) · Còn trống: ${dm.formatStorageBytes(summary.sdAvailableBytes)}",
+                enabled = true,
+            )
+        } else {
+            addTargetRow(
+                target = com.bsdung.musicassistantcar.playback.OfflineStorageTarget.REMOVABLE_SD,
+                titleText = "Thẻ nhớ SD — Không khả dụng",
+                subtitleText = if (summary.sdTrackCount > 0) {
+                    "Thẻ nhớ đang tháo (${summary.sdTrackCount} bài đã lưu trên thẻ)"
+                } else {
+                    "Không phát hiện thẻ nhớ SD gắn ngoài khả dụng"
+                },
+                enabled = false,
+            )
+        }
+
+        dialogRef = AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            .setTitle("Nơi lưu nhạc offline")
+            .setView(container)
+            .setNegativeButton("Đóng", null)
+            .create()
+        dialogRef?.show()
+    }
+
+    private fun showConfirmChangeStorageTargetDialog(
+        newTarget: com.bsdung.musicassistantcar.playback.OfflineStorageTarget,
+        onConfirmed: (() -> Unit)? = null,
+    ) {
+        val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
+        val message = buildString {
+            append("Các bài đã tải sẽ được giữ nguyên ở vị trí hiện tại.\n")
+            append("Chỉ các bài tải mới sử dụng nơi lưu mới.\n")
+            append("Không tự động di chuyển nhạc đã tải.")
+        }
+        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            .setTitle("Đổi nơi lưu các bản tải mới?")
+            .setMessage(message)
+            .setNegativeButton("HỦY", null)
+            .setPositiveButton("ĐỔI") { _, _ ->
+                dm.setOfflineStorageTarget(newTarget)
+                updateOfflineStorageDashboard()
+                libraryAdapter.notifyDataSetChanged()
+                Toast.makeText(
+                    this,
+                    "Nơi lưu nhạc offline: ${dm.formatStorageTargetLabel(newTarget)}",
+                    Toast.LENGTH_SHORT,
+                ).show()
+                onConfirmed?.invoke()
+            }
+            .show()
     }
 
     private fun showOfflineStorageCapDialog() {
@@ -2391,11 +2558,18 @@ class MainActivity : AppCompatActivity() {
             val summary = dm.getStorageSummary()
 
             if (!precheck.isAllowed) {
-                AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                val builder = AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
                     .setTitle(precheck.title ?: "Không đủ dung lượng")
                     .setMessage(precheck.message ?: "Không đủ dung lượng để tải.")
-                    .setPositiveButton("Đã hiểu", null)
-                    .show()
+                    .setNegativeButton("Đóng", null)
+                if (precheck.status == com.bsdung.musicassistantcar.playback.StoragePrecheckStatus.STORAGE_TARGET_UNAVAILABLE) {
+                    builder.setPositiveButton("Đổi sang Bộ nhớ trong") { _, _ ->
+                        showConfirmChangeStorageTargetDialog(com.bsdung.musicassistantcar.playback.OfflineStorageTarget.INTERNAL)
+                    }
+                } else {
+                    builder.setPositiveButton("Đã hiểu", null)
+                }
+                builder.show()
                 return
             }
 
@@ -2415,9 +2589,10 @@ class MainActivity : AppCompatActivity() {
                 msgBuilder.append(" [có $unknownCount bài chưa rõ dung lượng]")
             }
             msgBuilder.append("\n\n")
+            msgBuilder.append("Nơi lưu: ${dm.formatStorageTargetLabel(summary.selectedTarget)}\n")
             msgBuilder.append("Offline hiện tại: ${dm.formatStorageBytes(summary.usedBytes)}\n")
             msgBuilder.append("Giới hạn: ${dm.formatCapLabel(summary.capBytes)}\n")
-            msgBuilder.append("Còn trống thiết bị: ${dm.formatStorageBytes(summary.availableBytes)}\n")
+            msgBuilder.append("Còn trống nơi lưu: ${dm.formatStorageBytes(summary.availableBytes)}\n")
             msgBuilder.append("Mạng tải: ${dm.formatNetworkPolicyLabel()}\n\n")
             msgBuilder.append("Tiếp tục tải?")
 
@@ -3700,6 +3875,14 @@ class MainActivity : AppCompatActivity() {
 
         val status = dm.getDownloadStatus(trackId)
         when (status.state) {
+            com.bsdung.musicassistantcar.playback.DownloadState.OFFLINE_MEDIA_UNAVAILABLE -> {
+                AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                    .setTitle("Thẻ nhớ SD không khả dụng")
+                    .setMessage("Bài hát này đã được tải về Thẻ nhớ SD nhưng thẻ nhớ hiện không khả dụng.\nMeloVault sẽ giữ nguyên bản tải đã lưu và tạm phát trực tuyến cho đến khi thẻ nhớ được lắp lại.")
+                    .setPositiveButton("Đã hiểu", null)
+                    .show()
+                return
+            }
             com.bsdung.musicassistantcar.playback.DownloadState.DOWNLOADING,
             com.bsdung.musicassistantcar.playback.DownloadState.QUEUED,
             com.bsdung.musicassistantcar.playback.DownloadState.WAITING_FOR_WIFI -> {
@@ -3718,15 +3901,29 @@ class MainActivity : AppCompatActivity() {
                     .show()
                 return
             }
+            com.bsdung.musicassistantcar.playback.DownloadState.STORAGE_TARGET_UNAVAILABLE,
             com.bsdung.musicassistantcar.playback.DownloadState.FAILED,
             com.bsdung.musicassistantcar.playback.DownloadState.CANCELLED -> {
                 val precheck = dm.checkSingleDownloadStorage(carTrack)
                 if (!precheck.isAllowed) {
-                    AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
-                        .setTitle(precheck.title ?: "Không đủ dung lượng")
-                        .setMessage(precheck.message ?: "Không đủ dung lượng để tải.")
-                        .setPositiveButton("Đã hiểu", null)
-                        .show()
+                    if (precheck.status == com.bsdung.musicassistantcar.playback.StoragePrecheckStatus.STORAGE_TARGET_UNAVAILABLE) {
+                        dm.retryDownload(trackId)
+                        libraryAdapter.notifyDataSetChanged()
+                        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                            .setTitle("Thẻ nhớ SD không khả dụng")
+                            .setMessage(precheck.message ?: "Thẻ nhớ SD không khả dụng.")
+                            .setPositiveButton("Đổi sang Bộ nhớ trong") { _, _ ->
+                                showConfirmChangeStorageTargetDialog(com.bsdung.musicassistantcar.playback.OfflineStorageTarget.INTERNAL)
+                            }
+                            .setNegativeButton("Đóng", null)
+                            .show()
+                    } else {
+                        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                            .setTitle(precheck.title ?: "Không đủ dung lượng")
+                            .setMessage(precheck.message ?: "Không đủ dung lượng để tải.")
+                            .setPositiveButton("Đã hiểu", null)
+                            .show()
+                    }
                     return
                 }
                 val networkAllowed = dm.isNetworkAllowedForDownload()
@@ -3744,11 +3941,24 @@ class MainActivity : AppCompatActivity() {
 
         val precheck = dm.checkSingleDownloadStorage(carTrack)
         if (!precheck.isAllowed) {
-            AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
-                .setTitle(precheck.title ?: "Không đủ dung lượng")
-                .setMessage(precheck.message ?: "Không đủ dung lượng để tải.")
-                .setPositiveButton("Đã hiểu", null)
-                .show()
+            if (precheck.status == com.bsdung.musicassistantcar.playback.StoragePrecheckStatus.STORAGE_TARGET_UNAVAILABLE) {
+                dm.startDownload(carTrack)
+                libraryAdapter.notifyDataSetChanged()
+                AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                    .setTitle("Thẻ nhớ SD không khả dụng")
+                    .setMessage(precheck.message ?: "Thẻ nhớ SD không khả dụng.")
+                    .setPositiveButton("Đổi sang Bộ nhớ trong") { _, _ ->
+                        showConfirmChangeStorageTargetDialog(com.bsdung.musicassistantcar.playback.OfflineStorageTarget.INTERNAL)
+                    }
+                    .setNegativeButton("Đóng", null)
+                    .show()
+            } else {
+                AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                    .setTitle(precheck.title ?: "Không đủ dung lượng")
+                    .setMessage(precheck.message ?: "Không đủ dung lượng để tải.")
+                    .setPositiveButton("Đã hiểu", null)
+                    .show()
+            }
             return
         }
 
@@ -4058,13 +4268,21 @@ class MainActivity : AppCompatActivity() {
                     bindingDialog.txtOfflineState.text = "Có thể nghe offline"
                     val record = dm.getRecord(trackId)
                     val sizeMb = String.format(java.util.Locale.US, "%.1f MB", (record?.fileSizeBytes ?: 0L) / (1024.0 * 1024.0))
+                    val targetLabel = record?.storageTarget?.let { dm.formatStorageTargetLabel(it) } ?: "Bộ nhớ trong"
                     val dateStr = record?.downloadedAtMs?.let {
                         java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(it))
                     } ?: ""
-                    bindingDialog.txtOfflineDetails.text = "Dung lượng: $sizeMb • Đã tải: $dateStr"
+                    bindingDialog.txtOfflineDetails.text = "Dung lượng: $sizeMb • Nơi lưu: $targetLabel • Đã tải: $dateStr"
 
                     bindingDialog.actionDownloadIcon.setImageResource(R.drawable.ic_delete)
                     bindingDialog.actionDownloadText.text = "Xóa bản tải offline"
+                }
+                com.bsdung.musicassistantcar.playback.DownloadState.OFFLINE_MEDIA_UNAVAILABLE -> {
+                    bindingDialog.layoutOfflineInfo.visibility = View.VISIBLE
+                    bindingDialog.txtOfflineState.text = "Thẻ nhớ SD không khả dụng"
+                    bindingDialog.txtOfflineDetails.text = "Bản tải lưu trên Thẻ nhớ SD hiện đang tháo. Sẽ tạm phát trực tuyến."
+                    bindingDialog.actionDownloadIcon.setImageResource(R.drawable.ic_download_done)
+                    bindingDialog.actionDownloadText.text = "Thẻ nhớ SD không khả dụng"
                 }
                 com.bsdung.musicassistantcar.playback.DownloadState.DOWNLOADING,
                 com.bsdung.musicassistantcar.playback.DownloadState.QUEUED,
@@ -4073,6 +4291,7 @@ class MainActivity : AppCompatActivity() {
                     bindingDialog.actionDownloadIcon.setImageResource(R.drawable.ic_close)
                     bindingDialog.actionDownloadText.text = "Hủy tải bài hát"
                 }
+                com.bsdung.musicassistantcar.playback.DownloadState.STORAGE_TARGET_UNAVAILABLE,
                 com.bsdung.musicassistantcar.playback.DownloadState.FAILED,
                 com.bsdung.musicassistantcar.playback.DownloadState.CANCELLED -> {
                     bindingDialog.layoutOfflineInfo.visibility = View.GONE

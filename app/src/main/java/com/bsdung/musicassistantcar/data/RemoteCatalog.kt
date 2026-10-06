@@ -88,6 +88,56 @@ class RemoteCatalog(
             }.getOrNull()
             return resolveCanonicalTrackMediaId(item.mediaId, trackIdFromExtras)
         }
+
+        fun buildTrackExtras(track: CarTrack): android.os.Bundle {
+            val extras = android.os.Bundle()
+            if (track.duration != null && track.duration > 0.0) {
+                extras.putLong("duration_ms", (track.duration * 1000).toLong())
+            }
+            track.sourceFormat?.let { extras.putString("format", it) }
+            track.sourceSizeBytes?.let { extras.putLong("size_bytes", it) }
+            track.sourceCodec?.let { extras.putString("codec", it) }
+            track.sourceBitrate?.let { extras.putInt("bitrate", it) }
+            track.sourceSampleRate?.let { extras.putInt("sample_rate", it) }
+            track.sourceChannels?.let { extras.putInt("channels", it) }
+            track.sourceType?.let { extras.putString("source_type", it) }
+            track.loudnessLufs?.let { extras.putDouble("loudness_lufs", it) }
+            track.truePeakDbtp?.let { extras.putDouble("true_peak_dbtp", it) }
+            track.loudnessRangeLu?.let { extras.putDouble("loudness_range_lu", it) }
+            track.loudnessAnalysisVersion?.let { extras.putInt("loudness_analysis_version", it) }
+            extras.putBoolean("is_offline_download", false)
+            extras.putString("playback_source", "REMOTE_STREAM")
+            return extras
+        }
+
+        fun trackToRemoteMediaItem(track: CarTrack, api: CarApiClient): MediaItem {
+            val extras = buildTrackExtras(track)
+            return MediaItem.Builder()
+                .setMediaId("$TRACK_PREFIX${track.id}")
+                .setUri(api.streamUri(track.id))
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(
+                            track.title.ifBlank {
+                                "Chưa xác định"
+                            }
+                        )
+                        .setArtist(
+                            track.artist.ifBlank {
+                                "Nghệ sĩ không rõ"
+                            }
+                        )
+                        .setAlbumTitle(track.album)
+                        .setArtworkUri(
+                            api.trackCoverUri(track.id)
+                        )
+                        .setExtras(extras)
+                        .setIsBrowsable(false)
+                        .setIsPlayable(true)
+                        .build()
+                )
+                .build()
+        }
     }
 
     fun rootItem(): MediaItem =
@@ -503,53 +553,9 @@ class RemoteCatalog(
             page.coerceAtLeast(0) * pageSize,
         ).map(::trackItem)
 
-    fun trackExtras(track: CarTrack): android.os.Bundle {
-        val extras = android.os.Bundle()
-        if (track.duration != null && track.duration > 0.0) {
-            extras.putLong("duration_ms", (track.duration * 1000).toLong())
-        }
-        track.sourceFormat?.let { extras.putString("format", it) }
-        track.sourceSizeBytes?.let { extras.putLong("size_bytes", it) }
-        track.sourceCodec?.let { extras.putString("codec", it) }
-        track.sourceBitrate?.let { extras.putInt("bitrate", it) }
-        track.sourceSampleRate?.let { extras.putInt("sample_rate", it) }
-        track.sourceChannels?.let { extras.putInt("channels", it) }
-        track.sourceType?.let { extras.putString("source_type", it) }
-        track.loudnessLufs?.let { extras.putDouble("loudness_lufs", it) }
-        track.truePeakDbtp?.let { extras.putDouble("true_peak_dbtp", it) }
-        track.loudnessRangeLu?.let { extras.putDouble("loudness_range_lu", it) }
-        track.loudnessAnalysisVersion?.let { extras.putInt("loudness_analysis_version", it) }
-        return extras
-    }
+    fun trackExtras(track: CarTrack): android.os.Bundle = buildTrackExtras(track)
 
-    fun trackItem(track: CarTrack): MediaItem {
-        val extras = trackExtras(track)
-        return MediaItem.Builder()
-            .setMediaId("$TRACK_PREFIX${track.id}")
-            .setUri(api.streamUri(track.id))
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(
-                        track.title.ifBlank {
-                            "Chưa xác định"
-                        }
-                    )
-                    .setArtist(
-                        track.artist.ifBlank {
-                            "Nghệ sĩ không rõ"
-                        }
-                    )
-                    .setAlbumTitle(track.album)
-                    .setArtworkUri(
-                        api.trackCoverUri(track.id)
-                    )
-                    .setExtras(extras)
-                    .setIsBrowsable(false)
-                    .setIsPlayable(true)
-                    .build()
-            )
-            .build()
-    }
+    fun trackItem(track: CarTrack): MediaItem = trackToRemoteMediaItem(track, api)
 
     private fun driveBrowseItem(
         item: DriveBrowseItem,
@@ -600,12 +606,25 @@ class RemoteCatalog(
             .build()
     }
     fun withCurrentQuality(item: MediaItem): MediaItem {
-        if (item.mediaMetadata.extras?.getBoolean("is_offline_download") == true ||
-            item.mediaMetadata.extras?.getBoolean("is_device_local") == true ||
-            item.localConfiguration?.uri?.scheme == "file" ||
+        if (item.mediaMetadata.extras?.getBoolean("is_device_local") == true ||
             item.localConfiguration?.uri?.scheme == "content"
         ) {
             return item
+        }
+
+        var wasOfflineItem = false
+        if (item.mediaMetadata.extras?.getBoolean("is_offline_download") == true ||
+            item.localConfiguration?.uri?.scheme == "file"
+        ) {
+            val trackId = item.mediaMetadata.extras?.getLong("track_id_long", -1L)?.takeIf { it > 0L }
+                ?: item.mediaMetadata.extras?.getInt("track_id", -1)?.toLong()?.takeIf { it > 0L }
+                ?: item.mediaId.removePrefix(TRACK_PREFIX).toLongOrNull()
+                ?: -1L
+            val dm = downloadManagerSupplier()
+            if (dm == null || (trackId > 0L && dm.isOfflineReady(trackId))) {
+                return item
+            }
+            wasOfflineItem = true
         }
 
         val uri = when {
@@ -627,10 +646,19 @@ class RemoteCatalog(
 
             else -> return item
         }
+        val metadata = if (wasOfflineItem) {
+            val updatedExtras = android.os.Bundle(item.mediaMetadata.extras ?: android.os.Bundle()).apply {
+                putBoolean("is_offline_download", false)
+                putString("playback_source", "REMOTE_STREAM")
+            }
+            item.mediaMetadata.buildUpon().setExtras(updatedExtras).build()
+        } else {
+            item.mediaMetadata
+        }
         return MediaItem.Builder()
             .setMediaId(item.mediaId)
             .setUri(uri)
-            .setMediaMetadata(item.mediaMetadata)
+            .setMediaMetadata(metadata)
             .build()
     }
 

@@ -24,9 +24,14 @@ data class OfflineTrackRecord(
     val bitrate: Int? = null,
     val sampleRate: Int? = null,
     val channels: Int? = null,
+    val storageTarget: OfflineStorageTarget = OfflineStorageTarget.INTERNAL,
+    val storageVolumeUuid: String? = null,
 )
 
-class OfflineMetadataStore(private val storageDir: File) {
+class OfflineMetadataStore(
+    private val storageDir: File,
+    @Volatile private var volumeProvider: OfflineStorageVolumeProvider = SingleDirOfflineStorageVolumeProvider(storageDir),
+) {
 
     companion object {
         private const val TAG = "OfflineMetadataStore"
@@ -41,13 +46,13 @@ class OfflineMetadataStore(private val storageDir: File) {
         fun getDefault(context: Context): OfflineMetadataStore {
             return defaultInstance ?: synchronized(this) {
                 defaultInstance ?: run {
-                    val baseDir = context.getExternalFilesDir(null)
-                        ?.resolve(OFFLINE_DIR_NAME)
-                        ?: File(context.filesDir, OFFLINE_DIR_NAME)
+                    val appContext = context.applicationContext ?: context
+                    val provider = AndroidOfflineStorageVolumeProvider(appContext)
+                    val baseDir = provider.getInternalOfflineDir()
                     if (!baseDir.exists()) {
                         baseDir.mkdirs()
                     }
-                    OfflineMetadataStore(baseDir).also { defaultInstance = it }
+                    OfflineMetadataStore(baseDir, provider).also { defaultInstance = it }
                 }
             }
         }
@@ -156,13 +161,29 @@ class OfflineMetadataStore(private val storageDir: File) {
                 val trackId = map["track_id"]?.toLongOrNull() ?: continue
                 if (trackId <= 0L) continue
 
+                val rawRelativeName = (map["relative_file_name"] ?: "").trim()
+                val normalizedRelativeName = if ((rawRelativeName.contains('/') || rawRelativeName.contains('\\')) && !rawRelativeName.contains("..")) {
+                    try {
+                        val candidate = File(rawRelativeName)
+                        if (candidate.canonicalFile.parentFile == storageDir.canonicalFile) {
+                            candidate.name
+                        } else {
+                            rawRelativeName
+                        }
+                    } catch (_: Exception) {
+                        rawRelativeName
+                    }
+                } else {
+                    rawRelativeName
+                }
+
                 val record = OfflineTrackRecord(
                     trackId = trackId,
                     title = map["title"] ?: "",
                     artist = map["artist"] ?: "",
                     album = map["album"] ?: "",
                     durationMs = map["duration_ms"]?.toLongOrNull() ?: 0L,
-                    relativeFileName = map["relative_file_name"] ?: "",
+                    relativeFileName = normalizedRelativeName,
                     fileSizeBytes = map["file_size_bytes"]?.toLongOrNull() ?: 0L,
                     sha256 = map["sha256"] ?: "",
                     loudnessLufs = map["loudness_lufs"]?.toDoubleOrNull(),
@@ -175,6 +196,8 @@ class OfflineMetadataStore(private val storageDir: File) {
                     bitrate = map["bitrate"]?.toIntOrNull(),
                     sampleRate = map["sample_rate"]?.toIntOrNull(),
                     channels = map["channels"]?.toIntOrNull(),
+                    storageTarget = OfflineStorageTarget.fromString(map["storage_target"]),
+                    storageVolumeUuid = map["storage_volume_uuid"]?.takeIf { it.isNotBlank() },
                 )
                 records[trackId] = record
             }
@@ -215,6 +238,8 @@ class OfflineMetadataStore(private val storageDir: File) {
             r.bitrate?.let { fields.add("      \"bitrate\": $it") }
             r.sampleRate?.let { fields.add("      \"sample_rate\": $it") }
             r.channels?.let { fields.add("      \"channels\": $it") }
+            fields.add("      \"storage_target\": \"${r.storageTarget.name}\"")
+            r.storageVolumeUuid?.let { fields.add("      \"storage_volume_uuid\": \"${escapeJson(it)}\"") }
             "    {\n" + fields.joinToString(",\n") + "\n    }"
         }
         sb.append(trackEntries.joinToString(",\n"))
@@ -228,6 +253,12 @@ class OfflineMetadataStore(private val storageDir: File) {
         }
     }
 
+    fun getVolumeProvider(): OfflineStorageVolumeProvider = volumeProvider
+
+    fun setVolumeProvider(provider: OfflineStorageVolumeProvider) {
+        this.volumeProvider = provider
+    }
+
     @Synchronized
     fun saveRecord(record: OfflineTrackRecord) {
         records[record.trackId] = record
@@ -239,7 +270,7 @@ class OfflineMetadataStore(private val storageDir: File) {
         return records[trackId]
     }
 
-    fun isSafeRelativeFileName(fileName: String): Boolean {
+    fun isSafeRelativeFileName(fileName: String, baseDir: File = storageDir): Boolean {
         val trimmed = fileName.trim()
         if (trimmed.isEmpty()) return false
         if (trimmed.contains("..") || trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains(':')) {
@@ -255,25 +286,35 @@ class OfflineMetadataStore(private val storageDir: File) {
             return false
         }
         return try {
-            val rootCanonical = storageDir.canonicalFile
-            val targetCanonical = File(storageDir, trimmed).canonicalFile
+            val rootCanonical = baseDir.canonicalFile
+            val targetCanonical = File(baseDir, trimmed).canonicalFile
             targetCanonical.parentFile == rootCanonical
         } catch (e: Exception) {
             false
         }
     }
 
-    fun resolveSafeTrackFile(fileName: String): File? {
-        if (!isSafeRelativeFileName(fileName)) return null
-        return File(storageDir, fileName.trim())
+    fun resolveSafeTrackFile(fileName: String, baseDir: File = storageDir): File? {
+        if (!isSafeRelativeFileName(fileName, baseDir)) return null
+        return File(baseDir, fileName.trim())
+    }
+
+    fun resolveSafeTrackFile(record: OfflineTrackRecord): File? {
+        if (!volumeProvider.isTargetAvailable(record.storageTarget)) {
+            return null
+        }
+        val targetDir = volumeProvider.getOfflineDirForTarget(record.storageTarget) ?: return null
+        return resolveSafeTrackFile(record.relativeFileName, targetDir)
     }
 
     @Synchronized
     fun getEffectiveFileSizeBytes(record: OfflineTrackRecord): Long {
         if (record.sha256.isBlank()) return 0L
-        val partFile = File(storageDir, "track_${record.trackId}.part")
+        if (!volumeProvider.isTargetAvailable(record.storageTarget)) return 0L
+        val targetDir = volumeProvider.getOfflineDirForTarget(record.storageTarget) ?: return 0L
+        val partFile = File(targetDir, "track_${record.trackId}.part")
         if (partFile.exists()) return 0L
-        val safeFile = resolveSafeTrackFile(record.relativeFileName) ?: return 0L
+        val safeFile = resolveSafeTrackFile(record) ?: return 0L
         if (!safeFile.exists() || !safeFile.isFile) return 0L
         val actualLen = safeFile.length()
         return if (actualLen > 0L) actualLen else 0L
@@ -286,7 +327,18 @@ class OfflineMetadataStore(private val storageDir: File) {
         while (iterator.hasNext()) {
             val entry = iterator.next()
             val record = entry.value
-            val file = resolveSafeTrackFile(record.relativeFileName)
+            if (!isSafeRelativeFileName(record.relativeFileName, storageDir)) {
+                removedIds.add(entry.key)
+                iterator.remove()
+                continue
+            }
+            if (record.storageTarget == OfflineStorageTarget.REMOVABLE_SD &&
+                !volumeProvider.isTargetAvailable(OfflineStorageTarget.REMOVABLE_SD)
+            ) {
+                // Preserve removable SD metadata when SD card is unmounted/absent
+                continue
+            }
+            val file = resolveSafeTrackFile(record)
             if (file == null || !file.exists() || !file.isFile || file.length() <= 0L) {
                 removedIds.add(entry.key)
                 iterator.remove()
@@ -303,7 +355,8 @@ class OfflineMetadataStore(private val storageDir: File) {
     fun repairMismatchedSizes(): Int {
         var repairedCount = 0
         for ((trackId, record) in records.entries.toList()) {
-            val safeFile = resolveSafeTrackFile(record.relativeFileName) ?: continue
+            if (!volumeProvider.isTargetAvailable(record.storageTarget)) continue
+            val safeFile = resolveSafeTrackFile(record) ?: continue
             if (safeFile.exists() && safeFile.isFile) {
                 val actualLen = safeFile.length()
                 if (actualLen > 0L && actualLen != record.fileSizeBytes) {
@@ -325,7 +378,18 @@ class OfflineMetadataStore(private val storageDir: File) {
         while (iterator.hasNext()) {
             val entry = iterator.next()
             val record = entry.value
-            val file = resolveSafeTrackFile(record.relativeFileName)
+            if (!isSafeRelativeFileName(record.relativeFileName, storageDir)) {
+                staleIds.add(entry.key)
+                iterator.remove()
+                continue
+            }
+            if (record.storageTarget == OfflineStorageTarget.REMOVABLE_SD &&
+                !volumeProvider.isTargetAvailable(OfflineStorageTarget.REMOVABLE_SD)
+            ) {
+                // Preserve removable SD metadata when SD card is unmounted/absent
+                continue
+            }
+            val file = resolveSafeTrackFile(record)
             if (file == null || !file.exists() || !file.isFile || file.length() <= 0L || file.length() != record.fileSizeBytes) {
                 staleIds.add(entry.key)
                 iterator.remove()
@@ -341,7 +405,7 @@ class OfflineMetadataStore(private val storageDir: File) {
     @Synchronized
     fun hasTrack(trackId: Long): Boolean {
         val rec = records[trackId] ?: return false
-        val file = resolveSafeTrackFile(rec.relativeFileName) ?: return false
+        val file = resolveSafeTrackFile(rec) ?: return false
         return file.exists() && file.isFile && file.length() > 0L && file.length() == rec.fileSizeBytes
     }
 
@@ -354,12 +418,28 @@ class OfflineMetadataStore(private val storageDir: File) {
     fun removeRecord(trackId: Long): Boolean {
         val existing = records.remove(trackId)
         if (existing != null) {
-            val safeFile = resolveSafeTrackFile(existing.relativeFileName)
-            if (safeFile != null && safeFile.exists() && safeFile.isFile) {
-                safeFile.delete()
+            val targetDir = volumeProvider.getOfflineDirForTarget(existing.storageTarget)
+            if (targetDir != null) {
+                val safeFile = resolveSafeTrackFile(existing.relativeFileName, targetDir)
+                if (safeFile != null && safeFile.exists() && safeFile.isFile) {
+                    safeFile.delete()
+                }
+                // Clean stale .part and other files for this track ONLY inside the volume referenced in metadata
+                targetDir.listFiles { _, name ->
+                    name.startsWith("track_${trackId}.") && !name.contains("..") && !name.contains('/') && !name.contains('\\')
+                }?.forEach { candidate ->
+                    try {
+                        if (candidate.canonicalFile.parentFile == targetDir.canonicalFile) {
+                            candidate.delete()
+                        }
+                    } catch (ignored: Exception) {}
+                }
             }
+            persist()
+            return true
         }
-        // Ensure stale .part and other files for this track inside storageDir are also cleaned safely
+
+        // If no metadata existed, clean stale .part inside primary storageDir only
         storageDir.listFiles { _, name ->
             name.startsWith("track_${trackId}.") && !name.contains("..") && !name.contains('/') && !name.contains('\\')
         }?.forEach { candidate ->
@@ -369,17 +449,12 @@ class OfflineMetadataStore(private val storageDir: File) {
                 }
             } catch (ignored: Exception) {}
         }
-
-        if (existing != null) {
-            persist()
-            return true
-        }
         return false
     }
 
     fun getTrackFile(record: OfflineTrackRecord): File {
-        return resolveSafeTrackFile(record.relativeFileName)
-            ?: File(storageDir, "invalid_track_${record.trackId}")
+        return resolveSafeTrackFile(record)
+            ?: File(File(storageDir, "unavailable_volume_${record.storageTarget.name}"), "invalid_track_${record.trackId}")
     }
 
     fun getStorageDirectory(): File = storageDir

@@ -118,6 +118,8 @@ enum class DownloadState {
     OFFLINE_READY,
     FAILED,
     CANCELLED,
+    STORAGE_TARGET_UNAVAILABLE,
+    OFFLINE_MEDIA_UNAVAILABLE,
 }
 
 data class DownloadStatus(
@@ -142,6 +144,8 @@ data class DownloadJob(
     @Volatile var attemptId: Long = 0L,
     val batchId: String? = null,
     val queueSequence: Long = 0L,
+    @Volatile var targetStorage: OfflineStorageTarget = OfflineStorageTarget.INTERNAL,
+    @Volatile var targetDir: File? = null,
 )
 
 data class DownloadBatch(
@@ -186,12 +190,23 @@ data class OfflineStorageSummary(
     val availableBytes: Long,
     val totalBytes: Long,
     val capBytes: Long,
+    val selectedTarget: OfflineStorageTarget = OfflineStorageTarget.INTERNAL,
+    val internalTrackCount: Int = 0,
+    val internalUsedBytes: Long = 0L,
+    val internalAvailableBytes: Long = 0L,
+    val internalTotalBytes: Long = 0L,
+    val sdAvailable: Boolean = false,
+    val sdTrackCount: Int = 0,
+    val sdUsedBytes: Long = 0L,
+    val sdAvailableBytes: Long = 0L,
+    val sdTotalBytes: Long = 0L,
 )
 
 enum class StoragePrecheckStatus {
     ALLOWED,
     BLOCKED_CAP_EXCEEDED,
     BLOCKED_LOW_FREE_SPACE,
+    STORAGE_TARGET_UNAVAILABLE,
 }
 
 data class StoragePrecheckResult(
@@ -293,6 +308,8 @@ open class PinnedDownloadManager(
     private val serviceController: DownloadServiceController? = null,
     @Volatile private var networkPolicyResolver: NetworkPolicyResolver = DefaultPermissiveNetworkPolicyResolver,
     initialNetworkPolicy: DownloadNetworkPolicy = DownloadNetworkPolicy.ANY_NETWORK,
+    initialStorageTarget: OfflineStorageTarget = OfflineStorageTarget.INTERNAL,
+    @Volatile private var volumeProvider: OfflineStorageVolumeProvider = store.getVolumeProvider(),
 ) {
     private var context: Context? = null
     private val attemptCounter = java.util.concurrent.atomic.AtomicLong(1L)
@@ -304,7 +321,11 @@ open class PinnedDownloadManager(
     @Volatile
     private var inMemoryNetworkPolicy: DownloadNetworkPolicy = initialNetworkPolicy
     @Volatile
+    private var inMemoryStorageTarget: OfflineStorageTarget = initialStorageTarget
+    @Volatile
     private var availableSpaceProvider: (() -> Long)? = null
+    @Volatile
+    private var targetAvailableSpaceProvider: ((OfflineStorageTarget) -> Long?)? = null
     @Volatile
     private var lastApiClient: CarApiClient = CarApiClient()
 
@@ -325,14 +346,24 @@ open class PinnedDownloadManager(
             context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 ?.getString(PREF_DOWNLOAD_NETWORK_POLICY, DownloadNetworkPolicy.ANY_NETWORK.name)
         ),
+        initialStorageTarget = OfflineStorageTarget.fromString(
+            context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                ?.getString(PREF_OFFLINE_STORAGE_TARGET, OfflineStorageTarget.INTERNAL.name)
+        ),
     ) {
         this.context = context.applicationContext
+        if (store.getVolumeProvider() is SingleDirOfflineStorageVolumeProvider) {
+            store.setVolumeProvider(AndroidOfflineStorageVolumeProvider(context.applicationContext))
+        }
         val prefs = this.context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         if (prefs != null) {
             inMemoryStorageCapBytes = prefs.getLong(PREF_OFFLINE_STORAGE_CAP_BYTES, CAP_UNLIMITED)
             inMemorySortKey = prefs.getString(PREF_DOWNLOADED_SORT, SORT_DATE_DESC) ?: SORT_DATE_DESC
             inMemoryNetworkPolicy = DownloadNetworkPolicy.fromString(
                 prefs.getString(PREF_DOWNLOAD_NETWORK_POLICY, inMemoryNetworkPolicy.name)
+            )
+            inMemoryStorageTarget = OfflineStorageTarget.fromString(
+                prefs.getString(PREF_OFFLINE_STORAGE_TARGET, inMemoryStorageTarget.name)
             )
         }
         registerNetworkCallbackIfNeeded(context.applicationContext)
@@ -345,6 +376,7 @@ open class PinnedDownloadManager(
         const val PREF_OFFLINE_STORAGE_CAP_BYTES = "offline_storage_cap_bytes"
         const val PREF_DOWNLOADED_SORT = "downloaded_music_sort"
         const val PREF_DOWNLOAD_NETWORK_POLICY = "download_network_policy"
+        const val PREF_OFFLINE_STORAGE_TARGET = "offline_storage_target"
 
         const val MIN_FREE_RESERVE_BYTES = 500L * 1024L * 1024L
         const val CAP_UNLIMITED = 0L
@@ -414,13 +446,23 @@ open class PinnedDownloadManager(
     private var activeBatch: DownloadBatch? = null
 
     init {
-        if (context == null && initialNetworkPolicy == DownloadNetworkPolicy.ANY_NETWORK) {
-            try {
-                val prefFile = File(store.getStorageDirectory(), "network_policy.pref")
-                if (prefFile.exists() && prefFile.isFile) {
-                    inMemoryNetworkPolicy = DownloadNetworkPolicy.fromString(prefFile.readText(Charsets.UTF_8).trim())
-                }
-            } catch (ignored: Exception) {}
+        if (context == null) {
+            if (initialNetworkPolicy == DownloadNetworkPolicy.ANY_NETWORK) {
+                try {
+                    val prefFile = File(store.getStorageDirectory(), "network_policy.pref")
+                    if (prefFile.exists() && prefFile.isFile) {
+                        inMemoryNetworkPolicy = DownloadNetworkPolicy.fromString(prefFile.readText(Charsets.UTF_8).trim())
+                    }
+                } catch (ignored: Exception) {}
+            }
+            if (initialStorageTarget == OfflineStorageTarget.INTERNAL) {
+                try {
+                    val targetPrefFile = File(store.getStorageDirectory(), "offline_storage_target.pref")
+                    if (targetPrefFile.exists() && targetPrefFile.isFile) {
+                        inMemoryStorageTarget = OfflineStorageTarget.fromString(targetPrefFile.readText(Charsets.UTF_8).trim())
+                    }
+                } catch (ignored: Exception) {}
+            }
         }
         cleanOrphanParts()
         restoreQueueState()
@@ -491,6 +533,60 @@ open class PinnedDownloadManager(
         }
     }
 
+    fun getOfflineStorageTarget(): OfflineStorageTarget {
+        val prefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs != null) {
+            val stored = prefs.getString(PREF_OFFLINE_STORAGE_TARGET, null)
+            if (stored != null) {
+                inMemoryStorageTarget = OfflineStorageTarget.fromString(stored)
+            }
+        }
+        return inMemoryStorageTarget
+    }
+
+    fun setOfflineStorageTarget(target: OfflineStorageTarget) {
+        inMemoryStorageTarget = target
+        context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            ?.edit()
+            ?.putString(PREF_OFFLINE_STORAGE_TARGET, target.name)
+            ?.apply()
+        try {
+            val storageDir = store.getStorageDirectory()
+            if (!storageDir.exists()) storageDir.mkdirs()
+            File(storageDir, "offline_storage_target.pref").writeText(target.name, Charsets.UTF_8)
+        } catch (ignored: Exception) {}
+    }
+
+    fun formatStorageTargetLabel(target: OfflineStorageTarget = getOfflineStorageTarget()): String {
+        return when (target) {
+            OfflineStorageTarget.INTERNAL -> "Bộ nhớ trong"
+            OfflineStorageTarget.REMOVABLE_SD -> "Thẻ nhớ SD"
+        }
+    }
+
+    fun getVolumeProvider(): OfflineStorageVolumeProvider = volumeProvider
+
+    fun setVolumeProviderForTesting(provider: OfflineStorageVolumeProvider) {
+        this.volumeProvider = provider
+        this.store.setVolumeProvider(provider)
+    }
+
+    fun discoverStorageVolumes(): OfflineStorageDiscoveryResult {
+        return volumeProvider.discoverVolumes()
+    }
+
+    fun isRemovableSdAvailable(): Boolean {
+        return volumeProvider.isTargetAvailable(OfflineStorageTarget.REMOVABLE_SD)
+    }
+
+    fun isStorageTargetAvailable(target: OfflineStorageTarget = getOfflineStorageTarget()): Boolean {
+        return volumeProvider.isTargetAvailable(target)
+    }
+
+    fun getStorageDirectoryForTarget(target: OfflineStorageTarget = getOfflineStorageTarget()): File? {
+        return volumeProvider.getStorageDirectory(target)
+    }
+
     fun isNetworkAllowedForDownload(): Boolean {
         return when (getDownloadNetworkPolicy()) {
             DownloadNetworkPolicy.ANY_NETWORK -> true
@@ -505,7 +601,6 @@ open class PinnedDownloadManager(
 
     private fun abortActiveDownloadForWifiPolicy() {
         val abortedTrackIds = mutableListOf<Long>()
-        val storageDir = store.getStorageDirectory()
         for ((trackId, job) in jobs) {
             synchronized(job) {
                 if (job.state == DownloadState.DOWNLOADING && !job.isCancelled) {
@@ -515,10 +610,7 @@ open class PinnedDownloadManager(
                     job.errorMessage = null
                     activeStreams.remove(trackId)?.let { runCatching { it.close() } }
                     activeOutputs.remove(trackId)?.let { runCatching { it.close() } }
-                    val partFile = File(storageDir, "track_${trackId}.part")
-                    if (partFile.exists()) {
-                        partFile.delete()
-                    }
+                    deletePartFileOnAllKnownTargets(trackId)
                     wakeLock?.release()
                     abortedTrackIds.add(trackId)
                 }
@@ -526,6 +618,23 @@ open class PinnedDownloadManager(
         }
         for (trackId in abortedTrackIds) {
             notifyWaitingForWifi(trackId)
+        }
+    }
+
+    private fun deletePartFileForTarget(trackId: Long, target: OfflineStorageTarget) {
+        try {
+            val dir = volumeProvider.getStorageDirectory(target) ?: return
+            val partFile = File(dir, "track_${trackId}.part")
+            if (partFile.exists()) {
+                partFile.delete()
+            }
+        } catch (ignored: Exception) {}
+    }
+
+    private fun deletePartFileOnAllKnownTargets(trackId: Long) {
+        deletePartFileForTarget(trackId, OfflineStorageTarget.INTERNAL)
+        if (volumeProvider.isTargetAvailable(OfflineStorageTarget.REMOVABLE_SD)) {
+            deletePartFileForTarget(trackId, OfflineStorageTarget.REMOVABLE_SD)
         }
     }
 
@@ -615,12 +724,18 @@ open class PinnedDownloadManager(
     }
 
     fun cleanOrphanParts(): Int {
-        val storageDir = store.getStorageDirectory()
-        val partFiles = storageDir.listFiles { _, name -> name.endsWith(".part") } ?: emptyArray()
         var count = 0
-        for (file in partFiles) {
-            if (file.delete()) {
-                count++
+        val dirs = mutableListOf<File>()
+        volumeProvider.getStorageDirectory(OfflineStorageTarget.INTERNAL)?.let { dirs.add(it) }
+        if (volumeProvider.isTargetAvailable(OfflineStorageTarget.REMOVABLE_SD)) {
+            volumeProvider.getStorageDirectory(OfflineStorageTarget.REMOVABLE_SD)?.let { dirs.add(it) }
+        }
+        for (dir in dirs.distinctBy { it.absolutePath }) {
+            val partFiles = dir.listFiles { _, name -> name.endsWith(".part") } ?: emptyArray()
+            for (file in partFiles) {
+                if (file.delete()) {
+                    count++
+                }
             }
         }
         if (count > 0) {
@@ -674,12 +789,15 @@ open class PinnedDownloadManager(
         if (record.fileSizeBytes <= 0L) {
             return false
         }
-        val storageDir = store.getStorageDirectory()
-        val partFile = File(storageDir, "track_${trackId}.part")
+        if (!volumeProvider.isTargetAvailable(record.storageTarget)) {
+            return false
+        }
+        val targetDir = volumeProvider.getStorageDirectory(record.storageTarget) ?: return false
+        val partFile = File(targetDir, "track_${trackId}.part")
         if (partFile.exists()) {
             return false
         }
-        val finalFile = store.getTrackFile(record)
+        val finalFile = store.resolveSafeTrackFile(record) ?: return false
         if (!finalFile.exists() || !finalFile.isFile) {
             return false
         }
@@ -688,6 +806,21 @@ open class PinnedDownloadManager(
             return false
         }
         return true
+    }
+
+    fun isOfflineMediaUnavailable(trackId: Long): Boolean {
+        val job = jobs[trackId]
+        if (job != null && job.state != DownloadState.OFFLINE_READY) {
+            return false
+        }
+        val record = store.getRecord(trackId) ?: return false
+        if (record.sha256.isBlank() || record.fileSizeBytes <= 0L) {
+            return false
+        }
+        if (!volumeProvider.isTargetAvailable(record.storageTarget)) {
+            return true
+        }
+        return false
     }
 
     fun isDownloaded(trackId: Long): Boolean {
@@ -718,6 +851,19 @@ open class PinnedDownloadManager(
                 artist = record?.artist ?: "",
             )
         }
+        if (isOfflineMediaUnavailable(trackId)) {
+            val record = store.getRecord(trackId)
+            val size = record?.fileSizeBytes ?: 0L
+            return DownloadStatus(
+                trackId = trackId,
+                state = DownloadState.OFFLINE_MEDIA_UNAVAILABLE,
+                bytesDownloaded = size,
+                totalBytes = size,
+                errorMessage = "Thẻ nhớ SD không khả dụng",
+                title = record?.title ?: "",
+                artist = record?.artist ?: "",
+            )
+        }
         return DownloadStatus(trackId, DownloadState.NOT_DOWNLOADED)
     }
 
@@ -726,12 +872,13 @@ open class PinnedDownloadManager(
     }
 
     fun deleteDownload(trackId: Long): Boolean {
+        val recordTarget = store.getRecord(trackId)?.storageTarget
         cancelDownload(trackId)
         jobs.remove(trackId)
-        val storageDir = store.getStorageDirectory()
-        val partFile = File(storageDir, "track_${trackId}.part")
-        if (partFile.exists()) {
-            partFile.delete()
+        if (recordTarget != null) {
+            deletePartFileForTarget(trackId, recordTarget)
+        } else {
+            deletePartFileForTarget(trackId, getOfflineStorageTarget())
         }
         val removed = store.removeRecord(trackId)
         if (removed) {
@@ -756,11 +903,7 @@ open class PinnedDownloadManager(
             job.state = DownloadState.CANCELLED
             activeStreams.remove(trackId)?.let { runCatching { it.close() } }
             activeOutputs.remove(trackId)?.let { runCatching { it.close() } }
-            val storageDir = store.getStorageDirectory()
-            val partFile = File(storageDir, "track_${trackId}.part")
-            if (partFile.exists()) {
-                partFile.delete()
-            }
+            deletePartFileOnAllKnownTargets(trackId)
             if (!wasActive) {
                 shouldNotifyCancelled = true
             }
@@ -782,12 +925,34 @@ open class PinnedDownloadManager(
     ): Boolean {
         lastApiClient = apiClient
         val existingJob = jobs[trackId] ?: return false
-        if (existingJob.state != DownloadState.FAILED && existingJob.state != DownloadState.CANCELLED) return false
-        val storageDir = store.getStorageDirectory()
-        val partFile = File(storageDir, "track_${trackId}.part")
-        if (partFile.exists()) {
-            partFile.delete()
+        if (existingJob.state != DownloadState.FAILED &&
+            existingJob.state != DownloadState.CANCELLED &&
+            existingJob.state != DownloadState.STORAGE_TARGET_UNAVAILABLE
+        ) {
+            return false
         }
+        val selectedTarget = getOfflineStorageTarget()
+        if (!isStorageTargetAvailable(selectedTarget)) {
+            val unavailableMsg = "Thẻ nhớ SD không khả dụng"
+            val unavailableJob = DownloadJob(
+                track = existingJob.track,
+                state = DownloadState.STORAGE_TARGET_UNAVAILABLE,
+                totalBytes = existingJob.track.sourceSizeBytes ?: 0L,
+                errorMessage = unavailableMsg,
+                attemptId = attemptCounter.incrementAndGet(),
+                batchId = existingJob.batchId,
+                queueSequence = sequenceCounter.incrementAndGet(),
+            )
+            jobs[trackId] = unavailableJob
+            notifyFailed(trackId, unavailableMsg)
+            if (!hasActiveJobs()) {
+                serviceController?.onQueueIdle()
+            }
+            persistQueueState()
+            return false
+        }
+
+        deletePartFileForTarget(trackId, selectedTarget)
         val newJob = DownloadJob(
             track = existingJob.track,
             state = DownloadState.QUEUED,
@@ -813,8 +978,8 @@ open class PinnedDownloadManager(
     ) {
         lastApiClient = apiClient
         val trackId = track.id.toLong()
-        if (isOfflineReady(trackId)) {
-            Log.i(TAG, "Track $trackId already offline-ready, skipping")
+        if (isOfflineReady(trackId) || isOfflineMediaUnavailable(trackId)) {
+            Log.i(TAG, "Track $trackId already offline or on unmounted SD, skipping")
             return
         }
 
@@ -830,13 +995,29 @@ open class PinnedDownloadManager(
             }
         }
 
-        val storageDir = store.getStorageDirectory()
-        val partFile = File(storageDir, "track_${trackId}.part")
-        if (partFile.exists()) {
-            partFile.delete()
+        val selectedTarget = getOfflineStorageTarget()
+        val total = track.sourceSizeBytes ?: 0L
+        if (!isStorageTargetAvailable(selectedTarget)) {
+            val unavailableMsg = "Thẻ nhớ SD không khả dụng"
+            val unavailableJob = DownloadJob(
+                track = track,
+                state = DownloadState.STORAGE_TARGET_UNAVAILABLE,
+                totalBytes = total,
+                errorMessage = unavailableMsg,
+                attemptId = attemptCounter.incrementAndGet(),
+                queueSequence = sequenceCounter.incrementAndGet(),
+            )
+            jobs[trackId] = unavailableJob
+            notifyFailed(trackId, unavailableMsg)
+            if (!hasActiveJobs()) {
+                serviceController?.onQueueIdle()
+            }
+            persistQueueState()
+            return
         }
 
-        val total = track.sourceSizeBytes ?: 0L
+        deletePartFileForTarget(trackId, selectedTarget)
+
         val job = DownloadJob(
             track = track,
             state = DownloadState.QUEUED,
@@ -863,7 +1044,7 @@ open class PinnedDownloadManager(
 
         for (t in distinctTracks) {
             val trackId = t.id.toLong()
-            if (isOfflineReady(trackId)) {
+            if (isOfflineReady(trackId) || isOfflineMediaUnavailable(trackId)) {
                 alreadyOffline.add(t)
             } else {
                 val job = jobs[trackId]
@@ -903,27 +1084,23 @@ open class PinnedDownloadManager(
         availableSpaceProvider = provider
     }
 
-    fun getAvailableStorageBytes(): Long {
+    fun setTargetAvailableSpaceProviderForTesting(provider: ((OfflineStorageTarget) -> Long)?) {
+        targetAvailableSpaceProvider = provider
+    }
+
+    fun getAvailableStorageBytes(target: OfflineStorageTarget = getOfflineStorageTarget()): Long {
         return try {
-            availableSpaceProvider?.invoke() ?: run {
-                val dir = store.getStorageDirectory()
-                if (!dir.exists()) {
-                    dir.mkdirs()
-                }
-                dir.usableSpace
-            }
+            targetAvailableSpaceProvider?.invoke(target)
+                ?: availableSpaceProvider?.invoke()
+                ?: volumeProvider.getAvailableBytes(target)
         } catch (e: Exception) {
             0L
         }
     }
 
-    fun getTotalStorageBytes(): Long {
+    fun getTotalStorageBytes(target: OfflineStorageTarget = getOfflineStorageTarget()): Long {
         return try {
-            val dir = store.getStorageDirectory()
-            if (!dir.exists()) {
-                dir.mkdirs()
-            }
-            dir.totalSpace
+            volumeProvider.getTotalBytes(target)
         } catch (e: Exception) {
             0L
         }
@@ -986,26 +1163,67 @@ open class PinnedDownloadManager(
         return sum
     }
 
+    fun getPinnedUsedBytesForTarget(target: OfflineStorageTarget, excludeTrackId: Long? = null): Long {
+        var sum = 0L
+        for (record in store.getAllRecords()) {
+            if (record.storageTarget != target) continue
+            if (excludeTrackId != null && record.trackId == excludeTrackId) continue
+            if (isDownloading(record.trackId)) continue
+            val bytes = store.getEffectiveFileSizeBytes(record)
+            if (bytes > 0L) {
+                sum += bytes
+            }
+        }
+        return sum
+    }
+
     fun getStorageSummary(repairStaleMetadata: Boolean = true): OfflineStorageSummary {
         if (repairStaleMetadata) {
             store.reconcileMissingAndUnsafe()
         }
         var count = 0
         var used = 0L
+        var internalCount = 0
+        var internalUsed = 0L
+        var sdCount = 0
+        var sdUsed = 0L
         for (record in store.getAllRecords()) {
             if (isDownloading(record.trackId)) continue
             val bytes = store.getEffectiveFileSizeBytes(record)
             if (bytes > 0L) {
                 count++
                 used += bytes
+                if (record.storageTarget == OfflineStorageTarget.REMOVABLE_SD) {
+                    sdCount++
+                    sdUsed += bytes
+                } else {
+                    internalCount++
+                    internalUsed += bytes
+                }
             }
         }
+        val selectedTarget = getOfflineStorageTarget()
+        val sdAvail = isRemovableSdAvailable()
+        val internalFree = getAvailableStorageBytes(OfflineStorageTarget.INTERNAL)
+        val internalTotal = getTotalStorageBytes(OfflineStorageTarget.INTERNAL)
+        val sdFree = if (sdAvail) getAvailableStorageBytes(OfflineStorageTarget.REMOVABLE_SD) else 0L
+        val sdTotal = if (sdAvail) getTotalStorageBytes(OfflineStorageTarget.REMOVABLE_SD) else 0L
         return OfflineStorageSummary(
             trackCount = count,
             usedBytes = used,
-            availableBytes = getAvailableStorageBytes(),
-            totalBytes = getTotalStorageBytes(),
+            availableBytes = getAvailableStorageBytes(selectedTarget),
+            totalBytes = getTotalStorageBytes(selectedTarget),
             capBytes = getOfflineStorageCapBytes(),
+            selectedTarget = selectedTarget,
+            internalTrackCount = internalCount,
+            internalUsedBytes = internalUsed,
+            internalAvailableBytes = internalFree,
+            internalTotalBytes = internalTotal,
+            sdAvailable = sdAvail,
+            sdTrackCount = sdCount,
+            sdUsedBytes = sdUsed,
+            sdAvailableBytes = sdFree,
+            sdTotalBytes = sdTotal,
         )
     }
 
@@ -1055,12 +1273,29 @@ open class PinnedDownloadManager(
     }
 
     fun evaluateStorageForDownload(knownRequiredBytes: Long): StoragePrecheckResult {
+        val selectedTarget = getOfflineStorageTarget()
         val currentUsed = getPinnedUsedBytes()
         val cap = getOfflineStorageCapBytes()
-        val available = getAvailableStorageBytes()
         val req = knownRequiredBytes.coerceAtLeast(0L)
 
-        // 1. Offline storage cap check
+        // 0. Check if selected storage target volume is available
+        if (!isStorageTargetAvailable(selectedTarget)) {
+            val title = "Thẻ nhớ SD không khả dụng"
+            val message = "Thẻ nhớ SD không khả dụng. Vui lòng kiểm tra thẻ nhớ hoặc chuyển nơi lưu sang Bộ nhớ trong."
+            return StoragePrecheckResult(
+                status = StoragePrecheckStatus.STORAGE_TARGET_UNAVAILABLE,
+                currentUsedBytes = currentUsed,
+                requiredBytes = req,
+                capBytes = cap,
+                availableBytes = 0L,
+                title = title,
+                message = message,
+            )
+        }
+
+        val available = getAvailableStorageBytes(selectedTarget)
+
+        // 1. Offline storage cap check (global across INTERNAL + REMOVABLE_SD)
         if (cap > 0L) {
             val capExceeded = if (req > 0L) {
                 currentUsed >= cap || req > (cap - currentUsed)
@@ -1088,7 +1323,7 @@ open class PinnedDownloadManager(
             }
         }
 
-        // 2. Device 500 MB free-space reserve check for known-size downloads
+        // 2. Target volume 500 MB free-space reserve check for known-size downloads
         if (req > 0L) {
             if (available < req || (available - req) < MIN_FREE_RESERVE_BYTES) {
                 val title = "Không đủ dung lượng bộ nhớ"
@@ -1136,7 +1371,7 @@ open class PinnedDownloadManager(
     }
 
     fun hasSufficientStorage(requiredBytes: Long): Boolean {
-        if (requiredBytes <= 0L) return true
+        if (requiredBytes <= 0L) return isStorageTargetAvailable(getOfflineStorageTarget())
         return evaluateStorageForDownload(requiredBytes).isAllowed
     }
 
@@ -1201,7 +1436,7 @@ open class PinnedDownloadManager(
                         }
                         downloadedBytesSum += job.bytesDownloaded
                     }
-                    DownloadState.FAILED -> {
+                    DownloadState.FAILED, DownloadState.STORAGE_TARGET_UNAVAILABLE -> {
                         failedCount++
                     }
                     DownloadState.CANCELLED -> {
@@ -1212,7 +1447,7 @@ open class PinnedDownloadManager(
                         val record = store.getRecord(id)
                         downloadedBytesSum += (record?.fileSizeBytes ?: 0L)
                     }
-                    DownloadState.NOT_DOWNLOADED -> {}
+                    DownloadState.NOT_DOWNLOADED, DownloadState.OFFLINE_MEDIA_UNAVAILABLE -> {}
                 }
             }
         }
@@ -1246,6 +1481,39 @@ open class PinnedDownloadManager(
         apiClient: CarApiClient = CarApiClient(),
     ): Int {
         lastApiClient = apiClient
+        val selectedTarget = getOfflineStorageTarget()
+        if (!isStorageTargetAvailable(selectedTarget)) {
+            val unavailableMsg = "Thẻ nhớ SD không khả dụng"
+            val distinctUnavailable = tracksToEnqueue.distinctBy { it.id }
+            for (track in distinctUnavailable) {
+                val trackId = track.id.toLong()
+                if (isOfflineReady(trackId) || isOfflineMediaUnavailable(trackId)) continue
+                val existingJob = jobs[trackId]
+                if (existingJob != null && (existingJob.state == DownloadState.QUEUED ||
+                        existingJob.state == DownloadState.WAITING_FOR_WIFI ||
+                        existingJob.state == DownloadState.DOWNLOADING ||
+                        existingJob.state == DownloadState.FINALIZING)) {
+                    continue
+                }
+                val unavailableJob = DownloadJob(
+                    track = track,
+                    state = DownloadState.STORAGE_TARGET_UNAVAILABLE,
+                    totalBytes = track.sourceSizeBytes ?: 0L,
+                    errorMessage = unavailableMsg,
+                    attemptId = attemptCounter.incrementAndGet(),
+                    batchId = batch.batchId,
+                    queueSequence = sequenceCounter.incrementAndGet(),
+                )
+                jobs[trackId] = unavailableJob
+                notifyFailed(trackId, unavailableMsg)
+            }
+            if (!hasActiveJobs()) {
+                serviceController?.onQueueIdle()
+            }
+            persistQueueState()
+            return 0
+        }
+
         if (activeBatch == null) {
             activeBatch = batch
         }
@@ -1255,7 +1523,7 @@ open class PinnedDownloadManager(
 
         for (track in distinctTracks) {
             val trackId = track.id.toLong()
-            if (isOfflineReady(trackId)) {
+            if (isOfflineReady(trackId) || isOfflineMediaUnavailable(trackId)) {
                 continue
             }
             val existingJob = jobs[trackId]
@@ -1266,11 +1534,7 @@ open class PinnedDownloadManager(
                 continue
             }
 
-            val storageDir = store.getStorageDirectory()
-            val partFile = File(storageDir, "track_${trackId}.part")
-            if (partFile.exists()) {
-                partFile.delete()
-            }
+            deletePartFileForTarget(trackId, selectedTarget)
 
             val total = track.sourceSizeBytes ?: 0L
             val job = DownloadJob(
@@ -1324,7 +1588,6 @@ open class PinnedDownloadManager(
 
     fun cancelAllJobs(): Int {
         var cancelledCount = 0
-        val storageDir = store.getStorageDirectory()
         for ((trackId, job) in jobs) {
             synchronized(job) {
                 if (job.state == DownloadState.QUEUED ||
@@ -1338,10 +1601,7 @@ open class PinnedDownloadManager(
                     job.state = DownloadState.CANCELLED
                     activeStreams.remove(trackId)?.let { runCatching { it.close() } }
                     activeOutputs.remove(trackId)?.let { runCatching { it.close() } }
-                    val partFile = File(storageDir, "track_${trackId}.part")
-                    if (partFile.exists()) {
-                        partFile.delete()
-                    }
+                    deletePartFileOnAllKnownTargets(trackId)
                     if (!wasActive) {
                         notifyCancelled(trackId)
                     }
@@ -1439,34 +1699,42 @@ open class PinnedDownloadManager(
             return
         }
 
+        val selectedTarget = getOfflineStorageTarget()
         var partFile: File? = null
         var finalFile: File? = null
         var stream: InputStream? = null
         try {
-            val storageDir = store.getStorageDirectory()
-            if (!storageDir.exists()) {
-                storageDir.mkdirs()
+            if (!isStorageTargetAvailable(selectedTarget)) {
+                throw StorageTargetUnavailableException(selectedTarget, "Thẻ nhớ SD không khả dụng")
             }
+            val storageDir = volumeProvider.getStorageDirectory(selectedTarget)
+                ?: throw StorageTargetUnavailableException(selectedTarget, "Thẻ nhớ SD không khả dụng")
+            if (!storageDir.exists() && !storageDir.mkdirs() && !storageDir.exists()) {
+                throw StorageTargetUnavailableException(selectedTarget, "Thẻ nhớ SD không khả dụng")
+            }
+            val targetVolumeUuid = volumeProvider.getVolumeUuid(selectedTarget)
 
             val ext = track.sourceFormat?.lowercase()?.takeIf { it.isNotBlank() } ?: "audio"
             val finalFileName = "track_${trackId}.$ext"
             val partFileName = "track_${trackId}.part"
-            partFile = File(storageDir, partFileName)
-            finalFile = File(storageDir, finalFileName)
+            val currentPartFile = File(storageDir, partFileName)
+            val currentFinalFile = File(storageDir, finalFileName)
+            partFile = currentPartFile
+            finalFile = currentFinalFile
 
-            if (partFile.exists()) {
-                partFile.delete()
+            if (currentPartFile.exists()) {
+                currentPartFile.delete()
             }
 
-            // Re-verify v0.6.24 storage cap and 500 MB reserve before acquiring wakeLock or opening stream
+            // Re-verify storage cap (global) and 500 MB reserve (on SELECTED TARGET volume) before acquiring wakeLock or opening stream
             val basePinnedUsedBytes = getPinnedUsedBytes(excludeTrackId = trackId)
             val initialCapBytes = getOfflineStorageCapBytes()
             val knownTrackBytes = track.sourceSizeBytes?.takeIf { it > 0L } ?: 0L
             if (initialCapBytes > 0L && (basePinnedUsedBytes >= initialCapBytes || (knownTrackBytes > 0L && knownTrackBytes > (initialCapBytes - basePinnedUsedBytes)))) {
                 throw IOException("Vượt giới hạn dung lượng offline")
             }
-            val availableBytes = getAvailableStorageBytes()
-            if (availableSpaceProvider != null || availableBytes > 0L) {
+            val availableBytes = getAvailableStorageBytes(selectedTarget)
+            if (targetAvailableSpaceProvider != null || availableSpaceProvider != null || availableBytes > 0L) {
                 if (availableBytes < MIN_FREE_RESERVE_BYTES || (knownTrackBytes > 0L && (availableBytes < knownTrackBytes || (availableBytes - knownTrackBytes) < MIN_FREE_RESERVE_BYTES))) {
                     throw IOException("Không đủ dung lượng bộ nhớ")
                 }
@@ -1479,6 +1747,9 @@ open class PinnedDownloadManager(
                 if (job.pausedForWifi || !isNetworkAllowedForDownload()) {
                     job.pausedForWifi = true
                     throw IOException("Paused for Wi-Fi")
+                }
+                if (!isStorageTargetAvailable(selectedTarget)) {
+                    throw StorageTargetUnavailableException(selectedTarget, "Thẻ nhớ SD không khả dụng")
                 }
                 wakeLock?.acquire()
                 job.state = DownloadState.DOWNLOADING
@@ -1516,6 +1787,9 @@ open class PinnedDownloadManager(
                 job.pausedForWifi = true
                 throw IOException("Paused for Wi-Fi")
             }
+            if (!isStorageTargetAvailable(selectedTarget)) {
+                throw StorageTargetUnavailableException(selectedTarget, "Thẻ nhớ SD không khả dụng")
+            }
 
             // REQUIREMENT 1: Use ONLY a valid HTTP response-reported length for active transfer percentage.
             // If Content-Length is absent, totalTarget is 0L (indeterminate). Do not invent a percentage from metadata sourceSizeBytes.
@@ -1526,8 +1800,8 @@ open class PinnedDownloadManager(
             if (capOnOpen > 0L && totalTarget > 0L && (basePinnedUsedBytes >= capOnOpen || totalTarget > (capOnOpen - basePinnedUsedBytes))) {
                 throw IOException("Vượt giới hạn dung lượng offline")
             }
-            val availOnOpen = getAvailableStorageBytes()
-            if (totalTarget > 0L && (availableSpaceProvider != null || availOnOpen > 0L)) {
+            val availOnOpen = getAvailableStorageBytes(selectedTarget)
+            if (totalTarget > 0L && (targetAvailableSpaceProvider != null || availableSpaceProvider != null || availOnOpen > 0L)) {
                 if (availOnOpen < totalTarget || (availOnOpen - totalTarget) < MIN_FREE_RESERVE_BYTES) {
                     throw IOException("Không đủ dung lượng bộ nhớ")
                 }
@@ -1548,7 +1822,17 @@ open class PinnedDownloadManager(
                     job.pausedForWifi = true
                     throw IOException("Paused for Wi-Fi")
                 }
-                FileOutputStream(partFile).also { activeOutputs[trackId] = it }
+                if (!isStorageTargetAvailable(selectedTarget)) {
+                    throw StorageTargetUnavailableException(selectedTarget, "Thẻ nhớ SD không khả dụng")
+                }
+                try {
+                    FileOutputStream(currentPartFile).also { activeOutputs[trackId] = it }
+                } catch (ioe: IOException) {
+                    if (!isStorageTargetAvailable(selectedTarget)) {
+                        throw StorageTargetUnavailableException(selectedTarget, "Thẻ nhớ SD không khả dụng")
+                    }
+                    throw ioe
+                }
             }
 
             fileOutput.use { output ->
@@ -1564,11 +1848,21 @@ open class PinnedDownloadManager(
                             job.pausedForWifi = true
                             throw IOException("Paused for Wi-Fi")
                         }
+                        if (!isStorageTargetAvailable(selectedTarget)) {
+                            throw StorageTargetUnavailableException(selectedTarget, "Thẻ nhớ SD không khả dụng")
+                        }
                         val activeCap = getOfflineStorageCapBytes()
                         if (activeCap > 0L && (basePinnedUsedBytes + totalBytesRead + bytesRead) > activeCap) {
                             throw IOException("Vượt giới hạn dung lượng offline")
                         }
-                        output.write(buffer, 0, bytesRead)
+                        try {
+                            output.write(buffer, 0, bytesRead)
+                        } catch (ioe: IOException) {
+                            if (!isStorageTargetAvailable(selectedTarget)) {
+                                throw StorageTargetUnavailableException(selectedTarget, "Thẻ nhớ SD không khả dụng")
+                            }
+                            throw ioe
+                        }
                         digest.update(buffer, 0, bytesRead)
                         totalBytesRead += bytesRead
                         job.bytesDownloaded = totalBytesRead
@@ -1584,7 +1878,14 @@ open class PinnedDownloadManager(
                 }
                 synchronized(job) {
                     if (!job.isCancelled && !job.pausedForWifi) {
-                        output.flush()
+                        try {
+                            output.flush()
+                        } catch (ioe: IOException) {
+                            if (!isStorageTargetAvailable(selectedTarget)) {
+                                throw StorageTargetUnavailableException(selectedTarget, "Thẻ nhớ SD không khả dụng")
+                            }
+                            throw ioe
+                        }
                     }
                 }
             }
@@ -1595,6 +1896,9 @@ open class PinnedDownloadManager(
             }
             if (job.pausedForWifi) {
                 throw IOException("Paused for Wi-Fi")
+            }
+            if (!isStorageTargetAvailable(selectedTarget)) {
+                throw StorageTargetUnavailableException(selectedTarget, "Thẻ nhớ SD không khả dụng")
             }
 
             if (totalBytesRead <= 0L) {
@@ -1612,6 +1916,9 @@ open class PinnedDownloadManager(
                 }
                 if (job.pausedForWifi) {
                     throw IOException("Paused for Wi-Fi")
+                }
+                if (!isStorageTargetAvailable(selectedTarget)) {
+                    throw StorageTargetUnavailableException(selectedTarget, "Thẻ nhớ SD không khả dụng")
                 }
                 job.state = DownloadState.FINALIZING
                 job.bytesDownloaded = totalBytesRead
@@ -1649,6 +1956,8 @@ open class PinnedDownloadManager(
                 bitrate = track.sourceBitrate,
                 sampleRate = track.sourceSampleRate,
                 channels = track.sourceChannels,
+                storageTarget = selectedTarget,
+                storageVolumeUuid = targetVolumeUuid,
             )
 
             var committed = false
@@ -1656,16 +1965,19 @@ open class PinnedDownloadManager(
                 if (job.isCancelled || jobs[trackId] !== job) {
                     throw IOException("Download cancelled before commit")
                 }
-
-                if (finalFile.exists()) {
-                    finalFile.delete()
-                }
-                if (!partFile.renameTo(finalFile)) {
-                    partFile.copyTo(finalFile, overwrite = true)
-                    partFile.delete()
+                if (!isStorageTargetAvailable(selectedTarget)) {
+                    throw StorageTargetUnavailableException(selectedTarget, "Thẻ nhớ SD không khả dụng")
                 }
 
-                if (!finalFile.exists() || finalFile.length() != totalBytesRead) {
+                if (currentFinalFile.exists()) {
+                    currentFinalFile.delete()
+                }
+                if (!currentPartFile.renameTo(currentFinalFile)) {
+                    currentPartFile.copyTo(currentFinalFile, overwrite = true)
+                    currentPartFile.delete()
+                }
+
+                if (!currentFinalFile.exists() || currentFinalFile.length() != totalBytesRead) {
                     throw IOException("Final file verification failed after rename")
                 }
 
@@ -1674,7 +1986,7 @@ open class PinnedDownloadManager(
                 jobs.remove(trackId)
 
                 if (!isOfflineReady(trackId)) {
-                    if (finalFile.exists()) finalFile.delete()
+                    if (currentFinalFile.exists()) currentFinalFile.delete()
                     store.removeRecord(trackId)
                     throw IOException("Offline ready verification failed after saving record")
                 }
@@ -1684,7 +1996,7 @@ open class PinnedDownloadManager(
 
             wakeLock?.release()
             if (committed) {
-                Log.i(TAG, "Successfully downloaded track $trackId ($totalBytesRead bytes, sha256=${sha256.take(8)}...)")
+                Log.i(TAG, "Successfully downloaded track $trackId ($totalBytesRead bytes, target=$selectedTarget, sha256=${sha256.take(8)}...)")
                 if (!hasActiveJobs()) {
                     serviceController?.onQueueIdle()
                 }
@@ -1696,8 +2008,8 @@ open class PinnedDownloadManager(
             activeOutputs.remove(trackId)?.let { runCatching { it.close() } }
             runCatching { stream?.close() }
             if (jobs[trackId] === job) {
-                partFile?.let { if (it.exists()) it.delete() }
-                finalFile?.let { if (it.exists() && !isOfflineReady(trackId)) it.delete() }
+                runCatching { partFile?.let { if (it.exists()) it.delete() } }
+                runCatching { finalFile?.let { if (it.exists() && !isOfflineReady(trackId)) it.delete() } }
                 if (job.isCancelled) {
                     job.pausedForWifi = false
                     job.state = DownloadState.CANCELLED
@@ -1721,6 +2033,15 @@ open class PinnedDownloadManager(
                     if (shouldNotifyWaiting) {
                         notifyWaitingForWifi(trackId)
                     }
+                } else if (e is StorageTargetUnavailableException || !isStorageTargetAvailable(selectedTarget)) {
+                    val errorMsg = e.message?.takeIf { it.isNotBlank() } ?: "Thẻ nhớ SD không khả dụng"
+                    Log.e(TAG, "Storage target unavailable for track $trackId: $errorMsg", e)
+                    job.state = DownloadState.STORAGE_TARGET_UNAVAILABLE
+                    job.errorMessage = errorMsg
+                    if (!hasActiveJobs()) {
+                        serviceController?.onQueueIdle()
+                    }
+                    notifyFailed(trackId, errorMsg)
                 } else {
                     val isNoSpace = e.message?.contains("ENOSPC", ignoreCase = true) == true ||
                         e.message?.contains("No space left", ignoreCase = true) == true ||
@@ -1740,8 +2061,8 @@ open class PinnedDownloadManager(
                     notifyFailed(trackId, errorMsg)
                 }
             } else {
-                partFile?.let { if (it.exists()) it.delete() }
-                finalFile?.let { if (it.exists() && !isOfflineReady(trackId)) it.delete() }
+                runCatching { partFile?.let { if (it.exists()) it.delete() } }
+                runCatching { finalFile?.let { if (it.exists() && !isOfflineReady(trackId)) it.delete() } }
                 Log.i(TAG, "Attempt ${job.attemptId} for track $trackId superseded; suppressed late failure publication")
             }
         } finally {
@@ -1830,6 +2151,26 @@ open class PinnedDownloadManager(
         return records.sortedWith(comparator)
     }
 
+    fun resolveLocalPlaybackFile(trackId: Long): File? {
+        if (!isOfflineReady(trackId)) return null
+        val record = store.getRecord(trackId) ?: return null
+        return store.resolveSafeTrackFile(record)
+    }
+
+    fun resolvePlaybackMediaItem(
+        track: CarTrack,
+        apiClient: CarApiClient = lastApiClient,
+    ): MediaItem {
+        val trackId = track.id.toLong()
+        if (isOfflineReady(trackId)) {
+            val record = store.getRecord(trackId)
+            if (record != null) {
+                return toMediaItem(record)
+            }
+        }
+        return RemoteCatalog.trackToRemoteMediaItem(track, apiClient)
+    }
+
     fun toMediaItem(record: OfflineTrackRecord): MediaItem {
         val file = store.getTrackFile(record)
         val fileUri = Uri.fromFile(file)
@@ -1841,6 +2182,8 @@ open class PinnedDownloadManager(
             putLong("size_bytes", effectiveSize)
             putLong("downloaded_at_ms", record.downloadedAtMs)
             putString("downloaded_date_str", formatDownloadDate(record.downloadedAtMs))
+            putString("storage_target", record.storageTarget.name)
+            record.storageVolumeUuid?.let { putString("storage_volume_uuid", it) }
             record.format?.let { putString("format", it) }
             record.codec?.let { putString("codec", it) }
             record.bitrate?.let { putInt("bitrate", it) }

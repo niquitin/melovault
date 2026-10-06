@@ -329,14 +329,15 @@ class OfflinePlaylistSyncCoordinator(
 
         for (track in eligibleTracks) {
             val trackId = track.id.toLong()
-            if (downloadManager.isOfflineReady(trackId)) {
+            if (downloadManager.isOfflineReady(trackId) || downloadManager.isOfflineMediaUnavailable(trackId)) {
                 alreadyOffline.add(track)
                 continue
             }
 
             val status = downloadManager.getDownloadStatus(trackId)
             when (status.state) {
-                DownloadState.OFFLINE_READY -> {
+                DownloadState.OFFLINE_READY,
+                DownloadState.OFFLINE_MEDIA_UNAVAILABLE -> {
                     alreadyOffline.add(track)
                 }
                 DownloadState.QUEUED,
@@ -348,7 +349,8 @@ class OfflinePlaylistSyncCoordinator(
                     inProgress.add(track)
                     waitingForWifi.add(track)
                 }
-                DownloadState.FAILED -> {
+                DownloadState.FAILED,
+                DownloadState.STORAGE_TARGET_UNAVAILABLE -> {
                     failed.add(track)
                     eligibleNew.add(track)
                     val sz = track.sourceSizeBytes ?: 0L

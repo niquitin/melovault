@@ -1181,13 +1181,16 @@ private class LibraryCallback(
                             if (rec != null) {
                                 dm.toMediaItem(rec)
                             } else {
-                                catalog.item(mediaId) ?: requested
+                                catalog.item(mediaId) ?: catalog.withCurrentQuality(requested)
                             }
                         } else {
-                            // If track is NOT offline ready (or local download was deleted):
+                            // If track is NOT offline ready (e.g. SD card unmounted or local download deleted):
                             // discard any stale file:// URI and resolve fresh remote stream from catalog.
-                            if (requested.localConfiguration?.uri?.scheme == "file" || requested.localConfiguration == null) {
-                                catalog.item(mediaId) ?: requested
+                            if (requested.localConfiguration?.uri?.scheme == "file" ||
+                                requested.mediaMetadata.extras?.getBoolean("is_offline_download") == true ||
+                                requested.localConfiguration == null
+                            ) {
+                                runCatching { catalog.item(mediaId) }.getOrNull() ?: catalog.withCurrentQuality(requested)
                             } else {
                                 requested
                             }
