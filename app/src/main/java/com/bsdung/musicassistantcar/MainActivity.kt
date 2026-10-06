@@ -797,6 +797,16 @@ class MainActivity : AppCompatActivity() {
         binding.btnOfflineStorageCap.setOnClickListener {
             showOfflineStorageCapDialog()
         }
+        binding.txtOfflineStorageCap.setOnClickListener {
+            showOfflineStorageCapDialog()
+        }
+
+        binding.btnOfflineNetworkPolicy.setOnClickListener {
+            showDownloadNetworkPolicyDialog()
+        }
+        binding.txtOfflineNetworkPolicy.setOnClickListener {
+            showDownloadNetworkPolicyDialog()
+        }
 
         binding.btnOfflineMultiSelect.setOnClickListener {
             enterEditMode(allowReorder = false)
@@ -1269,6 +1279,7 @@ class MainActivity : AppCompatActivity() {
         binding.txtOfflineStorageUsed.text = "${dm.formatStorageBytes(summary.usedBytes)} · ${summary.trackCount} bài"
         binding.txtOfflineStorageFree.text = dm.formatStorageBytes(summary.availableBytes)
         binding.txtOfflineStorageCap.text = dm.formatCapLabel(summary.capBytes)
+        binding.txtOfflineNetworkPolicy.text = dm.formatNetworkPolicyLabel()
 
         val hasTracks = summary.trackCount > 0
         binding.btnOfflineMultiSelect.isEnabled = hasTracks
@@ -1305,6 +1316,74 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("Đóng", null)
             .show()
+    }
+
+    private fun showDownloadNetworkPolicyDialog() {
+        val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
+        val currentPolicy = dm.getDownloadNetworkPolicy()
+        val options = listOf(
+            Pair("Mọi mạng", com.bsdung.musicassistantcar.playback.DownloadNetworkPolicy.ANY_NETWORK),
+            Pair("Chỉ Wi-Fi", com.bsdung.musicassistantcar.playback.DownloadNetworkPolicy.WIFI_ONLY),
+        )
+
+        val density = resources.displayMetrics.density
+        val padH = (20 * density).toInt()
+        val padV = (12 * density).toInt()
+        val container = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(padH, padV, padH, (4 * density).toInt())
+        }
+
+        val descView = android.widget.TextView(this).apply {
+            text = "Chỉ tải bản offline khi thiết bị đang có kết nối Wi-Fi Internet."
+            textSize = 13f
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_secondary))
+            setPadding(0, 0, 0, (12 * density).toInt())
+        }
+        container.addView(descView)
+
+        val radioGroup = android.widget.RadioGroup(this).apply {
+            orientation = android.widget.RadioGroup.VERTICAL
+        }
+
+        var dialogRef: AlertDialog? = null
+        options.forEachIndexed { idx, (label, policy) ->
+            val rb = android.widget.RadioButton(this).apply {
+                id = View.generateViewId()
+                text = label
+                textSize = 15f
+                setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
+                buttonTintList = android.content.res.ColorStateList.valueOf(
+                    ContextCompat.getColor(this@MainActivity, R.color.accent_primary)
+                )
+                setPadding((8 * density).toInt(), (10 * density).toInt(), (8 * density).toInt(), (10 * density).toInt())
+                isChecked = (policy == currentPolicy)
+                setOnClickListener {
+                    dm.setDownloadNetworkPolicy(policy)
+                    updateOfflineStorageDashboard()
+                    updateDownloadQueueHeader()
+                    libraryAdapter.notifyDataSetChanged()
+                    if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
+                        loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
+                    }
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Mạng tải xuống: ${dm.formatNetworkPolicyLabel(policy)}",
+                        Toast.LENGTH_SHORT,
+                    ).show()
+                    dialogRef?.dismiss()
+                }
+            }
+            radioGroup.addView(rb, idx)
+        }
+        container.addView(radioGroup)
+
+        dialogRef = AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            .setTitle("Mạng tải xuống")
+            .setView(container)
+            .setNegativeButton("Đóng", null)
+            .create()
+        dialogRef?.show()
     }
 
     private fun stopPlaybackIfDeletedOfflineTrack(deletedTrackIds: Set<Long>) {
@@ -1860,7 +1939,8 @@ class MainActivity : AppCompatActivity() {
             msgBuilder.append("\n\n")
             msgBuilder.append("Offline hiện tại: ${dm.formatStorageBytes(summary.usedBytes)}\n")
             msgBuilder.append("Giới hạn: ${dm.formatCapLabel(summary.capBytes)}\n")
-            msgBuilder.append("Còn trống thiết bị: ${dm.formatStorageBytes(summary.availableBytes)}\n\n")
+            msgBuilder.append("Còn trống thiết bị: ${dm.formatStorageBytes(summary.availableBytes)}\n")
+            msgBuilder.append("Mạng tải: ${dm.formatNetworkPolicyLabel()}\n\n")
             msgBuilder.append("Tiếp tục tải?")
 
             val dialogTitle = if (isPlaylist) "Tải offline playlist" else "Tải offline danh sách"
@@ -1879,9 +1959,15 @@ class MainActivity : AppCompatActivity() {
                         knownTotalBytes = knownBytes,
                         hasUnknownSizes = unknownCount > 0,
                     )
+                    val networkAllowed = dm.isNetworkAllowedForDownload()
                     val enqueued = dm.enqueueBatch(batch, classification.eligibleNewTracks)
                     libraryAdapter.notifyDataSetChanged()
-                    Toast.makeText(this, "Đã thêm $enqueued bài vào hàng đợi tải offline", Toast.LENGTH_SHORT).show()
+                    val toastMsg = if (!networkAllowed) {
+                        "Đã thêm $enqueued bài vào hàng đợi — Đang chờ Wi-Fi"
+                    } else {
+                        "Đã thêm $enqueued bài vào hàng đợi tải offline"
+                    }
+                    Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
                     if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
                         loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
                     }
@@ -1984,6 +2070,7 @@ class MainActivity : AppCompatActivity() {
         binding.downloadQueueHeader.visibility = View.VISIBLE
         val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
         val progress = dm.getActiveBatchProgress()
+        val waitingForWifi = dm.isQueueWaitingForWifi()
 
         if (progress != null) {
             val title = progress.sourceDisplayName.ifBlank { "Hàng đợi tải offline" }
@@ -1992,7 +2079,9 @@ class MainActivity : AppCompatActivity() {
 
             val currTitle = progress.currentTrackTitle
             val currProgress = progress.currentTrackProgress
-            if (currTitle != null) {
+            if (waitingForWifi) {
+                binding.queueCurrentTrackText.text = "Đang chờ Wi-Fi để tiếp tục tải"
+            } else if (currTitle != null) {
                 val dlMb = String.format(Locale.US, "%.1f", (currProgress?.bytesDownloaded ?: 0L) / (1024.0 * 1024.0))
                 val totBytes = currProgress?.totalBytes ?: 0L
                 val infoText = if (totBytes > 0L) {
@@ -2026,7 +2115,11 @@ class MainActivity : AppCompatActivity() {
             val allJobs = dm.getActiveJobMediaItems()
             binding.queueBatchTitle.text = "Hàng đợi tải offline"
             binding.queueTrackCount.text = "${allJobs.size} bài"
-            binding.queueCurrentTrackText.text = if (allJobs.isNotEmpty()) "Đang xử lý hàng đợi" else "Không có tác vụ tải"
+            binding.queueCurrentTrackText.text = when {
+                waitingForWifi -> "Đang chờ Wi-Fi để tiếp tục tải"
+                allJobs.isNotEmpty() -> "Đang xử lý hàng đợi"
+                else -> "Không có tác vụ tải"
+            }
             binding.queueProgressBar.isIndeterminate = false
             binding.queueProgressBar.progress = 0
         }
@@ -2710,6 +2803,15 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+        override fun onDownloadWaitingForWifi(trackId: Long) {
+            runOnUiThread {
+                libraryAdapter.notifyDataSetChanged()
+                updateDownloadQueueHeader()
+                if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
+                    loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
+                }
+            }
+        }
         override fun onDownloadCompleted(trackId: Long, record: com.bsdung.musicassistantcar.playback.OfflineTrackRecord) {
             runOnUiThread {
                 libraryAdapter.notifyDataSetChanged()
@@ -2804,7 +2906,8 @@ class MainActivity : AppCompatActivity() {
         val status = dm.getDownloadStatus(trackId)
         when (status.state) {
             com.bsdung.musicassistantcar.playback.DownloadState.DOWNLOADING,
-            com.bsdung.musicassistantcar.playback.DownloadState.QUEUED -> {
+            com.bsdung.musicassistantcar.playback.DownloadState.QUEUED,
+            com.bsdung.musicassistantcar.playback.DownloadState.WAITING_FOR_WIFI -> {
                 AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
                     .setTitle("Hủy tải bài hát?")
                     .setMessage("Dừng và hủy tiến trình tải bài hát \"${MetadataDisplayHelper.cleanTitle(track.title)}\".")
@@ -2831,9 +2934,11 @@ class MainActivity : AppCompatActivity() {
                         .show()
                     return
                 }
+                val networkAllowed = dm.isNetworkAllowedForDownload()
                 dm.retryDownload(trackId)
                 libraryAdapter.notifyDataSetChanged()
-                Toast.makeText(this, "Đang thử lại...", Toast.LENGTH_SHORT).show()
+                val toastMsg = if (!networkAllowed) "Đang chờ Wi-Fi để tải xuống" else "Đang thử lại..."
+                Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
                 if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
                     loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
                 }
@@ -2852,7 +2957,9 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        Toast.makeText(this, "Bắt đầu tải về...", Toast.LENGTH_SHORT).show()
+        val networkAllowed = dm.isNetworkAllowedForDownload()
+        val toastMsg = if (!networkAllowed) "Đang chờ Wi-Fi để tải xuống" else "Bắt đầu tải về..."
+        Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
         dm.startDownload(carTrack)
         libraryAdapter.notifyDataSetChanged()
         if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
@@ -3159,7 +3266,8 @@ class MainActivity : AppCompatActivity() {
                     bindingDialog.actionDownloadText.text = "Xóa bản tải offline"
                 }
                 com.bsdung.musicassistantcar.playback.DownloadState.DOWNLOADING,
-                com.bsdung.musicassistantcar.playback.DownloadState.QUEUED -> {
+                com.bsdung.musicassistantcar.playback.DownloadState.QUEUED,
+                com.bsdung.musicassistantcar.playback.DownloadState.WAITING_FOR_WIFI -> {
                     bindingDialog.layoutOfflineInfo.visibility = View.GONE
                     bindingDialog.actionDownloadIcon.setImageResource(R.drawable.ic_close)
                     bindingDialog.actionDownloadText.text = "Hủy tải bài hát"

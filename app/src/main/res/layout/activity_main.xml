@@ -917,6 +917,30 @@
                             android:textColor="@color/accent_primary"
                             android:layout_marginTop="2dp" />
                     </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="0.95"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Mạng tải xuống"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_secondary" />
+
+                        <TextView
+                            android:id="@+id/txtOfflineNetworkPolicy"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Mọi mạng"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/accent_primary"
+                            android:layout_marginTop="2dp" />
+                    </LinearLayout>
                 </LinearLayout>
 
                 <LinearLayout
@@ -935,6 +959,21 @@
                         android:paddingStart="10dp"
                         android:paddingEnd="10dp"
                         android:text="Giới hạn"
+                        android:textAllCaps="false"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_primary"
+                        android:background="@drawable/bg_button_control"
+                        android:layout_marginEnd="6dp" />
+
+                    <Button
+                        android:id="@+id/btnOfflineNetworkPolicy"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:minHeight="0dp"
+                        android:minWidth="0dp"
+                        android:paddingStart="10dp"
+                        android:paddingEnd="10dp"
+                        android:text="Mạng tải"
                         android:textAllCaps="false"
                         android:textSize="11sp"
                         android:textColor="@color/text_primary"

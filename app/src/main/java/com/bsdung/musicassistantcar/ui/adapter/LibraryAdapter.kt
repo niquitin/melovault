@@ -392,6 +392,18 @@ class LibraryAdapter(
                             binding.btnDownload.contentDescription = "Hủy"
                             binding.btnDownload.setOnClickListener { onDownloadClick?.invoke(item) }
                         }
+                        com.bsdung.musicassistantcar.playback.DownloadState.WAITING_FOR_WIFI -> {
+                            binding.downloadProgressLayout.visibility = View.GONE
+                            binding.txtDownloadStatus.visibility = View.VISIBLE
+                            binding.txtDownloadStatus.text = "Đang chờ Wi-Fi"
+                            binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
+                            binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
+                            binding.btnDownload.visibility = View.VISIBLE
+                            binding.btnDownload.setImageResource(R.drawable.ic_close)
+                            binding.btnDownload.setColorFilter(ContextCompat.getColor(context, R.color.text_tertiary))
+                            binding.btnDownload.contentDescription = "Hủy"
+                            binding.btnDownload.setOnClickListener { onDownloadClick?.invoke(item) }
+                        }
                         com.bsdung.musicassistantcar.playback.DownloadState.DOWNLOADING -> {
                             binding.txtDownloadStatus.visibility = View.GONE
                             binding.txtDownloadStatus.setOnClickListener(null)

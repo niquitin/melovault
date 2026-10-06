@@ -82,6 +82,12 @@ class PinnedDownloadService : Service() {
             updateNotification(status.title, status.bytesDownloaded, status.totalBytes)
         }
 
+        override fun onDownloadWaitingForWifi(trackId: Long) {
+            val manager = PinnedDownloadManager.getDefault(applicationContext)
+            val status = manager.getDownloadStatus(trackId)
+            updateNotification(status.title, 0L, status.totalBytes)
+        }
+
         override fun onDownloadCompleted(trackId: Long, record: OfflineTrackRecord) {
             checkQueueAndStopIfIdle()
         }
@@ -198,6 +204,33 @@ class PinnedDownloadService : Service() {
 
         val manager = PinnedDownloadManager.getDefault(applicationContext)
         val batchProgress = manager.getActiveBatchProgress()
+        val waitingForWifi = manager.isQueueWaitingForWifi()
+
+        if (waitingForWifi) {
+            val notifTitle = "Đang chờ Wi-Fi để tải nhạc offline"
+            val contentText = if (batchProgress != null && batchProgress.totalTracks > 1) {
+                "${batchProgress.completedTracks}/${batchProgress.totalTracks} bài · Đang chờ Wi-Fi"
+            } else {
+                "${title.ifBlank { "Hàng đợi tải offline" }} · Đang chờ Wi-Fi"
+            }
+            val subText = batchProgress?.sourceDisplayName?.takeIf { it.isNotBlank() } ?: "MeloVault"
+            return NotificationCompat.Builder(this, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_sys_download)
+                .setContentTitle(notifTitle)
+                .setContentText(contentText)
+                .setSubText(subText)
+                .setStyle(
+                    NotificationCompat.BigTextStyle()
+                        .setBigContentTitle(notifTitle)
+                        .setSummaryText(subText)
+                        .bigText("$contentText\nSẽ tự động tiếp tục khi có kết nối Wi-Fi Internet.")
+                )
+                .setContentIntent(contentIntent)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setProgress(0, 0, false)
+                .build()
+        }
 
         if (batchProgress != null && batchProgress.totalTracks > 1) {
             val completed = batchProgress.completedTracks

@@ -1,6 +1,10 @@
 package com.bsdung.musicassistantcar.playback
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.Uri
 import android.os.Bundle
 import android.os.PowerManager
@@ -22,9 +26,93 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
+enum class DownloadNetworkPolicy {
+    ANY_NETWORK,
+    WIFI_ONLY;
+
+    companion object {
+        fun fromString(value: String?): DownloadNetworkPolicy {
+            return when (value?.trim()?.uppercase()) {
+                "WIFI_ONLY" -> WIFI_ONLY
+                "ANY_NETWORK" -> ANY_NETWORK
+                else -> ANY_NETWORK
+            }
+        }
+    }
+}
+
+data class NetworkTransportInfo(
+    val hasWifiTransport: Boolean = false,
+    val hasCellularTransport: Boolean = false,
+    val hasVpnTransport: Boolean = false,
+    val hasInternetCapability: Boolean = false,
+    val isValidated: Boolean = false,
+) {
+    val isValidatedInternet: Boolean
+        get() = hasInternetCapability && isValidated
+
+    val isValidatedWifi: Boolean
+        get() = hasWifiTransport && hasInternetCapability && isValidated
+}
+
+interface NetworkPolicyResolver {
+    fun getActiveTransports(): List<NetworkTransportInfo>
+
+    fun hasValidatedInternet(): Boolean {
+        return getActiveTransports().any { it.isValidatedInternet }
+    }
+
+    fun hasValidatedWifi(): Boolean {
+        return getActiveTransports().any { it.isValidatedWifi }
+    }
+
+    fun isDownloadAllowed(policy: DownloadNetworkPolicy): Boolean {
+        return when (policy) {
+            DownloadNetworkPolicy.ANY_NETWORK -> hasValidatedInternet()
+            DownloadNetworkPolicy.WIFI_ONLY -> hasValidatedWifi()
+        }
+    }
+}
+
+object DefaultPermissiveNetworkPolicyResolver : NetworkPolicyResolver {
+    override fun getActiveTransports(): List<NetworkTransportInfo> = listOf(
+        NetworkTransportInfo(
+            hasWifiTransport = true,
+            hasInternetCapability = true,
+            isValidated = true,
+        )
+    )
+}
+
+class AndroidNetworkPolicyResolver(private val context: Context) : NetworkPolicyResolver {
+    override fun getActiveTransports(): List<NetworkTransportInfo> {
+        return try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                ?: return emptyList()
+            val networks = LinkedHashSet<Network>()
+            cm.activeNetwork?.let { networks.add(it) }
+            cm.allNetworks?.forEach { if (it != null) networks.add(it) }
+            networks.mapNotNull { network ->
+                val caps = cm.getNetworkCapabilities(network) ?: return@mapNotNull null
+                NetworkTransportInfo(
+                    hasWifiTransport = caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI),
+                    hasCellularTransport = caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR),
+                    hasVpnTransport = caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN),
+                    hasInternetCapability = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET),
+                    isValidated = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED),
+                )
+            }
+        } catch (e: Exception) {
+            Log.e("NetworkPolicyResolver", "Failed to query network transports", e)
+            emptyList()
+        }
+    }
+}
+
 enum class DownloadState {
     NOT_DOWNLOADED,
     QUEUED,
+    WAITING_FOR_WIFI,
     DOWNLOADING,
     FINALIZING,
     OFFLINE_READY,
@@ -49,9 +137,11 @@ data class DownloadJob(
     @Volatile var totalBytes: Long = 0L,
     @Volatile var errorMessage: String? = null,
     @Volatile var isCancelled: Boolean = false,
+    @Volatile var pausedForWifi: Boolean = false,
     val enqueuedAtMs: Long = System.currentTimeMillis(),
-    val attemptId: Long = 0L,
+    @Volatile var attemptId: Long = 0L,
     val batchId: String? = null,
+    val queueSequence: Long = 0L,
 )
 
 data class DownloadBatch(
@@ -201,15 +291,22 @@ open class PinnedDownloadManager(
     private val streamOpener: ((track: CarTrack, apiClient: CarApiClient) -> Pair<InputStream, Long?>)? = null,
     private val wakeLock: DownloadWakeLock? = null,
     private val serviceController: DownloadServiceController? = null,
+    @Volatile private var networkPolicyResolver: NetworkPolicyResolver = DefaultPermissiveNetworkPolicyResolver,
+    initialNetworkPolicy: DownloadNetworkPolicy = DownloadNetworkPolicy.ANY_NETWORK,
 ) {
     private var context: Context? = null
     private val attemptCounter = java.util.concurrent.atomic.AtomicLong(1L)
+    private val sequenceCounter = java.util.concurrent.atomic.AtomicLong(1L)
     @Volatile
     private var inMemoryStorageCapBytes: Long = CAP_UNLIMITED
     @Volatile
     private var inMemorySortKey: String = SORT_DATE_DESC
     @Volatile
+    private var inMemoryNetworkPolicy: DownloadNetworkPolicy = initialNetworkPolicy
+    @Volatile
     private var availableSpaceProvider: (() -> Long)? = null
+    @Volatile
+    private var lastApiClient: CarApiClient = CarApiClient()
 
     constructor(
         context: Context,
@@ -217,13 +314,28 @@ open class PinnedDownloadManager(
         executor: ExecutorService = Executors.newSingleThreadExecutor(),
         wakeLock: DownloadWakeLock? = AndroidDownloadWakeLock(context.applicationContext),
         serviceController: DownloadServiceController? = AndroidDownloadServiceController(context.applicationContext),
-    ) : this(store, executor, null, wakeLock, serviceController) {
+    ) : this(
+        store = store,
+        executor = executor,
+        streamOpener = null,
+        wakeLock = wakeLock,
+        serviceController = serviceController,
+        networkPolicyResolver = AndroidNetworkPolicyResolver(context.applicationContext),
+        initialNetworkPolicy = DownloadNetworkPolicy.fromString(
+            context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                ?.getString(PREF_DOWNLOAD_NETWORK_POLICY, DownloadNetworkPolicy.ANY_NETWORK.name)
+        ),
+    ) {
         this.context = context.applicationContext
         val prefs = this.context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         if (prefs != null) {
             inMemoryStorageCapBytes = prefs.getLong(PREF_OFFLINE_STORAGE_CAP_BYTES, CAP_UNLIMITED)
             inMemorySortKey = prefs.getString(PREF_DOWNLOADED_SORT, SORT_DATE_DESC) ?: SORT_DATE_DESC
+            inMemoryNetworkPolicy = DownloadNetworkPolicy.fromString(
+                prefs.getString(PREF_DOWNLOAD_NETWORK_POLICY, inMemoryNetworkPolicy.name)
+            )
         }
+        registerNetworkCallbackIfNeeded(context.applicationContext)
     }
 
     companion object {
@@ -232,6 +344,7 @@ open class PinnedDownloadManager(
         const val PREFS_NAME = "music_assistant_car"
         const val PREF_OFFLINE_STORAGE_CAP_BYTES = "offline_storage_cap_bytes"
         const val PREF_DOWNLOADED_SORT = "downloaded_music_sort"
+        const val PREF_DOWNLOAD_NETWORK_POLICY = "download_network_policy"
 
         const val MIN_FREE_RESERVE_BYTES = 500L * 1024L * 1024L
         const val CAP_UNLIMITED = 0L
@@ -281,6 +394,7 @@ open class PinnedDownloadManager(
 
     interface DownloadListener {
         fun onDownloadStarted(trackId: Long) {}
+        fun onDownloadWaitingForWifi(trackId: Long) {}
         fun onDownloadProgress(trackId: Long, bytesDownloaded: Long) {}
         fun onDownloadProgress(trackId: Long, bytesDownloaded: Long, totalBytes: Long) {
             onDownloadProgress(trackId, bytesDownloaded)
@@ -295,12 +409,209 @@ open class PinnedDownloadManager(
     private val listeners = Collections.synchronizedSet(mutableSetOf<DownloadListener>())
     private val jobs = ConcurrentHashMap<Long, DownloadJob>()
     private val activeStreams = ConcurrentHashMap<Long, InputStream>()
+    private val activeOutputs = ConcurrentHashMap<Long, FileOutputStream>()
     @Volatile
     private var activeBatch: DownloadBatch? = null
 
     init {
+        if (context == null && initialNetworkPolicy == DownloadNetworkPolicy.ANY_NETWORK) {
+            try {
+                val prefFile = File(store.getStorageDirectory(), "network_policy.pref")
+                if (prefFile.exists() && prefFile.isFile) {
+                    inMemoryNetworkPolicy = DownloadNetworkPolicy.fromString(prefFile.readText(Charsets.UTF_8).trim())
+                }
+            } catch (ignored: Exception) {}
+        }
         cleanOrphanParts()
         restoreQueueState()
+    }
+
+    private fun registerNetworkCallbackIfNeeded(appContext: Context) {
+        try {
+            val cm = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+            val request = NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build()
+            cm.registerNetworkCallback(request, object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    onNetworkStateChanged()
+                }
+
+                override fun onLost(network: Network) {
+                    onNetworkStateChanged()
+                }
+
+                override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+                    onNetworkStateChanged()
+                }
+            })
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to register network callback", e)
+        }
+    }
+
+    fun setNetworkPolicyResolverForTesting(resolver: NetworkPolicyResolver) {
+        this.networkPolicyResolver = resolver
+    }
+
+    fun getNetworkPolicyResolver(): NetworkPolicyResolver = networkPolicyResolver
+
+    fun getDownloadNetworkPolicy(): DownloadNetworkPolicy {
+        val prefs = context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs != null) {
+            val stored = prefs.getString(PREF_DOWNLOAD_NETWORK_POLICY, null)
+            if (stored != null) {
+                inMemoryNetworkPolicy = DownloadNetworkPolicy.fromString(stored)
+            }
+        }
+        return inMemoryNetworkPolicy
+    }
+
+    fun setDownloadNetworkPolicy(
+        policy: DownloadNetworkPolicy,
+        apiClient: CarApiClient = lastApiClient,
+    ) {
+        inMemoryNetworkPolicy = policy
+        context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            ?.edit()
+            ?.putString(PREF_DOWNLOAD_NETWORK_POLICY, policy.name)
+            ?.apply()
+        try {
+            val storageDir = store.getStorageDirectory()
+            if (!storageDir.exists()) storageDir.mkdirs()
+            File(storageDir, "network_policy.pref").writeText(policy.name, Charsets.UTF_8)
+        } catch (ignored: Exception) {}
+        onNetworkStateChanged(apiClient)
+    }
+
+    fun formatNetworkPolicyLabel(policy: DownloadNetworkPolicy = getDownloadNetworkPolicy()): String {
+        return when (policy) {
+            DownloadNetworkPolicy.ANY_NETWORK -> "Mọi mạng"
+            DownloadNetworkPolicy.WIFI_ONLY -> "Chỉ Wi-Fi"
+        }
+    }
+
+    fun isNetworkAllowedForDownload(): Boolean {
+        return when (getDownloadNetworkPolicy()) {
+            DownloadNetworkPolicy.ANY_NETWORK -> true
+            DownloadNetworkPolicy.WIFI_ONLY -> networkPolicyResolver.isDownloadAllowed(DownloadNetworkPolicy.WIFI_ONLY)
+        }
+    }
+
+    fun isQueueWaitingForWifi(): Boolean {
+        return jobs.values.any { it.state == DownloadState.WAITING_FOR_WIFI } &&
+            jobs.values.none { it.state == DownloadState.DOWNLOADING || it.state == DownloadState.FINALIZING }
+    }
+
+    private fun abortActiveDownloadForWifiPolicy() {
+        val abortedTrackIds = mutableListOf<Long>()
+        val storageDir = store.getStorageDirectory()
+        for ((trackId, job) in jobs) {
+            synchronized(job) {
+                if (job.state == DownloadState.DOWNLOADING && !job.isCancelled) {
+                    job.pausedForWifi = true
+                    job.state = DownloadState.WAITING_FOR_WIFI
+                    job.bytesDownloaded = 0L
+                    job.errorMessage = null
+                    activeStreams.remove(trackId)?.let { runCatching { it.close() } }
+                    activeOutputs.remove(trackId)?.let { runCatching { it.close() } }
+                    val partFile = File(storageDir, "track_${trackId}.part")
+                    if (partFile.exists()) {
+                        partFile.delete()
+                    }
+                    wakeLock?.release()
+                    abortedTrackIds.add(trackId)
+                }
+            }
+        }
+        for (trackId in abortedTrackIds) {
+            notifyWaitingForWifi(trackId)
+        }
+    }
+
+    private fun reconcileWaitingQueueStates() {
+        val allowed = isNetworkAllowedForDownload()
+        val pendingJobs = jobs.values
+            .filter { !it.isCancelled && (it.state == DownloadState.WAITING_FOR_WIFI || it.state == DownloadState.QUEUED) }
+            .sortedBy { it.queueSequence }
+
+        if (!allowed) {
+            val hasFinalizing = jobs.values.any { it.state == DownloadState.FINALIZING }
+            val becameWaitingIds = mutableListOf<Long>()
+            for (job in pendingJobs) {
+                synchronized(job) {
+                    if (!job.isCancelled && job.state == DownloadState.QUEUED) {
+                        job.state = DownloadState.WAITING_FOR_WIFI
+                        job.bytesDownloaded = 0L
+                        becameWaitingIds.add(job.track.id.toLong())
+                    }
+                }
+            }
+            if (!hasFinalizing && jobs.values.none { it.state == DownloadState.DOWNLOADING }) {
+                wakeLock?.release()
+            }
+            for (trackId in becameWaitingIds) {
+                notifyWaitingForWifi(trackId)
+            }
+        } else {
+            for (job in pendingJobs) {
+                synchronized(job) {
+                    if (!job.isCancelled && job.state == DownloadState.WAITING_FOR_WIFI) {
+                        job.state = DownloadState.QUEUED
+                    }
+                }
+            }
+        }
+    }
+
+    fun onNetworkStateChanged(apiClient: CarApiClient = lastApiClient) {
+        lastApiClient = apiClient
+        if (!isNetworkAllowedForDownload()) {
+            abortActiveDownloadForWifiPolicy()
+            reconcileWaitingQueueStates()
+            persistQueueState()
+        } else {
+            val hadWaitingOrQueued = jobs.values.any {
+                !it.isCancelled && (it.state == DownloadState.WAITING_FOR_WIFI || it.state == DownloadState.QUEUED)
+            }
+            if (hadWaitingOrQueued) {
+                reconcileWaitingQueueStates()
+                serviceController?.onQueueActive()
+                persistQueueState()
+                scheduleQueueProcessing(apiClient)
+            }
+        }
+    }
+
+    private fun scheduleQueueProcessing(apiClient: CarApiClient) {
+        lastApiClient = apiClient
+        executor.submit { processQueueLoop(apiClient) }
+    }
+
+    private fun processQueueLoop(apiClient: CarApiClient) {
+        while (true) {
+            if (!isNetworkAllowedForDownload()) {
+                abortActiveDownloadForWifiPolicy()
+                reconcileWaitingQueueStates()
+                persistQueueState()
+                return
+            }
+
+            val nextJob = jobs.values
+                .filter { !it.isCancelled && (it.state == DownloadState.WAITING_FOR_WIFI || it.state == DownloadState.QUEUED) }
+                .minByOrNull { it.queueSequence }
+                ?: break
+
+            synchronized(nextJob) {
+                if (nextJob.isCancelled || jobs[nextJob.track.id.toLong()] !== nextJob) {
+                    continue
+                }
+                nextJob.pausedForWifi = false
+                nextJob.attemptId = attemptCounter.incrementAndGet()
+            }
+
+            runDownloadJob(nextJob, apiClient)
+        }
     }
 
     fun cleanOrphanParts(): Int {
@@ -329,6 +640,7 @@ open class PinnedDownloadManager(
     fun isDownloading(trackId: Long): Boolean {
         val job = jobs[trackId] ?: return false
         return job.state == DownloadState.QUEUED ||
+            job.state == DownloadState.WAITING_FOR_WIFI ||
             job.state == DownloadState.DOWNLOADING ||
             job.state == DownloadState.FINALIZING
     }
@@ -336,6 +648,7 @@ open class PinnedDownloadManager(
     fun hasActiveJobs(): Boolean {
         return jobs.values.any {
             it.state == DownloadState.QUEUED ||
+            it.state == DownloadState.WAITING_FOR_WIFI ||
             it.state == DownloadState.DOWNLOADING ||
             it.state == DownloadState.FINALIZING
         }
@@ -344,7 +657,9 @@ open class PinnedDownloadManager(
     fun getCurrentActiveJob(): DownloadJob? {
         return jobs.values.firstOrNull {
             it.state == DownloadState.DOWNLOADING || it.state == DownloadState.FINALIZING
-        } ?: jobs.values.firstOrNull { it.state == DownloadState.QUEUED }
+        } ?: jobs.values.filter {
+            it.state == DownloadState.WAITING_FOR_WIFI || it.state == DownloadState.QUEUED
+        }.minByOrNull { it.queueSequence }
     }
 
     fun isOfflineReady(trackId: Long): Boolean {
@@ -432,32 +747,40 @@ open class PinnedDownloadManager(
 
     fun cancelDownload(trackId: Long): Boolean {
         val job = jobs[trackId] ?: return false
+        var shouldNotifyCancelled = false
         synchronized(job) {
             if (job.state == DownloadState.OFFLINE_READY) return false
             job.isCancelled = true
+            job.pausedForWifi = false
             val wasActive = (job.state == DownloadState.DOWNLOADING || job.state == DownloadState.FINALIZING)
             job.state = DownloadState.CANCELLED
             activeStreams.remove(trackId)?.let { runCatching { it.close() } }
+            activeOutputs.remove(trackId)?.let { runCatching { it.close() } }
             val storageDir = store.getStorageDirectory()
             val partFile = File(storageDir, "track_${trackId}.part")
-            if (!wasActive) {
-                if (partFile.exists()) {
-                    partFile.delete()
-                }
-                notifyCancelled(trackId)
-                if (!hasActiveJobs()) {
-                    serviceController?.onQueueIdle()
-                }
+            if (partFile.exists()) {
+                partFile.delete()
             }
-            persistQueueState()
-            return true
+            if (!wasActive) {
+                shouldNotifyCancelled = true
+            }
         }
+        reconcileWaitingQueueStates()
+        if (shouldNotifyCancelled) {
+            notifyCancelled(trackId)
+            if (!hasActiveJobs()) {
+                serviceController?.onQueueIdle()
+            }
+        }
+        persistQueueState()
+        return true
     }
 
     fun retryDownload(
         trackId: Long,
         apiClient: CarApiClient = CarApiClient(),
     ): Boolean {
+        lastApiClient = apiClient
         val existingJob = jobs[trackId] ?: return false
         if (existingJob.state != DownloadState.FAILED && existingJob.state != DownloadState.CANCELLED) return false
         val storageDir = store.getStorageDirectory()
@@ -471,12 +794,16 @@ open class PinnedDownloadManager(
             totalBytes = existingJob.track.sourceSizeBytes ?: 0L,
             attemptId = attemptCounter.incrementAndGet(),
             batchId = existingJob.batchId,
+            queueSequence = sequenceCounter.incrementAndGet(),
         )
         jobs[trackId] = newJob
+        reconcileWaitingQueueStates()
         notifyStarted(trackId)
         serviceController?.onQueueActive()
         persistQueueState()
-        executor.submit { runDownloadJob(newJob, apiClient) }
+        if (isNetworkAllowedForDownload()) {
+            scheduleQueueProcessing(apiClient)
+        }
         return true
     }
 
@@ -484,6 +811,7 @@ open class PinnedDownloadManager(
         track: CarTrack,
         apiClient: CarApiClient = CarApiClient(),
     ) {
+        lastApiClient = apiClient
         val trackId = track.id.toLong()
         if (isOfflineReady(trackId)) {
             Log.i(TAG, "Track $trackId already offline-ready, skipping")
@@ -493,6 +821,7 @@ open class PinnedDownloadManager(
         val existingJob = jobs[trackId]
         if (existingJob != null) {
             if (existingJob.state == DownloadState.QUEUED ||
+                existingJob.state == DownloadState.WAITING_FOR_WIFI ||
                 existingJob.state == DownloadState.DOWNLOADING ||
                 existingJob.state == DownloadState.FINALIZING
             ) {
@@ -501,19 +830,29 @@ open class PinnedDownloadManager(
             }
         }
 
+        val storageDir = store.getStorageDirectory()
+        val partFile = File(storageDir, "track_${trackId}.part")
+        if (partFile.exists()) {
+            partFile.delete()
+        }
+
         val total = track.sourceSizeBytes ?: 0L
         val job = DownloadJob(
             track = track,
             state = DownloadState.QUEUED,
             totalBytes = total,
             attemptId = attemptCounter.incrementAndGet(),
+            queueSequence = sequenceCounter.incrementAndGet(),
         )
         jobs[trackId] = job
+        reconcileWaitingQueueStates()
         notifyStarted(trackId)
         serviceController?.onQueueActive()
         persistQueueState()
 
-        executor.submit { runDownloadJob(job, apiClient) }
+        if (isNetworkAllowedForDownload()) {
+            scheduleQueueProcessing(apiClient)
+        }
     }
 
     fun classifyTracksForDownload(tracks: List<CarTrack>): BulkClassificationResult {
@@ -529,6 +868,7 @@ open class PinnedDownloadManager(
             } else {
                 val job = jobs[trackId]
                 if (job != null && (job.state == DownloadState.QUEUED ||
+                        job.state == DownloadState.WAITING_FOR_WIFI ||
                         job.state == DownloadState.DOWNLOADING ||
                         job.state == DownloadState.FINALIZING)) {
                     inProgress.add(t)
@@ -565,7 +905,13 @@ open class PinnedDownloadManager(
 
     fun getAvailableStorageBytes(): Long {
         return try {
-            availableSpaceProvider?.invoke() ?: store.getStorageDirectory().usableSpace
+            availableSpaceProvider?.invoke() ?: run {
+                val dir = store.getStorageDirectory()
+                if (!dir.exists()) {
+                    dir.mkdirs()
+                }
+                dir.usableSpace
+            }
         } catch (e: Exception) {
             0L
         }
@@ -573,7 +919,11 @@ open class PinnedDownloadManager(
 
     fun getTotalStorageBytes(): Long {
         return try {
-            store.getStorageDirectory().totalSpace
+            val dir = store.getStorageDirectory()
+            if (!dir.exists()) {
+                dir.mkdirs()
+            }
+            dir.totalSpace
         } catch (e: Exception) {
             0L
         }
@@ -805,6 +1155,8 @@ open class PinnedDownloadManager(
         var inProgressCount = 0
         var currentDownloadingTrack: CarTrack? = null
         var currentDownloadingStatus: DownloadStatus? = null
+        var waitingTrack: CarTrack? = null
+        var waitingStatus: DownloadStatus? = null
         var downloadedBytesSum = 0L
 
         for (id in trackIds) {
@@ -817,6 +1169,21 @@ open class PinnedDownloadManager(
                 when (job.state) {
                     DownloadState.QUEUED -> {
                         inProgressCount++
+                    }
+                    DownloadState.WAITING_FOR_WIFI -> {
+                        inProgressCount++
+                        if (waitingTrack == null) {
+                            waitingTrack = job.track
+                            waitingStatus = DownloadStatus(
+                                trackId = id,
+                                state = job.state,
+                                bytesDownloaded = job.bytesDownloaded,
+                                totalBytes = job.totalBytes,
+                                errorMessage = job.errorMessage,
+                                title = job.track.title,
+                                artist = job.track.artist,
+                            )
+                        }
                     }
                     DownloadState.DOWNLOADING, DownloadState.FINALIZING -> {
                         inProgressCount++
@@ -850,6 +1217,9 @@ open class PinnedDownloadManager(
             }
         }
 
+        val activeOrWaitingTrack = currentDownloadingTrack ?: waitingTrack
+        val activeOrWaitingStatus = currentDownloadingStatus ?: waitingStatus
+
         return BatchProgress(
             batchId = batch.batchId,
             sourceDisplayName = batch.sourceDisplayName,
@@ -861,8 +1231,8 @@ open class PinnedDownloadManager(
             totalBytesKnown = batch.knownTotalBytes,
             downloadedBytes = downloadedBytesSum,
             hasUnknownSizes = batch.hasUnknownSizes,
-            currentTrackTitle = currentDownloadingTrack?.title,
-            currentTrackProgress = currentDownloadingStatus,
+            currentTrackTitle = activeOrWaitingTrack?.title,
+            currentTrackProgress = activeOrWaitingStatus,
         )
     }
 
@@ -871,9 +1241,11 @@ open class PinnedDownloadManager(
         tracksToEnqueue: List<CarTrack>,
         apiClient: CarApiClient = CarApiClient(),
     ): Int {
+        lastApiClient = apiClient
         activeBatch = batch
         var enqueuedCount = 0
         val distinctTracks = tracksToEnqueue.distinctBy { it.id }
+        val newlyEnqueuedIds = mutableListOf<Long>()
 
         for (track in distinctTracks) {
             val trackId = track.id.toLong()
@@ -882,6 +1254,7 @@ open class PinnedDownloadManager(
             }
             val existingJob = jobs[trackId]
             if (existingJob != null && (existingJob.state == DownloadState.QUEUED ||
+                    existingJob.state == DownloadState.WAITING_FOR_WIFI ||
                     existingJob.state == DownloadState.DOWNLOADING ||
                     existingJob.state == DownloadState.FINALIZING)) {
                 continue
@@ -900,17 +1273,25 @@ open class PinnedDownloadManager(
                 totalBytes = total,
                 attemptId = attemptCounter.incrementAndGet(),
                 batchId = batch.batchId,
+                queueSequence = sequenceCounter.incrementAndGet(),
             )
             jobs[trackId] = job
             enqueuedCount++
+            newlyEnqueuedIds.add(trackId)
+        }
+
+        reconcileWaitingQueueStates()
+        for (trackId in newlyEnqueuedIds) {
             notifyStarted(trackId)
-            executor.submit { runDownloadJob(job, apiClient) }
         }
 
         if (enqueuedCount > 0) {
             serviceController?.onQueueActive()
         }
         persistQueueState()
+        if (enqueuedCount > 0 && isNetworkAllowedForDownload()) {
+            scheduleQueueProcessing(apiClient)
+        }
         return enqueuedCount
     }
 
@@ -918,8 +1299,9 @@ open class PinnedDownloadManager(
         var cancelledCount = 0
         for (job in jobs.values) {
             synchronized(job) {
-                if (job.state == DownloadState.QUEUED) {
+                if (job.state == DownloadState.QUEUED || job.state == DownloadState.WAITING_FOR_WIFI) {
                     job.isCancelled = true
+                    job.pausedForWifi = false
                     job.state = DownloadState.CANCELLED
                     notifyCancelled(job.track.id.toLong())
                     cancelledCount++
@@ -938,11 +1320,17 @@ open class PinnedDownloadManager(
         val storageDir = store.getStorageDirectory()
         for ((trackId, job) in jobs) {
             synchronized(job) {
-                if (job.state == DownloadState.QUEUED || job.state == DownloadState.DOWNLOADING || job.state == DownloadState.FINALIZING) {
+                if (job.state == DownloadState.QUEUED ||
+                    job.state == DownloadState.WAITING_FOR_WIFI ||
+                    job.state == DownloadState.DOWNLOADING ||
+                    job.state == DownloadState.FINALIZING
+                ) {
                     job.isCancelled = true
+                    job.pausedForWifi = false
                     val wasActive = (job.state == DownloadState.DOWNLOADING || job.state == DownloadState.FINALIZING)
                     job.state = DownloadState.CANCELLED
                     activeStreams.remove(trackId)?.let { runCatching { it.close() } }
+                    activeOutputs.remove(trackId)?.let { runCatching { it.close() } }
                     val partFile = File(storageDir, "track_${trackId}.part")
                     if (partFile.exists()) {
                         partFile.delete()
@@ -1037,12 +1425,17 @@ open class PinnedDownloadManager(
             return
         }
 
+        if (!isNetworkAllowedForDownload()) {
+            wakeLock?.release()
+            reconcileWaitingQueueStates()
+            persistQueueState()
+            return
+        }
+
         var partFile: File? = null
         var finalFile: File? = null
         var stream: InputStream? = null
         try {
-            wakeLock?.acquire()
-            job.state = DownloadState.DOWNLOADING
             val storageDir = store.getStorageDirectory()
             if (!storageDir.exists()) {
                 storageDir.mkdirs()
@@ -1058,10 +1451,32 @@ open class PinnedDownloadManager(
                 partFile.delete()
             }
 
+            // Re-verify v0.6.24 storage cap and 500 MB reserve before acquiring wakeLock or opening stream
             val basePinnedUsedBytes = getPinnedUsedBytes(excludeTrackId = trackId)
             val initialCapBytes = getOfflineStorageCapBytes()
-            if (initialCapBytes > 0L && basePinnedUsedBytes >= initialCapBytes) {
+            val knownTrackBytes = track.sourceSizeBytes?.takeIf { it > 0L } ?: 0L
+            if (initialCapBytes > 0L && (basePinnedUsedBytes >= initialCapBytes || (knownTrackBytes > 0L && knownTrackBytes > (initialCapBytes - basePinnedUsedBytes)))) {
                 throw IOException("Vượt giới hạn dung lượng offline")
+            }
+            val availableBytes = getAvailableStorageBytes()
+            if (availableSpaceProvider != null || availableBytes > 0L) {
+                if (availableBytes < MIN_FREE_RESERVE_BYTES || (knownTrackBytes > 0L && (availableBytes < knownTrackBytes || (availableBytes - knownTrackBytes) < MIN_FREE_RESERVE_BYTES))) {
+                    throw IOException("Không đủ dung lượng bộ nhớ")
+                }
+            }
+
+            synchronized(job) {
+                if (job.isCancelled || jobs[trackId] !== job) {
+                    throw IOException("Download cancelled")
+                }
+                if (job.pausedForWifi || !isNetworkAllowedForDownload()) {
+                    job.pausedForWifi = true
+                    throw IOException("Paused for Wi-Fi")
+                }
+                wakeLock?.acquire()
+                job.state = DownloadState.DOWNLOADING
+                job.bytesDownloaded = 0L
+                job.errorMessage = null
             }
 
             val (input, reportedLength) = if (streamOpener != null) {
@@ -1083,12 +1498,16 @@ open class PinnedDownloadManager(
                 Pair(conn.inputStream, conn.contentLengthLong.takeIf { it > 0L })
             }
 
-            // Transfer resource ownership immediately before cancellation/supersession check
+            // Transfer resource ownership immediately before cancellation/supersession/policy check
             stream = input
             activeStreams[trackId] = input
 
             if (job.isCancelled || jobs[trackId] !== job) {
                 throw IOException("Download cancelled")
+            }
+            if (job.pausedForWifi || !isNetworkAllowedForDownload()) {
+                job.pausedForWifi = true
+                throw IOException("Paused for Wi-Fi")
             }
 
             // REQUIREMENT 1: Use ONLY a valid HTTP response-reported length for active transfer percentage.
@@ -1100,6 +1519,12 @@ open class PinnedDownloadManager(
             if (capOnOpen > 0L && totalTarget > 0L && (basePinnedUsedBytes >= capOnOpen || totalTarget > (capOnOpen - basePinnedUsedBytes))) {
                 throw IOException("Vượt giới hạn dung lượng offline")
             }
+            val availOnOpen = getAvailableStorageBytes()
+            if (totalTarget > 0L && (availableSpaceProvider != null || availOnOpen > 0L)) {
+                if (availOnOpen < totalTarget || (availOnOpen - totalTarget) < MIN_FREE_RESERVE_BYTES) {
+                    throw IOException("Không đủ dung lượng bộ nhớ")
+                }
+            }
 
             if (jobs[trackId] === job) {
                 notifyProgress(trackId, 0L, totalTarget)
@@ -1108,36 +1533,61 @@ open class PinnedDownloadManager(
             val digest = MessageDigest.getInstance("SHA-256")
             var totalBytesRead = 0L
 
-            FileOutputStream(partFile).use { output ->
+            val fileOutput = synchronized(job) {
+                if (job.isCancelled || jobs[trackId] !== job) {
+                    throw IOException("Download cancelled")
+                }
+                if (job.pausedForWifi || !isNetworkAllowedForDownload()) {
+                    job.pausedForWifi = true
+                    throw IOException("Paused for Wi-Fi")
+                }
+                FileOutputStream(partFile).also { activeOutputs[trackId] = it }
+            }
+
+            fileOutput.use { output ->
                 val buffer = ByteArray(16 * 1024)
                 var bytesRead: Int
                 var lastProgressNotifyMs = System.currentTimeMillis()
                 while (input.read(buffer).also { bytesRead = it } != -1) {
-                    if (job.isCancelled || jobs[trackId] !== job) {
-                        throw IOException("Download cancelled")
+                    synchronized(job) {
+                        if (job.isCancelled || jobs[trackId] !== job) {
+                            throw IOException("Download cancelled")
+                        }
+                        if (job.pausedForWifi || !isNetworkAllowedForDownload()) {
+                            job.pausedForWifi = true
+                            throw IOException("Paused for Wi-Fi")
+                        }
+                        val activeCap = getOfflineStorageCapBytes()
+                        if (activeCap > 0L && (basePinnedUsedBytes + totalBytesRead + bytesRead) > activeCap) {
+                            throw IOException("Vượt giới hạn dung lượng offline")
+                        }
+                        output.write(buffer, 0, bytesRead)
+                        digest.update(buffer, 0, bytesRead)
+                        totalBytesRead += bytesRead
+                        job.bytesDownloaded = totalBytesRead
                     }
-                    val activeCap = getOfflineStorageCapBytes()
-                    if (activeCap > 0L && (basePinnedUsedBytes + totalBytesRead + bytesRead) > activeCap) {
-                        throw IOException("Vượt giới hạn dung lượng offline")
-                    }
-                    output.write(buffer, 0, bytesRead)
-                    digest.update(buffer, 0, bytesRead)
-                    totalBytesRead += bytesRead
-                    job.bytesDownloaded = totalBytesRead
 
                     val now = System.currentTimeMillis()
                     if (now - lastProgressNotifyMs >= 100) {
                         lastProgressNotifyMs = now
-                        if (jobs[trackId] === job) {
+                        if (jobs[trackId] === job && !job.pausedForWifi && !job.isCancelled) {
                             notifyProgress(trackId, totalBytesRead, totalTarget)
                         }
                     }
                 }
-                output.flush()
+                synchronized(job) {
+                    if (!job.isCancelled && !job.pausedForWifi) {
+                        output.flush()
+                    }
+                }
             }
+            activeOutputs.remove(trackId)
 
             if (job.isCancelled || jobs[trackId] !== job) {
                 throw IOException("Download cancelled")
+            }
+            if (job.pausedForWifi) {
+                throw IOException("Paused for Wi-Fi")
             }
 
             if (totalBytesRead <= 0L) {
@@ -1148,9 +1598,18 @@ open class PinnedDownloadManager(
                 throw IOException("Content-Length mismatch: expected $reportedLength, got $totalBytesRead")
             }
 
-            job.state = DownloadState.FINALIZING
-            job.bytesDownloaded = totalBytesRead
-            job.totalBytes = totalBytesRead
+            // Transition to FINALIZING atomically: once in FINALIZING, local hash/rename/commit will not be aborted by Wi-Fi changes
+            synchronized(job) {
+                if (job.isCancelled || jobs[trackId] !== job) {
+                    throw IOException("Download cancelled")
+                }
+                if (job.pausedForWifi) {
+                    throw IOException("Paused for Wi-Fi")
+                }
+                job.state = DownloadState.FINALIZING
+                job.bytesDownloaded = totalBytesRead
+                job.totalBytes = totalBytesRead
+            }
             if (jobs[trackId] === job && !job.isCancelled) {
                 notifyFinalizing(trackId)
             }
@@ -1226,17 +1685,35 @@ open class PinnedDownloadManager(
             }
         } catch (e: Exception) {
             wakeLock?.release()
-            activeStreams.remove(trackId)
+            activeStreams.remove(trackId)?.let { runCatching { it.close() } }
+            activeOutputs.remove(trackId)?.let { runCatching { it.close() } }
             runCatching { stream?.close() }
             if (jobs[trackId] === job) {
                 partFile?.let { if (it.exists()) it.delete() }
                 finalFile?.let { if (it.exists() && !isOfflineReady(trackId)) it.delete() }
                 if (job.isCancelled) {
+                    job.pausedForWifi = false
                     job.state = DownloadState.CANCELLED
+                    reconcileWaitingQueueStates()
                     if (!hasActiveJobs()) {
                         serviceController?.onQueueIdle()
                     }
                     notifyCancelled(trackId)
+                } else if (job.pausedForWifi || !isNetworkAllowedForDownload()) {
+                    var shouldNotifyWaiting = false
+                    synchronized(job) {
+                        job.pausedForWifi = false
+                        if (!job.isCancelled && jobs[trackId] === job) {
+                            shouldNotifyWaiting = (job.state != DownloadState.WAITING_FOR_WIFI)
+                            job.state = DownloadState.WAITING_FOR_WIFI
+                            job.bytesDownloaded = 0L
+                            job.errorMessage = null
+                        }
+                    }
+                    reconcileWaitingQueueStates()
+                    if (shouldNotifyWaiting) {
+                        notifyWaitingForWifi(trackId)
+                    }
                 } else {
                     val isNoSpace = e.message?.contains("ENOSPC", ignoreCase = true) == true ||
                         e.message?.contains("No space left", ignoreCase = true) == true ||
@@ -1261,7 +1738,8 @@ open class PinnedDownloadManager(
                 Log.i(TAG, "Attempt ${job.attemptId} for track $trackId superseded; suppressed late failure publication")
             }
         } finally {
-            activeStreams.remove(trackId)
+            activeStreams.remove(trackId)?.let { runCatching { it.close() } }
+            activeOutputs.remove(trackId)?.let { runCatching { it.close() } }
             runCatching { stream?.close() }
             wakeLock?.release()
             if (!hasActiveJobs()) {
@@ -1273,6 +1751,10 @@ open class PinnedDownloadManager(
 
     private fun notifyStarted(trackId: Long) {
         listeners.toList().forEach { it.onDownloadStarted(trackId) }
+    }
+
+    private fun notifyWaitingForWifi(trackId: Long) {
+        listeners.toList().forEach { it.onDownloadWaitingForWifi(trackId) }
     }
 
     private fun notifyProgress(trackId: Long, bytesDownloaded: Long, totalBytes: Long) {
@@ -1390,7 +1872,7 @@ open class PinnedDownloadManager(
     fun getActiveJobMediaItems(): List<MediaItem> {
         return jobs.values
             .filter { it.state != DownloadState.OFFLINE_READY }
-            .sortedBy { it.enqueuedAtMs }
+            .sortedWith(compareBy<DownloadJob> { it.queueSequence }.thenBy { it.enqueuedAtMs })
             .map { job ->
                 val extras = Bundle().apply {
                     putLong("track_id_long", job.track.id.toLong())
@@ -1465,11 +1947,14 @@ open class PinnedDownloadManager(
             val stateFile = File(storageDir, "download_queue_state.json")
             val tmpFile = File(storageDir, "download_queue_state.json.tmp")
 
-            val activeJobs = jobs.values.filter {
-                it.state == DownloadState.QUEUED ||
-                it.state == DownloadState.DOWNLOADING ||
-                it.state == DownloadState.FINALIZING
-            }
+            val activeJobs = jobs.values
+                .filter {
+                    it.state == DownloadState.QUEUED ||
+                    it.state == DownloadState.WAITING_FOR_WIFI ||
+                    it.state == DownloadState.DOWNLOADING ||
+                    it.state == DownloadState.FINALIZING
+                }
+                .sortedBy { it.queueSequence }
 
             if (activeJobs.isEmpty()) {
                 if (stateFile.exists()) stateFile.delete()
@@ -1479,6 +1964,7 @@ open class PinnedDownloadManager(
 
             val sb = StringBuilder()
             sb.append("{\n")
+            sb.append("  \"network_policy\": \"${getDownloadNetworkPolicy().name}\",\n")
             val b = activeBatch
             if (b != null) {
                 sb.append("  \"batch\": {\n")
@@ -1513,6 +1999,8 @@ open class PinnedDownloadManager(
                 t.loudnessRangeLu?.let { fields.add("      \"loudness_range_lu\": $it") }
                 t.loudnessAnalysisVersion?.let { fields.add("      \"loudness_analysis_version\": $it") }
                 j.batchId?.let { fields.add("      \"batch_id\": \"${escapeJson(it)}\"") }
+                fields.add("      \"state\": \"${j.state.name}\"")
+                fields.add("      \"queue_sequence\": ${j.queueSequence}")
                 fields.add("      \"enqueued_at_ms\": ${j.enqueuedAtMs}")
                 "    {\n" + fields.joinToString(",\n") + "\n    }"
             }
@@ -1534,6 +2022,7 @@ open class PinnedDownloadManager(
 
     @Synchronized
     fun restoreQueueState(apiClient: CarApiClient = CarApiClient()): Int {
+        lastApiClient = apiClient
         val storageDir = store.getStorageDirectory()
         val stateFile = File(storageDir, "download_queue_state.json")
         if (!stateFile.exists() || stateFile.length() == 0L) {
@@ -1546,6 +2035,11 @@ open class PinnedDownloadManager(
             if (!content.startsWith("{") || !content.endsWith("}")) {
                 stateFile.delete()
                 return 0
+            }
+
+            val policyMatch = Regex(""""network_policy"\s*:\s*"([^"]+)"""").find(content)
+            if (policyMatch != null && context == null) {
+                inMemoryNetworkPolicy = DownloadNetworkPolicy.fromString(policyMatch.groupValues[1])
             }
 
             val propRegex = Regex(""""([^"]+)"\s*:\s*(?:"((?:\\.|[^"\\])*)"|(null)|(true|false)|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?))""")
@@ -1602,6 +2096,7 @@ open class PinnedDownloadManager(
             }
 
             // Parse jobs
+            val restoredTrackIds = mutableListOf<Long>()
             val jobsStart = content.indexOf("\"jobs\"")
             if (jobsStart != -1) {
                 val arrayStart = content.indexOf('[', jobsStart)
@@ -1651,25 +2146,35 @@ open class PinnedDownloadManager(
                         )
 
                         val bId = map["batch_id"]
+                        val enqAt = map["enqueued_at_ms"]?.toLongOrNull() ?: System.currentTimeMillis()
                         val newJob = DownloadJob(
                             track = track,
                             state = DownloadState.QUEUED,
                             totalBytes = track.sourceSizeBytes ?: 0L,
+                            enqueuedAtMs = enqAt,
                             attemptId = attemptCounter.incrementAndGet(),
                             batchId = bId,
+                            queueSequence = sequenceCounter.incrementAndGet(),
                         )
                         jobs[trackId] = newJob
                         restoredCount++
-                        notifyStarted(trackId)
-                        executor.submit { runDownloadJob(newJob, apiClient) }
+                        restoredTrackIds.add(trackId)
                     }
                 }
+            }
+
+            reconcileWaitingQueueStates()
+            for (trackId in restoredTrackIds) {
+                notifyStarted(trackId)
             }
 
             if (restoredCount > 0) {
                 serviceController?.onQueueActive()
             }
             persistQueueState()
+            if (restoredCount > 0 && isNetworkAllowedForDownload()) {
+                scheduleQueueProcessing(apiClient)
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to restore queue state", e)
             try { stateFile.delete() } catch (ignored: Exception) {}
