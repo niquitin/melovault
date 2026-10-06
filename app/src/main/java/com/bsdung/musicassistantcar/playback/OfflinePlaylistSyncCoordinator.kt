@@ -92,6 +92,8 @@ data class RemoteSyncSummary(
     val authoritativeListFetched: Boolean,
     val removedDeletedPlaylistIds: List<Int>,
     val reconciledResults: List<ReconcileResult>,
+    val authOrConfigError: Boolean = false,
+    val transientErrorCount: Int = 0,
 )
 
 data class EnableConfirmationPrompt(
@@ -106,17 +108,33 @@ class OfflinePlaylistSyncCoordinator(
     private val store: OfflineMetadataStore = downloadManager.getMetadataStore(),
     private val prefs: SharedPreferences? = null,
     private val playlistTracksFetcher: ((Int, CarApiClient) -> Pair<List<CarTrack>, Int>)? = null,
+    schedulerBackend: WorkSchedulerBackend = InMemoryWorkSchedulerBackend(),
+    private val persistenceFile: File = File(store.getStorageDirectory(), REGISTRY_FILE_NAME),
 ) {
     private val watchedPlaylists = LinkedHashMap<Int, WatchedPlaylistRecord>()
-    private val persistenceFile: File = File(store.getStorageDirectory(), REGISTRY_FILE_NAME)
+    @Volatile
+    private var lastBackgroundSyncAttemptAtMs: Long = 0L
+    @Volatile
+    private var lastBackgroundSyncSuccessAtMs: Long = 0L
+    @Volatile
+    private var lastBackgroundSyncDiagnostic: String? = null
+
+    val scheduler: OfflinePlaylistSyncScheduler = OfflinePlaylistSyncScheduler(
+        backend = schedulerBackend,
+        watchedCountProvider = { watchedPlaylists.size },
+    )
 
     init {
         loadWatchedPlaylists()
+        loadBackgroundSyncTimestamps()
+        scheduler.ensureScheduled()
     }
 
     companion object {
         const val PREF_WATCHED_PLAYLIST_IDS = "offline_sync_playlist_ids"
         const val PREF_WATCHED_PLAYLISTS_JSON = "offline_sync_playlists_json"
+        const val PREF_LAST_BG_SYNC_ATTEMPT_AT = "last_background_sync_attempt_at"
+        const val PREF_LAST_BG_SYNC_SUCCESS_AT = "last_background_sync_success_at"
         const val REGISTRY_FILE_NAME = "offline_sync_playlists.json"
         const val SOURCE_TYPE_PLAYLIST_AUTO_SYNC = "PLAYLIST_AUTO_SYNC"
 
@@ -135,13 +153,15 @@ class OfflinePlaylistSyncCoordinator(
         private var instance: OfflinePlaylistSyncCoordinator? = null
 
         fun getDefault(context: Context): OfflinePlaylistSyncCoordinator {
+            val appCtx = context.applicationContext
             return instance ?: synchronized(this) {
                 instance ?: OfflinePlaylistSyncCoordinator(
-                    downloadManager = PinnedDownloadManager.getDefault(context.applicationContext),
-                    prefs = context.applicationContext.getSharedPreferences(
+                    downloadManager = PinnedDownloadManager.getDefault(appCtx),
+                    prefs = appCtx.getSharedPreferences(
                         PinnedDownloadManager.PREFS_NAME,
                         Context.MODE_PRIVATE,
                     ),
+                    schedulerBackend = AndroidWorkManagerBackend(appCtx),
                 ).also { instance = it }
             }
         }
@@ -152,6 +172,37 @@ class OfflinePlaylistSyncCoordinator(
             val st = track.status.trim().lowercase()
             if (st in UNSUPPORTED_STATUSES) return false
             return true
+        }
+
+        internal fun isAuthOrConfigFailure(exc: Throwable): Boolean {
+            if (exc is SecurityException) return true
+            val msg = (exc.message ?: "") + " " + (exc.cause?.message ?: "")
+            return msg.contains("Backend 401") ||
+                msg.contains("Backend 403") ||
+                msg.contains("HTTP 401") ||
+                msg.contains("HTTP 403") ||
+                msg.contains("Unauthorized", ignoreCase = true) ||
+                msg.contains("Forbidden", ignoreCase = true)
+        }
+    }
+
+    @Synchronized
+    fun ensureBackgroundSyncScheduled(): Boolean {
+        return scheduler.ensureScheduled()
+    }
+
+    fun getLastBackgroundSyncAttemptAtMs(): Long = lastBackgroundSyncAttemptAtMs
+
+    fun getLastBackgroundSyncSuccessAtMs(): Long = lastBackgroundSyncSuccessAtMs
+
+    fun getLastBackgroundSyncDiagnostic(): String? = lastBackgroundSyncDiagnostic
+
+    @Synchronized
+    fun formatBackgroundSyncInfoLine(): String {
+        return if (watchedPlaylists.isNotEmpty()) {
+            "Tự đồng bộ nền: 6 giờ/lần"
+        } else {
+            "Tự đồng bộ nền: chưa bật"
         }
     }
 
@@ -196,6 +247,7 @@ class OfflinePlaylistSyncCoordinator(
         )
         watchedPlaylists[playlistId] = record
         persistWatchedPlaylists()
+        scheduler.ensureScheduled()
         return record
     }
 
@@ -223,6 +275,7 @@ class OfflinePlaylistSyncCoordinator(
         if (removed) {
             persistWatchedPlaylists()
         }
+        scheduler.ensureScheduled()
         return removed
     }
 
@@ -235,6 +288,7 @@ class OfflinePlaylistSyncCoordinator(
         persistWatchedPlaylists()
         return true
     }
+
 
     @Synchronized
     fun classifyPlaylist(
@@ -655,7 +709,10 @@ class OfflinePlaylistSyncCoordinator(
      */
     @Synchronized
     fun reconcileAuthoritativePlaylistList(authoritativePlaylists: List<CarPlaylist>): List<Int> {
-        if (watchedPlaylists.isEmpty()) return emptyList()
+        if (watchedPlaylists.isEmpty()) {
+            scheduler.ensureScheduled()
+            return emptyList()
+        }
         val authoritativeById = authoritativePlaylists.associateBy { it.id }
         val removedIds = mutableListOf<Int>()
         var changed = false
@@ -679,6 +736,7 @@ class OfflinePlaylistSyncCoordinator(
         if (changed) {
             persistWatchedPlaylists()
         }
+        scheduler.ensureScheduled()
         return removedIds
     }
 
@@ -690,6 +748,7 @@ class OfflinePlaylistSyncCoordinator(
     fun syncAllWatchedPlaylistsFromRemote(apiClient: CarApiClient = CarApiClient()): RemoteSyncSummary {
         val watchedSnapshot = getWatchedPlaylists()
         if (watchedSnapshot.isEmpty()) {
+            scheduler.ensureScheduled()
             return RemoteSyncSummary(
                 authoritativeListFetched = true,
                 removedDeletedPlaylistIds = emptyList(),
@@ -697,21 +756,37 @@ class OfflinePlaylistSyncCoordinator(
             )
         }
 
-        val remotePlaylists = try {
-            apiClient.playlists()
-        } catch (_: Exception) {
+        if (!apiClient.hasValidConfiguration()) {
             return RemoteSyncSummary(
                 authoritativeListFetched = false,
                 removedDeletedPlaylistIds = emptyList(),
                 reconciledResults = emptyList(),
+                authOrConfigError = true,
+                transientErrorCount = 0,
+            )
+        }
+
+        val remotePlaylists = try {
+            apiClient.playlists()
+        } catch (exc: Exception) {
+            val isAuth = isAuthOrConfigFailure(exc)
+            return RemoteSyncSummary(
+                authoritativeListFetched = false,
+                removedDeletedPlaylistIds = emptyList(),
+                reconciledResults = emptyList(),
+                authOrConfigError = isAuth,
+                transientErrorCount = if (isAuth) 0 else 1,
             )
         }
 
         val removedIds = reconcileAuthoritativePlaylistList(remotePlaylists)
         val remainingWatched = getWatchedPlaylists()
         val results = mutableListOf<ReconcileResult>()
+        var authError = false
+        var transientErrors = 0
 
         for (record in remainingWatched) {
+            var trackFetchError: Throwable? = null
             val fetched = try {
                 if (playlistTracksFetcher != null) {
                     playlistTracksFetcher.invoke(record.playlistId, apiClient)
@@ -722,15 +797,31 @@ class OfflinePlaylistSyncCoordinator(
                     )
                     Pair(playbackRes.items, playbackRes.skipped)
                 }
-            } catch (_: Exception) {
-                try {
-                    val (items, total) = apiClient.playlistTracksWithTotal(record.playlistId, 1000, 0)
-                    val skipped = (total - items.size).coerceAtLeast(0)
-                    Pair(items, skipped)
-                } catch (_: Exception) {
+            } catch (e1: Exception) {
+                trackFetchError = e1
+                if (playlistTracksFetcher != null) {
                     null
+                } else {
+                    try {
+                        val (items, total) = apiClient.playlistTracksWithTotal(record.playlistId, 1000, 0)
+                        val skipped = (total - items.size).coerceAtLeast(0)
+                        trackFetchError = null
+                        Pair(items, skipped)
+                    } catch (e2: Exception) {
+                        trackFetchError = e2
+                        null
+                    }
                 }
-            } ?: continue
+            }
+
+            if (fetched == null) {
+                if (trackFetchError != null && isAuthOrConfigFailure(trackFetchError!!)) {
+                    authError = true
+                } else {
+                    transientErrors++
+                }
+                continue
+            }
 
             val (tracks, skippedCount) = fetched
             val res = reconcilePlaylist(
@@ -743,11 +834,120 @@ class OfflinePlaylistSyncCoordinator(
             results.add(res)
         }
 
+        scheduler.ensureScheduled()
         return RemoteSyncSummary(
             authoritativeListFetched = true,
             removedDeletedPlaylistIds = removedIds,
             reconciledResults = results,
+            authOrConfigError = authError,
+            transientErrorCount = transientErrors,
         )
+    }
+
+    /**
+     * Headless execution entrypoint used by [OfflinePlaylistSyncWorker].
+     * Never acquires a WakeLock, never starts a foreground worker, never transfers audio bytes directly.
+     */
+    fun executeBackgroundSyncRun(
+        apiClient: CarApiClient = CarApiClient(),
+        runAttemptCount: Int = 0,
+        nowMs: Long = System.currentTimeMillis(),
+    ): BackgroundSyncRunResult {
+        recordBackgroundSyncAttempt(nowMs)
+        reloadWatchedPlaylists()
+
+        if (getWatchedPlaylists().isEmpty()) {
+            recordBackgroundSyncSuccess(nowMs, "NO_WATCHED_PLAYLISTS")
+            return BackgroundSyncRunResult(
+                disposition = BackgroundSyncDisposition.SUCCESS,
+                diagnostic = "NO_WATCHED_PLAYLISTS",
+                enqueuedTrackCount = 0,
+                summary = null,
+            )
+        }
+
+        if (!apiClient.hasValidConfiguration()) {
+            lastBackgroundSyncDiagnostic = "CONFIG_UNAVAILABLE"
+            return BackgroundSyncRunResult(
+                disposition = BackgroundSyncDisposition.SUCCESS,
+                diagnostic = "CONFIG_UNAVAILABLE",
+                enqueuedTrackCount = 0,
+                summary = null,
+            )
+        }
+
+        val summary = syncAllWatchedPlaylistsFromRemote(apiClient)
+        val totalEnqueued = summary.reconciledResults.sumOf { it.enqueuedCount }
+
+        if (summary.authOrConfigError) {
+            lastBackgroundSyncDiagnostic = "AUTH_OR_CONFIG_ERROR"
+            return BackgroundSyncRunResult(
+                disposition = BackgroundSyncDisposition.SUCCESS,
+                diagnostic = "AUTH_OR_CONFIG_ERROR",
+                enqueuedTrackCount = totalEnqueued,
+                summary = summary,
+            )
+        }
+
+        if (!summary.authoritativeListFetched || summary.transientErrorCount > 0) {
+            return if (runAttemptCount < OfflinePlaylistSyncScheduler.MAX_RETRY_ATTEMPTS) {
+                val diag = "TRANSIENT_FETCH_ERROR_RETRY_${runAttemptCount + 1}"
+                lastBackgroundSyncDiagnostic = diag
+                BackgroundSyncRunResult(
+                    disposition = BackgroundSyncDisposition.RETRY,
+                    diagnostic = diag,
+                    enqueuedTrackCount = totalEnqueued,
+                    summary = summary,
+                )
+            } else {
+                val diag = "TRANSIENT_FETCH_ERROR_BOUNDED_STOP"
+                lastBackgroundSyncDiagnostic = diag
+                BackgroundSyncRunResult(
+                    disposition = BackgroundSyncDisposition.SUCCESS,
+                    diagnostic = diag,
+                    enqueuedTrackCount = totalEnqueued,
+                    summary = summary,
+                )
+            }
+        }
+
+        recordBackgroundSyncSuccess(nowMs, "OK")
+        return BackgroundSyncRunResult(
+            disposition = BackgroundSyncDisposition.SUCCESS,
+            diagnostic = "OK",
+            enqueuedTrackCount = totalEnqueued,
+            summary = summary,
+        )
+    }
+
+    private fun loadBackgroundSyncTimestamps() {
+        if (prefs == null) return
+        try {
+            lastBackgroundSyncAttemptAtMs = prefs.getLong(PREF_LAST_BG_SYNC_ATTEMPT_AT, 0L)
+            lastBackgroundSyncSuccessAtMs = prefs.getLong(PREF_LAST_BG_SYNC_SUCCESS_AT, 0L)
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun recordBackgroundSyncAttempt(nowMs: Long) {
+        lastBackgroundSyncAttemptAtMs = nowMs
+        if (prefs != null) {
+            try {
+                prefs.edit().putLong(PREF_LAST_BG_SYNC_ATTEMPT_AT, nowMs).apply()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun recordBackgroundSyncSuccess(nowMs: Long, diagnostic: String) {
+        lastBackgroundSyncSuccessAtMs = nowMs
+        lastBackgroundSyncDiagnostic = diagnostic
+        if (prefs != null) {
+            try {
+                prefs.edit().putLong(PREF_LAST_BG_SYNC_SUCCESS_AT, nowMs).apply()
+            } catch (_: Exception) {
+            }
+        }
     }
 
     fun buildEnableConfirmationPrompt(
@@ -773,6 +973,7 @@ class OfflinePlaylistSyncCoordinator(
             append("Dung lượng biết trước: $knownBytesLabel\n")
             append("Mạng tải xuống: $networkLabel\n")
             append("Giới hạn offline: $capLabel · Còn trống: $freeLabel\n")
+            append("Tự đồng bộ nền: 6 giờ/lần\n")
             if (classification.unknownSizeCount > 0) {
                 append("Có ${classification.unknownSizeCount} bài chưa rõ dung lượng.\n")
             }
@@ -780,7 +981,7 @@ class OfflinePlaylistSyncCoordinator(
                 append("Có ${classification.unsupportedCount} bài không thể tải offline.\n")
             }
             append("\n")
-            append("Khi thêm bài mới vào playlist này, MeloVault sẽ tự tải offline các bài còn thiếu khi mở ứng dụng hoặc làm mới playlist.\n")
+            append("Khi thêm bài mới vào playlist này, MeloVault sẽ tự tải offline các bài còn thiếu khi mở ứng dụng, làm mới playlist hoặc kiểm tra nền định kỳ.\n")
             append("Khi xóa bài khỏi playlist hoặc tắt chế độ này, các file đã tải vẫn được giữ lại.")
         }
 
@@ -794,7 +995,9 @@ class OfflinePlaylistSyncCoordinator(
     fun reloadWatchedPlaylists() {
         watchedPlaylists.clear()
         loadWatchedPlaylists()
+        scheduler.ensureScheduled()
     }
+
 
     @Synchronized
     private fun loadWatchedPlaylists() {

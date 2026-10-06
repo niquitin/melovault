@@ -165,6 +165,9 @@ open class CarApiClient {
         }
     }
 
+    open fun hasValidConfiguration(): Boolean =
+        endpoints.isNotEmpty()
+
     fun baseUrl(): String =
         activeBaseUrl ?: probe()
 

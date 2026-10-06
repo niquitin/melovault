@@ -117,6 +117,9 @@ class MusicService : MediaLibraryService() {
         Log.i(TAG, "onCreate: Initializing MusicService on thread=${Thread.currentThread().name}")
 
         trackResumeStore = TrackResumeStore.create(this)
+        runCatching {
+            OfflinePlaylistSyncCoordinator.getDefault(this).ensureBackgroundSyncScheduled()
+        }
 
         val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         val mobile = prefs.getBoolean("mobile_320", false)

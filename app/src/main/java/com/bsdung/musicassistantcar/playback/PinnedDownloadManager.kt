@@ -2130,8 +2130,18 @@ open class PinnedDownloadManager(
                         val trackId = map["track_id"]?.toLongOrNull() ?: continue
                         if (trackId <= 0L) continue
 
-                        // Skip if already offline ready
+                        // Skip if already offline ready or already active in queue
                         if (isOfflineReady(trackId)) continue
+                        val existingJob = jobs[trackId]
+                        if (existingJob != null && (
+                                existingJob.state == DownloadState.QUEUED ||
+                                existingJob.state == DownloadState.WAITING_FOR_WIFI ||
+                                existingJob.state == DownloadState.DOWNLOADING ||
+                                existingJob.state == DownloadState.FINALIZING
+                            )
+                        ) {
+                            continue
+                        }
 
                         val track = CarTrack(
                             id = trackId.toInt(),

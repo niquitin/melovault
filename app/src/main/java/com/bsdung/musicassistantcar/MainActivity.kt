@@ -303,6 +303,10 @@ class MainActivity : AppCompatActivity() {
         // Start service explicitly for sticky automotive lifecycle
         val serviceIntent = Intent(this, MusicService::class.java)
         startService(serviceIntent)
+        runCatching {
+            com.bsdung.musicassistantcar.playback.OfflinePlaylistSyncCoordinator.getDefault(this)
+                .ensureBackgroundSyncScheduled()
+        }
 
         if (savedInstanceState != null) {
             savedRecyclerState = savedInstanceState.getParcelable("recycler_state")
@@ -2143,10 +2147,16 @@ class MainActivity : AppCompatActivity() {
         if (status.isWatched) {
             binding.btnPlaylistSyncNow.visibility = View.VISIBLE
             binding.txtPlaylistSyncStatus.visibility = View.VISIBLE
-            val line = if (!status.secondaryStatusText.isNullOrBlank() && !status.statusText.contains(status.secondaryStatusText)) {
+            val baseLine = if (!status.secondaryStatusText.isNullOrBlank() && !status.statusText.contains(status.secondaryStatusText)) {
                 "${status.statusText} · ${status.secondaryStatusText}"
             } else {
                 status.statusText
+            }
+            val bgInfo = coordinator.formatBackgroundSyncInfoLine()
+            val line = if (!baseLine.contains(bgInfo)) {
+                "$baseLine · $bgInfo"
+            } else {
+                baseLine
             }
             binding.txtPlaylistSyncStatus.text = line
         } else {

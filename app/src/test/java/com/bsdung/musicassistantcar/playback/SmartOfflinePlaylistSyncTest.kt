@@ -788,6 +788,7 @@ class SmartOfflinePlaylistSyncTest {
     @Test
     fun test53_processRestartRecovery() {
         val track1DoneLatch = CountDownLatch(1)
+        val track2StartedLatch = CountDownLatch(1)
         val holdTrack2Latch = CountDownLatch(1)
 
         val manager1 = PinnedDownloadManager(
@@ -795,6 +796,7 @@ class SmartOfflinePlaylistSyncTest {
             executor = Executors.newSingleThreadExecutor(),
             streamOpener = { track, _ ->
                 if (track.id == 702) {
+                    track2StartedLatch.countDown()
                     holdTrack2Latch.await(5, TimeUnit.SECONDS)
                 }
                 val bytes = ByteArray(4_000) { 8 }
@@ -811,16 +813,19 @@ class SmartOfflinePlaylistSyncTest {
         val tracks = listOf(sampleTrack(701), sampleTrack(702), sampleTrack(703))
         coordinator1.enableWatchAndSync(77, "Persisted Playlist 77", tracks)
         assertTrue(track1DoneLatch.await(5, TimeUnit.SECONDS))
+        assertTrue(track2StartedLatch.await(5, TimeUnit.SECONDS))
         assertTrue(manager1.isOfflineReady(701L))
 
         // Simulate process restart with new Store, new PinnedDownloadManager, new Coordinator
         val restartedDownloads = java.util.Collections.synchronizedList(mutableListOf<Int>())
         val remainingLatch = CountDownLatch(2)
+        val startRecoveryLatch = CountDownLatch(1)
         val store2 = OfflineMetadataStore(storeDir)
         val manager2 = PinnedDownloadManager(
             store = store2,
             executor = Executors.newSingleThreadExecutor(),
             streamOpener = { track, _ ->
+                startRecoveryLatch.await(5, TimeUnit.SECONDS)
                 restartedDownloads.add(track.id)
                 val bytes = ByteArray(4_000) { 9 }
                 Pair(ByteArrayInputStream(bytes), bytes.size.toLong())
@@ -831,6 +836,7 @@ class SmartOfflinePlaylistSyncTest {
                 remainingLatch.countDown()
             }
         })
+        startRecoveryLatch.countDown()
 
         val coordinator2 = OfflinePlaylistSyncCoordinator(downloadManager = manager2)
         assertTrue("Playlist 77 must remain watched across process restart", coordinator2.isPlaylistWatched(77))
