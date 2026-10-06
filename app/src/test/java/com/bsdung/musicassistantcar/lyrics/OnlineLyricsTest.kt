@@ -744,5 +744,460 @@ class OnlineLyricsTest {
         assertTrue(isPlaying)
         assertEquals(1_500L, playbackPositionMs)
     }
+
+    // =========================================================================
+    // 55. FULLSCREEN CAR LYRICS UNIT TESTS (v0.6.30 — SECTION 21)
+    // =========================================================================
+
+    @Test
+    fun `fullscreen 01 entering fullscreen does not trigger duplicate network lookup when lyrics already loaded`() {
+        val cacheDir = tempFolder.newFolder("fullscreen_no_duplicate_lookup")
+        val cache = LyricsCache(cacheDir = cacheDir)
+        val networkCalls = AtomicInteger(0)
+        val repo = LyricsRepository(
+            cache = cache,
+            lookupFetcher = { _, _, _, _, _, _, _, _ ->
+                networkCalls.incrementAndGet()
+                LyricsLookupResult(
+                    status = LyricsStatus.SYNCED,
+                    provider = "lrclib",
+                    providerRecordId = "14169",
+                    syncedLyrics = "[00:05.00]Line 1\n[00:12.00]Line 2\n[00:20.00]Line 3",
+                )
+            },
+        )
+        val controller = LyricsSessionController(repository = repo)
+        val meta = LyricsTrackMetadata(
+            trackKey = "7017",
+            title = "Lydia",
+            artist = "F.I.R",
+            album = "F.I.R",
+            durationMs = 238_934L,
+        )
+
+        // Load in inline panel first
+        controller.loadSynchronously(meta, currentPositionMs = 6_000L)
+        assertEquals(1, networkCalls.get())
+        assertTrue(controller.uiState is LyricsUiState.Synced)
+        assertEquals(0, controller.activeLineIndex)
+
+        // Enter fullscreen on the same track -> reuses already-loaded state without any lookup
+        val stateOnFullscreen = controller.enterFullscreen(meta, currentPositionMs = 13_000L)
+        assertTrue(controller.isFullscreenVisible)
+        assertEquals(1, networkCalls.get())
+        assertTrue(stateOnFullscreen is LyricsUiState.Synced)
+        assertEquals(1, controller.activeLineIndex)
+        assertEquals(1, (stateOnFullscreen as LyricsUiState.Synced).activeLineIndex)
+    }
+
+    @Test
+    fun `fullscreen 02 exiting fullscreen preserves current playback and lyric state`() {
+        val cacheDir = tempFolder.newFolder("fullscreen_exit_preserves_state")
+        val cache = LyricsCache(cacheDir = cacheDir)
+        val repo = LyricsRepository(
+            cache = cache,
+            lookupFetcher = { _, _, _, _, _, _, _, _ ->
+                LyricsLookupResult(
+                    status = LyricsStatus.SYNCED,
+                    syncedLyrics = "[00:05.00]Line 1\n[00:15.00]Line 2\n[00:25.00]Line 3",
+                )
+            },
+        )
+        val controller = LyricsSessionController(repository = repo)
+        val meta = LyricsTrackMetadata(
+            trackKey = "7017",
+            title = "Lydia",
+            artist = "F.I.R",
+            durationMs = 238_934L,
+        )
+
+        controller.enterFullscreen(meta, currentPositionMs = 16_000L)
+        assertTrue(controller.isFullscreenVisible)
+        assertEquals(1, controller.activeLineIndex)
+
+        // Exit fullscreen -> lyric state, active line index, and signature remain intact
+        controller.exitFullscreen()
+        assertFalse(controller.isFullscreenVisible)
+        assertTrue(controller.uiState is LyricsUiState.Synced)
+        assertEquals(1, controller.activeLineIndex)
+        assertEquals(meta.cacheSignature(), controller.currentSignature)
+    }
+
+    @Test
+    fun `fullscreen 03 synced line progression updates active index and centered scroll offset`() {
+        val cacheDir = tempFolder.newFolder("fullscreen_progression_and_offset")
+        val cache = LyricsCache(cacheDir = cacheDir)
+        val repo = LyricsRepository(
+            cache = cache,
+            lookupFetcher = { _, _, _, _, _, _, _, _ ->
+                LyricsLookupResult(
+                    status = LyricsStatus.SYNCED,
+                    syncedLyrics = "[00:03.00]Intro\n[00:10.00]Verse 1\n[00:20.00]Chorus\n[00:35.00]Outro",
+                )
+            },
+        )
+        val controller = LyricsSessionController(repository = repo)
+        val meta = LyricsTrackMetadata(
+            trackKey = "7017",
+            title = "Lydia",
+            artist = "F.I.R",
+            durationMs = 238_934L,
+        )
+
+        controller.enterFullscreen(meta, currentPositionMs = 1_000L)
+        assertEquals(-1, controller.activeLineIndex)
+
+        assertTrue(controller.onPositionUpdated(3_200L))
+        assertEquals(0, controller.activeLineIndex)
+        assertEquals(0, controller.scrollPositionIndex)
+
+        assertTrue(controller.onPositionUpdated(21_000L))
+        assertEquals(2, controller.activeLineIndex)
+        assertEquals(2, controller.scrollPositionIndex)
+
+        // Verify centered scroll offset places active line near 40%-50% from top of viewport
+        val viewportHeightPx = 500
+        val itemHeightPx = 64
+        val offsetPx = LyricsSessionController.computeCenteredScrollOffset(viewportHeightPx, itemHeightPx)
+        val itemCenterRatio = (offsetPx + itemHeightPx / 2).toFloat() / viewportHeightPx.toFloat()
+        assertTrue("Expected item center between 0.40 and 0.50, got $itemCenterRatio", itemCenterRatio in 0.40f..0.50f)
+    }
+
+    @Test
+    fun `fullscreen 04 manual scroll sets follow mode false while active line highlight continues updating`() {
+        val cacheDir = tempFolder.newFolder("fullscreen_manual_scroll")
+        val cache = LyricsCache(cacheDir = cacheDir)
+        val repo = LyricsRepository(
+            cache = cache,
+            lookupFetcher = { _, _, _, _, _, _, _, _ ->
+                LyricsLookupResult(
+                    status = LyricsStatus.SYNCED,
+                    syncedLyrics = "[00:05.00]Line 0\n[00:10.00]Line 1\n[00:15.00]Line 2",
+                )
+            },
+        )
+        val controller = LyricsSessionController(repository = repo)
+        val meta = LyricsTrackMetadata(
+            trackKey = "7017",
+            title = "Lydia",
+            artist = "F.I.R",
+            durationMs = 238_934L,
+        )
+
+        controller.enterFullscreen(meta, currentPositionMs = 6_000L)
+        assertEquals(0, controller.activeLineIndex)
+        assertEquals(0, controller.scrollPositionIndex)
+        assertTrue(controller.autoFollow)
+
+        // User scrolls manually
+        controller.onUserManualScroll()
+        assertFalse(controller.autoFollow)
+        assertFalse((controller.uiState as LyricsUiState.Synced).autoFollow)
+
+        // Playback advances to Line 2 -> activeLineIndex updates, but scrollPositionIndex stays at 0
+        assertTrue(controller.onPositionUpdated(16_000L))
+        assertEquals(2, controller.activeLineIndex)
+        assertEquals(0, controller.scrollPositionIndex)
+    }
+
+    @Test
+    fun `fullscreen 05 Theo nhac button sets follow mode true and returns to active line`() {
+        val cacheDir = tempFolder.newFolder("fullscreen_resume_follow")
+        val cache = LyricsCache(cacheDir = cacheDir)
+        val repo = LyricsRepository(
+            cache = cache,
+            lookupFetcher = { _, _, _, _, _, _, _, _ ->
+                LyricsLookupResult(
+                    status = LyricsStatus.SYNCED,
+                    syncedLyrics = "[00:05.00]Line 0\n[00:10.00]Line 1\n[00:15.00]Line 2",
+                )
+            },
+        )
+        val controller = LyricsSessionController(repository = repo)
+        val meta = LyricsTrackMetadata(
+            trackKey = "7017",
+            title = "Lydia",
+            artist = "F.I.R",
+            durationMs = 238_934L,
+        )
+
+        controller.enterFullscreen(meta, currentPositionMs = 6_000L)
+        controller.onUserManualScroll()
+        controller.onPositionUpdated(16_000L)
+        assertFalse(controller.autoFollow)
+        assertEquals(2, controller.activeLineIndex)
+        assertEquals(0, controller.scrollPositionIndex)
+
+        // Tapping "Theo nhạc" re-enables autoFollow and scrolls to current active line (index 2)
+        controller.onResumeAutoFollow(currentPositionMs = 16_500L)
+        assertTrue(controller.autoFollow)
+        assertTrue((controller.uiState as LyricsUiState.Synced).autoFollow)
+        assertEquals(2, controller.activeLineIndex)
+        assertEquals(2, controller.scrollPositionIndex)
+    }
+
+    @Test
+    fun `fullscreen 06 tapping synced line triggers seek callback with expected timestamp and enables follow`() {
+        val cacheDir = tempFolder.newFolder("fullscreen_tap_to_seek")
+        val cache = LyricsCache(cacheDir = cacheDir)
+        val repo = LyricsRepository(
+            cache = cache,
+            lookupFetcher = { _, _, _, _, _, _, _, _ ->
+                LyricsLookupResult(
+                    status = LyricsStatus.SYNCED,
+                    syncedLyrics = "[00:05.00]Line 0\n[00:12.50]Line 1\n[00:24.75]Line 2",
+                )
+            },
+        )
+        val seekedTimestamps = mutableListOf<Long>()
+        val controller = LyricsSessionController(
+            repository = repo,
+            onSeekRequested = { seekedTimestamps.add(it) },
+        )
+        val meta = LyricsTrackMetadata(
+            trackKey = "7017",
+            title = "Lydia",
+            artist = "F.I.R",
+            durationMs = 238_934L,
+        )
+
+        val state = controller.enterFullscreen(meta, currentPositionMs = 6_000L) as LyricsUiState.Synced
+        controller.onUserManualScroll()
+        assertFalse(controller.autoFollow)
+
+        // User taps Line 2 (24_750L)
+        controller.onLineTapped(state.lines[2])
+        assertEquals(listOf(24_750L), seekedTimestamps)
+        assertTrue(controller.autoFollow)
+        assertEquals(2, controller.activeLineIndex)
+        assertEquals(2, controller.scrollPositionIndex)
+    }
+
+    @Test
+    fun `fullscreen 07 plain lyrics mode does not seek when tapped`() {
+        val cacheDir = tempFolder.newFolder("fullscreen_plain_no_seek")
+        val cache = LyricsCache(cacheDir = cacheDir)
+        val repo = LyricsRepository(
+            cache = cache,
+            lookupFetcher = { _, _, _, _, _, _, _, _ ->
+                LyricsLookupResult(
+                    status = LyricsStatus.PLAIN,
+                    plainLyrics = "Unsynced line 1\nUnsynced line 2",
+                )
+            },
+        )
+        val seekedTimestamps = mutableListOf<Long>()
+        val controller = LyricsSessionController(
+            repository = repo,
+            onSeekRequested = { seekedTimestamps.add(it) },
+        )
+        val meta = LyricsTrackMetadata(
+            trackKey = "129",
+            title = "존재의 이유",
+            artist = "김종환",
+            durationMs = 282_000L,
+        )
+
+        val state = controller.enterFullscreen(meta)
+        assertTrue(state is LyricsUiState.Plain)
+        controller.onPlainLyricsTapped()
+        assertTrue(seekedTimestamps.isEmpty())
+    }
+
+    @Test
+    fun `fullscreen 08 track change resets active line and scroll follow state cleanly`() {
+        val cacheDir = tempFolder.newFolder("fullscreen_track_change_reset")
+        val cache = LyricsCache(cacheDir = cacheDir)
+        val repo = LyricsRepository(
+            cache = cache,
+            lookupFetcher = { _, _, _, _, _, _, _, _ ->
+                LyricsLookupResult(
+                    status = LyricsStatus.SYNCED,
+                    syncedLyrics = "[00:05.00]Line 0\n[00:15.00]Line 1",
+                )
+            },
+        )
+        val controller = LyricsSessionController(repository = repo)
+        val trackA = LyricsTrackMetadata(trackKey = "7017", title = "Lydia", artist = "F.I.R", durationMs = 238_934L)
+        val trackB = LyricsTrackMetadata(trackKey = "7018", title = "Next Song", artist = "F.I.R", durationMs = 210_000L)
+
+        controller.enterFullscreen(trackA, currentPositionMs = 16_000L)
+        controller.onUserManualScroll()
+        assertEquals(1, controller.activeLineIndex)
+        assertFalse(controller.autoFollow)
+
+        // Track changes to trackB while fullscreen is open
+        val tokenB = controller.onTrackChanged(trackB)
+        assertNotNull(tokenB)
+        assertEquals(-1, controller.activeLineIndex)
+        assertEquals(0, controller.scrollPositionIndex)
+        assertTrue(controller.autoFollow)
+        assertTrue(controller.uiState is LyricsUiState.Loading)
+        assertEquals("Next Song", (controller.uiState as LyricsUiState.Loading).title)
+    }
+
+    @Test
+    fun `fullscreen 09 stale async lyric result from track A is ignored after switching to track B while fullscreen is open`() {
+        val cacheDir = tempFolder.newFolder("fullscreen_stale_async_guard")
+        val cache = LyricsCache(cacheDir = cacheDir)
+        val repo = LyricsRepository(
+            cache = cache,
+            lookupFetcher = { _, _, _, _, _, _, _, _ ->
+                LyricsLookupResult(status = LyricsStatus.NOT_FOUND)
+            },
+        )
+        val controller = LyricsSessionController(repository = repo)
+        val trackA = LyricsTrackMetadata(trackKey = "track:A", title = "Song A", artist = "Artist A", durationMs = 200_000L)
+        val trackB = LyricsTrackMetadata(trackKey = "track:B", title = "Song B", artist = "Artist B", durationMs = 210_000L)
+
+        controller.enterFullscreen(trackA)
+        val tokenA = controller.onTrackChanged(trackA)!!
+        val tokenB = controller.onTrackChanged(trackB)!!
+
+        // Stale result from Track A arrives while fullscreen is open on Track B
+        val staleResultA = LyricsLookupResult(
+            status = LyricsStatus.SYNCED,
+            syncedLyrics = "[00:01.00]Stale Song A line",
+        )
+        assertFalse(controller.applyResultIfCurrent(tokenA, staleResultA, currentPositionMs = 2_000L))
+        assertTrue(controller.uiState is LyricsUiState.Loading)
+
+        // Result from Track B arrives and is applied
+        val validResultB = LyricsLookupResult(
+            status = LyricsStatus.SYNCED,
+            syncedLyrics = "[00:01.00]Fresh Song B line",
+        )
+        assertTrue(controller.applyResultIfCurrent(tokenB, validResultB, currentPositionMs = 2_000L))
+        assertEquals("Fresh Song B line", (controller.uiState as LyricsUiState.Synced).lines[0].text)
+    }
+
+    @Test
+    fun `fullscreen 10 not found and temporary error state transitions and retry`() {
+        val cacheDir = tempFolder.newFolder("fullscreen_not_found_and_retry")
+        val cache = LyricsCache(cacheDir = cacheDir)
+        var mode = "ERROR"
+        val repo = LyricsRepository(
+            cache = cache,
+            lookupFetcher = { _, _, _, _, _, _, _, _ ->
+                when (mode) {
+                    "ERROR" -> LyricsLookupResult(status = LyricsStatus.TEMPORARY_ERROR, diagnostic = "network_down")
+                    "NOT_FOUND" -> LyricsLookupResult(status = LyricsStatus.NOT_FOUND)
+                    else -> LyricsLookupResult(
+                        status = LyricsStatus.SYNCED,
+                        syncedLyrics = "[00:04.00]Recovered after retry",
+                    )
+                }
+            },
+        )
+        val controller = LyricsSessionController(repository = repo)
+        val meta = LyricsTrackMetadata(trackKey = "11200", title = "Duyên Kiếp", artist = "Artist", durationMs = 240_000L)
+
+        // 1. TemporaryError
+        val errState = controller.enterFullscreen(meta)
+        assertTrue(errState is LyricsUiState.TemporaryError)
+
+        // 2. Retry -> NotFound
+        mode = "NOT_FOUND"
+        val nfState = controller.retryCurrentTrack(meta)
+        assertTrue(nfState is LyricsUiState.NotFound)
+
+        // 3. Retry with forceRefresh -> Synced
+        mode = "SYNCED"
+        val syncedState = controller.retryCurrentTrack(meta, currentPositionMs = 5_000L) as LyricsUiState.Synced
+        assertEquals("Recovered after retry", syncedState.lines[0].text)
+        assertEquals(0, syncedState.activeLineIndex)
+    }
+
+    @Test
+    fun `fullscreen 11 screen awake flag enabled on fullscreen enter and cleared on exit or background`() {
+        val cacheDir = tempFolder.newFolder("fullscreen_keep_screen_on")
+        val cache = LyricsCache(cacheDir = cacheDir)
+        val repo = LyricsRepository(
+            cache = cache,
+            lookupFetcher = { _, _, _, _, _, _, _, _ -> LyricsLookupResult(status = LyricsStatus.NOT_FOUND) },
+        )
+        val controller = LyricsSessionController(repository = repo)
+        val meta = LyricsTrackMetadata(trackKey = "7017", title = "Lydia", artist = "F.I.R", durationMs = 238_934L)
+
+        // Initially not in fullscreen
+        assertFalse(controller.isKeepScreenOnEnabled)
+
+        // Enter fullscreen while in foreground -> keep screen on enabled
+        controller.onActivityForegroundChanged(true)
+        controller.enterFullscreen(meta)
+        assertTrue(controller.isKeepScreenOnEnabled)
+
+        // Activity goes to background -> keep screen on cleared immediately
+        controller.onActivityForegroundChanged(false)
+        assertFalse(controller.isKeepScreenOnEnabled)
+
+        // Activity returns to foreground while fullscreen still open -> re-enabled
+        controller.onActivityForegroundChanged(true)
+        assertTrue(controller.isKeepScreenOnEnabled)
+
+        // Exit fullscreen -> keep screen on cleared immediately
+        controller.exitFullscreen()
+        assertFalse(controller.isKeepScreenOnEnabled)
+    }
+
+    @Test
+    fun `fullscreen 12 works identically for remote stream offline internal offline SD and Device Music track models`() {
+        val cacheDir = tempFolder.newFolder("fullscreen_all_sources")
+        val cache = LyricsCache(cacheDir = cacheDir)
+        val networkCalls = AtomicInteger(0)
+        val repo = LyricsRepository(
+            cache = cache,
+            lookupFetcher = { _, _, _, _, _, _, _, _ ->
+                networkCalls.incrementAndGet()
+                LyricsLookupResult(
+                    status = LyricsStatus.SYNCED,
+                    provider = "lrclib",
+                    providerRecordId = "777",
+                    syncedLyrics = "[00:05.00]Unified lyric line across all sources",
+                )
+            },
+        )
+        val controller = LyricsSessionController(repository = repo)
+
+        val remoteTrack = LyricsTrackMetadata(
+            trackKey = "7017",
+            title = "Lydia",
+            artist = "F.I.R",
+            album = "F.I.R",
+            durationMs = 238_000L,
+            isDeviceLocal = false,
+        )
+        val offlineInternalTrack = remoteTrack.copy(trackKey = "7017", durationMs = 238_100L)
+        val offlineSdTrack = remoteTrack.copy(trackKey = "7017", durationMs = 237_900L)
+        val deviceMusicTrack = remoteTrack.copy(
+            trackKey = "device:external_primary:999",
+            durationMs = 238_200L,
+            isDeviceLocal = true,
+        )
+
+        // 1. Remote stream resolves from network and caches
+        val s1 = controller.enterFullscreen(remoteTrack, currentPositionMs = 6_000L) as LyricsUiState.Synced
+        assertEquals(1, networkCalls.get())
+        assertEquals("Unified lyric line across all sources", s1.lines[0].text)
+
+        // 2. Offline INTERNAL resolves from shared metadata signature without network call
+        controller.exitFullscreen()
+        val s2 = controller.enterFullscreen(offlineInternalTrack, currentPositionMs = 6_000L) as LyricsUiState.Synced
+        assertEquals(1, networkCalls.get())
+        assertEquals("Unified lyric line across all sources", s2.lines[0].text)
+
+        // 3. Offline REMOVABLE_SD resolves from shared metadata signature without network call
+        controller.exitFullscreen()
+        val s3 = controller.enterFullscreen(offlineSdTrack, currentPositionMs = 6_000L) as LyricsUiState.Synced
+        assertEquals(1, networkCalls.get())
+        assertEquals("Unified lyric line across all sources", s3.lines[0].text)
+
+        // 4. Device Music resolves from shared metadata signature without network call
+        controller.exitFullscreen()
+        val s4 = controller.enterFullscreen(deviceMusicTrack, currentPositionMs = 6_000L) as LyricsUiState.Synced
+        assertEquals(1, networkCalls.get())
+        assertEquals("Unified lyric line across all sources", s4.lines[0].text)
+    }
 }
+
 

@@ -11,13 +11,13 @@
     android:paddingTop="10dp"
     android:paddingBottom="10dp"
     android:layout_marginBottom="4dp"
-    android:background="@drawable/bg_button_tertiary"
+    android:background="@drawable/bg_track_normal"
     android:clickable="true"
     android:focusable="true">
 
     <TextView
         android:id="@+id/lyricsLineTimestampView"
-        android:layout_width="46dp"
+        android:layout_width="48dp"
         android:layout_height="wrap_content"
         android:text="00:00"
         android:textSize="11sp"
@@ -29,8 +29,10 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
+        android:singleLine="false"
         android:textColor="@color/text_secondary"
         android:textSize="16sp"
         android:lineSpacingExtra="4dp" />
 
 </LinearLayout>
+

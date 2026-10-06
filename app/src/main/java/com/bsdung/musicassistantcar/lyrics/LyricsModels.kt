@@ -67,6 +67,13 @@ data class LyricsTrackMetadata(
         }
         return true
     }
+
+    fun cacheSignature(): String = LyricsCache.computeMetadataSignature(
+        title = title,
+        artist = artist,
+        album = album,
+        durationMs = durationMs,
+    )
 }
 
 data class LyricsLookupResult(

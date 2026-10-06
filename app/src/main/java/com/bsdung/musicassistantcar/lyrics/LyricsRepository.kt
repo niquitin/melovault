@@ -255,16 +255,72 @@ class LyricsSessionController(
     var scrollPositionIndex: Int = 0
         private set
 
+    var isFullscreenVisible: Boolean = false
+        private set
+
+    var isActivityInForeground: Boolean = true
+        private set
+
+    var currentSignature: String? = null
+        private set
+
+    val isKeepScreenOnEnabled: Boolean
+        get() = isFullscreenVisible && isActivityInForeground
+
     fun startLookup(metadata: LyricsTrackMetadata): LyricsRequestToken {
         autoFollow = true
         activeLineIndex = -1
         scrollPositionIndex = 0
         val token = repository.beginTrackRequest(metadata)
+        currentSignature = token.signature
         uiState = LyricsUiState.Loading(
             title = metadata.title,
             artist = metadata.artist,
         )
         return token
+    }
+
+    fun onTrackChanged(metadata: LyricsTrackMetadata?): LyricsRequestToken? {
+        autoFollow = true
+        activeLineIndex = -1
+        scrollPositionIndex = 0
+        if (metadata == null) {
+            repository.cancelActiveRequests()
+            currentSignature = null
+            uiState = LyricsUiState.Idle
+            return null
+        }
+        return startLookup(metadata)
+    }
+
+    fun enterFullscreen(
+        metadata: LyricsTrackMetadata? = null,
+        currentPositionMs: Long = 0L,
+    ): LyricsUiState {
+        isFullscreenVisible = true
+        if (metadata == null) {
+            return uiState
+        }
+        val sig = repository.signatureFor(metadata)
+        if (currentSignature == sig && uiState !is LyricsUiState.Idle) {
+            if (uiState is LyricsUiState.Synced) {
+                onPositionUpdated(currentPositionMs)
+            }
+            return uiState
+        }
+        return loadSynchronously(
+            metadata = metadata,
+            forceRefresh = false,
+            currentPositionMs = currentPositionMs,
+        )
+    }
+
+    fun exitFullscreen() {
+        isFullscreenVisible = false
+    }
+
+    fun onActivityForegroundChanged(inForeground: Boolean) {
+        isActivityInForeground = inForeground
     }
 
     fun applyResultIfCurrent(
@@ -275,6 +331,7 @@ class LyricsSessionController(
         if (!repository.isTokenCurrent(token)) {
             return false
         }
+        currentSignature = token.signature
         val nextState = LyricsRepository.toUiState(
             result = result,
             currentPositionMs = currentPositionMs,
@@ -310,6 +367,18 @@ class LyricsSessionController(
         return uiState
     }
 
+    fun retryCurrentTrack(
+        metadata: LyricsTrackMetadata,
+        currentPositionMs: Long = 0L,
+    ): LyricsUiState {
+        val forceRefresh = uiState !is LyricsUiState.TemporaryError
+        return loadSynchronously(
+            metadata = metadata,
+            forceRefresh = forceRefresh,
+            currentPositionMs = currentPositionMs,
+        )
+    }
+
     fun onUserManualScroll() {
         autoFollow = false
         val current = uiState
@@ -331,20 +400,40 @@ class LyricsSessionController(
         }
     }
 
-    fun onPositionUpdated(positionMs: Long) {
-        val current = uiState as? LyricsUiState.Synced ?: return
+    fun onPositionUpdated(positionMs: Long): Boolean {
+        val current = uiState as? LyricsUiState.Synced ?: return false
         val idx = LrcParser.findActiveLineIndex(current.lines, positionMs)
+        val changed = idx != activeLineIndex
         activeLineIndex = idx
         if (autoFollow && idx >= 0) {
             scrollPositionIndex = idx
         }
         uiState = current.copy(activeLineIndex = idx, autoFollow = autoFollow)
+        return changed
     }
 
-    fun onLineTapped(line: LyricsLine) {
+    fun onLineTapped(line: LyricsLine): Boolean {
+        if (uiState !is LyricsUiState.Synced) {
+            return false
+        }
         onSeekRequested(line.startMs)
         autoFollow = true
         onPositionUpdated(line.startMs)
+        return true
+    }
+
+    fun onPlainLyricsTapped(): Boolean {
+        // Plain unsynced lyrics do not have line timestamps and must never seek.
+        return false
+    }
+
+    companion object {
+        fun computeCenteredScrollOffset(viewportHeightPx: Int, itemHeightPx: Int): Int {
+            if (viewportHeightPx <= 0) return 0
+            val safeItemHeight = itemHeightPx.coerceAtLeast(0)
+            return ((viewportHeightPx - safeItemHeight) / 2).coerceAtLeast(0)
+        }
     }
 }
+
 
