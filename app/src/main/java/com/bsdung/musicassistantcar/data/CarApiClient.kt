@@ -2,6 +2,11 @@ package com.bsdung.musicassistantcar.data
 
 import android.net.Uri
 import com.bsdung.musicassistantcar.BuildConfig
+import com.bsdung.musicassistantcar.lyrics.LrcParser
+import com.bsdung.musicassistantcar.lyrics.LyricsCandidate
+import com.bsdung.musicassistantcar.lyrics.LyricsLookupResult
+import com.bsdung.musicassistantcar.lyrics.LyricsMatchedTrack
+import com.bsdung.musicassistantcar.lyrics.LyricsStatus
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
@@ -807,6 +812,117 @@ open class CarApiClient {
             total = json.optInt("total", tracks.size),
             playable = json.optInt("playable", tracks.size),
             skipped = json.optInt("skipped", 0),
+        )
+    }
+
+    open fun lookupLyrics(
+        trackKey: String,
+        title: String,
+        artist: String,
+        album: String = "",
+        durationMs: Long? = null,
+        forceRefresh: Boolean = false,
+        preferredProvider: String? = null,
+        preferredRecordId: String? = null,
+    ): LyricsLookupResult {
+        val body = JSONObject().apply {
+            put("track_key", trackKey)
+            put("title", title)
+            put("artist", artist)
+            put("album", album)
+            if (durationMs != null && durationMs > 0L) {
+                put("duration_ms", durationMs)
+            } else {
+                put("duration_ms", JSONObject.NULL)
+            }
+            put("force_refresh", forceRefresh)
+            if (!preferredProvider.isNullOrBlank()) {
+                put("preferred_provider", preferredProvider)
+            } else {
+                put("preferred_provider", JSONObject.NULL)
+            }
+            if (!preferredRecordId.isNullOrBlank()) {
+                put("preferred_record_id", preferredRecordId)
+            } else {
+                put("preferred_record_id", JSONObject.NULL)
+            }
+        }
+        val json = requestJson(
+            method = "POST",
+            path = "/car/lyrics/lookup",
+            bodyJson = body,
+            connectTimeoutMs = 5_000,
+            readTimeoutMs = 15_000,
+        )
+        return parseLyricsLookupResponse(json)
+    }
+
+    internal fun parseLyricsLookupResponse(json: JSONObject): LyricsLookupResult {
+        val status = LyricsStatus.fromWire(cleanString(json, "status", "TEMPORARY_ERROR"))
+        val provider = cleanString(json, "provider", "lrclib").ifBlank { "lrclib" }
+        val providerRecordId = cleanString(json, "provider_record_id").takeIf { it.isNotBlank() }
+        val confidence = json.optDouble("confidence", 0.0)
+        val matchedObj = json.optJSONObject("matched_track")
+        val matchedTrack = matchedObj?.let {
+            LyricsMatchedTrack(
+                title = cleanString(it, "title"),
+                artist = cleanString(it, "artist"),
+                album = cleanString(it, "album"),
+                durationMs = if (it.has("duration_ms") && !it.isNull("duration_ms")) it.optLong("duration_ms") else null,
+            )
+        }
+        val plainLyrics = cleanString(json, "plain_lyrics").takeIf { it.isNotBlank() }
+        val syncedLyrics = cleanString(json, "synced_lyrics").takeIf { it.isNotBlank() }
+        val instrumental = json.optBoolean("instrumental", status == LyricsStatus.INSTRUMENTAL)
+        val diagnostic = cleanString(json, "diagnostic").takeIf { it.isNotBlank() }
+
+        val candidatesArr = json.optJSONArray("candidates") ?: JSONArray()
+        val candidates = buildList {
+            val count = minOf(candidatesArr.length(), 5)
+            for (i in 0 until count) {
+                val c = candidatesArr.optJSONObject(i) ?: continue
+                val recId = cleanString(c, "record_id")
+                if (recId.isBlank()) continue
+                add(
+                    LyricsCandidate(
+                        provider = cleanString(c, "provider", provider).ifBlank { provider },
+                        recordId = recId,
+                        title = cleanString(c, "title"),
+                        artist = cleanString(c, "artist"),
+                        album = cleanString(c, "album"),
+                        durationMs = if (c.has("duration_ms") && !c.isNull("duration_ms")) c.optLong("duration_ms") else null,
+                        hasSynced = c.optBoolean("has_synced", false),
+                        confidence = c.optDouble("confidence", 0.0),
+                    ),
+                )
+            }
+        }
+
+        val syncedLines = if (status == LyricsStatus.SYNCED && !syncedLyrics.isNullOrBlank()) {
+            LrcParser.parse(syncedLyrics)
+        } else {
+            emptyList()
+        }
+
+        val resolvedStatus = if (status == LyricsStatus.SYNCED && syncedLines.isEmpty()) {
+            if (!plainLyrics.isNullOrBlank()) LyricsStatus.PLAIN else LyricsStatus.NOT_FOUND
+        } else {
+            status
+        }
+
+        return LyricsLookupResult(
+            status = resolvedStatus,
+            provider = provider,
+            providerRecordId = providerRecordId,
+            confidence = confidence,
+            matchedTrack = matchedTrack,
+            plainLyrics = plainLyrics,
+            syncedLyrics = syncedLyrics,
+            syncedLines = syncedLines,
+            instrumental = instrumental,
+            candidates = candidates,
+            diagnostic = diagnostic,
+            fromCache = false,
         )
     }
 

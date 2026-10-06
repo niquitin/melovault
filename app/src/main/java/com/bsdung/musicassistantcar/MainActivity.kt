@@ -41,6 +41,14 @@ import com.bsdung.musicassistantcar.databinding.DialogTrackActionsBinding
 import com.bsdung.musicassistantcar.databinding.DialogPlaylistChooserBinding
 import com.bsdung.musicassistantcar.databinding.DialogSignalPathBinding
 import com.bsdung.musicassistantcar.ui.adapter.PlaylistChoiceAdapter
+import com.bsdung.musicassistantcar.ui.adapter.LyricsCandidateAdapter
+import com.bsdung.musicassistantcar.ui.adapter.SyncedLyricsAdapter
+import com.bsdung.musicassistantcar.lyrics.LrcParser
+import com.bsdung.musicassistantcar.lyrics.LyricsCache
+import com.bsdung.musicassistantcar.lyrics.LyricsCandidate
+import com.bsdung.musicassistantcar.lyrics.LyricsRepository
+import com.bsdung.musicassistantcar.lyrics.LyricsTrackMetadata
+import com.bsdung.musicassistantcar.lyrics.LyricsUiState
 import com.bsdung.musicassistantcar.data.CarApiClient
 import com.bsdung.musicassistantcar.data.PlaybackQuality
 import com.bsdung.musicassistantcar.data.RemoteCatalog
@@ -121,11 +129,24 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progressController: ProgressController
     private lateinit var libraryAdapter: LibraryAdapter
     private lateinit var queueAdapter: QueueAdapter
+    private lateinit var syncedLyricsAdapter: SyncedLyricsAdapter
+    private lateinit var lyricsCandidateAdapter: LyricsCandidateAdapter
     private lateinit var enrichmentController: ProgressiveEnrichmentController
     private var isQueueVisible: Boolean = false
+    private var isLyricsVisible: Boolean = false
+    private var isLyricsAutoFollow: Boolean = true
+    private var currentLyricsUiState: LyricsUiState = LyricsUiState.Idle
+    private var currentLyricsSignature: String? = null
     private var isEditMode: Boolean = false
     private var libraryItemTouchHelper: ItemTouchHelper? = null
     private val navManager = NavigationManager()
+    private val lyricsRepository by lazy {
+        LyricsRepository(
+            cache = LyricsCache(this),
+            apiClient = CarApiClient(),
+        )
+    }
+    private val lyricsExecutor = Executors.newSingleThreadExecutor()
     private val uiCatalog by lazy {
         RemoteCatalog(
             api = CarApiClient(),
@@ -230,12 +251,40 @@ class MainActivity : AppCompatActivity() {
             if (isQueueVisible) {
                 renderQueue()
             }
+            if (isLyricsVisible && currentLyricsUiState is LyricsUiState.Synced) {
+                syncActiveLyricsLineWithPlayer(forceScroll = false)
+                if (player.isPlaying) {
+                    startLyricsPositionLoop()
+                } else {
+                    stopLyricsPositionLoop()
+                }
+            }
+        }
+
+        override fun onPositionDiscontinuity(
+            oldPosition: Player.PositionInfo,
+            newPosition: Player.PositionInfo,
+            reason: Int,
+        ) {
+            if (isLyricsVisible && currentLyricsUiState is LyricsUiState.Synced) {
+                syncActiveLyricsLineWithPlayer(forceScroll = isLyricsAutoFollow)
+            }
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_READY) {
                 requestTechnicalInfoForCurrentItem()
                 requestSignalPathForCurrentItem()
+                val currentItem = browser?.currentMediaItem
+                if (isLyricsVisible && currentItem != null) {
+                    val readyMeta = extractLyricsTrackMetadata(currentItem)
+                    val readySig = lyricsRepository.signatureFor(readyMeta)
+                    if (readySig != currentLyricsSignature) {
+                        loadLyricsForCurrentTrack(forceRefresh = false, metadataOverride = readyMeta)
+                    } else if (currentLyricsUiState is LyricsUiState.Synced) {
+                        syncActiveLyricsLineWithPlayer(forceScroll = isLyricsAutoFollow)
+                    }
+                }
             }
         }
 
@@ -257,6 +306,7 @@ class MainActivity : AppCompatActivity() {
             currentSignalPathMediaId = null
             currentSignalPathQuality = null
             currentSignalPathFailed = false
+            handleLyricsOnTrackTransition(mediaItem)
             updateNowPlaying()
             requestTechnicalInfoForCurrentItem()
             requestSignalPathForCurrentItem()
@@ -311,6 +361,7 @@ class MainActivity : AppCompatActivity() {
         if (savedInstanceState != null) {
             savedRecyclerState = savedInstanceState.getParcelable("recycler_state")
             isQueueVisible = savedInstanceState.getBoolean("is_queue_visible", false)
+            isLyricsVisible = savedInstanceState.getBoolean("is_lyrics_visible", false)
             val parentId = savedInstanceState.getString("nav_parent_id", "root") ?: "root"
             val label = savedInstanceState.getString("nav_label", "Thư viện") ?: "Thư viện"
             val page = savedInstanceState.getInt("nav_page", 0)
@@ -343,6 +394,10 @@ class MainActivity : AppCompatActivity() {
                 override fun handleOnBackPressed() {
                     if (isEditMode) {
                         exitEditMode()
+                        return
+                    }
+                    if (isLyricsVisible) {
+                        hideLyrics()
                         return
                     }
                     if (isQueueVisible) {
@@ -565,6 +620,44 @@ class MainActivity : AppCompatActivity() {
             setHasFixedSize(true)
         }
 
+        // Setup SyncedLyricsAdapter & LyricsCandidateAdapter
+        syncedLyricsAdapter = SyncedLyricsAdapter(
+            onLineClick = { line ->
+                val player = browser ?: return@SyncedLyricsAdapter
+                Log.i(TAG, "LYRICS_TAP_SEEK: startMs=${line.startMs}")
+                player.seekTo(line.startMs)
+                isLyricsAutoFollow = true
+                updateLyricsAutoFollowButtonUi()
+                syncActiveLyricsLineWithPlayer(forceScroll = true, targetPositionMs = line.startMs)
+            },
+        )
+        binding.lyricsSyncedRecyclerView?.apply {
+            layoutManager = LinearLayoutManager(this@MainActivity)
+            adapter = syncedLyricsAdapter
+            addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                    if (newState == RecyclerView.SCROLL_STATE_DRAGGING && isLyricsAutoFollow) {
+                        isLyricsAutoFollow = false
+                        updateLyricsAutoFollowButtonUi()
+                    }
+                }
+            })
+        }
+
+        lyricsCandidateAdapter = LyricsCandidateAdapter(
+            onCandidateClick = { candidate ->
+                loadLyricsForCurrentTrack(
+                    forceRefresh = false,
+                    preferredProvider = candidate.provider,
+                    preferredRecordId = candidate.recordId,
+                )
+            },
+        )
+        binding.lyricsCandidatesRecyclerView?.apply {
+            layoutManager = LinearLayoutManager(this@MainActivity)
+            adapter = lyricsCandidateAdapter
+        }
+
         // Setup ProgressController
         progressController = ProgressController(
             seekBar = binding.seekBar,
@@ -572,6 +665,9 @@ class MainActivity : AppCompatActivity() {
             totalTimeView = binding.totalTimeView,
             onSeekTo = { targetMs ->
                 browser?.seekTo(targetMs)
+                if (isLyricsVisible && currentLyricsUiState is LyricsUiState.Synced) {
+                    syncActiveLyricsLineWithPlayer(forceScroll = isLyricsAutoFollow, targetPositionMs = targetMs)
+                }
             },
         )
 
@@ -672,6 +768,31 @@ class MainActivity : AppCompatActivity() {
 
         binding.queueClearButton.setOnClickListener {
             clearUpcoming()
+        }
+
+        // Lyrics Button & Panel Controls
+        binding.lyricsButton?.setOnClickListener {
+            toggleLyrics()
+        }
+        binding.lyricsBackButton?.setOnClickListener {
+            hideLyrics()
+        }
+        binding.lyricsAutoFollowButton?.setOnClickListener {
+            isLyricsAutoFollow = true
+            updateLyricsAutoFollowButtonUi()
+            val activeIdx = syncedLyricsAdapter.activeLineIndex
+            if (activeIdx >= 0) {
+                scrollToActiveLyricLine(activeIdx)
+            } else {
+                syncActiveLyricsLineWithPlayer(forceScroll = true)
+            }
+        }
+        binding.lyricsRefreshButton?.setOnClickListener {
+            loadLyricsForCurrentTrack(forceRefresh = true)
+        }
+        binding.lyricsStatusActionButton?.setOnClickListener {
+            val isTempErr = currentLyricsUiState is LyricsUiState.TemporaryError
+            loadLyricsForCurrentTrack(forceRefresh = !isTempErr)
         }
 
         // Connection Dot
@@ -900,7 +1021,9 @@ class MainActivity : AppCompatActivity() {
                         progressController.attachPlayer(mediaBrowser)
                         refreshBackendStatus()
                         updateNowPlaying()
-                        if (isQueueVisible) {
+                        if (isLyricsVisible) {
+                            showLyrics()
+                        } else if (isQueueVisible) {
                             showQueue()
                         }
                         if (navManager.searchQuery.isNotBlank()) {
@@ -972,7 +1095,7 @@ class MainActivity : AppCompatActivity() {
         }
         updateHeaderAndBreadcrumbs()
 
-        binding.loadingView.visibility = View.VISIBLE
+        binding.loadingView.visibility = if (isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
         binding.emptyView.visibility = View.GONE
         binding.errorView.visibility = View.GONE
         binding.recyclerView.visibility = View.GONE
@@ -1195,10 +1318,12 @@ class MainActivity : AppCompatActivity() {
     private fun renderItems(uiItems: List<LibraryItem>) {
         binding.loadingView.visibility = View.GONE
         binding.errorView.visibility = View.GONE
+        val overlayOpen = isQueueVisible || isLyricsVisible
 
         if (uiItems.isEmpty()) {
+            libraryAdapter.submitItems(emptyList())
             binding.recyclerView.visibility = View.GONE
-            binding.emptyView.visibility = View.VISIBLE
+            binding.emptyView.visibility = if (overlayOpen) View.GONE else View.VISIBLE
             binding.emptyText.text = when {
                 navManager.searchQuery.isNotBlank() -> "Không tìm thấy bài phù hợp"
                 navManager.currentParentId.startsWith(RemoteCatalog.PLAYLIST_PREFIX) -> "Danh sách phát chưa có bài hát"
@@ -1206,7 +1331,7 @@ class MainActivity : AppCompatActivity() {
             }
         } else {
             binding.emptyView.visibility = View.GONE
-            binding.recyclerView.visibility = View.VISIBLE
+            binding.recyclerView.visibility = if (overlayOpen) View.GONE else View.VISIBLE
             libraryAdapter.submitItems(uiItems)
             if (pendingRestorePosition != null) {
                 val pos = pendingRestorePosition ?: 0
@@ -1229,7 +1354,7 @@ class MainActivity : AppCompatActivity() {
         updateDownloadQueueHeader()
         updateOfflineStorageDashboard()
 
-        val showPagination = !navManager.isAtRoot
+        val showPagination = !navManager.isAtRoot && !overlayOpen
         binding.pageBar.visibility = if (showPagination) View.VISIBLE else View.GONE
         binding.previousPageButton.visibility =
             if (showPagination && navManager.currentPage > 0) View.VISIBLE else View.INVISIBLE
@@ -1291,7 +1416,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateOfflineStorageDashboard() {
-        val showDashboard = !isEditMode && !isQueueVisible && navManager.currentParentId == RemoteCatalog.DOWNLOADED_ID
+        val showDashboard = !isEditMode && !isQueueVisible && !isLyricsVisible && navManager.currentParentId == RemoteCatalog.DOWNLOADED_ID
         if (!showDashboard) {
             binding.offlineStorageHeader.visibility = View.GONE
             return
@@ -1504,7 +1629,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updateCollectionSortButton() {
         val parentId = navManager.currentParentId
-        val isSortable = !isEditMode && !isQueueVisible && isSortableCollection(parentId)
+        val isSortable = !isEditMode && !isQueueVisible && !isLyricsVisible && isSortableCollection(parentId)
         if (isSortable) {
             binding.collectionSortButton.visibility = View.VISIBLE
             if (parentId == RemoteCatalog.DOWNLOADED_ID) {
@@ -1606,7 +1731,7 @@ class MainActivity : AppCompatActivity() {
      */
     private fun updateCollectionActionBar() {
         val parentId = navManager.currentParentId
-        val showBar = !isEditMode && !isQueueVisible && isCollectionContext(parentId)
+        val showBar = !isEditMode && !isQueueVisible && !isLyricsVisible && isCollectionContext(parentId)
         binding.collectionActionBar.visibility = if (showBar) View.VISIBLE else View.GONE
         if (showBar) {
             val isPlaylist = parentId.startsWith(RemoteCatalog.PLAYLIST_PREFIX)
@@ -1638,6 +1763,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun enterEditMode(allowReorder: Boolean) {
         if (isQueueVisible) hideQueue()
+        if (isLyricsVisible) hideLyrics()
         isEditMode = true
         libraryAdapter.setEditMode(true, allowReorder)
         binding.breadcrumbBar.visibility = View.GONE
@@ -1707,6 +1833,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun showQueue() {
         if (isEditMode) exitEditMode()
+        if (isLyricsVisible) hideLyrics()
         isQueueVisible = true
         binding.queueButton.setColorFilter(ContextCompat.getColor(this, R.color.accent_primary))
         binding.queueButton.setBackgroundResource(R.drawable.bg_button_tertiary_active)
@@ -1716,6 +1843,7 @@ class MainActivity : AppCompatActivity() {
         binding.collectionActionBar.visibility = View.GONE
         binding.playlistSyncBar.visibility = View.GONE
         binding.offlineStorageHeader.visibility = View.GONE
+        binding.downloadQueueHeader.visibility = View.GONE
         binding.recyclerView.visibility = View.GONE
         binding.pageBar.visibility = View.GONE
         binding.emptyView.visibility = View.GONE
@@ -1749,6 +1877,327 @@ class MainActivity : AppCompatActivity() {
             binding.emptyView.visibility = View.VISIBLE
         }
         binding.pageBar.visibility = if (!navManager.isAtRoot) View.VISIBLE else View.GONE
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Online Lyrics / Synced Lyrics Controller (v0.6.28)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private val lyricsSyncRunnable = object : Runnable {
+        override fun run() {
+            if (!isLyricsVisible || currentLyricsUiState !is LyricsUiState.Synced) {
+                return
+            }
+            val player = browser
+            if (player == null || !player.isPlaying) {
+                return
+            }
+            syncActiveLyricsLineWithPlayer(forceScroll = false)
+            mainHandler.postDelayed(this, 250L)
+        }
+    }
+
+    private fun startLyricsPositionLoop() {
+        mainHandler.removeCallbacks(lyricsSyncRunnable)
+        if (isLyricsVisible && currentLyricsUiState is LyricsUiState.Synced && browser?.isPlaying == true) {
+            mainHandler.post(lyricsSyncRunnable)
+        }
+    }
+
+    private fun stopLyricsPositionLoop() {
+        mainHandler.removeCallbacks(lyricsSyncRunnable)
+    }
+
+    private fun toggleLyrics() {
+        if (isLyricsVisible) {
+            hideLyrics()
+        } else {
+            showLyrics()
+        }
+    }
+
+    private fun showLyrics() {
+        if (isEditMode) exitEditMode()
+        if (isQueueVisible) hideQueue()
+        isLyricsVisible = true
+        binding.lyricsButton?.setTextColor(ContextCompat.getColor(this, R.color.accent_primary))
+        binding.lyricsButton?.setBackgroundResource(R.drawable.bg_button_tertiary_active)
+
+        // Hide library / search content views
+        binding.breadcrumbBar.visibility = View.GONE
+        binding.collectionActionBar.visibility = View.GONE
+        binding.playlistSyncBar.visibility = View.GONE
+        binding.offlineStorageHeader.visibility = View.GONE
+        binding.downloadQueueHeader.visibility = View.GONE
+        binding.recyclerView.visibility = View.GONE
+        binding.pageBar.visibility = View.GONE
+        binding.emptyView.visibility = View.GONE
+        binding.errorView.visibility = View.GONE
+        binding.loadingView.visibility = View.GONE
+        binding.searchContainer.visibility = View.GONE
+
+        binding.lyricsContainer?.visibility = View.VISIBLE
+        loadLyricsForCurrentTrack(forceRefresh = false)
+    }
+
+    private fun hideLyrics() {
+        isLyricsVisible = false
+        stopLyricsPositionLoop()
+        binding.lyricsButton?.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+        binding.lyricsButton?.setBackgroundResource(R.drawable.bg_button_control)
+        binding.lyricsContainer?.visibility = View.GONE
+
+        // Restore normal views
+        binding.searchContainer.visibility = View.VISIBLE
+        binding.breadcrumbBar.visibility = View.VISIBLE
+        updateHeaderAndBreadcrumbs()
+
+        if (libraryAdapter.itemCount > 0) {
+            binding.recyclerView.visibility = View.VISIBLE
+            binding.emptyView.visibility = View.GONE
+        } else {
+            binding.recyclerView.visibility = View.GONE
+            binding.emptyView.visibility = View.VISIBLE
+        }
+        binding.pageBar.visibility = if (!navManager.isAtRoot) View.VISIBLE else View.GONE
+    }
+
+    private fun extractLyricsTrackMetadata(mediaItem: MediaItem): LyricsTrackMetadata {
+        val metadata = mediaItem.mediaMetadata
+        val extras = metadata.extras
+        val rawTitle = metadata.title?.toString().orEmpty().trim()
+        val cleanTitle = if (rawTitle.equals("Chưa xác định", ignoreCase = true)) "" else rawTitle
+        val cleanArtist = MetadataDisplayHelper.cleanArtist(metadata.artist?.toString())
+        val cleanAlbum = MetadataDisplayHelper.cleanAlbum(metadata.albumTitle?.toString())
+
+        val extrasDurationMs = extras?.getLong("duration_ms")?.takeIf { it > 0L }
+        val playerDurationMs = if (browser?.currentMediaItem?.mediaId == mediaItem.mediaId) {
+            browser?.duration?.takeIf { it > 0L && it != androidx.media3.common.C.TIME_UNSET }
+        } else {
+            null
+        }
+        val durationMs = extrasDurationMs ?: playerDurationMs
+
+        val canonicalId = RemoteCatalog.canonicalTrackMediaId(mediaItem) ?: mediaItem.mediaId
+        val isDeviceLocal = mediaItem.mediaId.startsWith(RemoteCatalog.DEVICE_PREFIX) ||
+            extras?.getBoolean("is_device_local", false) == true
+
+        return LyricsTrackMetadata(
+            trackKey = canonicalId,
+            title = cleanTitle,
+            artist = cleanArtist,
+            album = cleanAlbum,
+            durationMs = durationMs,
+            isDeviceLocal = isDeviceLocal,
+        )
+    }
+
+    private fun handleLyricsOnTrackTransition(mediaItem: MediaItem?) {
+        stopLyricsPositionLoop()
+        isLyricsAutoFollow = true
+        updateLyricsAutoFollowButtonUi()
+        syncedLyricsAdapter.submitLines(emptyList(), -1)
+        binding.lyricsSyncedRecyclerView?.scrollToPosition(0)
+
+        if (mediaItem == null) {
+            lyricsRepository.cancelActiveRequests()
+            currentLyricsSignature = null
+            currentLyricsUiState = LyricsUiState.Idle
+            if (isLyricsVisible) {
+                renderLyricsUiState(LyricsUiState.NotFound())
+            }
+            return
+        }
+
+        val trackMeta = extractLyricsTrackMetadata(mediaItem)
+        val token = lyricsRepository.beginTrackRequest(trackMeta)
+        currentLyricsSignature = token.signature
+
+        if (isLyricsVisible) {
+            loadLyricsForCurrentTrack(
+                forceRefresh = false,
+                preAllocatedToken = token,
+                metadataOverride = trackMeta,
+            )
+        } else {
+            currentLyricsUiState = LyricsUiState.Idle
+        }
+    }
+
+    private fun loadLyricsForCurrentTrack(
+        forceRefresh: Boolean,
+        preferredProvider: String? = null,
+        preferredRecordId: String? = null,
+        preAllocatedToken: com.bsdung.musicassistantcar.lyrics.LyricsRequestToken? = null,
+        metadataOverride: LyricsTrackMetadata? = null,
+    ) {
+        val currentItem = browser?.currentMediaItem
+        if (currentItem == null) {
+            lyricsRepository.cancelActiveRequests()
+            currentLyricsSignature = null
+            currentLyricsUiState = LyricsUiState.NotFound()
+            if (isLyricsVisible) {
+                renderLyricsUiState(currentLyricsUiState)
+            }
+            return
+        }
+
+        val trackMeta = metadataOverride ?: extractLyricsTrackMetadata(currentItem)
+        val token = preAllocatedToken ?: lyricsRepository.beginTrackRequest(trackMeta)
+        currentLyricsSignature = token.signature
+
+        isLyricsAutoFollow = true
+        updateLyricsAutoFollowButtonUi()
+        syncedLyricsAdapter.submitLines(emptyList(), -1)
+        binding.lyricsSyncedRecyclerView?.scrollToPosition(0)
+
+        currentLyricsUiState = LyricsUiState.Loading(
+            title = trackMeta.title,
+            artist = trackMeta.artist,
+        )
+        if (isLyricsVisible) {
+            renderLyricsUiState(currentLyricsUiState)
+        }
+
+        lyricsExecutor.submit {
+            val result = lyricsRepository.resolveLyrics(
+                metadata = trackMeta,
+                forceRefresh = forceRefresh,
+                preferredProvider = preferredProvider,
+                preferredRecordId = preferredRecordId,
+            )
+            Log.i(
+                TAG,
+                "LYRICS_RESOLVED: trackKey=${trackMeta.trackKey} status=${result.status} " +
+                    "fromCache=${result.fromCache} provider=${result.provider} " +
+                    "recordId=${result.providerRecordId ?: "none"} lines=${result.syncedLines.size}",
+            )
+            runOnUiThread {
+                if (!lyricsRepository.isTokenCurrent(token)) {
+                    Log.i(TAG, "LYRICS_STALE_DISCARDED: trackKey=${trackMeta.trackKey} gen=${token.generation}")
+                    return@runOnUiThread
+                }
+                val posMs = browser?.currentPosition?.coerceAtLeast(0L) ?: 0L
+                val uiState = LyricsRepository.toUiState(
+                    result = result,
+                    currentPositionMs = posMs,
+                    autoFollow = isLyricsAutoFollow,
+                )
+                currentLyricsUiState = uiState
+                if (isLyricsVisible) {
+                    renderLyricsUiState(uiState)
+                }
+            }
+        }
+    }
+
+    private fun renderLyricsUiState(state: LyricsUiState) {
+        stopLyricsPositionLoop()
+        binding.lyricsLoadingView?.visibility = View.GONE
+        binding.lyricsPlainBadgeView?.visibility = View.GONE
+        binding.lyricsSyncedRecyclerView?.visibility = View.GONE
+        binding.lyricsPlainContainer?.visibility = View.GONE
+        binding.lyricsAmbiguousContainer?.visibility = View.GONE
+        binding.lyricsStatusContainer?.visibility = View.GONE
+        binding.lyricsAutoFollowButton?.visibility = View.GONE
+
+        when (state) {
+            is LyricsUiState.Idle,
+            is LyricsUiState.Loading -> {
+                binding.lyricsSourceBadgeView?.text = "Đang tải lời bài hát..."
+                binding.lyricsLoadingView?.visibility = View.VISIBLE
+            }
+            is LyricsUiState.Synced -> {
+                val srcLabel = if (state.fromCache) "Đã lưu đệm" else "Trực tuyến"
+                val providerLabel = state.provider.uppercase()
+                binding.lyricsSourceBadgeView?.text = "Nguồn: $providerLabel · Lời đồng bộ · $srcLabel"
+                binding.lyricsSyncedRecyclerView?.visibility = View.VISIBLE
+                val posMs = browser?.currentPosition?.coerceAtLeast(0L) ?: 0L
+                val activeIdx = LrcParser.findActiveLineIndex(state.lines, posMs)
+                syncedLyricsAdapter.submitLines(state.lines, activeIdx)
+                updateLyricsAutoFollowButtonUi()
+                if (activeIdx >= 0 && isLyricsAutoFollow) {
+                    binding.lyricsSyncedRecyclerView?.post {
+                        scrollToActiveLyricLine(activeIdx)
+                    }
+                }
+                startLyricsPositionLoop()
+            }
+            is LyricsUiState.Plain -> {
+                val srcLabel = if (state.fromCache) "Đã lưu đệm" else "Trực tuyến"
+                val providerLabel = state.provider.uppercase()
+                binding.lyricsSourceBadgeView?.text = "Nguồn: $providerLabel · Lời văn bản · $srcLabel"
+                binding.lyricsPlainBadgeView?.text = "Lời chưa đồng bộ thời gian"
+                binding.lyricsPlainBadgeView?.visibility = View.VISIBLE
+                binding.lyricsPlainTextView?.text = state.text
+                binding.lyricsPlainContainer?.visibility = View.VISIBLE
+            }
+            is LyricsUiState.Instrumental -> {
+                val providerLabel = state.provider.uppercase()
+                binding.lyricsSourceBadgeView?.text = "Nguồn: $providerLabel · Bản nhạc không lời"
+                binding.lyricsStatusTitleView?.text = "Bản nhạc không lời"
+                binding.lyricsStatusSubtitleView?.text = "Bài hát này được đánh dấu là nhạc không lời (Instrumental)."
+                binding.lyricsStatusSubtitleView?.visibility = View.VISIBLE
+                binding.lyricsStatusActionButton?.text = "Tìm lại lời"
+                binding.lyricsStatusContainer?.visibility = View.VISIBLE
+            }
+            is LyricsUiState.Ambiguous -> {
+                val providerLabel = state.provider.uppercase()
+                binding.lyricsSourceBadgeView?.text = "Nguồn: $providerLabel · Có nhiều kết quả gần giống"
+                lyricsCandidateAdapter.submitCandidates(state.candidates)
+                binding.lyricsAmbiguousContainer?.visibility = View.VISIBLE
+            }
+            is LyricsUiState.NotFound -> {
+                val providerLabel = state.provider.uppercase()
+                binding.lyricsSourceBadgeView?.text = "Nguồn: $providerLabel · Không có dữ liệu lời phù hợp"
+                binding.lyricsStatusTitleView?.text = "Không tìm thấy lời bài hát"
+                binding.lyricsStatusSubtitleView?.text = "Đã kiểm tra tên bài hát và nghệ sĩ nhưng chưa có bản lời khớp chính xác."
+                binding.lyricsStatusSubtitleView?.visibility = View.VISIBLE
+                binding.lyricsStatusActionButton?.text = "Tìm lại lời"
+                binding.lyricsStatusContainer?.visibility = View.VISIBLE
+            }
+            is LyricsUiState.TemporaryError -> {
+                binding.lyricsSourceBadgeView?.text = "Lỗi kết nối dịch vụ lời bài hát"
+                binding.lyricsStatusTitleView?.text = state.message.ifBlank { "Không thể tải lời bài hát" }
+                binding.lyricsStatusSubtitleView?.text = "Kiểm tra kết nối mạng hoặc thử lại sau."
+                binding.lyricsStatusSubtitleView?.visibility = View.VISIBLE
+                binding.lyricsStatusActionButton?.text = "Thử lại"
+                binding.lyricsStatusContainer?.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    private fun updateLyricsAutoFollowButtonUi() {
+        val showBtn = isLyricsVisible && currentLyricsUiState is LyricsUiState.Synced && !isLyricsAutoFollow
+        binding.lyricsAutoFollowButton?.visibility = if (showBtn) View.VISIBLE else View.GONE
+    }
+
+    private fun syncActiveLyricsLineWithPlayer(
+        forceScroll: Boolean,
+        targetPositionMs: Long? = null,
+    ) {
+        val state = currentLyricsUiState as? LyricsUiState.Synced ?: return
+        val posMs = targetPositionMs ?: browser?.currentPosition?.coerceAtLeast(0L) ?: return
+        val newIndex = LrcParser.findActiveLineIndex(state.lines, posMs)
+        val changed = syncedLyricsAdapter.updateActiveLineIndex(newIndex)
+        if (changed) {
+            val lineStartMs = if (newIndex in state.lines.indices) state.lines[newIndex].startMs else -1L
+            Log.i(TAG, "LYRICS_ACTIVE_LINE: index=$newIndex startMs=$lineStartMs posMs=$posMs autoFollow=$isLyricsAutoFollow")
+        }
+        if ((changed || forceScroll) && isLyricsAutoFollow && newIndex >= 0) {
+            scrollToActiveLyricLine(newIndex)
+        }
+    }
+
+    private fun scrollToActiveLyricLine(index: Int) {
+        val rv = binding.lyricsSyncedRecyclerView ?: return
+        val lm = rv.layoutManager as? LinearLayoutManager ?: return
+        val rvHeight = rv.height
+        if (rvHeight > 0) {
+            lm.scrollToPositionWithOffset(index, (rvHeight / 3).coerceAtLeast(48))
+        } else {
+            rv.smoothScrollToPosition(index)
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -2118,7 +2567,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun updatePlaylistSyncBarPassive() {
         val parentId = navManager.currentParentId
-        val showSyncBar = !isEditMode && !isQueueVisible && parentId.startsWith(RemoteCatalog.PLAYLIST_PREFIX)
+        val showSyncBar = !isEditMode && !isQueueVisible && !isLyricsVisible && parentId.startsWith(RemoteCatalog.PLAYLIST_PREFIX)
         if (!showSyncBar) {
             binding.playlistSyncBar.visibility = View.GONE
             return
@@ -2393,7 +2842,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateDownloadQueueHeader() {
-        if (navManager.currentParentId != RemoteCatalog.DOWNLOADING_ID) {
+        if (isQueueVisible || isLyricsVisible || navManager.currentParentId != RemoteCatalog.DOWNLOADING_ID) {
             binding.downloadQueueHeader.visibility = View.GONE
             return
         }
@@ -2731,6 +3180,7 @@ class MainActivity : AppCompatActivity() {
                 binding.totalTimeView.text = "--:--"
                 binding.qualityChip.visibility = View.VISIBLE
                 binding.signalPathButton?.visibility = View.VISIBLE
+                binding.lyricsButton?.visibility = View.VISIBLE
                 binding.queueButton.visibility = View.VISIBLE
                 binding.shuffleButton.visibility = View.VISIBLE
                 binding.repeatButton.visibility = View.VISIBLE
@@ -2740,6 +3190,7 @@ class MainActivity : AppCompatActivity() {
                 binding.timeRow.visibility = View.GONE
                 binding.qualityChip.visibility = View.GONE
                 binding.signalPathButton?.visibility = View.GONE
+                binding.lyricsButton?.visibility = View.GONE
                 binding.queueButton.visibility = View.GONE
                 binding.shuffleButton.visibility = View.INVISIBLE
                 binding.repeatButton.visibility = View.INVISIBLE
@@ -2836,9 +3287,18 @@ class MainActivity : AppCompatActivity() {
         binding.timeRow.visibility = View.VISIBLE
         binding.qualityChip.visibility = View.VISIBLE
         binding.signalPathButton?.visibility = View.VISIBLE
+        binding.lyricsButton?.visibility = View.VISIBLE
         binding.queueButton.visibility = View.VISIBLE
         binding.shuffleButton.visibility = View.VISIBLE
         binding.repeatButton.visibility = View.VISIBLE
+
+        if (isLyricsVisible) {
+            binding.lyricsButton?.setTextColor(ContextCompat.getColor(this, R.color.accent_primary))
+            binding.lyricsButton?.setBackgroundResource(R.drawable.bg_button_tertiary_active)
+        } else {
+            binding.lyricsButton?.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+            binding.lyricsButton?.setBackgroundResource(R.drawable.bg_button_control)
+        }
 
         if (isQueueVisible) {
             binding.queueButton.setColorFilter(ContextCompat.getColor(this, R.color.accent_primary))
@@ -3316,10 +3776,15 @@ class MainActivity : AppCompatActivity() {
             refreshBackendStatus()
             // Reconcile Now Playing after returning from background or launcher.
             updateNowPlaying()
+            if (isLyricsVisible && currentLyricsUiState is LyricsUiState.Synced) {
+                syncActiveLyricsLineWithPlayer(forceScroll = isLyricsAutoFollow)
+                startLyricsPositionLoop()
+            }
         }
     }
 
     override fun onStop() {
+        stopLyricsPositionLoop()
         super.onStop()
         logWindowMetrics("onStop")
     }
@@ -3346,6 +3811,7 @@ class MainActivity : AppCompatActivity() {
         super.onSaveInstanceState(outState)
         outState.putParcelable("recycler_state", binding.recyclerView.layoutManager?.onSaveInstanceState())
         outState.putBoolean("is_queue_visible", isQueueVisible)
+        outState.putBoolean("is_lyrics_visible", isLyricsVisible)
         outState.putString("nav_parent_id", navManager.currentParentId)
         outState.putString("nav_label", navManager.currentLabel)
         outState.putInt("nav_page", navManager.currentPage)
@@ -4020,6 +4486,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         logWindowMetrics("onDestroy")
+        stopLyricsPositionLoop()
         progressController.detach()
         enrichmentController.cancel()
         browser?.removeListener(playerListener)
@@ -4029,6 +4496,7 @@ class MainActivity : AppCompatActivity() {
         browserFuture = null
         searchDebounceRunnable?.let { mainHandler.removeCallbacks(it) }
         com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this).removeListener(downloadListener)
+        lyricsExecutor.shutdownNow()
         uiExecutor.shutdownNow()
         super.onDestroy()
     }

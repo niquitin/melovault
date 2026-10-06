@@ -26,8 +26,8 @@ android {
         applicationId 'com.bsdung.musicassistantcar'
         minSdk 26
         targetSdk 36
-        versionCode 47
-        versionName '0.6.27'
+        versionCode 48
+        versionName '0.6.28'
 
         buildConfigField 'String', 'CAR_API_TOKEN',
             '"' + carApiToken.replace('\\', '\\\\').replace('"', '\\"') + '"'
