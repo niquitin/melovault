@@ -133,6 +133,7 @@ class MusicService : MediaLibraryService() {
             api = CarApiClient(),
             localRepoSupplier = { com.bsdung.musicassistantcar.data.LocalMediaRepository.getDefault(this) },
             downloadManagerSupplier = { PinnedDownloadManager.getDefault(this) },
+            playlistSyncCoordinatorSupplier = { OfflinePlaylistSyncCoordinator.getDefault(this) },
         )
         historyTracker = PlayHistoryTracker { mediaId ->
             Log.i(TAG, "Track reached >=10s playback, reporting history: $mediaId")

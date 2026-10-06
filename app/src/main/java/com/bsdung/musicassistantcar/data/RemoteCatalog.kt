@@ -8,6 +8,7 @@ class RemoteCatalog(
     private val api: CarApiClient = CarApiClient(),
     private val localRepoSupplier: () -> LocalMediaRepository? = { null },
     private val downloadManagerSupplier: () -> com.bsdung.musicassistantcar.playback.PinnedDownloadManager? = { null },
+    private val playlistSyncCoordinatorSupplier: () -> com.bsdung.musicassistantcar.playback.OfflinePlaylistSyncCoordinator? = { null },
 ) {
     companion object {
         const val ROOT_ID = "root"
@@ -196,6 +197,8 @@ class RemoteCatalog(
 
         if (parentId == PLAYLISTS_ID) {
             val playlists = api.playlists()
+            val syncCoordinator = playlistSyncCoordinatorSupplier()
+            syncCoordinator?.reconcileAuthoritativePlaylistList(playlists)
             val items = mutableListOf<MediaItem>()
             if (page == 0) {
                 items.add(
@@ -207,11 +210,17 @@ class RemoteCatalog(
                 )
             }
             playlists.forEach { playlist ->
+                val isWatched = syncCoordinator?.isPlaylistWatched(playlist.id) == true
+                val subtitle = if (isWatched) {
+                    "${playlist.trackCount} bài · Luôn giữ offline"
+                } else {
+                    "${playlist.trackCount} bài"
+                }
                 items.add(
                     browsableItem(
                         "$PLAYLIST_PREFIX${playlist.id}",
                         playlist.name,
-                        "${playlist.trackCount} bài",
+                        subtitle,
                     )
                 )
             }
@@ -395,8 +404,11 @@ class RemoteCatalog(
     ): CollectionActionResult =
         api.addCollectionToPlaylist(playlistId, kind, artist, album, root, path)
 
-    fun renamePlaylist(playlistId: Int, newName: String): CarPlaylist =
-        api.renamePlaylist(playlistId, newName)
+    fun renamePlaylist(playlistId: Int, newName: String): CarPlaylist {
+        val renamed = api.renamePlaylist(playlistId, newName)
+        playlistSyncCoordinatorSupplier()?.updatePlaylistDisplayName(renamed.id, renamed.name)
+        return renamed
+    }
 
     fun item(mediaId: String): MediaItem? {
         if (mediaId == ROOT_ID) {
@@ -666,8 +678,11 @@ class RemoteCatalog(
     fun reportPlay(mediaId: String): Int =
         api.reportPlay(mediaId)
 
-    fun playlists(): List<CarPlaylist> =
-        api.playlists()
+    fun playlists(): List<CarPlaylist> {
+        val list = api.playlists()
+        playlistSyncCoordinatorSupplier()?.reconcileAuthoritativePlaylistList(list)
+        return list
+    }
 
     private fun browsableItem(
         id: String,

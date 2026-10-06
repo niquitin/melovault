@@ -131,6 +131,7 @@ class MainActivity : AppCompatActivity() {
             api = CarApiClient(),
             localRepoSupplier = { com.bsdung.musicassistantcar.data.LocalMediaRepository.getDefault(this) },
             downloadManagerSupplier = { com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this) },
+            playlistSyncCoordinatorSupplier = { com.bsdung.musicassistantcar.playback.OfflinePlaylistSyncCoordinator.getDefault(this) },
         )
     }
     private val uiExecutor = Executors.newSingleThreadExecutor()
@@ -148,6 +149,10 @@ class MainActivity : AppCompatActivity() {
     private val pageSize = 30
     private var currentCollectionRequestId: Long = 0L
     private val collectionFetchExecutor = Executors.newSingleThreadExecutor()
+    @Volatile
+    private var hasRunStartupPlaylistSync: Boolean = false
+    private val cachedPlaylistTracks = java.util.concurrent.ConcurrentHashMap<Int, List<com.bsdung.musicassistantcar.data.CarTrack>>()
+    private val cachedPlaylistSkippedCount = java.util.concurrent.ConcurrentHashMap<Int, Int>()
 
     private fun captureCurrentScroll() {
         val lm = binding.recyclerView.layoutManager as? LinearLayoutManager
@@ -836,11 +841,20 @@ class MainActivity : AppCompatActivity() {
             triggerPlaylistDeleteOffline()
         }
 
+        binding.btnPlaylistSyncToggle.setOnClickListener {
+            handlePlaylistSyncToggleClicked()
+        }
+
+        binding.btnPlaylistSyncNow.setOnClickListener {
+            handlePlaylistSyncNowClicked()
+        }
+
         binding.btnCancelPendingQueue.setOnClickListener {
             val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
             val cancelled = dm.cancelPendingQueue()
             Toast.makeText(this, "Đã hủy các bài trong hàng đợi ($cancelled bài)", Toast.LENGTH_SHORT).show()
             updateDownloadQueueHeader()
+            updatePlaylistSyncBarPassive()
             if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
                 loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
             }
@@ -855,6 +869,7 @@ class MainActivity : AppCompatActivity() {
                     val cancelled = dm.cancelAllJobs()
                     Toast.makeText(this, "Đã hủy toàn bộ lượt tải ($cancelled bài)", Toast.LENGTH_SHORT).show()
                     updateDownloadQueueHeader()
+                    updatePlaylistSyncBarPassive()
                     if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
                         loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
                     }
@@ -889,6 +904,7 @@ class MainActivity : AppCompatActivity() {
                         } else {
                             loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
                         }
+                        triggerStartupPlaylistSyncOnce()
                     }
                     .onFailure { exc ->
                         binding.statusDot.setImageResource(R.drawable.bg_status_dot_offline)
@@ -932,6 +948,7 @@ class MainActivity : AppCompatActivity() {
         page: Int,
         label: String,
         sort: String = navManager.currentSort,
+        reconcilePlaylistSync: Boolean = true,
     ) {
         if (isEditMode) exitEditMode()
         val mediaBrowser = browser
@@ -1021,6 +1038,9 @@ class MainActivity : AppCompatActivity() {
 
                         renderItems(uiItems)
                         Log.i(TAG, "ADAPTER ITEM COUNT: ${libraryAdapter.itemCount}")
+                        if (parentId.startsWith(RemoteCatalog.PLAYLIST_PREFIX) && page == 0) {
+                            reconcileOpenedPlaylistIfNeeded(parentId, label, triggerSync = reconcilePlaylistSync)
+                        }
                     }
                     .onFailure { exc ->
                         Log.e(TAG, "ROOT REQUEST FAILED: ${exc.message}", exc)
@@ -1601,6 +1621,7 @@ class MainActivity : AppCompatActivity() {
                 binding.collectionDeleteOfflineButton.visibility = View.GONE
             }
         }
+        updatePlaylistSyncBarPassive()
     }
 
     /** Returns true if [parentId] is a browseable collection that supports Play All / Shuffle. */
@@ -1617,6 +1638,7 @@ class MainActivity : AppCompatActivity() {
         libraryAdapter.setEditMode(true, allowReorder)
         binding.breadcrumbBar.visibility = View.GONE
         binding.collectionActionBar.visibility = View.GONE
+        binding.playlistSyncBar.visibility = View.GONE
         binding.collectionSortButton.visibility = View.GONE
         binding.offlineStorageHeader.visibility = View.GONE
         binding.editModeBar.visibility = View.VISIBLE
@@ -1659,6 +1681,8 @@ class MainActivity : AppCompatActivity() {
             val result = runCatching { uiCatalog.batchRemoveFromPlaylist(playlistId, mediaIds) }
             runOnUiThread {
                 result.onSuccess { res ->
+                    cachedPlaylistTracks.remove(playlistId)
+                    cachedPlaylistSkippedCount.remove(playlistId)
                     Toast.makeText(this, "Đã xóa ${res.removed} bài khỏi danh sách phát", Toast.LENGTH_SHORT).show()
                     exitEditMode()
                     loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
@@ -1686,6 +1710,7 @@ class MainActivity : AppCompatActivity() {
         // Hide library / search content views
         binding.breadcrumbBar.visibility = View.GONE
         binding.collectionActionBar.visibility = View.GONE
+        binding.playlistSyncBar.visibility = View.GONE
         binding.offlineStorageHeader.visibility = View.GONE
         binding.recyclerView.visibility = View.GONE
         binding.pageBar.visibility = View.GONE
@@ -2055,10 +2080,306 @@ class MainActivity : AppCompatActivity() {
                 updateCollectionActionBar()
                 updateOfflineStorageDashboard()
                 Toast.makeText(this, "Đã xóa bản offline của $deleted bài hát", Toast.LENGTH_SHORT).show()
-                loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
+                loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel, reconcilePlaylistSync = false)
             }
             .setNegativeButton("Hủy", null)
             .show()
+    }
+
+    private fun extractCurrentAdapterTracks(): List<com.bsdung.musicassistantcar.data.CarTrack> {
+        return libraryAdapter.getItems().filterIsInstance<LibraryItem.Track>().map { track ->
+            val tid = RemoteCatalog.canonicalTrackMediaId(track.mediaItem)?.removePrefix(RemoteCatalog.TRACK_PREFIX)?.toIntOrNull()
+                ?: track.id.removePrefix(RemoteCatalog.TRACK_PREFIX).toIntOrNull() ?: 0
+            com.bsdung.musicassistantcar.data.CarTrack(
+                id = tid,
+                title = track.title,
+                artist = track.artist,
+                album = track.album.orEmpty(),
+                status = "ready",
+                duration = (track.durationMs ?: 0L) / 1000.0,
+                sourceFormat = track.format,
+                sourceSizeBytes = track.sizeBytes,
+                sourceCodec = track.codec,
+                sourceBitrate = track.bitrate,
+                sourceSampleRate = track.sampleRate,
+                sourceChannels = track.channels,
+                sourceType = track.mediaItem.mediaMetadata.extras?.getString("source_type"),
+                loudnessLufs = track.mediaItem.mediaMetadata.extras?.takeIf { it.containsKey("loudness_lufs") }?.getDouble("loudness_lufs"),
+                truePeakDbtp = track.mediaItem.mediaMetadata.extras?.takeIf { it.containsKey("true_peak_dbtp") }?.getDouble("true_peak_dbtp"),
+                loudnessRangeLu = track.mediaItem.mediaMetadata.extras?.takeIf { it.containsKey("loudness_range_lu") }?.getDouble("loudness_range_lu"),
+                loudnessAnalysisVersion = track.mediaItem.mediaMetadata.extras?.takeIf { it.containsKey("loudness_analysis_version") }?.getInt("loudness_analysis_version"),
+            )
+        }
+    }
+
+    private fun updatePlaylistSyncBarPassive() {
+        val parentId = navManager.currentParentId
+        val showSyncBar = !isEditMode && !isQueueVisible && parentId.startsWith(RemoteCatalog.PLAYLIST_PREFIX)
+        if (!showSyncBar) {
+            binding.playlistSyncBar.visibility = View.GONE
+            return
+        }
+
+        val playlistId = parentId.removePrefix(RemoteCatalog.PLAYLIST_PREFIX).toIntOrNull()
+        if (playlistId == null || playlistId <= 0) {
+            binding.playlistSyncBar.visibility = View.GONE
+            return
+        }
+
+        binding.playlistSyncBar.visibility = View.VISIBLE
+        val coordinator = com.bsdung.musicassistantcar.playback.OfflinePlaylistSyncCoordinator.getDefault(this)
+        val playlistName = navManager.currentLabel.ifBlank { "Playlist #$playlistId" }
+        val tracks = cachedPlaylistTracks[playlistId] ?: extractCurrentAdapterTracks()
+        val skippedCount = cachedPlaylistSkippedCount[playlistId] ?: 0
+
+        val status = coordinator.getPlaylistSyncStatus(
+            playlistId = playlistId,
+            playlistName = playlistName,
+            tracks = tracks,
+            additionalUnsupportedCount = skippedCount,
+        )
+
+        binding.btnPlaylistSyncToggle.text = status.toggleLabel
+        if (status.isWatched) {
+            binding.btnPlaylistSyncNow.visibility = View.VISIBLE
+            binding.txtPlaylistSyncStatus.visibility = View.VISIBLE
+            val line = if (!status.secondaryStatusText.isNullOrBlank() && !status.statusText.contains(status.secondaryStatusText)) {
+                "${status.statusText} · ${status.secondaryStatusText}"
+            } else {
+                status.statusText
+            }
+            binding.txtPlaylistSyncStatus.text = line
+        } else {
+            binding.btnPlaylistSyncNow.visibility = View.GONE
+            binding.txtPlaylistSyncStatus.visibility = View.GONE
+        }
+    }
+
+    private fun triggerStartupPlaylistSyncOnce() {
+        if (hasRunStartupPlaylistSync) return
+        hasRunStartupPlaylistSync = true
+        val coordinator = com.bsdung.musicassistantcar.playback.OfflinePlaylistSyncCoordinator.getDefault(this)
+        if (coordinator.getWatchedPlaylistIds().isEmpty()) return
+
+        collectionFetchExecutor.submit {
+            val summary = runCatching {
+                coordinator.syncAllWatchedPlaylistsFromRemote(CarApiClient())
+            }.getOrNull() ?: return@submit
+            for (res in summary.reconciledResults) {
+                cachedPlaylistTracks[res.playlistId] = res.classification.eligibleTracks
+                cachedPlaylistSkippedCount[res.playlistId] = res.classification.unsupportedCount
+            }
+            runOnUiThread {
+                libraryAdapter.notifyDataSetChanged()
+                updateCollectionActionBar()
+                updateDownloadQueueHeader()
+                updateOfflineStorageDashboard()
+            }
+        }
+    }
+
+    private fun reconcileOpenedPlaylistIfNeeded(
+        parentId: String,
+        playlistLabel: String,
+        triggerSync: Boolean = true,
+    ) {
+        val playlistId = parentId.removePrefix(RemoteCatalog.PLAYLIST_PREFIX).toIntOrNull() ?: return
+        val coordinator = com.bsdung.musicassistantcar.playback.OfflinePlaylistSyncCoordinator.getDefault(this)
+        val isWatched = coordinator.isPlaylistWatched(playlistId)
+        val total = navManager.currentCollectionTotal ?: -1
+        val adapterTracks = extractCurrentAdapterTracks()
+
+        if (!isWatched && total in 0..adapterTracks.size) {
+            cachedPlaylistTracks[playlistId] = adapterTracks
+            cachedPlaylistSkippedCount[playlistId] = (total - adapterTracks.size).coerceAtLeast(0)
+            updatePlaylistSyncBarPassive()
+            return
+        }
+
+        collectionFetchExecutor.submit {
+            val res = runCatching {
+                uiCatalog.fetchCollectionPlayback(
+                    kind = "playlist",
+                    playlistId = playlistId,
+                )
+            }.getOrNull()
+
+            val tracks = res?.items ?: adapterTracks
+            val skipped = res?.skipped ?: 0
+            cachedPlaylistTracks[playlistId] = tracks
+            cachedPlaylistSkippedCount[playlistId] = skipped
+
+            if (triggerSync && coordinator.isPlaylistWatched(playlistId)) {
+                coordinator.reconcilePlaylist(
+                    playlistId = playlistId,
+                    playlistName = playlistLabel.ifBlank { "Playlist #$playlistId" },
+                    tracks = tracks,
+                    additionalUnsupportedCount = skipped,
+                )
+            }
+
+            runOnUiThread {
+                if (navManager.currentParentId == parentId) {
+                    libraryAdapter.notifyDataSetChanged()
+                    updateCollectionActionBar()
+                    updateDownloadQueueHeader()
+                }
+            }
+        }
+    }
+
+    private fun handlePlaylistSyncToggleClicked() {
+        val parentId = navManager.currentParentId
+        if (!parentId.startsWith(RemoteCatalog.PLAYLIST_PREFIX)) return
+        val playlistId = parentId.removePrefix(RemoteCatalog.PLAYLIST_PREFIX).toIntOrNull() ?: return
+        val playlistTitle = navManager.currentLabel.ifBlank { "Playlist #$playlistId" }
+        val coordinator = com.bsdung.musicassistantcar.playback.OfflinePlaylistSyncCoordinator.getDefault(this)
+        val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
+
+        if (coordinator.isPlaylistWatched(playlistId)) {
+            AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                .setTitle("Tắt tự động đồng bộ offline?")
+                .setMessage("Các bài đã tải sẽ được giữ lại trên thiết bị.")
+                .setPositiveButton("TẮT") { _, _ ->
+                    coordinator.disableWatch(playlistId)
+                    updatePlaylistSyncBarPassive()
+                    Toast.makeText(this, "Đã tắt Luôn giữ offline cho \"$playlistTitle\"", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("HỦY", null)
+                .show()
+            return
+        }
+
+        binding.btnPlaylistSyncToggle.isEnabled = false
+        collectionFetchExecutor.submit {
+            val playbackRes = runCatching {
+                uiCatalog.fetchCollectionPlayback(
+                    kind = "playlist",
+                    playlistId = playlistId,
+                )
+            }.getOrNull()
+
+            runOnUiThread {
+                binding.btnPlaylistSyncToggle.isEnabled = true
+                val tracks = playbackRes?.items ?: cachedPlaylistTracks[playlistId] ?: extractCurrentAdapterTracks()
+                val skipped = playbackRes?.skipped ?: cachedPlaylistSkippedCount[playlistId] ?: 0
+                cachedPlaylistTracks[playlistId] = tracks
+                cachedPlaylistSkippedCount[playlistId] = skipped
+
+                val classification = coordinator.classifyPlaylist(
+                    playlistId = playlistId,
+                    playlistName = playlistTitle,
+                    tracks = tracks,
+                    additionalUnsupportedCount = skipped,
+                )
+
+                // Section 8: Already 100% offline playlist enables immediately without modal or service start
+                if (classification.isAllEligibleOffline) {
+                    coordinator.enableWatch(playlistId, playlistTitle)
+                    updatePlaylistSyncBarPassive()
+                    Toast.makeText(this, "Luôn giữ offline: Bật · ✓ Đã đồng bộ offline", Toast.LENGTH_SHORT).show()
+                    return@runOnUiThread
+                }
+
+                val prompt = coordinator.buildEnableConfirmationPrompt(playlistTitle, classification)
+                AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                    .setTitle(prompt.title)
+                    .setMessage(prompt.message)
+                    .setPositiveButton(prompt.positiveButtonText) { _, _ ->
+                        val reconcileRes = coordinator.enableWatchAndSync(
+                            playlistId = playlistId,
+                            displayName = playlistTitle,
+                            tracks = tracks,
+                            additionalUnsupportedCount = skipped,
+                        )
+                        libraryAdapter.notifyDataSetChanged()
+                        updateCollectionActionBar()
+                        updateDownloadQueueHeader()
+                        updateOfflineStorageDashboard()
+
+                        val precheck = reconcileRes.storagePrecheck
+                        if (precheck != null && !precheck.isAllowed) {
+                            AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                                .setTitle(precheck.title ?: "Không đủ dung lượng")
+                                .setMessage(precheck.message ?: "Không đủ dung lượng để đồng bộ playlist.")
+                                .setPositiveButton("Đã hiểu", null)
+                                .show()
+                        } else {
+                            val toastMsg = if (!dm.isNetworkAllowedForDownload() && reconcileRes.enqueuedCount > 0) {
+                                "Đã bật đồng bộ offline — Đang chờ Wi-Fi (${reconcileRes.enqueuedCount} bài)"
+                            } else if (reconcileRes.enqueuedCount > 0) {
+                                "Đang đồng bộ offline ${reconcileRes.enqueuedCount} bài"
+                            } else {
+                                "Đã bật Luôn giữ offline"
+                            }
+                            Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .setNegativeButton(prompt.negativeButtonText, null)
+                    .show()
+            }
+        }
+    }
+
+    private fun handlePlaylistSyncNowClicked() {
+        val parentId = navManager.currentParentId
+        if (!parentId.startsWith(RemoteCatalog.PLAYLIST_PREFIX)) return
+        val playlistId = parentId.removePrefix(RemoteCatalog.PLAYLIST_PREFIX).toIntOrNull() ?: return
+        val playlistTitle = navManager.currentLabel.ifBlank { "Playlist #$playlistId" }
+        val coordinator = com.bsdung.musicassistantcar.playback.OfflinePlaylistSyncCoordinator.getDefault(this)
+        if (!coordinator.isPlaylistWatched(playlistId)) return
+
+        binding.btnPlaylistSyncNow.isEnabled = false
+        collectionFetchExecutor.submit {
+            val playbackRes = runCatching {
+                uiCatalog.fetchCollectionPlayback(
+                    kind = "playlist",
+                    playlistId = playlistId,
+                )
+            }.getOrNull()
+
+            runOnUiThread {
+                binding.btnPlaylistSyncNow.isEnabled = true
+                val tracks = playbackRes?.items ?: cachedPlaylistTracks[playlistId] ?: extractCurrentAdapterTracks()
+                val skipped = playbackRes?.skipped ?: cachedPlaylistSkippedCount[playlistId] ?: 0
+                cachedPlaylistTracks[playlistId] = tracks
+                cachedPlaylistSkippedCount[playlistId] = skipped
+
+                val reconcileRes = coordinator.reconcilePlaylist(
+                    playlistId = playlistId,
+                    playlistName = playlistTitle,
+                    tracks = tracks,
+                    additionalUnsupportedCount = skipped,
+                )
+                libraryAdapter.notifyDataSetChanged()
+                updateCollectionActionBar()
+                updateDownloadQueueHeader()
+                updateOfflineStorageDashboard()
+
+                val precheck = reconcileRes.storagePrecheck
+                if (precheck != null && !precheck.isAllowed) {
+                    AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                        .setTitle(precheck.title ?: "Không đủ dung lượng")
+                        .setMessage(precheck.message ?: "Không đủ dung lượng để đồng bộ playlist.")
+                        .setPositiveButton("Đã hiểu", null)
+                        .show()
+                } else {
+                    val toastMsg = when {
+                        reconcileRes.enqueuedCount > 0 && reconcileRes.status.state == com.bsdung.musicassistantcar.playback.PlaylistSyncState.WAITING_FOR_WIFI ->
+                            "Đã thêm ${reconcileRes.enqueuedCount} bài — Đang chờ Wi-Fi"
+                        reconcileRes.enqueuedCount > 0 ->
+                            "Đang đồng bộ thêm ${reconcileRes.enqueuedCount} bài offline"
+                        reconcileRes.status.state == com.bsdung.musicassistantcar.playback.PlaylistSyncState.SYNCED ->
+                            "✓ Đã đồng bộ offline"
+                        reconcileRes.status.state == com.bsdung.musicassistantcar.playback.PlaylistSyncState.WAITING_FOR_WIFI ->
+                            "Đang chờ kết nối Wi-Fi để tải tiếp"
+                        else ->
+                            reconcileRes.status.statusText
+                    }
+                    Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     private fun updateDownloadQueueHeader() {
@@ -2782,6 +3103,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 libraryAdapter.notifyDataSetChanged()
                 updateDownloadQueueHeader()
+                updatePlaylistSyncBarPassive()
                 if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
                     loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
                 }
@@ -2807,6 +3129,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 libraryAdapter.notifyDataSetChanged()
                 updateDownloadQueueHeader()
+                updatePlaylistSyncBarPassive()
                 if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
                     loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
                 }
@@ -2829,6 +3152,7 @@ class MainActivity : AppCompatActivity() {
                 libraryAdapter.notifyDataSetChanged()
                 updateDownloadQueueHeader()
                 updateOfflineStorageDashboard()
+                updatePlaylistSyncBarPassive()
                 if (error != "Deleted") {
                     Toast.makeText(this@MainActivity, "Tải thất bại: $error", Toast.LENGTH_SHORT).show()
                 }
@@ -2842,6 +3166,7 @@ class MainActivity : AppCompatActivity() {
                 libraryAdapter.notifyDataSetChanged()
                 updateDownloadQueueHeader()
                 updateOfflineStorageDashboard()
+                updatePlaylistSyncBarPassive()
                 if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID) {
                     loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
                 }

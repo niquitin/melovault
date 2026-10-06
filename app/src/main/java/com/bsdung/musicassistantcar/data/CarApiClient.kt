@@ -778,7 +778,7 @@ open class CarApiClient {
      *
      * Use a longer read timeout (60 s) since large playlists can take a moment.
      */
-    fun fetchCollectionPlayback(
+    open fun fetchCollectionPlayback(
         kind: String,
         artist: String? = null,
         album: String? = null,

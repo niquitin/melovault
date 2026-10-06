@@ -1236,13 +1236,19 @@ open class PinnedDownloadManager(
         )
     }
 
+    fun getMetadataStore(): OfflineMetadataStore = store
+
+    fun getJobQueueSequence(trackId: Long): Long? = jobs[trackId]?.queueSequence
+
     fun enqueueBatch(
         batch: DownloadBatch,
         tracksToEnqueue: List<CarTrack>,
         apiClient: CarApiClient = CarApiClient(),
     ): Int {
         lastApiClient = apiClient
-        activeBatch = batch
+        if (activeBatch == null) {
+            activeBatch = batch
+        }
         var enqueuedCount = 0
         val distinctTracks = tracksToEnqueue.distinctBy { it.id }
         val newlyEnqueuedIds = mutableListOf<Long>()
@@ -1286,6 +1292,7 @@ open class PinnedDownloadManager(
         }
 
         if (enqueuedCount > 0) {
+            activeBatch = batch
             serviceController?.onQueueActive()
         }
         persistQueueState()
