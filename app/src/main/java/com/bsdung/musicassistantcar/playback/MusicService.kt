@@ -13,15 +13,21 @@ import android.widget.Toast
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.audio.AudioRendererEventListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.bsdung.musicassistantcar.playback.alac.AlacAudioRenderer
+import com.bsdung.musicassistantcar.playback.alac.AlacCapabilities
 import androidx.media3.session.LibraryResult
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaLibraryService.LibraryParams
@@ -178,6 +184,8 @@ class MusicService : MediaLibraryService() {
             )
             .build()
 
+        AlacCapabilities.logDeviceCapabilities()
+
         val renderersFactory = object : DefaultRenderersFactory(this) {
             override fun buildAudioSink(
                 context: Context,
@@ -189,6 +197,31 @@ class MusicService : MediaLibraryService() {
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
                     .setAudioProcessors(arrayOf(gainAudioProcessor))
                     .build()
+            }
+
+            override fun buildAudioRenderers(
+                context: Context,
+                extensionRendererMode: Int,
+                mediaCodecSelector: MediaCodecSelector,
+                enableDecoderFallback: Boolean,
+                audioSink: AudioSink,
+                eventHandler: Handler,
+                eventListener: AudioRendererEventListener,
+                out: ArrayList<Renderer>,
+            ) {
+                // Platform MediaCodecAudioRenderer is added first (Priority 1)
+                super.buildAudioRenderers(
+                    context,
+                    extensionRendererMode,
+                    mediaCodecSelector,
+                    enableDecoderFallback,
+                    audioSink,
+                    eventHandler,
+                    eventListener,
+                    out,
+                )
+                // Pure-Java software ALAC decoder fallback (Priority 2)
+                out.add(AlacAudioRenderer(eventHandler, eventListener, audioSink))
             }
         }
 
@@ -204,13 +237,24 @@ class MusicService : MediaLibraryService() {
         player.addListener(object : Player.Listener {
             override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
                 var audioTrackSelected = false
+                var hasAudioTrack = false
+                var unhandledAudioFormat: androidx.media3.common.Format? = null
                 for (group in tracks.groups) {
                     val trackType = group.type
                     for (i in 0 until group.length) {
                         val format = group.getTrackFormat(i)
                         val isTrackSelected = group.isTrackSelected(i)
-                        if (isTrackSelected && trackType == C.TRACK_TYPE_AUDIO) {
-                            audioTrackSelected = true
+                        if (trackType == C.TRACK_TYPE_AUDIO) {
+                            hasAudioTrack = true
+                            if (isTrackSelected) {
+                                audioTrackSelected = true
+                                if (format.sampleMimeType == MimeTypes.AUDIO_ALAC) {
+                                    val platformSupported = AlacCapabilities.supportsPlatformDecoder(MimeTypes.AUDIO_ALAC)
+                                    AlacCapabilities.logSelectedRenderer(platformSupported)
+                                }
+                            } else {
+                                unhandledAudioFormat = format
+                            }
                         }
                         Log.i(
                             TAG,
@@ -221,8 +265,24 @@ class MusicService : MediaLibraryService() {
                         )
                     }
                 }
-                if (!audioTrackSelected && tracks.groups.isNotEmpty()) {
-                    Log.w(TAG, "onTracksChanged: NO AUDIO TRACK SELECTED - possible unsupported audio codec/subtype")
+                if (hasAudioTrack && !audioTrackSelected) {
+                    val mime = unhandledAudioFormat?.sampleMimeType
+                    Log.w(
+                        TAG,
+                        "SILENT_RENDER_GUARD_TRIGGERED: unsupported audio track detected without active audio renderer (mime=$mime)",
+                    )
+                    player.pause()
+                    val errorMsg = if (mime == MimeTypes.AUDIO_ALAC) {
+                        "Thiết bị chưa hỗ trợ định dạng ALAC"
+                    } else {
+                        "Thiết bị chưa hỗ trợ định dạng âm thanh này"
+                    }
+                    showPlaybackErrorToast(errorMsg)
+                    if (player.hasNextMediaItem()) {
+                        player.seekToNextMediaItem()
+                    } else {
+                        player.stop()
+                    }
                 }
             }
 
@@ -682,6 +742,12 @@ class MusicService : MediaLibraryService() {
         mainHandler.post {
             val formatted = TrackResumePolicy.formatDuration(positionMs)
             Toast.makeText(this, "Tiếp tục từ $formatted", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun showPlaybackErrorToast(message: String) {
+        mainHandler.post {
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
         }
     }
 
