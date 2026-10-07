@@ -301,14 +301,18 @@ class OnlineLyricsTest {
     }
 
     @Test
-    fun `forceRefresh clears manual override and cached entry`() {
+    fun `forceRefresh refreshes chosen manual override while clearManualOverride returns to automatic`() {
         val cacheDir = tempFolder.newFolder("lyrics_force_refresh")
+        val overrideFile = File(tempFolder.newFolder("lyrics_override_dir"), "lyrics_overrides.json")
         val cache = LyricsCache(cacheDir = cacheDir)
+        val overrideStore = LyricsOverrideStore(overrideFile = overrideFile)
         val seenForceRefresh = mutableListOf<Boolean>()
         val seenPreferredRecordId = mutableListOf<String?>()
+        val seenResolveRecordId = mutableListOf<String>()
 
         val repo = LyricsRepository(
             cache = cache,
+            overrideStore = overrideStore,
             lookupFetcher = { _, _, _, _, _, forceRefresh, _, preferredRecordId ->
                 seenForceRefresh.add(forceRefresh)
                 seenPreferredRecordId.add(preferredRecordId)
@@ -316,6 +320,15 @@ class OnlineLyricsTest {
                     status = LyricsStatus.SYNCED,
                     providerRecordId = preferredRecordId ?: "auto_100",
                     syncedLyrics = "[00:01.00]Line from ${preferredRecordId ?: "auto"}",
+                )
+            },
+            resolveFetcher = { _, providerRecordId, _ ->
+                seenResolveRecordId.add(providerRecordId)
+                LyricsLookupResult(
+                    status = LyricsStatus.SYNCED,
+                    providerRecordId = providerRecordId,
+                    syncedLyrics = "[00:01.00]Line from $providerRecordId",
+                    provenance = LyricsProvenance.MANUAL,
                 )
             },
         )
@@ -336,21 +349,29 @@ class OnlineLyricsTest {
             preferredRecordId = "cand_777",
         )
         assertEquals("cand_777", chosen.providerRecordId)
-        assertNotNull(cache.getManualOverride(repo.signatureFor(meta)))
+        assertEquals(LyricsProvenance.MANUAL, chosen.provenance)
+        assertNotNull(overrideStore.getOverride(meta.trackKey, repo.signatureFor(meta)))
 
         // Next normal load uses cache without network call
         val cachedLoad = repo.resolveLyrics(metadata = meta, forceRefresh = false)
         assertTrue(cachedLoad.fromCache)
         assertEquals("cand_777", cachedLoad.providerRecordId)
-        assertEquals(1, seenForceRefresh.size)
+        assertEquals(LyricsProvenance.MANUAL, cachedLoad.provenance)
+        assertEquals(1, seenResolveRecordId.size)
 
-        // "Tìm lại lời" (forceRefresh = true) clears manual override & cache and re-queries provider
+        // "Tìm lại lời" (forceRefresh = true) refreshes the SAME selected provider record without abandoning manual choice
         val refreshed = repo.resolveLyrics(metadata = meta, forceRefresh = true)
-        assertEquals(2, seenForceRefresh.size)
-        assertTrue(seenForceRefresh.last())
-        assertNull(seenPreferredRecordId.last())
-        assertNull(cache.getManualOverride(repo.signatureFor(meta)))
-        assertEquals("auto_100", refreshed.providerRecordId)
+        assertEquals(2, seenResolveRecordId.size)
+        assertEquals("cand_777", seenResolveRecordId.last())
+        assertEquals("cand_777", refreshed.providerRecordId)
+        assertEquals(LyricsProvenance.MANUAL, refreshed.provenance)
+        assertNotNull(overrideStore.getOverride(meta.trackKey, repo.signatureFor(meta)))
+
+        // "Tìm lại tự động" (clearManualOverride) clears override & cache and re-runs automatic lookup
+        val autoRestored = repo.clearManualOverride(meta)
+        assertNull(overrideStore.getOverride(meta.trackKey, repo.signatureFor(meta)))
+        assertEquals("auto_100", autoRestored.providerRecordId)
+        assertEquals(LyricsProvenance.AUTO, autoRestored.provenance)
     }
 
     // =========================================================================
@@ -1197,6 +1218,644 @@ class OnlineLyricsTest {
         val s4 = controller.enterFullscreen(deviceMusicTrack, currentPositionMs = 6_000L) as LyricsUiState.Synced
         assertEquals(1, networkCalls.get())
         assertEquals("Unified lyric line across all sources", s4.lines[0].text)
+    }
+
+    // =========================================================================
+    // 56. LYRICS MATCHING & MANUAL CORRECTION UNIT TESTS (v0.6.31 — SECTION 28)
+    // =========================================================================
+
+    private fun buildTestEnvironment(
+        name: String,
+        lookupFetcher: (String, String, String, String, Long?, Boolean, String?, String?) -> LyricsLookupResult = { _, _, _, _, _, _, _, _ ->
+            LyricsLookupResult(
+                status = LyricsStatus.SYNCED,
+                provider = "lrclib",
+                providerRecordId = "1001",
+                syncedLyrics = "[00:05.00]Auto line 1\n[00:10.00]Auto line 2",
+            )
+        },
+        candidatesFetcher: (String, String, String, String, Long?) -> LyricsCandidatesResult = { _, _, _, _, _ ->
+            LyricsCandidatesResult(
+                status = "OK",
+                provider = "lrclib",
+                candidates = listOf(
+                    LyricsCandidate(
+                        provider = "lrclib",
+                        recordId = "1001",
+                        title = "Lydia",
+                        artist = "F.I.R",
+                        album = "F.I.R",
+                        durationMs = 238_000L,
+                        hasSynced = true,
+                        hasPlainLyrics = true,
+                        confidence = 0.96,
+                    ),
+                    LyricsCandidate(
+                        provider = "lrclib",
+                        recordId = "2002",
+                        title = "Lydia (Plain Version)",
+                        artist = "F.I.R",
+                        album = "F.I.R",
+                        durationMs = 239_000L,
+                        hasSynced = false,
+                        hasPlainLyrics = true,
+                        confidence = 0.88,
+                    ),
+                ),
+            )
+        },
+        resolveFetcher: (String, String, Boolean) -> LyricsLookupResult = { _, recordId, _ ->
+            if (recordId == "2002") {
+                LyricsLookupResult(
+                    status = LyricsStatus.PLAIN,
+                    provider = "lrclib",
+                    providerRecordId = "2002",
+                    plainLyrics = "Plain manual lyric line 1\nPlain manual lyric line 2",
+                    provenance = LyricsProvenance.MANUAL,
+                )
+            } else {
+                LyricsLookupResult(
+                    status = LyricsStatus.SYNCED,
+                    provider = "lrclib",
+                    providerRecordId = recordId,
+                    syncedLyrics = "[00:02.00]Manual synced line from $recordId\n[00:08.00]Second manual line",
+                    provenance = LyricsProvenance.MANUAL,
+                )
+            }
+        },
+    ): Triple<LyricsCache, LyricsOverrideStore, LyricsRepository> {
+        val root = tempFolder.newFolder(name)
+        val cache = LyricsCache(cacheDir = File(root, "cache"))
+        val overrideStore = LyricsOverrideStore(overrideFile = File(root, "lyrics_overrides.json"))
+        val repo = LyricsRepository(
+            cache = cache,
+            overrideStore = overrideStore,
+            lookupFetcher = lookupFetcher,
+            candidatesFetcher = candidatesFetcher,
+            resolveFetcher = resolveFetcher,
+        )
+        return Triple(cache, overrideStore, repo)
+    }
+
+    @Test
+    fun `v0631 01 opening candidate picker triggers candidate fetch for current track`() {
+        val fetchedTitles = mutableListOf<String>()
+        val (_, _, repo) = buildTestEnvironment(
+            name = "v0631_01",
+            candidatesFetcher = { _, title, artist, _, _ ->
+                fetchedTitles.add("$title|$artist")
+                LyricsCandidatesResult(
+                    status = "OK",
+                    candidates = listOf(
+                        LyricsCandidate(provider = "lrclib", recordId = "14169", title = title, artist = artist, hasSynced = true, confidence = 0.95),
+                    ),
+                )
+            },
+        )
+        val controller = LyricsSessionController(repository = repo)
+        val meta = LyricsTrackMetadata(trackKey = "7017", title = "Lydia", artist = "F.I.R", durationMs = 238_934L)
+
+        val pickerState = controller.openCandidatePickerSynchronously(meta)
+        assertEquals(listOf("Lydia|F.I.R"), fetchedTitles)
+        assertTrue(pickerState is LyricsCandidatePickerState.Loaded)
+        assertEquals(1, (pickerState as LyricsCandidatePickerState.Loaded).candidates.size)
+        assertEquals("14169", pickerState.candidates[0].recordId)
+    }
+
+    @Test
+    fun `v0631 02 candidate list displays max 5 items`() {
+        val eightCandidates = (1..8).map { idx ->
+            LyricsCandidate(
+                provider = "lrclib",
+                recordId = "rec_$idx",
+                title = "Song $idx",
+                artist = "Artist",
+                hasSynced = true,
+                confidence = 1.0 - idx * 0.05,
+            )
+        }
+        val (_, _, repo) = buildTestEnvironment(
+            name = "v0631_02",
+            candidatesFetcher = { _, _, _, _, _ ->
+                LyricsCandidatesResult(status = "OK", candidates = eightCandidates)
+            },
+        )
+        val controller = LyricsSessionController(repository = repo)
+        val meta = LyricsTrackMetadata(trackKey = "7017", title = "Lydia", artist = "F.I.R", durationMs = 238_934L)
+
+        val pickerState = controller.openCandidatePickerSynchronously(meta) as LyricsCandidatePickerState.Loaded
+        assertEquals(5, pickerState.candidates.size)
+        assertEquals(listOf("rec_1", "rec_2", "rec_3", "rec_4", "rec_5"), pickerState.candidates.map { it.recordId })
+    }
+
+    @Test
+    fun `v0631 03 candidate item shows synced vs plain badge correctly`() {
+        val syncedCand = LyricsCandidate(
+            provider = "lrclib",
+            recordId = "101",
+            title = "Synced Track",
+            artist = "Artist",
+            hasSynced = true,
+            hasPlainLyrics = true,
+            confidence = 0.95,
+        )
+        val plainCand = LyricsCandidate(
+            provider = "lrclib",
+            recordId = "102",
+            title = "Plain Track",
+            artist = "Artist",
+            hasSynced = false,
+            hasPlainLyrics = true,
+            confidence = 0.85,
+        )
+        assertEquals("Đồng bộ", syncedCand.badgeText())
+        assertEquals("Văn bản", plainCand.badgeText())
+    }
+
+    @Test
+    fun `v0631 04 selecting a candidate calls resolve with exact provider_record_id`() {
+        val resolvedIds = mutableListOf<String>()
+        val (_, _, repo) = buildTestEnvironment(
+            name = "v0631_04",
+            resolveFetcher = { provider, recordId, _ ->
+                resolvedIds.add("$provider:$recordId")
+                LyricsLookupResult(
+                    status = LyricsStatus.SYNCED,
+                    provider = provider,
+                    providerRecordId = recordId,
+                    syncedLyrics = "[00:01.00]Exact resolved $recordId",
+                    provenance = LyricsProvenance.MANUAL,
+                )
+            },
+        )
+        val controller = LyricsSessionController(repository = repo)
+        val meta = LyricsTrackMetadata(trackKey = "7017", title = "Lydia", artist = "F.I.R", durationMs = 238_934L)
+        val candidate = LyricsCandidate(
+            provider = "lrclib",
+            recordId = "exact_998877",
+            title = "Lydia (Special)",
+            artist = "F.I.R",
+            hasSynced = true,
+            confidence = 0.90,
+        )
+
+        controller.selectCandidateSynchronously(meta, candidate)
+        assertEquals(listOf("lrclib:exact_998877"), resolvedIds)
+    }
+
+    @Test
+    fun `v0631 05 selecting a candidate updates active lyrics state immediately`() {
+        val (_, _, repo) = buildTestEnvironment(name = "v0631_05")
+        val controller = LyricsSessionController(repository = repo)
+        val meta = LyricsTrackMetadata(trackKey = "7017", title = "Lydia", artist = "F.I.R", durationMs = 238_934L)
+
+        controller.loadSynchronously(meta, currentPositionMs = 6_000L)
+        assertEquals("1001", (controller.uiState as LyricsUiState.Synced).recordId)
+
+        val chosen = LyricsCandidate(provider = "lrclib", recordId = "3003", title = "Lydia Alt", artist = "F.I.R", hasSynced = true, confidence = 0.91)
+        val updated = controller.selectCandidateSynchronously(meta, chosen, currentPositionMs = 3_000L) as LyricsUiState.Synced
+        assertEquals("3003", updated.recordId)
+        assertEquals("Manual synced line from 3003", updated.lines[0].text)
+        assertEquals(LyricsCandidatePickerState.Closed, controller.candidatePickerState)
+    }
+
+    @Test
+    fun `v0631 06 selecting synced candidate updates synced line list and resets scroll follow state`() {
+        val (_, _, repo) = buildTestEnvironment(name = "v0631_06")
+        val controller = LyricsSessionController(repository = repo)
+        val meta = LyricsTrackMetadata(trackKey = "7017", title = "Lydia", artist = "F.I.R", durationMs = 238_934L)
+
+        controller.enterFullscreen(meta, currentPositionMs = 11_000L)
+        controller.onUserManualScroll()
+        assertFalse(controller.autoFollow)
+
+        val chosen = LyricsCandidate(provider = "lrclib", recordId = "4004", title = "Lydia Synced 2", artist = "F.I.R", hasSynced = true, confidence = 0.92)
+        val state = controller.selectCandidateSynchronously(meta, chosen, currentPositionMs = 9_000L) as LyricsUiState.Synced
+        assertTrue(controller.autoFollow)
+        assertTrue(state.autoFollow)
+        assertEquals(2, state.lines.size)
+        assertEquals(1, state.activeLineIndex)
+        assertEquals(1, controller.scrollPositionIndex)
+    }
+
+    @Test
+    fun `v0631 07 selecting plain candidate switches UI to plain lyrics mode`() {
+        val (_, _, repo) = buildTestEnvironment(name = "v0631_07")
+        val controller = LyricsSessionController(repository = repo)
+        val meta = LyricsTrackMetadata(trackKey = "7017", title = "Lydia", artist = "F.I.R", durationMs = 238_934L)
+
+        controller.loadSynchronously(meta, currentPositionMs = 6_000L)
+        assertTrue(controller.uiState is LyricsUiState.Synced)
+
+        val plainCandidate = LyricsCandidate(
+            provider = "lrclib",
+            recordId = "2002",
+            title = "Lydia (Plain Version)",
+            artist = "F.I.R",
+            hasSynced = false,
+            hasPlainLyrics = true,
+            confidence = 0.88,
+        )
+        val state = controller.selectCandidateSynchronously(meta, plainCandidate)
+        assertTrue(state is LyricsUiState.Plain)
+        assertEquals("Plain manual lyric line 1\nPlain manual lyric line 2", (state as LyricsUiState.Plain).text)
+        assertEquals(LyricsProvenance.MANUAL, state.provenance)
+    }
+
+    @Test
+    fun `v0631 08 manual override persists to local override store`() {
+        val (_, overrideStore, repo) = buildTestEnvironment(name = "v0631_08")
+        val meta = LyricsTrackMetadata(trackKey = "7017", title = "Lydia", artist = "F.I.R", album = "F.I.R", durationMs = 238_934L)
+        val candidate = LyricsCandidate(
+            provider = "lrclib",
+            recordId = "8888",
+            title = "Lydia Selected",
+            artist = "F.I.R",
+            album = "F.I.R",
+            durationMs = 238_000L,
+            hasSynced = true,
+            confidence = 0.94,
+        )
+
+        repo.selectManualCandidate(meta, candidate)
+        val stored = overrideStore.getOverride("7017", repo.signatureFor(meta))
+        assertNotNull(stored)
+        assertEquals("7017", stored!!.trackKey)
+        assertEquals(repo.signatureFor(meta), stored.metadataSignature)
+        assertEquals("lrclib", stored.provider)
+        assertEquals("8888", stored.providerRecordId)
+        assertEquals("Lydia Selected", stored.selectedTitle)
+        assertEquals("F.I.R", stored.selectedArtist)
+        assertEquals(238_000L, stored.selectedDurationMs)
+    }
+
+    @Test
+    fun `v0631 09 reloading same track uses persisted manual override`() {
+        val root = tempFolder.newFolder("v0631_09")
+        val overrideFile = File(root, "lyrics_overrides.json")
+        val cacheDir1 = File(root, "cache1")
+        val cacheDir2 = File(root, "cache2") // empty cache to simulate cold cache / new session
+
+        val meta = LyricsTrackMetadata(trackKey = "7017", title = "Lydia", artist = "F.I.R", durationMs = 238_934L)
+        val candidate = LyricsCandidate(provider = "lrclib", recordId = "5566", title = "Lydia Chosen", artist = "F.I.R", hasSynced = true, confidence = 0.91)
+
+        val repo1 = LyricsRepository(
+            cache = LyricsCache(cacheDir = cacheDir1),
+            overrideStore = LyricsOverrideStore(overrideFile = overrideFile),
+            lookupFetcher = { _, _, _, _, _, _, _, _ -> LyricsLookupResult(status = LyricsStatus.NOT_FOUND) },
+            resolveFetcher = { _, recordId, _ ->
+                LyricsLookupResult(
+                    status = LyricsStatus.SYNCED,
+                    provider = "lrclib",
+                    providerRecordId = recordId,
+                    syncedLyrics = "[00:01.00]Persisted override $recordId",
+                    provenance = LyricsProvenance.MANUAL,
+                )
+            },
+        )
+        repo1.selectManualCandidate(meta, candidate)
+
+        // New repository instance reading persisted override file even with empty cache
+        val resolvedIds = mutableListOf<String>()
+        val repo2 = LyricsRepository(
+            cache = LyricsCache(cacheDir = cacheDir2),
+            overrideStore = LyricsOverrideStore(overrideFile = overrideFile),
+            lookupFetcher = { _, _, _, _, _, _, _, _ ->
+                throw AssertionError("Automatic lookup should not be called when manual override exists")
+            },
+            resolveFetcher = { _, recordId, _ ->
+                resolvedIds.add(recordId)
+                LyricsLookupResult(
+                    status = LyricsStatus.SYNCED,
+                    provider = "lrclib",
+                    providerRecordId = recordId,
+                    syncedLyrics = "[00:01.00]Reloaded manual $recordId",
+                    provenance = LyricsProvenance.MANUAL,
+                )
+            },
+        )
+        val reloaded = repo2.resolveLyrics(meta)
+        assertEquals(listOf("5566"), resolvedIds)
+        assertEquals("5566", reloaded.providerRecordId)
+        assertEquals(LyricsProvenance.MANUAL, reloaded.provenance)
+    }
+
+    @Test
+    fun `v0631 10 cached manual override avoids unnecessary network call when valid`() {
+        val resolveCalls = AtomicInteger(0)
+        val lookupCalls = AtomicInteger(0)
+        val (_, _, repo) = buildTestEnvironment(
+            name = "v0631_10",
+            lookupFetcher = { _, _, _, _, _, _, _, _ ->
+                lookupCalls.incrementAndGet()
+                LyricsLookupResult(status = LyricsStatus.NOT_FOUND)
+            },
+            resolveFetcher = { _, recordId, _ ->
+                resolveCalls.incrementAndGet()
+                LyricsLookupResult(
+                    status = LyricsStatus.SYNCED,
+                    provider = "lrclib",
+                    providerRecordId = recordId,
+                    syncedLyrics = "[00:02.00]Cached manual $recordId",
+                    provenance = LyricsProvenance.MANUAL,
+                )
+            },
+        )
+        val meta = LyricsTrackMetadata(trackKey = "7017", title = "Lydia", artist = "F.I.R", durationMs = 238_934L)
+        val candidate = LyricsCandidate(provider = "lrclib", recordId = "7788", title = "Lydia", artist = "F.I.R", hasSynced = true, confidence = 0.95)
+
+        repo.selectManualCandidate(meta, candidate)
+        assertEquals(1, resolveCalls.get())
+        assertEquals(0, lookupCalls.get())
+
+        // Subsequent load hits local cache and verifies recordId == 7788 without network call
+        val second = repo.resolveLyrics(meta, forceRefresh = false)
+        assertTrue(second.fromCache)
+        assertEquals("7788", second.providerRecordId)
+        assertEquals(LyricsProvenance.MANUAL, second.provenance)
+        assertEquals(1, resolveCalls.get())
+        assertEquals(0, lookupCalls.get())
+    }
+
+    @Test
+    fun `v0631 11 Tim lai loi with manual override refreshes the chosen record rather than discarding override`() {
+        val resolveCalls = AtomicInteger(0)
+        val lookupCalls = AtomicInteger(0)
+        val (_, overrideStore, repo) = buildTestEnvironment(
+            name = "v0631_11",
+            lookupFetcher = { _, _, _, _, _, _, _, _ ->
+                lookupCalls.incrementAndGet()
+                LyricsLookupResult(status = LyricsStatus.SYNCED, providerRecordId = "auto_1", syncedLyrics = "[00:01.00]Auto")
+            },
+            resolveFetcher = { _, recordId, _ ->
+                val callNum = resolveCalls.incrementAndGet()
+                LyricsLookupResult(
+                    status = LyricsStatus.SYNCED,
+                    provider = "lrclib",
+                    providerRecordId = recordId,
+                    syncedLyrics = "[00:01.00]Manual $recordId call #$callNum",
+                    provenance = LyricsProvenance.MANUAL,
+                )
+            },
+        )
+        val meta = LyricsTrackMetadata(trackKey = "7017", title = "Lydia", artist = "F.I.R", durationMs = 238_934L)
+        val candidate = LyricsCandidate(provider = "lrclib", recordId = "manual_900", title = "Lydia", artist = "F.I.R", hasSynced = true, confidence = 0.95)
+
+        repo.selectManualCandidate(meta, candidate)
+        assertEquals(1, resolveCalls.get())
+
+        // "Tìm lại lời" (forceRefresh = true) re-resolves "manual_900" and keeps override intact
+        val refreshed = repo.resolveLyrics(meta, forceRefresh = true)
+        assertEquals(2, resolveCalls.get())
+        assertEquals(0, lookupCalls.get())
+        assertEquals("manual_900", refreshed.providerRecordId)
+        assertEquals(LyricsProvenance.MANUAL, refreshed.provenance)
+        assertEquals("Manual manual_900 call #2", refreshed.syncedLines[0].text)
+        assertNotNull(overrideStore.getOverride("7017", repo.signatureFor(meta)))
+    }
+
+    @Test
+    fun `v0631 12 Tim lai tu dong clears manual override and returns to automatic lookup`() {
+        val (_, overrideStore, repo) = buildTestEnvironment(name = "v0631_12")
+        val controller = LyricsSessionController(repository = repo)
+        val meta = LyricsTrackMetadata(trackKey = "7017", title = "Lydia", artist = "F.I.R", durationMs = 238_934L)
+        val candidate = LyricsCandidate(provider = "lrclib", recordId = "manual_900", title = "Lydia", artist = "F.I.R", hasSynced = true, confidence = 0.95)
+
+        val manualState = controller.selectCandidateSynchronously(meta, candidate) as LyricsUiState.Synced
+        assertEquals("manual_900", manualState.recordId)
+        assertEquals(LyricsProvenance.MANUAL, manualState.provenance)
+        assertTrue(repo.hasManualOverride(meta))
+
+        // "Tìm lại tự động" clears override and runs automatic lookup ("1001")
+        val autoState = controller.clearOverrideSynchronously(meta) as LyricsUiState.Synced
+        assertFalse(repo.hasManualOverride(meta))
+        assertNull(overrideStore.getOverride("7017", repo.signatureFor(meta)))
+        assertEquals("1001", autoState.recordId)
+        assertEquals(LyricsProvenance.AUTO, autoState.provenance)
+    }
+
+    @Test
+    fun `v0631 13 metadata change invalidates stale override for same track_key`() {
+        val (_, overrideStore, repo) = buildTestEnvironment(name = "v0631_13")
+        val metaV1 = LyricsTrackMetadata(trackKey = "7017", title = "Old Title", artist = "Old Artist", durationMs = 200_000L)
+        val metaV2 = LyricsTrackMetadata(trackKey = "7017", title = "New Corrected Title", artist = "New Artist", durationMs = 240_000L)
+        val candidate = LyricsCandidate(provider = "lrclib", recordId = "old_override_id", title = "Old Title", artist = "Old Artist", hasSynced = true, confidence = 0.90)
+
+        repo.selectManualCandidate(metaV1, candidate)
+        assertTrue(repo.hasManualOverride(metaV1))
+
+        // Same track_key ("7017"), but metadata changed -> override must not apply!
+        assertFalse(repo.hasManualOverride(metaV2))
+        assertNull(overrideStore.getOverride("7017", repo.signatureFor(metaV2)))
+        val resultV2 = repo.resolveLyrics(metaV2)
+        assertEquals("1001", resultV2.providerRecordId)
+        assertEquals(LyricsProvenance.AUTO, resultV2.provenance)
+    }
+
+    @Test
+    fun `v0631 14 corrupted override store recovers safely without crash`() {
+        val dir = tempFolder.newFolder("v0631_14")
+        val overrideFile = File(dir, "lyrics_overrides.json")
+        overrideFile.writeText("{corrupted_json_content_!@#$", Charsets.UTF_8)
+
+        val store = LyricsOverrideStore(overrideFile = overrideFile)
+        assertNull(store.getOverride("7017", "any_sig"))
+        assertFalse(overrideFile.exists())
+
+        // Subsequent save works cleanly
+        store.saveOverride(
+            trackKey = "7017",
+            metadataSignature = "sig_7017",
+            provider = "lrclib",
+            providerRecordId = "14169",
+            selectedTitle = "Lydia",
+            selectedArtist = "F.I.R",
+            selectedDurationMs = 238_000L,
+        )
+        val recovered = store.getOverride("7017", "sig_7017")
+        assertNotNull(recovered)
+        assertEquals("14169", recovered!!.providerRecordId)
+    }
+
+    @Test
+    fun `v0631 15 stale candidate list response from Track A is ignored after switching to Track B`() {
+        val (_, _, repo) = buildTestEnvironment(name = "v0631_15")
+        val controller = LyricsSessionController(repository = repo)
+        val trackA = LyricsTrackMetadata(trackKey = "track:A", title = "Track A", artist = "Artist A", durationMs = 200_000L)
+        val trackB = LyricsTrackMetadata(trackKey = "track:B", title = "Track B", artist = "Artist B", durationMs = 210_000L)
+
+        val candTokenA = controller.startCandidatePicker(trackA)
+        assertTrue(controller.candidatePickerState is LyricsCandidatePickerState.Loading)
+
+        // Switch to Track B before Track A's candidate list arrives
+        controller.onTrackChanged(trackB)
+        assertEquals(LyricsCandidatePickerState.Closed, controller.candidatePickerState)
+
+        val staleCandidatesA = LyricsCandidatesResult(
+            status = "OK",
+            candidates = listOf(
+                LyricsCandidate(provider = "lrclib", recordId = "cand_A", title = "Track A", artist = "Artist A", hasSynced = true, confidence = 0.95),
+            ),
+        )
+        assertFalse(controller.applyCandidatesIfCurrent(candTokenA, staleCandidatesA))
+        assertEquals(LyricsCandidatePickerState.Closed, controller.candidatePickerState)
+    }
+
+    @Test
+    fun `v0631 16 stale resolve response from Track A is ignored after switching to Track B`() {
+        val (_, _, repo) = buildTestEnvironment(name = "v0631_16")
+        val controller = LyricsSessionController(repository = repo)
+        val trackA = LyricsTrackMetadata(trackKey = "track:A", title = "Track A", artist = "Artist A", durationMs = 200_000L)
+        val trackB = LyricsTrackMetadata(trackKey = "track:B", title = "Track B", artist = "Artist B", durationMs = 210_000L)
+
+        // User selects a candidate for Track A (allocates lookup token for Track A)
+        val tokenA = controller.startLookup(trackA)
+        // Before resolve completes, user switches to Track B
+        val tokenB = controller.onTrackChanged(trackB)!!
+
+        val lateResolvedA = LyricsLookupResult(
+            status = LyricsStatus.SYNCED,
+            provider = "lrclib",
+            providerRecordId = "manual_A",
+            syncedLyrics = "[00:01.00]Late manual lyrics for Track A",
+            provenance = LyricsProvenance.MANUAL,
+        )
+        assertFalse(controller.applyResultIfCurrent(tokenA, lateResolvedA, currentPositionMs = 2_000L))
+
+        val resolvedB = LyricsLookupResult(
+            status = LyricsStatus.SYNCED,
+            provider = "lrclib",
+            providerRecordId = "auto_B",
+            syncedLyrics = "[00:01.00]Lyrics for Track B",
+            provenance = LyricsProvenance.AUTO,
+        )
+        assertTrue(controller.applyResultIfCurrent(tokenB, resolvedB, currentPositionMs = 2_000L))
+        assertEquals("Lyrics for Track B", (controller.uiState as LyricsUiState.Synced).lines[0].text)
+    }
+
+    @Test
+    fun `v0631 17 provenance indicator shows Tu dong vs Da chon thu cong`() {
+        assertEquals("LRCLIB · Tự động", LyricsProvenance.AUTO.badgeText)
+        assertEquals("LRCLIB · Đã chọn thủ công", LyricsProvenance.MANUAL.badgeText)
+
+        val (_, _, repo) = buildTestEnvironment(name = "v0631_17")
+        val controller = LyricsSessionController(repository = repo)
+        val meta = LyricsTrackMetadata(trackKey = "7017", title = "Lydia", artist = "F.I.R", durationMs = 238_934L)
+
+        val autoState = controller.loadSynchronously(meta) as LyricsUiState.Synced
+        assertEquals(LyricsProvenance.AUTO, autoState.provenance)
+        assertEquals("LRCLIB · Tự động", autoState.provenance.badgeText)
+
+        val cand = LyricsCandidate(provider = "lrclib", recordId = "9001", title = "Lydia", artist = "F.I.R", hasSynced = true, confidence = 0.93)
+        val manualState = controller.selectCandidateSynchronously(meta, cand) as LyricsUiState.Synced
+        assertEquals(LyricsProvenance.MANUAL, manualState.provenance)
+        assertEquals("LRCLIB · Đã chọn thủ công", manualState.provenance.badgeText)
+    }
+
+    @Test
+    fun `v0631 18 manual override works across remote stream offline internal offline SD and Device Music models`() {
+        val resolveCalls = AtomicInteger(0)
+        val (_, _, repo) = buildTestEnvironment(
+            name = "v0631_18",
+            resolveFetcher = { _, recordId, _ ->
+                resolveCalls.incrementAndGet()
+                LyricsLookupResult(
+                    status = LyricsStatus.SYNCED,
+                    provider = "lrclib",
+                    providerRecordId = recordId,
+                    syncedLyrics = "[00:03.00]Shared manual lyrics $recordId",
+                    provenance = LyricsProvenance.MANUAL,
+                )
+            },
+        )
+        val remoteMeta = LyricsTrackMetadata(trackKey = "11200", title = "Duyên Kiếp", artist = "Trường Vũ", durationMs = 240_000L)
+        val internalOfflineMeta = remoteMeta.copy(durationMs = 240_100L)
+        val sdOfflineMeta = remoteMeta.copy(durationMs = 239_900L)
+        val deviceMusicMeta = LyricsTrackMetadata(
+            trackKey = "device:external_primary:501",
+            title = "Song On Device",
+            artist = "Device Artist",
+            durationMs = 195_000L,
+            isDeviceLocal = true,
+        )
+
+        val candLibrary = LyricsCandidate(provider = "lrclib", recordId = "lib_manual_1", title = "Duyên Kiếp", artist = "Trường Vũ", hasSynced = true, confidence = 0.95)
+        repo.selectManualCandidate(remoteMeta, candLibrary)
+        assertEquals(1, resolveCalls.get())
+
+        // Internal & SD offline share trackKey "11200" and normalized signature -> served from manual override cache!
+        val internalRes = repo.resolveLyrics(internalOfflineMeta)
+        val sdRes = repo.resolveLyrics(sdOfflineMeta)
+        assertEquals("lib_manual_1", internalRes.providerRecordId)
+        assertEquals(LyricsProvenance.MANUAL, internalRes.provenance)
+        assertTrue(internalRes.fromCache)
+        assertEquals("lib_manual_1", sdRes.providerRecordId)
+        assertEquals(LyricsProvenance.MANUAL, sdRes.provenance)
+        assertTrue(sdRes.fromCache)
+        assertEquals(1, resolveCalls.get())
+
+        // Device Music track uses its own canonical device key and persists independently
+        val candDevice = LyricsCandidate(provider = "lrclib", recordId = "dev_manual_2", title = "Song On Device", artist = "Device Artist", hasSynced = true, confidence = 0.91)
+        repo.selectManualCandidate(deviceMusicMeta, candDevice)
+        val devRes = repo.resolveLyrics(deviceMusicMeta)
+        assertEquals("dev_manual_2", devRes.providerRecordId)
+        assertEquals(LyricsProvenance.MANUAL, devRes.provenance)
+        assertTrue(devRes.fromCache)
+    }
+
+    @Test
+    fun `v0631 19 candidate picker works from both inline lyrics panel and fullscreen lyrics overlay`() {
+        val (_, _, repo) = buildTestEnvironment(name = "v0631_19")
+        val controller = LyricsSessionController(repository = repo)
+        val meta = LyricsTrackMetadata(trackKey = "7017", title = "Lydia", artist = "F.I.R", durationMs = 238_934L)
+
+        // 1. Open candidate picker in inline mode
+        controller.loadSynchronously(meta, currentPositionMs = 5_000L)
+        assertFalse(controller.isFullscreenVisible)
+        val inlinePicker = controller.openCandidatePickerSynchronously(meta) as LyricsCandidatePickerState.Loaded
+        assertEquals(2, inlinePicker.candidates.size)
+        assertEquals("1001", inlinePicker.activeRecordId)
+        controller.closeCandidatePicker()
+        assertEquals(LyricsCandidatePickerState.Closed, controller.candidatePickerState)
+
+        // 2. Enter fullscreen and open candidate picker in fullscreen mode
+        controller.enterFullscreen(meta, currentPositionMs = 6_000L)
+        assertTrue(controller.isFullscreenVisible)
+        val fullscreenPicker = controller.openCandidatePickerSynchronously(meta) as LyricsCandidatePickerState.Loaded
+        assertEquals(2, fullscreenPicker.candidates.size)
+
+        // Select candidate 2002 while in fullscreen -> stays in fullscreen and updates lyrics
+        val updated = controller.selectCandidateSynchronously(meta, fullscreenPicker.candidates[1])
+        assertTrue(controller.isFullscreenVisible)
+        assertEquals(LyricsCandidatePickerState.Closed, controller.candidatePickerState)
+        assertTrue(updated is LyricsUiState.Plain)
+        assertEquals("2002", (updated as LyricsUiState.Plain).recordId)
+    }
+
+    @Test
+    fun `v0631 20 selecting or clearing lyrics never restarts or interrupts playback`() {
+        val (_, _, repo) = buildTestEnvironment(name = "v0631_20")
+        val seekCalls = mutableListOf<Long>()
+        val controller = LyricsSessionController(
+            repository = repo,
+            onSeekRequested = { seekCalls.add(it) },
+        )
+        val meta = LyricsTrackMetadata(trackKey = "7017", title = "Lydia", artist = "F.I.R", durationMs = 238_934L)
+
+        var isPlaying = true
+        val currentStreamSource = "REMOTE_STREAM"
+        val currentPositionMs = 42_500L
+
+        controller.loadSynchronously(meta, currentPositionMs = currentPositionMs)
+        val picker = controller.openCandidatePickerSynchronously(meta) as LyricsCandidatePickerState.Loaded
+        controller.selectCandidateSynchronously(meta, picker.candidates[0], currentPositionMs = currentPositionMs)
+        controller.clearOverrideSynchronously(meta, currentPositionMs = currentPositionMs)
+
+        // Selecting or clearing lyrics must never trigger any player seek, stop, or stream reload
+        assertTrue(seekCalls.isEmpty())
+        assertTrue(isPlaying)
+        assertEquals("REMOTE_STREAM", currentStreamSource)
+        assertEquals(42_500L, currentPositionMs)
     }
 }
 

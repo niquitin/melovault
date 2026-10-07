@@ -24,6 +24,23 @@ enum class LyricsStatus {
     }
 }
 
+enum class LyricsProvenance {
+    AUTO,
+    MANUAL,
+    ;
+
+    val badgeText: String
+        get() = displayBadge()
+
+    fun displayBadge(provider: String = "LRCLIB"): String {
+        val cleanProvider = provider.trim().ifBlank { "LRCLIB" }.uppercase()
+        return when (this) {
+            AUTO -> "$cleanProvider · Tự động"
+            MANUAL -> "$cleanProvider · Đã chọn thủ công"
+        }
+    }
+}
+
 data class LyricsLine(
     val startMs: Long,
     val text: String,
@@ -37,8 +54,69 @@ data class LyricsCandidate(
     val album: String = "",
     val durationMs: Long? = null,
     val hasSynced: Boolean = false,
+    val hasPlain: Boolean = true,
+    val instrumental: Boolean = false,
     val confidence: Double = 0.0,
-)
+    val matchScore: Double = confidence * 100.0,
+    val variantConflict: Boolean = false,
+    val durationConflict: Boolean = false,
+    val hasPlainLyrics: Boolean = hasPlain,
+) {
+    val providerRecordId: String
+        get() = recordId
+
+    val candidateId: String
+        get() = "${provider.trim().lowercase().ifEmpty { "lrclib" }}:$recordId"
+
+    fun badgeText(): String = when {
+        hasSynced -> "Đồng bộ"
+        instrumental -> "Nhạc cụ"
+        else -> "Văn bản"
+    }
+}
+
+data class LyricsCandidatesResult(
+    val status: String = "OK",
+    val provider: String = "lrclib",
+    val candidates: List<LyricsCandidate> = emptyList(),
+    val diagnostic: String? = null,
+) {
+    val errorMessage: String?
+        get() = diagnostic
+}
+
+sealed class LyricsCandidatePickerState {
+    object Hidden : LyricsCandidatePickerState()
+
+    data class Loading(
+        val trackKey: String = "",
+        val title: String = "",
+        val artist: String = "",
+    ) : LyricsCandidatePickerState()
+
+    data class Loaded(
+        val trackKey: String = "",
+        val candidates: List<LyricsCandidate>,
+        val selectedRecordId: String? = null,
+        val activeRecordId: String? = selectedRecordId,
+    ) : LyricsCandidatePickerState()
+
+    data class Empty(
+        val trackKey: String = "",
+        val message: String = "Không tìm thấy kết quả phù hợp",
+    ) : LyricsCandidatePickerState()
+
+    data class Error(
+        val trackKey: String = "",
+        val message: String = "Không thể tải danh sách lời bài hát",
+        val diagnostic: String? = null,
+    ) : LyricsCandidatePickerState()
+
+    companion object {
+        val Closed: Hidden
+            get() = Hidden
+    }
+}
 
 data class LyricsMatchedTrack(
     val title: String,
@@ -89,6 +167,7 @@ data class LyricsLookupResult(
     val candidates: List<LyricsCandidate> = emptyList(),
     val diagnostic: String? = null,
     val fromCache: Boolean = false,
+    val provenance: LyricsProvenance = LyricsProvenance.AUTO,
 )
 
 sealed class LyricsUiState {
@@ -106,18 +185,27 @@ sealed class LyricsUiState {
         val provider: String = "lrclib",
         val providerRecordId: String? = null,
         val fromCache: Boolean = false,
-    ) : LyricsUiState()
+        val provenance: LyricsProvenance = LyricsProvenance.AUTO,
+    ) : LyricsUiState() {
+        val recordId: String?
+            get() = providerRecordId
+    }
 
     data class Plain(
         val text: String,
         val provider: String = "lrclib",
         val providerRecordId: String? = null,
         val fromCache: Boolean = false,
-    ) : LyricsUiState()
+        val provenance: LyricsProvenance = LyricsProvenance.AUTO,
+    ) : LyricsUiState() {
+        val recordId: String?
+            get() = providerRecordId
+    }
 
     data class Instrumental(
         val provider: String = "lrclib",
         val fromCache: Boolean = false,
+        val provenance: LyricsProvenance = LyricsProvenance.AUTO,
     ) : LyricsUiState()
 
     data class Ambiguous(

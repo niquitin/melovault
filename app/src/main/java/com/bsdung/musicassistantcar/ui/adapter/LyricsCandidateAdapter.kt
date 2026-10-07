@@ -14,10 +14,15 @@ class LyricsCandidateAdapter(
 ) : RecyclerView.Adapter<LyricsCandidateAdapter.CandidateViewHolder>() {
 
     private val items = ArrayList<LyricsCandidate>()
+    private var selectedRecordId: String? = null
 
-    fun submitCandidates(candidates: List<LyricsCandidate>) {
+    fun submitCandidates(
+        candidates: List<LyricsCandidate>,
+        activeRecordId: String? = null,
+    ) {
         items.clear()
         items.addAll(candidates.take(5))
+        selectedRecordId = activeRecordId
         notifyDataSetChanged()
     }
 
@@ -33,18 +38,20 @@ class LyricsCandidateAdapter(
     override fun getItemCount(): Int = items.size
 
     override fun onBindViewHolder(holder: CandidateViewHolder, position: Int) {
-        holder.bind(items[position])
+        holder.bind(items[position], selectedRecordId)
     }
 
     inner class CandidateViewHolder(
         private val binding: ItemLyricsCandidateBinding,
     ) : RecyclerView.ViewHolder(binding.root) {
 
-        fun bind(candidate: LyricsCandidate) {
+        fun bind(candidate: LyricsCandidate, activeRecordId: String?) {
             val ctx = binding.root.context
-            binding.candidateTitleView.text = candidate.title.ifBlank { "Không rõ tên bài" }
+            val isSelected = !activeRecordId.isNullOrBlank() && candidate.recordId == activeRecordId
+            val baseTitle = candidate.title.ifBlank { "Không rõ tên bài" }
+            binding.candidateTitleView.text = if (isSelected) "$baseTitle · Đang dùng" else baseTitle
 
-            val parts = ArrayList<String>(3)
+            val parts = ArrayList<String>(4)
             if (candidate.artist.isNotBlank()) parts.add(candidate.artist)
             if (candidate.album.isNotBlank()) parts.add(candidate.album)
             if (candidate.durationMs != null && candidate.durationMs > 0L) {
@@ -53,6 +60,8 @@ class LyricsCandidateAdapter(
                 val sec = totalSec % 60L
                 parts.add(String.format(Locale.US, "%d:%02d", min, sec))
             }
+            val sourceLabel = candidate.provider.trim().ifBlank { "LRCLIB" }.uppercase(Locale.US)
+            parts.add(sourceLabel)
             binding.candidateSubtitleView.text = parts.joinToString(" • ")
 
             if (candidate.hasSynced) {
@@ -60,7 +69,7 @@ class LyricsCandidateAdapter(
                 binding.candidateBadgeView.setBackgroundResource(R.drawable.bg_quality_chip_original)
                 binding.candidateBadgeView.setTextColor(ContextCompat.getColor(ctx, R.color.quality_original_text))
             } else {
-                binding.candidateBadgeView.text = "Lời thường"
+                binding.candidateBadgeView.text = "Văn bản"
                 binding.candidateBadgeView.setBackgroundResource(R.drawable.bg_quality_chip_mobile)
                 binding.candidateBadgeView.setTextColor(ContextCompat.getColor(ctx, R.color.quality_mobile_text))
             }

@@ -592,6 +592,47 @@
                         android:textColor="@color/text_primary" />
                 </LinearLayout>
 
+                <LinearLayout
+                    android:id="@+id/lyricsManualActionRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="end|center_vertical"
+                    android:layout_marginBottom="6dp">
+
+                    <TextView
+                        android:id="@+id/lyricsAutoResetButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:minWidth="48dp"
+                        android:gravity="center"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:background="@drawable/bg_quality_chip_inactive"
+                        android:text="Tìm lại tự động"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/accent_primary"
+                        android:contentDescription="Tìm lại tự động"
+                        android:layout_marginEnd="6dp"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/lyricsChooseOtherButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:minWidth="48dp"
+                        android:gravity="center"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:background="@drawable/bg_quality_chip_inactive"
+                        android:text="Chọn lời khác"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary"
+                        android:contentDescription="Chọn lời khác" />
+                </LinearLayout>
+
                 <View
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
@@ -615,6 +656,7 @@
                         android:indeterminate="true" />
 
                     <TextView
+                        android:id="@+id/lyricsLoadingTextView"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Đang tìm lời bài hát…"
@@ -672,7 +714,7 @@
                     </androidx.core.widget.NestedScrollView>
                 </LinearLayout>
 
-                <!-- Ambiguous Candidates Container -->
+                <!-- Candidate Picker / Ambiguous Candidates Container -->
                 <LinearLayout
                     android:id="@+id/lyricsAmbiguousContainer"
                     android:layout_width="match_parent"
@@ -680,22 +722,54 @@
                     android:orientation="vertical"
                     android:visibility="gone">
 
-                    <TextView
+                    <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="Tìm thấy nhiều lời bài hát phù hợp"
-                        android:textSize="14sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/text_primary" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="8dp">
 
-                    <TextView
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="Chọn bản khớp với bài đang phát:"
-                        android:textSize="12sp"
-                        android:textColor="@color/text_secondary"
-                        android:layout_marginTop="2dp"
-                        android:layout_marginBottom="8dp" />
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/lyricsAmbiguousTitleView"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Chọn bản lời bài hát phù hợp"
+                                android:textSize="14sp"
+                                android:textStyle="bold"
+                                android:textColor="@color/text_primary" />
+
+                            <TextView
+                                android:id="@+id/lyricsAmbiguousSubtitleView"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="Chọn bản khớp với bài đang phát (tối đa 5 kết quả):"
+                                android:textSize="12sp"
+                                android:textColor="@color/text_secondary"
+                                android:layout_marginTop="2dp" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/lyricsCandidatesCloseButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="48dp"
+                            android:minWidth="48dp"
+                            android:gravity="center"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp"
+                            android:layout_marginStart="8dp"
+                            android:background="@drawable/bg_quality_chip_inactive"
+                            android:text="Đóng"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/text_primary"
+                            android:contentDescription="Đóng danh sách lời" />
+                    </LinearLayout>
 
                     <androidx.recyclerview.widget.RecyclerView
                         android:id="@+id/lyricsCandidatesRecyclerView"
@@ -736,20 +810,43 @@
                         android:layout_marginTop="4dp"
                         android:visibility="gone" />
 
-                    <Button
-                        android:id="@+id/lyricsStatusActionButton"
+                    <LinearLayout
                         android:layout_width="wrap_content"
-                        android:layout_height="38dp"
-                        android:minHeight="0dp"
-                        android:minWidth="0dp"
-                        android:paddingStart="16dp"
-                        android:paddingEnd="16dp"
-                        android:layout_marginTop="12dp"
-                        android:background="@drawable/bg_button_control"
-                        android:text="Tìm lại lời"
-                        android:textAllCaps="false"
-                        android:textSize="13sp"
-                        android:textColor="@color/text_primary" />
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center"
+                        android:layout_marginTop="12dp">
+
+                        <Button
+                            android:id="@+id/lyricsStatusActionButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="48dp"
+                            android:minHeight="48dp"
+                            android:minWidth="0dp"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp"
+                            android:background="@drawable/bg_button_control"
+                            android:text="Tìm lại lời"
+                            android:textAllCaps="false"
+                            android:textSize="13sp"
+                            android:textColor="@color/text_primary" />
+
+                        <Button
+                            android:id="@+id/lyricsStatusSecondaryButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="48dp"
+                            android:minHeight="48dp"
+                            android:minWidth="0dp"
+                            android:paddingStart="16dp"
+                            android:paddingEnd="16dp"
+                            android:layout_marginStart="10dp"
+                            android:background="@drawable/bg_button_control"
+                            android:text="Chọn lời khác"
+                            android:textAllCaps="false"
+                            android:textSize="13sp"
+                            android:textColor="@color/text_primary"
+                            android:visibility="gone" />
+                    </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
 
@@ -1633,6 +1730,39 @@
         </LinearLayout>
 
         <TextView
+            android:id="@+id/fullscreenLyricsAutoResetButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:minWidth="48dp"
+            android:gravity="center"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/bg_quality_chip_inactive"
+            android:text="Tìm lại tự động"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="@color/accent_primary"
+            android:contentDescription="Tìm lại tự động"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/fullscreenLyricsChooseOtherButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:minWidth="48dp"
+            android:gravity="center"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/bg_quality_chip_inactive"
+            android:text="Chọn lời khác"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary"
+            android:contentDescription="Chọn lời khác" />
+
+        <TextView
             android:id="@+id/fullscreenLyricsRefreshButton"
             android:layout_width="wrap_content"
             android:layout_height="48dp"
@@ -1677,6 +1807,7 @@
                 android:indeterminateTint="@color/accent_primary" />
 
             <TextView
+                android:id="@+id/fullscreenLyricsLoadingTextView"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Đang tìm lời bài hát…"
@@ -1740,7 +1871,7 @@
             </androidx.core.widget.NestedScrollView>
         </LinearLayout>
 
-        <!-- Ambiguous Candidates Container -->
+        <!-- Candidate Picker / Ambiguous Candidates Container -->
         <LinearLayout
             android:id="@+id/fullscreenLyricsAmbiguousContainer"
             android:layout_width="match_parent"
@@ -1749,22 +1880,54 @@
             android:padding="10dp"
             android:visibility="gone">
 
-            <TextView
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="Tìm thấy nhiều lời bài hát phù hợp"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:textColor="@color/text_primary" />
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="10dp">
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="Chọn bản khớp với bài đang phát:"
-                android:textSize="14sp"
-                android:textColor="@color/text_secondary"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="10dp" />
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/fullscreenLyricsAmbiguousTitleView"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Chọn bản lời bài hát phù hợp"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:id="@+id/fullscreenLyricsAmbiguousSubtitleView"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Chọn bản khớp với bài đang phát (tối đa 5 kết quả):"
+                        android:textSize="14sp"
+                        android:textColor="@color/text_secondary"
+                        android:layout_marginTop="4dp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/fullscreenLyricsCandidatesCloseButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minWidth="48dp"
+                    android:gravity="center"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_quality_chip_inactive"
+                    android:text="Đóng danh sách"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:contentDescription="Đóng danh sách lời" />
+            </LinearLayout>
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/fullscreenLyricsCandidatesRecyclerView"
@@ -1805,20 +1968,43 @@
                 android:layout_marginTop="8dp"
                 android:visibility="gone" />
 
-            <Button
-                android:id="@+id/fullscreenLyricsStatusActionButton"
+            <LinearLayout
                 android:layout_width="wrap_content"
-                android:layout_height="48dp"
-                android:minWidth="140dp"
-                android:paddingStart="20dp"
-                android:paddingEnd="20dp"
-                android:layout_marginTop="18dp"
-                android:background="@drawable/bg_quality_chip_active"
-                android:text="Tìm lại lời"
-                android:textAllCaps="false"
-                android:textSize="15sp"
-                android:textStyle="bold"
-                android:textColor="@color/text_primary" />
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:layout_marginTop="18dp">
+
+                <Button
+                    android:id="@+id/fullscreenLyricsStatusActionButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minWidth="140dp"
+                    android:paddingStart="20dp"
+                    android:paddingEnd="20dp"
+                    android:background="@drawable/bg_quality_chip_active"
+                    android:text="Tìm lại lời"
+                    android:textAllCaps="false"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary" />
+
+                <Button
+                    android:id="@+id/fullscreenLyricsStatusSecondaryButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minWidth="140dp"
+                    android:paddingStart="20dp"
+                    android:paddingEnd="20dp"
+                    android:layout_marginStart="12dp"
+                    android:background="@drawable/bg_quality_chip_inactive"
+                    android:text="Chọn lời khác"
+                    android:textAllCaps="false"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:visibility="gone" />
+            </LinearLayout>
         </LinearLayout>
     </FrameLayout>
 

@@ -4,6 +4,7 @@ import android.net.Uri
 import com.bsdung.musicassistantcar.BuildConfig
 import com.bsdung.musicassistantcar.lyrics.LrcParser
 import com.bsdung.musicassistantcar.lyrics.LyricsCandidate
+import com.bsdung.musicassistantcar.lyrics.LyricsCandidatesResult
 import com.bsdung.musicassistantcar.lyrics.LyricsLookupResult
 import com.bsdung.musicassistantcar.lyrics.LyricsMatchedTrack
 import com.bsdung.musicassistantcar.lyrics.LyricsStatus
@@ -857,6 +858,112 @@ open class CarApiClient {
         return parseLyricsLookupResponse(json)
     }
 
+    fun fetchLyricsCandidates(
+        trackKey: String,
+        title: String,
+        artist: String,
+        album: String = "",
+        durationMs: Long? = null,
+    ): LyricsCandidatesResult {
+        val body = JSONObject().apply {
+            put("track_id", trackKey)
+            put("track_key", trackKey)
+            put("title", title)
+            put("artist", artist)
+            put("album", album)
+            if (durationMs != null && durationMs > 0L) {
+                put("duration_ms", durationMs)
+            } else {
+                put("duration_ms", JSONObject.NULL)
+            }
+        }
+        val json = requestJson(
+            method = "POST",
+            path = "/car/lyrics/candidates",
+            bodyJson = body,
+            connectTimeoutMs = 5_000,
+            readTimeoutMs = 15_000,
+        )
+        return parseLyricsCandidatesResponse(json)
+    }
+
+    fun resolveLyricsByRecordId(
+        provider: String = "LRCLIB",
+        providerRecordId: String,
+        forceRefresh: Boolean = false,
+    ): LyricsLookupResult {
+        val body = JSONObject().apply {
+            put("provider", provider.trim().ifBlank { "LRCLIB" })
+            put("provider_record_id", providerRecordId.trim())
+            put("force_refresh", forceRefresh)
+        }
+        val json = requestJson(
+            method = "POST",
+            path = "/car/lyrics/resolve",
+            bodyJson = body,
+            connectTimeoutMs = 5_000,
+            readTimeoutMs = 15_000,
+        )
+        return parseLyricsLookupResponse(json)
+    }
+
+    internal fun parseLyricsCandidate(c: JSONObject, defaultProvider: String = "lrclib"): LyricsCandidate? {
+        val recId = cleanString(c, "provider_record_id").ifBlank { cleanString(c, "record_id") }
+        if (recId.isBlank()) return null
+        val hasSynced = if (c.has("has_synced_lyrics")) {
+            c.optBoolean("has_synced_lyrics", false)
+        } else {
+            c.optBoolean("has_synced", false)
+        }
+        val hasPlain = if (c.has("has_plain_lyrics")) {
+            c.optBoolean("has_plain_lyrics", true)
+        } else {
+            true
+        }
+        val confidence = c.optDouble("confidence", 0.0)
+        val matchScore = if (c.has("match_score") && !c.isNull("match_score")) {
+            c.optDouble("match_score", confidence * 100.0)
+        } else {
+            confidence * 100.0
+        }
+        return LyricsCandidate(
+            provider = cleanString(c, "provider", defaultProvider).ifBlank { defaultProvider },
+            recordId = recId,
+            title = cleanString(c, "title"),
+            artist = cleanString(c, "artist"),
+            album = cleanString(c, "album"),
+            durationMs = if (c.has("duration_ms") && !c.isNull("duration_ms")) c.optLong("duration_ms") else null,
+            hasSynced = hasSynced,
+            hasPlain = hasPlain,
+            instrumental = c.optBoolean("instrumental", false),
+            confidence = confidence,
+            matchScore = matchScore,
+            variantConflict = c.optBoolean("variant_conflict", false),
+            durationConflict = c.optBoolean("duration_conflict", false),
+        )
+    }
+
+    internal fun parseLyricsCandidatesResponse(json: JSONObject): LyricsCandidatesResult {
+        val status = cleanString(json, "status", "OK").ifBlank { "OK" }.uppercase()
+        val provider = cleanString(json, "provider", "lrclib").ifBlank { "lrclib" }
+        val diagnostic = cleanString(json, "diagnostic").takeIf { it.isNotBlank() }
+        val candidatesArr = json.optJSONArray("candidates") ?: JSONArray()
+        val candidates = buildList {
+            val count = minOf(candidatesArr.length(), 5)
+            for (i in 0 until count) {
+                val c = candidatesArr.optJSONObject(i) ?: continue
+                val parsed = parseLyricsCandidate(c, provider) ?: continue
+                add(parsed)
+            }
+        }
+        return LyricsCandidatesResult(
+            status = status,
+            provider = provider,
+            candidates = candidates,
+            diagnostic = diagnostic,
+        )
+    }
+
     internal fun parseLyricsLookupResponse(json: JSONObject): LyricsLookupResult {
         val status = LyricsStatus.fromWire(cleanString(json, "status", "TEMPORARY_ERROR"))
         val provider = cleanString(json, "provider", "lrclib").ifBlank { "lrclib" }
@@ -881,20 +988,8 @@ open class CarApiClient {
             val count = minOf(candidatesArr.length(), 5)
             for (i in 0 until count) {
                 val c = candidatesArr.optJSONObject(i) ?: continue
-                val recId = cleanString(c, "record_id")
-                if (recId.isBlank()) continue
-                add(
-                    LyricsCandidate(
-                        provider = cleanString(c, "provider", provider).ifBlank { provider },
-                        recordId = recId,
-                        title = cleanString(c, "title"),
-                        artist = cleanString(c, "artist"),
-                        album = cleanString(c, "album"),
-                        durationMs = if (c.has("duration_ms") && !c.isNull("duration_ms")) c.optLong("duration_ms") else null,
-                        hasSynced = c.optBoolean("has_synced", false),
-                        confidence = c.optDouble("confidence", 0.0),
-                    ),
-                )
+                val parsed = parseLyricsCandidate(c, provider) ?: continue
+                add(parsed)
             }
         }
 

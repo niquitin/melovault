@@ -48,6 +48,9 @@ import com.bsdung.musicassistantcar.ui.adapter.SyncedLyricsAdapter
 import com.bsdung.musicassistantcar.lyrics.LrcParser
 import com.bsdung.musicassistantcar.lyrics.LyricsCache
 import com.bsdung.musicassistantcar.lyrics.LyricsCandidate
+import com.bsdung.musicassistantcar.lyrics.LyricsCandidatePickerState
+import com.bsdung.musicassistantcar.lyrics.LyricsOverrideStore
+import com.bsdung.musicassistantcar.lyrics.LyricsProvenance
 import com.bsdung.musicassistantcar.lyrics.LyricsRepository
 import com.bsdung.musicassistantcar.lyrics.LyricsSessionController
 import com.bsdung.musicassistantcar.lyrics.LyricsTrackMetadata
@@ -140,17 +143,20 @@ class MainActivity : AppCompatActivity() {
     private var isQueueVisible: Boolean = false
     private var isLyricsVisible: Boolean = false
     private var isFullscreenLyricsVisible: Boolean = false
+    private var isCandidatePickerOpen: Boolean = false
+    private var currentCandidatePickerState: LyricsCandidatePickerState = LyricsCandidatePickerState.Closed
     private var isActivityInForeground: Boolean = false
     private var isLyricsAutoFollow: Boolean = true
     private var currentLyricsUiState: LyricsUiState = LyricsUiState.Idle
     private var currentLyricsSignature: String? = null
-    private var currentLyricsSourceSummary: String = "Nguồn: LRCLIB"
+    private var currentLyricsSourceSummary: String = "Nguồn: LRCLIB · Tự động"
     private var isEditMode: Boolean = false
     private var libraryItemTouchHelper: ItemTouchHelper? = null
     private val navManager = NavigationManager()
     private val lyricsRepository by lazy {
         LyricsRepository(
             cache = LyricsCache(this),
+            overrideStore = LyricsOverrideStore(this),
             apiClient = CarApiClient(),
         )
     }
@@ -409,6 +415,10 @@ class MainActivity : AppCompatActivity() {
             this,
             object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
+                    if (isCandidatePickerOpen) {
+                        closeLyricsCandidatePicker()
+                        return
+                    }
                     if (isFullscreenLyricsVisible) {
                         hideFullscreenLyrics()
                         return
@@ -690,11 +700,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val handleCandidateSelected: (LyricsCandidate) -> Unit = { candidate ->
-            loadLyricsForCurrentTrack(
-                forceRefresh = false,
-                preferredProvider = candidate.provider,
-                preferredRecordId = candidate.recordId,
-            )
+            selectManualLyricsCandidate(candidate)
         }
         lyricsCandidateAdapter = LyricsCandidateAdapter(onCandidateClick = handleCandidateSelected)
         fullscreenLyricsCandidateAdapter = LyricsCandidateAdapter(onCandidateClick = handleCandidateSelected)
@@ -831,7 +837,11 @@ class MainActivity : AppCompatActivity() {
             true
         }
         binding.lyricsBackButton?.setOnClickListener {
-            hideLyrics()
+            if (isCandidatePickerOpen) {
+                closeLyricsCandidatePicker()
+            } else {
+                hideLyrics()
+            }
         }
         binding.lyricsExpandFullscreenButton?.setOnClickListener {
             showFullscreenLyrics()
@@ -853,21 +863,73 @@ class MainActivity : AppCompatActivity() {
         binding.lyricsRefreshButton?.setOnClickListener {
             loadLyricsForCurrentTrack(forceRefresh = true)
         }
+        binding.lyricsChooseOtherButton?.setOnClickListener {
+            openLyricsCandidatePicker()
+        }
+        binding.lyricsAutoResetButton?.setOnClickListener {
+            resetLyricsToAutomatic()
+        }
+        binding.lyricsCandidatesCloseButton?.setOnClickListener {
+            closeLyricsCandidatePicker()
+        }
         binding.lyricsStatusActionButton?.setOnClickListener {
-            val isTempErr = currentLyricsUiState is LyricsUiState.TemporaryError
-            loadLyricsForCurrentTrack(forceRefresh = !isTempErr)
+            if (isCandidatePickerOpen) {
+                if (currentCandidatePickerState is LyricsCandidatePickerState.Empty) {
+                    closeLyricsCandidatePicker()
+                } else {
+                    openLyricsCandidatePicker()
+                }
+            } else {
+                val isTempErr = currentLyricsUiState is LyricsUiState.TemporaryError
+                loadLyricsForCurrentTrack(forceRefresh = !isTempErr)
+            }
+        }
+        binding.lyricsStatusSecondaryButton?.setOnClickListener {
+            if (isCandidatePickerOpen) {
+                closeLyricsCandidatePicker()
+            } else {
+                openLyricsCandidatePicker()
+            }
         }
 
         // Fullscreen Car Lyrics Overlay Controls
         binding.fullscreenLyricsBackButton?.setOnClickListener {
-            hideFullscreenLyrics()
+            if (isCandidatePickerOpen) {
+                closeLyricsCandidatePicker()
+            } else {
+                hideFullscreenLyrics()
+            }
         }
         binding.fullscreenLyricsRefreshButton?.setOnClickListener {
             loadLyricsForCurrentTrack(forceRefresh = true)
         }
+        binding.fullscreenLyricsChooseOtherButton?.setOnClickListener {
+            openLyricsCandidatePicker()
+        }
+        binding.fullscreenLyricsAutoResetButton?.setOnClickListener {
+            resetLyricsToAutomatic()
+        }
+        binding.fullscreenLyricsCandidatesCloseButton?.setOnClickListener {
+            closeLyricsCandidatePicker()
+        }
         binding.fullscreenLyricsStatusActionButton?.setOnClickListener {
-            val isTempErr = currentLyricsUiState is LyricsUiState.TemporaryError
-            loadLyricsForCurrentTrack(forceRefresh = !isTempErr)
+            if (isCandidatePickerOpen) {
+                if (currentCandidatePickerState is LyricsCandidatePickerState.Empty) {
+                    closeLyricsCandidatePicker()
+                } else {
+                    openLyricsCandidatePicker()
+                }
+            } else {
+                val isTempErr = currentLyricsUiState is LyricsUiState.TemporaryError
+                loadLyricsForCurrentTrack(forceRefresh = !isTempErr)
+            }
+        }
+        binding.fullscreenLyricsStatusSecondaryButton?.setOnClickListener {
+            if (isCandidatePickerOpen) {
+                closeLyricsCandidatePicker()
+            } else {
+                openLyricsCandidatePicker()
+            }
         }
         binding.fullscreenLyricsFollowButton?.setOnClickListener {
             Log.i(TAG, "LYRICS_FOLLOW_RESUMED: fullscreen=true")
@@ -2353,6 +2415,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleLyricsOnTrackTransition(mediaItem: MediaItem?) {
         stopLyricsPositionLoop()
+        isCandidatePickerOpen = false
+        currentCandidatePickerState = LyricsCandidatePickerState.Closed
         isLyricsAutoFollow = true
         updateLyricsAutoFollowButtonUi()
         syncedLyricsAdapter.submitLines(emptyList(), -1)
@@ -2399,6 +2463,8 @@ class MainActivity : AppCompatActivity() {
         val currentItem = browser?.currentMediaItem
         if (currentItem == null) {
             lyricsRepository.cancelActiveRequests()
+            isCandidatePickerOpen = false
+            currentCandidatePickerState = LyricsCandidatePickerState.Closed
             currentLyricsSignature = null
             currentLyricsUiState = LyricsUiState.NotFound()
             if (isLyricsVisible || isFullscreenLyricsVisible) {
@@ -2410,6 +2476,8 @@ class MainActivity : AppCompatActivity() {
         val trackMeta = metadataOverride ?: extractLyricsTrackMetadata(currentItem)
         val token = preAllocatedToken ?: lyricsRepository.beginTrackRequest(trackMeta)
         currentLyricsSignature = token.signature
+        isCandidatePickerOpen = false
+        currentCandidatePickerState = LyricsCandidatePickerState.Closed
 
         isLyricsAutoFollow = true
         updateLyricsAutoFollowButtonUi()
@@ -2439,7 +2507,8 @@ class MainActivity : AppCompatActivity() {
                 TAG,
                 "LYRICS_RESOLVED: trackKey=${trackMeta.trackKey} status=${result.status} " +
                     "fromCache=${result.fromCache} provider=${result.provider} " +
-                    "recordId=${result.providerRecordId ?: "none"} lines=${result.syncedLines.size}",
+                    "recordId=${result.providerRecordId ?: "none"} provenance=${result.provenance} " +
+                    "lines=${result.syncedLines.size}",
             )
             runOnUiThread {
                 if (!lyricsRepository.isTokenCurrent(token)) {
@@ -2460,6 +2529,207 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun openLyricsCandidatePicker() {
+        val currentItem = browser?.currentMediaItem ?: return
+        val trackMeta = extractLyricsTrackMetadata(currentItem)
+        isCandidatePickerOpen = true
+
+        val token = lyricsRepository.beginCandidateListRequest(trackMeta)
+        currentCandidatePickerState = LyricsCandidatePickerState.Loading(
+            title = trackMeta.title,
+            artist = trackMeta.artist,
+        )
+        if (isLyricsVisible || isFullscreenLyricsVisible) {
+            renderLyricsUiState(currentLyricsUiState)
+        }
+
+        lyricsExecutor.submit {
+            val candResult = lyricsRepository.fetchCandidates(trackMeta)
+            Log.i(
+                TAG,
+                "LYRICS_CANDIDATES_LOADED: trackKey=${trackMeta.trackKey} status=${candResult.status} " +
+                    "count=${candResult.candidates.size}",
+            )
+            runOnUiThread {
+                if (!lyricsRepository.isCandidateListTokenCurrent(token)) {
+                    Log.i(
+                        TAG,
+                        "LYRICS_CANDIDATES_STALE_DISCARDED: trackKey=${trackMeta.trackKey} gen=${token.generation}",
+                    )
+                    return@runOnUiThread
+                }
+                val activeRecordId = activeRecordIdForCurrentTrack(trackMeta)
+                currentCandidatePickerState = when {
+                    candResult.status.equals("ERROR", ignoreCase = true) ||
+                        candResult.status.equals("TEMPORARY_ERROR", ignoreCase = true) -> {
+                        LyricsCandidatePickerState.Error(
+                            message = candResult.errorMessage ?: "Không thể tải danh sách lời bài hát",
+                        )
+                    }
+                    candResult.candidates.isEmpty() -> {
+                        val fallbackCandidates = (currentLyricsUiState as? LyricsUiState.Ambiguous)?.candidates.orEmpty()
+                        if (fallbackCandidates.isNotEmpty()) {
+                            LyricsCandidatePickerState.Loaded(
+                                candidates = fallbackCandidates.take(LyricsRepository.MAX_DISPLAY_CANDIDATES),
+                                selectedRecordId = activeRecordId,
+                            )
+                        } else {
+                            LyricsCandidatePickerState.Empty()
+                        }
+                    }
+                    else -> {
+                        LyricsCandidatePickerState.Loaded(
+                            candidates = candResult.candidates.take(LyricsRepository.MAX_DISPLAY_CANDIDATES),
+                            selectedRecordId = activeRecordId,
+                        )
+                    }
+                }
+                if (isLyricsVisible || isFullscreenLyricsVisible) {
+                    renderLyricsUiState(currentLyricsUiState)
+                }
+            }
+        }
+    }
+
+    private fun closeLyricsCandidatePicker() {
+        if (!isCandidatePickerOpen) return
+        isCandidatePickerOpen = false
+        currentCandidatePickerState = LyricsCandidatePickerState.Closed
+        if (isLyricsVisible || isFullscreenLyricsVisible) {
+            renderLyricsUiState(currentLyricsUiState)
+        }
+    }
+
+    private fun selectManualLyricsCandidate(candidate: LyricsCandidate) {
+        val currentItem = browser?.currentMediaItem ?: return
+        val trackMeta = extractLyricsTrackMetadata(currentItem)
+        val token = lyricsRepository.beginTrackRequest(trackMeta)
+        currentLyricsSignature = token.signature
+
+        isCandidatePickerOpen = false
+        currentCandidatePickerState = LyricsCandidatePickerState.Closed
+        isLyricsAutoFollow = true
+        updateLyricsAutoFollowButtonUi()
+        syncedLyricsAdapter.submitLines(emptyList(), -1)
+        fullscreenSyncedLyricsAdapter.submitLines(emptyList(), -1)
+        binding.lyricsSyncedRecyclerView?.scrollToPosition(0)
+        binding.fullscreenLyricsSyncedRecyclerView?.scrollToPosition(0)
+        binding.lyricsPlainContainer?.scrollTo(0, 0)
+        binding.fullscreenLyricsPlainContainer?.scrollTo(0, 0)
+
+        currentLyricsUiState = LyricsUiState.Loading(
+            title = trackMeta.title,
+            artist = trackMeta.artist,
+        )
+        if (isLyricsVisible || isFullscreenLyricsVisible) {
+            renderLyricsUiState(currentLyricsUiState)
+        }
+
+        lyricsExecutor.submit {
+            val result = lyricsRepository.selectManualCandidate(
+                metadata = trackMeta,
+                candidate = candidate,
+            )
+            Log.i(
+                TAG,
+                "LYRICS_MANUAL_SELECTED: trackKey=${trackMeta.trackKey} recordId=${candidate.recordId} " +
+                    "status=${result.status} provenance=${result.provenance} lines=${result.syncedLines.size}",
+            )
+            runOnUiThread {
+                if (!lyricsRepository.isTokenCurrent(token)) {
+                    Log.i(TAG, "LYRICS_STALE_DISCARDED: trackKey=${trackMeta.trackKey} gen=${token.generation}")
+                    return@runOnUiThread
+                }
+                val posMs = browser?.currentPosition?.coerceAtLeast(0L) ?: 0L
+                val uiState = LyricsRepository.toUiState(
+                    result = result,
+                    currentPositionMs = posMs,
+                    autoFollow = isLyricsAutoFollow,
+                )
+                currentLyricsUiState = uiState
+                if (isLyricsVisible || isFullscreenLyricsVisible) {
+                    renderLyricsUiState(uiState)
+                }
+            }
+        }
+    }
+
+    private fun resetLyricsToAutomatic() {
+        val currentItem = browser?.currentMediaItem ?: return
+        val trackMeta = extractLyricsTrackMetadata(currentItem)
+        val token = lyricsRepository.beginTrackRequest(trackMeta)
+        currentLyricsSignature = token.signature
+
+        isCandidatePickerOpen = false
+        currentCandidatePickerState = LyricsCandidatePickerState.Closed
+        isLyricsAutoFollow = true
+        updateLyricsAutoFollowButtonUi()
+        syncedLyricsAdapter.submitLines(emptyList(), -1)
+        fullscreenSyncedLyricsAdapter.submitLines(emptyList(), -1)
+        binding.lyricsSyncedRecyclerView?.scrollToPosition(0)
+        binding.fullscreenLyricsSyncedRecyclerView?.scrollToPosition(0)
+        binding.lyricsPlainContainer?.scrollTo(0, 0)
+        binding.fullscreenLyricsPlainContainer?.scrollTo(0, 0)
+
+        currentLyricsUiState = LyricsUiState.Loading(
+            title = trackMeta.title,
+            artist = trackMeta.artist,
+        )
+        if (isLyricsVisible || isFullscreenLyricsVisible) {
+            renderLyricsUiState(currentLyricsUiState)
+        }
+
+        lyricsExecutor.submit {
+            val result = lyricsRepository.clearManualOverride(trackMeta)
+            Log.i(
+                TAG,
+                "LYRICS_MANUAL_CLEARED: trackKey=${trackMeta.trackKey} status=${result.status} " +
+                    "provenance=${result.provenance} recordId=${result.providerRecordId ?: "none"}",
+            )
+            runOnUiThread {
+                if (!lyricsRepository.isTokenCurrent(token)) {
+                    Log.i(TAG, "LYRICS_STALE_DISCARDED: trackKey=${trackMeta.trackKey} gen=${token.generation}")
+                    return@runOnUiThread
+                }
+                val posMs = browser?.currentPosition?.coerceAtLeast(0L) ?: 0L
+                val uiState = LyricsRepository.toUiState(
+                    result = result,
+                    currentPositionMs = posMs,
+                    autoFollow = isLyricsAutoFollow,
+                )
+                currentLyricsUiState = uiState
+                if (isLyricsVisible || isFullscreenLyricsVisible) {
+                    renderLyricsUiState(uiState)
+                }
+            }
+        }
+    }
+
+    private fun activeRecordIdForCurrentTrack(metadataOverride: LyricsTrackMetadata? = null): String? {
+        val currentItem = browser?.currentMediaItem
+        val meta = metadataOverride ?: currentItem?.let { extractLyricsTrackMetadata(it) }
+        val overrideRecId = meta?.let { lyricsRepository.getManualOverride(it)?.providerRecordId }
+        if (!overrideRecId.isNullOrBlank()) return overrideRecId
+        return when (val s = currentLyricsUiState) {
+            is LyricsUiState.Synced -> s.recordId
+            is LyricsUiState.Plain -> s.recordId
+            else -> null
+        }
+    }
+
+    private fun isManualOverrideActiveForState(state: LyricsUiState): Boolean {
+        val stateManual = when (state) {
+            is LyricsUiState.Synced -> state.provenance == LyricsProvenance.MANUAL
+            is LyricsUiState.Plain -> state.provenance == LyricsProvenance.MANUAL
+            is LyricsUiState.Instrumental -> state.provenance == LyricsProvenance.MANUAL
+            else -> false
+        }
+        if (stateManual) return true
+        val currentItem = browser?.currentMediaItem ?: return false
+        val meta = extractLyricsTrackMetadata(currentItem)
+        return lyricsRepository.hasManualOverride(meta)
+    }
+
     private fun renderLyricsUiState(state: LyricsUiState) {
         stopLyricsPositionLoop()
         // Inline containers
@@ -2470,6 +2740,7 @@ class MainActivity : AppCompatActivity() {
         binding.lyricsAmbiguousContainer?.visibility = View.GONE
         binding.lyricsStatusContainer?.visibility = View.GONE
         binding.lyricsAutoFollowButton?.visibility = View.GONE
+        binding.lyricsStatusSecondaryButton?.visibility = View.GONE
 
         // Fullscreen containers
         binding.fullscreenLyricsLoadingView?.visibility = View.GONE
@@ -2477,6 +2748,113 @@ class MainActivity : AppCompatActivity() {
         binding.fullscreenLyricsPlainContainer?.visibility = View.GONE
         binding.fullscreenLyricsAmbiguousContainer?.visibility = View.GONE
         binding.fullscreenLyricsStatusContainer?.visibility = View.GONE
+        binding.fullscreenLyricsStatusSecondaryButton?.visibility = View.GONE
+
+        val hasTrack = browser?.currentMediaItem != null
+        val manualOverrideActive = isManualOverrideActiveForState(state)
+        val provenanceBadge = if (manualOverrideActive) {
+            LyricsProvenance.MANUAL.badgeText
+        } else {
+            LyricsProvenance.AUTO.badgeText
+        }
+
+        // Action buttons visibility & labels
+        val showAutoReset = hasTrack && manualOverrideActive && state !is LyricsUiState.Loading
+        binding.lyricsAutoResetButton?.visibility = if (showAutoReset) View.VISIBLE else View.GONE
+        binding.fullscreenLyricsAutoResetButton?.visibility = if (showAutoReset) View.VISIBLE else View.GONE
+
+        val chooseButtonLabel = if (state is LyricsUiState.Ambiguous && !isCandidatePickerOpen) {
+            "Chọn kết quả"
+        } else {
+            "Chọn lời khác"
+        }
+        binding.lyricsChooseOtherButton?.text = chooseButtonLabel
+        binding.fullscreenLyricsChooseOtherButton?.text = chooseButtonLabel
+        binding.lyricsChooseOtherButton?.visibility = if (hasTrack) View.VISIBLE else View.GONE
+        binding.fullscreenLyricsChooseOtherButton?.visibility = if (hasTrack) View.VISIBLE else View.GONE
+
+        if (isCandidatePickerOpen) {
+            when (val pickerState = currentCandidatePickerState) {
+                is LyricsCandidatePickerState.Loading -> {
+                    currentLyricsSourceSummary = "Đang tải danh sách lời từ LRCLIB..."
+                    binding.lyricsSourceBadgeView?.text = currentLyricsSourceSummary
+                    binding.lyricsLoadingTextView?.text = "Đang tải danh sách lời bài hát…"
+                    binding.fullscreenLyricsLoadingTextView?.text = "Đang tải danh sách lời bài hát…"
+                    binding.lyricsLoadingView?.visibility = View.VISIBLE
+                    binding.fullscreenLyricsLoadingView?.visibility = View.VISIBLE
+                }
+                is LyricsCandidatePickerState.Loaded -> {
+                    currentLyricsSourceSummary = "Nguồn: $provenanceBadge · Chọn bản lời (${pickerState.candidates.size} kết quả)"
+                    binding.lyricsSourceBadgeView?.text = currentLyricsSourceSummary
+
+                    binding.lyricsAmbiguousTitleView?.text = "Chọn bản lời bài hát phù hợp"
+                    binding.lyricsAmbiguousSubtitleView?.text = "Chọn bản khớp với bài đang phát (${pickerState.candidates.size} kết quả):"
+                    binding.lyricsCandidatesCloseButton?.visibility = View.VISIBLE
+                    lyricsCandidateAdapter.submitCandidates(
+                        candidates = pickerState.candidates,
+                        activeRecordId = pickerState.activeRecordId,
+                    )
+                    binding.lyricsAmbiguousContainer?.visibility = View.VISIBLE
+
+                    binding.fullscreenLyricsAmbiguousTitleView?.text = "Chọn bản lời bài hát phù hợp"
+                    binding.fullscreenLyricsAmbiguousSubtitleView?.text = "Chọn bản khớp với bài đang phát (${pickerState.candidates.size} kết quả):"
+                    binding.fullscreenLyricsCandidatesCloseButton?.visibility = View.VISIBLE
+                    fullscreenLyricsCandidateAdapter.submitCandidates(
+                        candidates = pickerState.candidates,
+                        activeRecordId = pickerState.activeRecordId,
+                    )
+                    binding.fullscreenLyricsAmbiguousContainer?.visibility = View.VISIBLE
+                }
+                is LyricsCandidatePickerState.Empty -> {
+                    currentLyricsSourceSummary = "Nguồn: $provenanceBadge · Không có ứng viên phù hợp"
+                    binding.lyricsSourceBadgeView?.text = currentLyricsSourceSummary
+
+                    binding.lyricsStatusTitleView?.text = "Không tìm thấy lời phù hợp"
+                    binding.lyricsStatusSubtitleView?.text = "LRCLIB chưa có bản lời nào khớp với bài hát này."
+                    binding.lyricsStatusSubtitleView?.visibility = View.VISIBLE
+                    binding.lyricsStatusActionButton?.text = "Đóng danh sách"
+                    binding.lyricsStatusSecondaryButton?.visibility = View.GONE
+                    binding.lyricsStatusContainer?.visibility = View.VISIBLE
+
+                    binding.fullscreenLyricsStatusTitleView?.text = "Không tìm thấy lời phù hợp"
+                    binding.fullscreenLyricsStatusSubtitleView?.text = "LRCLIB chưa có bản lời nào khớp với bài hát này."
+                    binding.fullscreenLyricsStatusSubtitleView?.visibility = View.VISIBLE
+                    binding.fullscreenLyricsStatusActionButton?.text = "Đóng danh sách"
+                    binding.fullscreenLyricsStatusSecondaryButton?.visibility = View.GONE
+                    binding.fullscreenLyricsStatusContainer?.visibility = View.VISIBLE
+                }
+                is LyricsCandidatePickerState.Error -> {
+                    currentLyricsSourceSummary = "Lỗi tải danh sách lời bài hát"
+                    binding.lyricsSourceBadgeView?.text = currentLyricsSourceSummary
+
+                    binding.lyricsStatusTitleView?.text = "Không thể tải danh sách lời bài hát"
+                    binding.lyricsStatusSubtitleView?.text = pickerState.message
+                    binding.lyricsStatusSubtitleView?.visibility = View.VISIBLE
+                    binding.lyricsStatusActionButton?.text = "Thử lại"
+                    binding.lyricsStatusSecondaryButton?.text = "Đóng"
+                    binding.lyricsStatusSecondaryButton?.visibility = View.VISIBLE
+                    binding.lyricsStatusContainer?.visibility = View.VISIBLE
+
+                    binding.fullscreenLyricsStatusTitleView?.text = "Không thể tải danh sách lời bài hát"
+                    binding.fullscreenLyricsStatusSubtitleView?.text = pickerState.message
+                    binding.fullscreenLyricsStatusSubtitleView?.visibility = View.VISIBLE
+                    binding.fullscreenLyricsStatusActionButton?.text = "Thử lại"
+                    binding.fullscreenLyricsStatusSecondaryButton?.text = "Đóng"
+                    binding.fullscreenLyricsStatusSecondaryButton?.visibility = View.VISIBLE
+                    binding.fullscreenLyricsStatusContainer?.visibility = View.VISIBLE
+                }
+                is LyricsCandidatePickerState.Hidden -> {
+                    isCandidatePickerOpen = false
+                }
+            }
+            updateLyricsAutoFollowButtonUi()
+            startLyricsPositionLoop()
+            updateFullscreenLyricsPlayerChrome()
+            return
+        }
+
+        binding.lyricsLoadingTextView?.text = "Đang tìm lời bài hát…"
+        binding.fullscreenLyricsLoadingTextView?.text = "Đang tìm lời bài hát…"
 
         when (state) {
             is LyricsUiState.Idle,
@@ -2489,8 +2867,7 @@ class MainActivity : AppCompatActivity() {
             }
             is LyricsUiState.Synced -> {
                 val srcLabel = if (state.fromCache) "Đã lưu đệm" else "Trực tuyến"
-                val providerLabel = state.provider.uppercase()
-                currentLyricsSourceSummary = "Nguồn: $providerLabel · Lời đồng bộ · $srcLabel"
+                currentLyricsSourceSummary = "Nguồn: $provenanceBadge · Lời đồng bộ · $srcLabel"
                 binding.lyricsSourceBadgeView?.text = currentLyricsSourceSummary
                 binding.lyricsSyncedRecyclerView?.visibility = View.VISIBLE
                 binding.fullscreenLyricsSyncedRecyclerView?.visibility = View.VISIBLE
@@ -2512,8 +2889,7 @@ class MainActivity : AppCompatActivity() {
             }
             is LyricsUiState.Plain -> {
                 val srcLabel = if (state.fromCache) "Đã lưu đệm" else "Trực tuyến"
-                val providerLabel = state.provider.uppercase()
-                currentLyricsSourceSummary = "Nguồn: $providerLabel · Lời văn bản · $srcLabel"
+                currentLyricsSourceSummary = "Nguồn: $provenanceBadge · Lời văn bản · $srcLabel"
                 binding.lyricsSourceBadgeView?.text = currentLyricsSourceSummary
                 binding.lyricsPlainBadgeView?.text = "Lời chưa đồng bộ thời gian"
                 binding.lyricsPlainBadgeView?.visibility = View.VISIBLE
@@ -2527,49 +2903,61 @@ class MainActivity : AppCompatActivity() {
                 startLyricsPositionLoop()
             }
             is LyricsUiState.Instrumental -> {
-                val providerLabel = state.provider.uppercase()
-                currentLyricsSourceSummary = "Nguồn: $providerLabel · Bản nhạc không lời"
+                currentLyricsSourceSummary = "Nguồn: $provenanceBadge · Bản nhạc không lời"
                 binding.lyricsSourceBadgeView?.text = currentLyricsSourceSummary
                 binding.lyricsStatusTitleView?.text = "Bản nhạc không lời"
                 binding.lyricsStatusSubtitleView?.text = "Bài hát này được đánh dấu là nhạc không lời (Instrumental)."
                 binding.lyricsStatusSubtitleView?.visibility = View.VISIBLE
                 binding.lyricsStatusActionButton?.text = "Tìm lại lời"
+                binding.lyricsStatusSecondaryButton?.text = "Chọn lời khác"
+                binding.lyricsStatusSecondaryButton?.visibility = if (hasTrack) View.VISIBLE else View.GONE
                 binding.lyricsStatusContainer?.visibility = View.VISIBLE
 
                 binding.fullscreenLyricsStatusTitleView?.text = "Bản nhạc không lời"
                 binding.fullscreenLyricsStatusSubtitleView?.text = "Bài hát này được đánh dấu là nhạc không lời (Instrumental)."
                 binding.fullscreenLyricsStatusSubtitleView?.visibility = View.VISIBLE
                 binding.fullscreenLyricsStatusActionButton?.text = "Tìm lại lời"
+                binding.fullscreenLyricsStatusSecondaryButton?.text = "Chọn lời khác"
+                binding.fullscreenLyricsStatusSecondaryButton?.visibility = if (hasTrack) View.VISIBLE else View.GONE
                 binding.fullscreenLyricsStatusContainer?.visibility = View.VISIBLE
                 updateLyricsAutoFollowButtonUi()
                 startLyricsPositionLoop()
             }
             is LyricsUiState.Ambiguous -> {
-                val providerLabel = state.provider.uppercase()
-                currentLyricsSourceSummary = "Nguồn: $providerLabel · Có nhiều kết quả gần giống"
+                currentLyricsSourceSummary = "Nguồn: ${LyricsProvenance.AUTO.badgeText} · Có nhiều kết quả gần giống"
                 binding.lyricsSourceBadgeView?.text = currentLyricsSourceSummary
-                lyricsCandidateAdapter.submitCandidates(state.candidates)
+                val activeId = activeRecordIdForCurrentTrack()
+                binding.lyricsAmbiguousTitleView?.text = "Tìm thấy nhiều lời bài hát phù hợp"
+                binding.lyricsAmbiguousSubtitleView?.text = "Chọn bản khớp với bài đang phát:"
+                binding.lyricsCandidatesCloseButton?.visibility = View.GONE
+                lyricsCandidateAdapter.submitCandidates(state.candidates, activeRecordId = activeId)
                 binding.lyricsAmbiguousContainer?.visibility = View.VISIBLE
 
-                fullscreenLyricsCandidateAdapter.submitCandidates(state.candidates)
+                binding.fullscreenLyricsAmbiguousTitleView?.text = "Tìm thấy nhiều lời bài hát phù hợp"
+                binding.fullscreenLyricsAmbiguousSubtitleView?.text = "Chọn bản khớp với bài đang phát:"
+                binding.fullscreenLyricsCandidatesCloseButton?.visibility = View.GONE
+                fullscreenLyricsCandidateAdapter.submitCandidates(state.candidates, activeRecordId = activeId)
                 binding.fullscreenLyricsAmbiguousContainer?.visibility = View.VISIBLE
                 updateLyricsAutoFollowButtonUi()
                 startLyricsPositionLoop()
             }
             is LyricsUiState.NotFound -> {
-                val providerLabel = state.provider.uppercase()
-                currentLyricsSourceSummary = "Nguồn: $providerLabel · Không có dữ liệu lời phù hợp"
+                currentLyricsSourceSummary = "Nguồn: $provenanceBadge · Không có dữ liệu lời phù hợp"
                 binding.lyricsSourceBadgeView?.text = currentLyricsSourceSummary
                 binding.lyricsStatusTitleView?.text = "Không tìm thấy lời bài hát"
                 binding.lyricsStatusSubtitleView?.text = "Đã kiểm tra tên bài hát và nghệ sĩ nhưng chưa có bản lời khớp chính xác."
                 binding.lyricsStatusSubtitleView?.visibility = View.VISIBLE
                 binding.lyricsStatusActionButton?.text = "Tìm lại lời"
+                binding.lyricsStatusSecondaryButton?.text = "Chọn lời khác"
+                binding.lyricsStatusSecondaryButton?.visibility = if (hasTrack) View.VISIBLE else View.GONE
                 binding.lyricsStatusContainer?.visibility = View.VISIBLE
 
                 binding.fullscreenLyricsStatusTitleView?.text = "Không tìm thấy lời bài hát"
                 binding.fullscreenLyricsStatusSubtitleView?.text = "Đã kiểm tra tên bài hát và nghệ sĩ nhưng chưa có bản lời khớp chính xác."
                 binding.fullscreenLyricsStatusSubtitleView?.visibility = View.VISIBLE
                 binding.fullscreenLyricsStatusActionButton?.text = "Tìm lại lời"
+                binding.fullscreenLyricsStatusSecondaryButton?.text = "Chọn lời khác"
+                binding.fullscreenLyricsStatusSecondaryButton?.visibility = if (hasTrack) View.VISIBLE else View.GONE
                 binding.fullscreenLyricsStatusContainer?.visibility = View.VISIBLE
                 updateLyricsAutoFollowButtonUi()
                 startLyricsPositionLoop()
@@ -2582,12 +2970,16 @@ class MainActivity : AppCompatActivity() {
                 binding.lyricsStatusSubtitleView?.text = "Kiểm tra kết nối mạng hoặc thử lại sau."
                 binding.lyricsStatusSubtitleView?.visibility = View.VISIBLE
                 binding.lyricsStatusActionButton?.text = "Thử lại"
+                binding.lyricsStatusSecondaryButton?.text = "Chọn lời khác"
+                binding.lyricsStatusSecondaryButton?.visibility = if (hasTrack) View.VISIBLE else View.GONE
                 binding.lyricsStatusContainer?.visibility = View.VISIBLE
 
                 binding.fullscreenLyricsStatusTitleView?.text = titleText
                 binding.fullscreenLyricsStatusSubtitleView?.text = "Kiểm tra kết nối mạng hoặc thử lại sau."
                 binding.fullscreenLyricsStatusSubtitleView?.visibility = View.VISIBLE
                 binding.fullscreenLyricsStatusActionButton?.text = "Thử lại"
+                binding.fullscreenLyricsStatusSecondaryButton?.text = "Chọn lời khác"
+                binding.fullscreenLyricsStatusSecondaryButton?.visibility = if (hasTrack) View.VISIBLE else View.GONE
                 binding.fullscreenLyricsStatusContainer?.visibility = View.VISIBLE
                 updateLyricsAutoFollowButtonUi()
                 startLyricsPositionLoop()
@@ -2597,7 +2989,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateLyricsAutoFollowButtonUi() {
-        val isSynced = currentLyricsUiState is LyricsUiState.Synced
+        val isSynced = currentLyricsUiState is LyricsUiState.Synced && !isCandidatePickerOpen
         val showInlineBtn = isLyricsVisible && isSynced && !isLyricsAutoFollow
         binding.lyricsAutoFollowButton?.visibility = if (showInlineBtn) View.VISIBLE else View.GONE
 

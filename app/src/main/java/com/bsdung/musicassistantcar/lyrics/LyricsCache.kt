@@ -243,6 +243,11 @@ class LyricsCache(
         overrideFile(safeSig).delete()
     }
 
+    fun invalidateEntryOnly(signature: String) = synchronized(lock) {
+        val safeSig = sanitizeSignature(signature)
+        entryFile(safeSig).delete()
+    }
+
     fun invalidate(signature: String) = synchronized(lock) {
         val safeSig = sanitizeSignature(signature)
         entryFile(safeSig).delete()
