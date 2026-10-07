@@ -401,9 +401,9 @@
 
             <ImageView
                 android:id="@+id/searchClearButton"
-                android:layout_width="26dp"
-                android:layout_height="26dp"
-                android:padding="5dp"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="10dp"
                 android:src="@drawable/ic_close"
                 android:tint="@color/text_secondary"
                 android:visibility="gone"
@@ -452,7 +452,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="Tiếp theo"
+                        android:text="Hàng đợi"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:textColor="@color/text_primary" />
@@ -460,7 +460,8 @@
                     <TextView
                         android:id="@+id/queueClearButton"
                         android:layout_width="wrap_content"
-                        android:layout_height="36dp"
+                        android:layout_height="44dp"
+                        android:minHeight="44dp"
                         android:gravity="center"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
@@ -850,6 +851,112 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- Car-safe Quick Source / Category Filter Bar -->
+            <HorizontalScrollView
+                android:id="@+id/quickFilterScroll"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:scrollbars="none"
+                android:layout_marginBottom="8dp">
+
+                <LinearLayout
+                    android:id="@+id/quickFilterBar"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:id="@+id/filterRootChip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:minHeight="48dp"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="14dp"
+                        android:gravity="center"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_quality_chip_inactive"
+                        android:text="Thư viện"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:id="@+id/filterAllChip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:minHeight="48dp"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="14dp"
+                        android:gravity="center"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_quality_chip_inactive"
+                        android:text="Tất cả"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:id="@+id/filterDownloadedChip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:minHeight="48dp"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="14dp"
+                        android:gravity="center"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_quality_chip_inactive"
+                        android:text="Đã tải"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:id="@+id/filterDeviceChip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:minHeight="48dp"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="14dp"
+                        android:gravity="center"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_quality_chip_inactive"
+                        android:text="Thiết bị"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:id="@+id/filterDriveChip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:minHeight="48dp"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="14dp"
+                        android:gravity="center"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_quality_chip_inactive"
+                        android:text="Drive"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:id="@+id/filterPlaylistsChip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:minHeight="48dp"
+                        android:paddingStart="14dp"
+                        android:paddingEnd="14dp"
+                        android:gravity="center"
+                        android:background="@drawable/bg_quality_chip_inactive"
+                        android:text="Playlist"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+                </LinearLayout>
+            </HorizontalScrollView>
+
             <!-- Breadcrumbs Header -->
             <LinearLayout
                 android:id="@+id/breadcrumbBar"
@@ -861,9 +968,9 @@
 
                 <ImageView
                     android:id="@+id/backButton"
-                    android:layout_width="44dp"
-                    android:layout_height="44dp"
-                    android:padding="10dp"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:padding="12dp"
                     android:background="@drawable/bg_button_control"
                     android:src="@drawable/ic_arrow_back"
                     android:tint="@color/text_primary"

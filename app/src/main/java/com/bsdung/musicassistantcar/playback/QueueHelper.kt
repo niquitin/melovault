@@ -17,9 +17,41 @@ sealed class AddToQueueAction {
     data class StartNewQueue(val item: MediaItem) : AddToQueueAction()
 }
 
+sealed class RemoveQueueResult {
+    object InvalidIndex : RemoveQueueResult()
+    data class RemovedBeforeCurrent(
+        val removedIndex: Int,
+        val newCurrentIndex: Int,
+    ) : RemoveQueueResult()
+    data class RemovedAfterCurrent(
+        val removedIndex: Int,
+        val newCurrentIndex: Int,
+    ) : RemoveQueueResult()
+    data class RemovedCurrentAdvanceNext(
+        val removedIndex: Int,
+        val newCurrentIndex: Int,
+    ) : RemoveQueueResult()
+    data class RemovedCurrentMovePrevious(
+        val removedIndex: Int,
+        val newCurrentIndex: Int,
+    ) : RemoveQueueResult()
+    data class RemovedLastStopEmpty(
+        val removedIndex: Int,
+    ) : RemoveQueueResult()
+}
+
+data class AppliedRemoveResult(
+    val updatedQueue: List<MediaItem>,
+    val newCurrentIndex: Int,
+    val outcome: RemoveQueueResult,
+)
+
 sealed class QueueListItem {
     data class Header(val title: String) : QueueListItem()
-    data class Empty(val message: String) : QueueListItem()
+    data class Empty(
+        val message: String,
+        val isFullQueueEmpty: Boolean = false,
+    ) : QueueListItem()
     data class Track(
         val mediaItem: MediaItem,
         val queueIndex: Int,
@@ -31,10 +63,46 @@ sealed class QueueListItem {
         val isCurrent: Boolean,
         val isPlaying: Boolean,
         val isUpcoming: Boolean,
+        val sourceBadge: String? = null,
     ) : QueueListItem()
 }
 
 object QueueHelper {
+
+    fun formatQueueTitle(currentIndex: Int, totalCount: Int): String {
+        if (totalCount <= 0 || currentIndex !in 0 until totalCount) {
+            return "Hàng đợi · 0 bài"
+        }
+        return "Hàng đợi · ${currentIndex + 1}/$totalCount"
+    }
+
+    fun deriveSourceBadge(
+        item: MediaItem,
+        isOfflineDownloaded: Boolean = false,
+    ): String? {
+        if (isOfflineDownloaded) return "✓ Offline"
+        val mediaId = item.mediaId
+        val uriStr = item.localConfiguration?.uri?.toString().orEmpty()
+        return when {
+            mediaId.startsWith("device:") ||
+                mediaId.startsWith("device_track:") ||
+                uriStr.startsWith("content://") -> "Thiết bị"
+            uriStr.startsWith("file://") -> "✓ Offline"
+            mediaId.startsWith("drive-file:") || mediaId.startsWith("drive_file:") -> "Drive"
+            else -> {
+                val extras = item.mediaMetadata.extras
+                val source = (extras?.getString("source_type") ?: extras?.getString("source"))
+                    ?.lowercase()
+                    .orEmpty()
+                when (source) {
+                    "drive", "google_drive" -> "Drive"
+                    "telegram" -> "Telegram"
+                    "local", "device" -> "Thiết bị"
+                    else -> null
+                }
+            }
+        }
+    }
 
     fun planPlayNext(
         queue: List<MediaItem>,
@@ -113,6 +181,67 @@ object QueueHelper {
             is AddToQueueAction.AlreadyExists -> queue
             is AddToQueueAction.Append -> queue + newItem
         }
+    }
+
+    fun planRemoveQueueItem(
+        queueSize: Int,
+        currentIndex: Int,
+        targetIndex: Int,
+    ): RemoveQueueResult {
+        if (queueSize <= 0 || currentIndex !in 0 until queueSize || targetIndex !in 0 until queueSize) {
+            return RemoveQueueResult.InvalidIndex
+        }
+        return when {
+            targetIndex > currentIndex -> RemoveQueueResult.RemovedAfterCurrent(
+                removedIndex = targetIndex,
+                newCurrentIndex = currentIndex,
+            )
+            targetIndex < currentIndex -> RemoveQueueResult.RemovedBeforeCurrent(
+                removedIndex = targetIndex,
+                newCurrentIndex = currentIndex - 1,
+            )
+            queueSize == 1 -> RemoveQueueResult.RemovedLastStopEmpty(
+                removedIndex = targetIndex,
+            )
+            currentIndex < queueSize - 1 -> RemoveQueueResult.RemovedCurrentAdvanceNext(
+                removedIndex = targetIndex,
+                newCurrentIndex = currentIndex,
+            )
+            else -> RemoveQueueResult.RemovedCurrentMovePrevious(
+                removedIndex = targetIndex,
+                newCurrentIndex = currentIndex - 1,
+            )
+        }
+    }
+
+    fun applyRemoveQueueItem(
+        queue: List<MediaItem>,
+        currentIndex: Int,
+        targetIndex: Int,
+    ): AppliedRemoveResult {
+        val outcome = planRemoveQueueItem(queue.size, currentIndex, targetIndex)
+        if (outcome is RemoveQueueResult.InvalidIndex) {
+            return AppliedRemoveResult(
+                updatedQueue = queue,
+                newCurrentIndex = currentIndex,
+                outcome = outcome,
+            )
+        }
+        val mutable = queue.toMutableList()
+        mutable.removeAt(targetIndex)
+        val newCurrentIndex = when (outcome) {
+            is RemoveQueueResult.RemovedAfterCurrent -> outcome.newCurrentIndex
+            is RemoveQueueResult.RemovedBeforeCurrent -> outcome.newCurrentIndex
+            is RemoveQueueResult.RemovedCurrentAdvanceNext -> outcome.newCurrentIndex
+            is RemoveQueueResult.RemovedCurrentMovePrevious -> outcome.newCurrentIndex
+            is RemoveQueueResult.RemovedLastStopEmpty -> -1
+            is RemoveQueueResult.InvalidIndex -> currentIndex
+        }
+        return AppliedRemoveResult(
+            updatedQueue = mutable,
+            newCurrentIndex = newCurrentIndex,
+            outcome = outcome,
+        )
     }
 
     fun planRemoveUpcoming(
@@ -206,13 +335,31 @@ object QueueHelper {
         queue: List<MediaItem>,
         currentIndex: Int,
         isPlaying: Boolean,
+        sourceBadgeResolver: ((MediaItem) -> String?)? = null,
     ): List<QueueListItem> {
         if (queue.isEmpty()) {
-            return listOf(QueueListItem.Empty("Chưa có bài trong hàng đợi"))
+            return listOf(QueueListItem.Empty("Chưa có bài trong hàng đợi", isFullQueueEmpty = true))
         }
 
         val safeCurrentIndex = currentIndex.coerceIn(0, queue.lastIndex)
         val result = mutableListOf<QueueListItem>()
+
+        // 0. Previous tracks in queue (when safeCurrentIndex > 0)
+        if (safeCurrentIndex > 0) {
+            result.add(QueueListItem.Header("Trước đó · $safeCurrentIndex"))
+            for (i in 0 until safeCurrentIndex) {
+                result.add(
+                    createTrackItem(
+                        item = queue[i],
+                        index = i,
+                        isCurrent = false,
+                        isPlaying = false,
+                        isUpcoming = false,
+                        sourceBadge = sourceBadgeResolver?.invoke(queue[i]) ?: deriveSourceBadge(queue[i]),
+                    )
+                )
+            }
+        }
 
         // 1. Current track
         result.add(QueueListItem.Header("Đang phát"))
@@ -223,6 +370,7 @@ object QueueHelper {
                 isCurrent = true,
                 isPlaying = isPlaying,
                 isUpcoming = false,
+                sourceBadge = sourceBadgeResolver?.invoke(queue[safeCurrentIndex]) ?: deriveSourceBadge(queue[safeCurrentIndex]),
             )
         )
 
@@ -231,7 +379,7 @@ object QueueHelper {
         result.add(QueueListItem.Header("Tiếp theo · $upcomingCount"))
         val upcomingStartIndex = safeCurrentIndex + 1
         if (upcomingStartIndex >= queue.size) {
-            result.add(QueueListItem.Empty("Không còn bài tiếp theo"))
+            result.add(QueueListItem.Empty("Không còn bài tiếp theo", isFullQueueEmpty = false))
         } else {
             for (i in upcomingStartIndex until queue.size) {
                 result.add(
@@ -241,6 +389,7 @@ object QueueHelper {
                         isCurrent = false,
                         isPlaying = false,
                         isUpcoming = true,
+                        sourceBadge = sourceBadgeResolver?.invoke(queue[i]) ?: deriveSourceBadge(queue[i]),
                     )
                 )
             }
@@ -255,6 +404,7 @@ object QueueHelper {
         isCurrent: Boolean,
         isPlaying: Boolean,
         isUpcoming: Boolean,
+        sourceBadge: String? = null,
     ): QueueListItem.Track {
         val metadata = item.mediaMetadata
         val title = metadata.title?.toString().orEmpty().ifBlank { "Chưa xác định" }
@@ -289,6 +439,8 @@ object QueueHelper {
             isCurrent = isCurrent,
             isPlaying = isPlaying,
             isUpcoming = isUpcoming,
+            sourceBadge = sourceBadge,
         )
     }
 }
+

@@ -17,6 +17,7 @@ class QueueAdapter(
     private val onTrackClick: (QueueListItem.Track) -> Unit,
     private val onRemoveClick: (QueueListItem.Track) -> Unit,
     private val onStartDrag: ((RecyclerView.ViewHolder) -> Unit)? = null,
+    private val onReturnToLibraryClick: (() -> Unit)? = null,
 ) : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
     companion object {
@@ -34,6 +35,9 @@ class QueueAdapter(
     }
 
     fun getItem(position: Int): QueueListItem? = items.getOrNull(position)
+
+    fun getCurrentRowPosition(): Int =
+        items.indexOfFirst { it is QueueListItem.Track && it.isCurrent }
 
     fun moveItem(fromPosition: Int, toPosition: Int) {
         if (fromPosition in items.indices && toPosition in items.indices) {
@@ -96,7 +100,16 @@ class QueueAdapter(
         private val binding: ItemQueueEmptyBinding,
     ) : RecyclerView.ViewHolder(binding.root) {
         fun bind(item: QueueListItem.Empty) {
-            binding.queueEmptyMessage.text = item.message
+            binding.queueEmptyMessage.text = if (item.isFullQueueEmpty) "Hàng đợi đang trống" else item.message
+            if (item.isFullQueueEmpty && onReturnToLibraryClick != null) {
+                binding.queueEmptyReturnButton.visibility = View.VISIBLE
+                binding.queueEmptyReturnButton.setOnClickListener {
+                    onReturnToLibraryClick.invoke()
+                }
+            } else {
+                binding.queueEmptyReturnButton.visibility = View.GONE
+                binding.queueEmptyReturnButton.setOnClickListener(null)
+            }
         }
     }
 
@@ -129,6 +142,14 @@ class QueueAdapter(
                 binding.trackAudioInfo.visibility = View.GONE
             }
 
+            if (!item.sourceBadge.isNullOrBlank()) {
+                binding.queueSourceBadge.text = item.sourceBadge
+                binding.queueSourceBadge.visibility = View.VISIBLE
+            } else {
+                binding.queueSourceBadge.text = ""
+                binding.queueSourceBadge.visibility = View.GONE
+            }
+
             ArtworkLoader.loadArtwork(
                 imageView = binding.trackThumbnail,
                 uri = item.artworkUri,
@@ -140,30 +161,36 @@ class QueueAdapter(
                 binding.activeIndicator.visibility = View.VISIBLE
                 binding.trackRoot.setBackgroundResource(R.drawable.bg_track_active)
                 binding.trackTitle.setTextColor(ContextCompat.getColor(context, R.color.accent_primary))
+                binding.queueCurrentBadge.visibility = View.VISIBLE
                 binding.nowPlayingIndicator.visibility = View.VISIBLE
                 binding.nowPlayingIndicator.setImageResource(
                     if (item.isPlaying) R.drawable.ic_pause else R.drawable.ic_play_arrow
                 )
                 binding.dragHandle.visibility = View.GONE
-                binding.removeButton.visibility = View.GONE
+                binding.dragHandle.setOnTouchListener(null)
             } else {
                 binding.activeIndicator.visibility = View.GONE
                 binding.trackRoot.setBackgroundResource(R.drawable.bg_track_normal)
                 binding.trackTitle.setTextColor(ContextCompat.getColor(context, R.color.text_primary))
+                binding.queueCurrentBadge.visibility = View.GONE
                 binding.nowPlayingIndicator.visibility = View.GONE
-                binding.dragHandle.visibility = View.VISIBLE
-                binding.dragHandle.setOnTouchListener { _, event ->
-                    android.util.Log.i("QueueDrag", "dragHandle onTouch: action=${event.actionMasked}, pos=$bindingAdapterPosition")
-                    if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                        android.util.Log.i("QueueDrag", "dragHandle ACTION_DOWN -> calling onStartDrag")
-                        onStartDrag?.invoke(this)
+                if (item.isUpcoming) {
+                    binding.dragHandle.visibility = View.VISIBLE
+                    binding.dragHandle.setOnTouchListener { _, event ->
+                        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                            onStartDrag?.invoke(this)
+                        }
+                        false
                     }
-                    false
+                } else {
+                    binding.dragHandle.visibility = View.GONE
+                    binding.dragHandle.setOnTouchListener(null)
                 }
-                binding.removeButton.visibility = View.VISIBLE
-                binding.removeButton.setOnClickListener {
-                    onRemoveClick(item)
-                }
+            }
+
+            binding.removeButton.visibility = View.VISIBLE
+            binding.removeButton.setOnClickListener {
+                onRemoveClick(item)
             }
 
             binding.root.setOnClickListener {

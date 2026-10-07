@@ -260,8 +260,26 @@ class LibraryAdapter(
                 sampleRate = item.sampleRate,
                 channels = item.channels,
             )
-            if (!audioInfo.isNullOrBlank()) {
-                binding.trackAudioInfo.text = audioInfo
+            val extras = item.mediaItem.mediaMetadata.extras
+            val rawSource = (extras?.getString("source_type") ?: extras?.getString("source"))
+                ?.lowercase()
+                .orEmpty()
+            val sourceLabel = when (rawSource) {
+                "drive", "google_drive" -> "Drive"
+                "telegram" -> "Telegram"
+                "device", "local" -> "Thiết bị"
+                else -> when {
+                    item.id.startsWith(RemoteCatalog.DEVICE_PREFIX) -> "Thiết bị"
+                    item.id.startsWith(RemoteCatalog.DRIVE_FILE_PREFIX) -> "Drive"
+                    else -> ""
+                }
+            }
+            val combinedInfo = listOfNotNull(
+                sourceLabel.takeIf { it.isNotBlank() },
+                audioInfo?.takeIf { it.isNotBlank() },
+            ).joinToString(" · ")
+            if (combinedInfo.isNotBlank()) {
+                binding.trackAudioInfo.text = combinedInfo
                 binding.trackAudioInfo.visibility = View.VISIBLE
             } else {
                 binding.trackAudioInfo.text = ""
@@ -325,6 +343,8 @@ class LibraryAdapter(
                 binding.downloadContainer.visibility = View.GONE
                 binding.txtDownloadStatus.setOnClickListener(null)
                 binding.btnDownload.setOnClickListener(null)
+                binding.btnTrackActions.visibility = View.GONE
+                binding.btnTrackActions.setOnClickListener(null)
                 val selectable = isSelectableInEditMode(item)
                 if (selectable) {
                     binding.trackCheckbox.visibility = View.VISIBLE
@@ -357,6 +377,10 @@ class LibraryAdapter(
                 binding.trackCheckbox.visibility = View.GONE
                 binding.dragHandle.visibility = View.GONE
                 binding.dragHandle.setOnTouchListener(null)
+                binding.btnTrackActions.visibility = View.VISIBLE
+                binding.btnTrackActions.setOnClickListener {
+                    onTrackLongClick?.invoke(item)
+                }
 
                 val canonicalId = RemoteCatalog.canonicalTrackMediaId(item.mediaItem) ?: item.id
                 val trackId = canonicalId.removePrefix("download_job:").removePrefix(RemoteCatalog.TRACK_PREFIX).toLongOrNull()

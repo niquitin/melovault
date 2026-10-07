@@ -69,6 +69,7 @@ import com.bsdung.musicassistantcar.ui.adapter.QueueAdapter
 import com.bsdung.musicassistantcar.playback.QueueHelper
 import com.bsdung.musicassistantcar.playback.PlayNextAction
 import com.bsdung.musicassistantcar.playback.AddToQueueAction
+import com.bsdung.musicassistantcar.playback.RemoveQueueResult
 import com.bsdung.musicassistantcar.playback.QueueListItem
 import com.bsdung.musicassistantcar.ui.controller.ProgressController
 import com.bsdung.musicassistantcar.ui.controller.ProgressiveEnrichmentController
@@ -177,6 +178,7 @@ class MainActivity : AppCompatActivity() {
 
     private var activeBackendUrl: String? = null
     private var searchDebounceRunnable: Runnable? = null
+    private var isSuppressingSearchWatcher: Boolean = false
     private var currentLoadRequestId: Long = 0L
     private var savedRecyclerState: Parcelable? = null
     private var pendingRestorePosition: Int? = null
@@ -194,6 +196,29 @@ class MainActivity : AppCompatActivity() {
         val pos = lm?.findFirstVisibleItemPosition() ?: 0
         val offset = lm?.findViewByPosition(pos)?.top ?: 0
         navManager.saveCurrentScroll(pos, offset)
+    }
+
+    private fun restoreCurrentScroll() {
+        val lm = binding.recyclerView.layoutManager as? LinearLayoutManager ?: return
+        val pos = navManager.currentFirstVisiblePosition
+        val offset = navManager.currentTopOffsetPx
+        if (pos in 0 until libraryAdapter.itemCount) {
+            lm.scrollToPositionWithOffset(pos, offset)
+        }
+    }
+
+    private fun clearSearchInputSilently() {
+        if (binding.searchInput.text?.isNotEmpty() == true) {
+            isSuppressingSearchWatcher = true
+            try {
+                binding.searchInput.text?.clear()
+                binding.searchClearButton.visibility = View.GONE
+            } finally {
+                isSuppressingSearchWatcher = false
+            }
+        } else {
+            binding.searchClearButton.visibility = View.GONE
+        }
     }
 
 
@@ -609,6 +634,10 @@ class MainActivity : AppCompatActivity() {
         queueAdapter = QueueAdapter(
             onTrackClick = { queueTrack ->
                 val player = browser ?: return@QueueAdapter
+                Log.i(
+                    TAG,
+                    "QUEUE_TAP_PLAY: index=${queueTrack.queueIndex} mediaId=${queueTrack.mediaItem.mediaId} isCurrent=${queueTrack.isCurrent}",
+                )
                 if (queueTrack.isCurrent) {
                     if (player.isPlaying) player.pause() else player.play()
                 } else {
@@ -617,11 +646,14 @@ class MainActivity : AppCompatActivity() {
                 }
             },
             onRemoveClick = { queueTrack ->
-                removeUpcomingItem(queueTrack.queueIndex)
+                removeQueueItem(queueTrack.queueIndex)
             },
             onStartDrag = { viewHolder ->
                 android.util.Log.i("QueueDrag", "MainActivity onStartDrag called for pos=${viewHolder.bindingAdapterPosition}")
                 itemTouchHelper?.startDrag(viewHolder)
+            },
+            onReturnToLibraryClick = {
+                hideQueue()
             },
         )
         val touchCallback = com.bsdung.musicassistantcar.ui.adapter.QueueItemTouchHelperCallback(
@@ -964,9 +996,13 @@ class MainActivity : AppCompatActivity() {
 
         // Search Bar
         binding.searchClearButton.setOnClickListener {
+            searchDebounceRunnable?.let { mainHandler.removeCallbacks(it) }
             val imm = getSystemService(INPUT_METHOD_SERVICE) as? InputMethodManager
             imm?.hideSoftInputFromWindow(binding.searchInput.windowToken, 0)
-            goBack()
+            clearSearchInputSilently()
+            if (navManager.currentParentId == "search") {
+                goBack()
+            }
         }
 
         binding.searchInput.setOnEditorActionListener { _, actionId, _ ->
@@ -983,7 +1019,8 @@ class MainActivity : AppCompatActivity() {
 
         binding.searchInput.addTextChangedListener(object : TextWatcher {
             override fun afterTextChanged(s: Editable?) {
-                val query = s?.toString().orEmpty().trim()
+                if (isSuppressingSearchWatcher) return
+                val query = NavigationManager.normalizeSearchQuery(s?.toString().orEmpty())
                 binding.searchClearButton.visibility = if (query.isNotBlank()) View.VISIBLE else View.GONE
                 searchDebounceRunnable?.let { mainHandler.removeCallbacks(it) }
                 if (query.isNotBlank()) {
@@ -991,7 +1028,11 @@ class MainActivity : AppCompatActivity() {
                     searchDebounceRunnable = r
                     mainHandler.postDelayed(r, 300)
                 } else if (navManager.currentParentId == "search") {
-                    val r = Runnable { goBack() }
+                    val r = Runnable {
+                        if (navManager.currentParentId == "search") {
+                            goBack()
+                        }
+                    }
                     searchDebounceRunnable = r
                     mainHandler.postDelayed(r, 300)
                 }
@@ -1000,6 +1041,26 @@ class MainActivity : AppCompatActivity() {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
+
+        // Quick Filter Chips (Car Library & Queue UX v0.6.32)
+        binding.filterRootChip?.setOnClickListener {
+            handleQuickFilterClick(RemoteCatalog.ROOT_ID, "Thư viện")
+        }
+        binding.filterAllChip?.setOnClickListener {
+            handleQuickFilterClick(RemoteCatalog.ALL_ID, "Tất cả bài hát")
+        }
+        binding.filterDownloadedChip?.setOnClickListener {
+            handleQuickFilterClick(RemoteCatalog.DOWNLOADED_ID, "Đã tải")
+        }
+        binding.filterDeviceChip?.setOnClickListener {
+            handleQuickFilterClick(RemoteCatalog.DEVICE_LOCAL_ID, "Thiết bị")
+        }
+        binding.filterDriveChip?.setOnClickListener {
+            handleQuickFilterClick(RemoteCatalog.DRIVE_ID, "Google Drive")
+        }
+        binding.filterPlaylistsChip?.setOnClickListener {
+            handleQuickFilterClick(RemoteCatalog.PLAYLISTS_ID, "Danh sách phát")
+        }
 
         // Breadcrumbs & Navigation
         binding.backButton.setOnClickListener {
@@ -1216,7 +1277,7 @@ class MainActivity : AppCompatActivity() {
     private fun loadRoot() {
         if (isEditMode) exitEditMode()
         navManager.resetToRoot()
-        binding.searchInput.text?.clear()
+        clearSearchInputSilently()
         loadChildren(RemoteCatalog.ROOT_ID, 0, "Thư viện")
     }
 
@@ -1228,13 +1289,18 @@ class MainActivity : AppCompatActivity() {
         searchDebounceRunnable?.let { mainHandler.removeCallbacks(it) }
         val wasInSearch = navManager.currentParentId == "search"
         val previous = navManager.goBack()
-        if (wasInSearch && binding.searchInput.text?.isNotEmpty() == true) {
-            binding.searchInput.text?.clear()
+        if (wasInSearch) {
+            clearSearchInputSilently()
         }
         if (previous == null) {
             loadRoot()
             return
         }
+        Log.i(
+            TAG,
+            "NAV_BACK: fromSearch=$wasInSearch toParent=${previous.parentId} page=${previous.page} " +
+                "restorePos=${previous.firstVisiblePosition} restoreOffset=${previous.topOffsetPx}",
+        )
         pendingRestorePosition = previous.firstVisiblePosition
         pendingRestoreOffset = previous.topOffsetPx
         loadChildren(previous.parentId, previous.page, previous.label, previous.sort)
@@ -1252,6 +1318,9 @@ class MainActivity : AppCompatActivity() {
         if (mediaBrowser == null) {
             Log.w(TAG, "loadChildren: MediaBrowser not ready, skipping parentId=$parentId")
             return
+        }
+        if (navManager.currentParentId == "search" && parentId != "search") {
+            clearSearchInputSilently()
         }
         navManager.navigateTo(parentId, label, page, sort)
         if (parentId.startsWith(RemoteCatalog.DEVICE_FOLDER_PREFIX)) {
@@ -1358,27 +1427,41 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun runSearch(query: String, page: Int = 0) {
-        val cleanQuery = query.trim()
+        val cleanQuery = NavigationManager.normalizeSearchQuery(query)
         if (cleanQuery.isBlank()) {
-            goBack()
+            if (navManager.currentParentId == "search") {
+                goBack()
+            }
+            return
+        }
+
+        if (page == 0 &&
+            !navManager.shouldExecuteSearch(cleanQuery, page) &&
+            binding.errorView.visibility != View.VISIBLE &&
+            binding.loadingView.visibility != View.VISIBLE
+        ) {
+            Log.i(TAG, "SEARCH_DEDUP_SKIP: query='$cleanQuery' page=$page")
             return
         }
 
         if (page == 0) {
-            captureCurrentScroll()
+            if (navManager.currentParentId != "search") {
+                captureCurrentScroll()
+            }
             navManager.startSearch(cleanQuery)
         } else {
             navManager.setPage(page)
         }
         updateHeaderAndBreadcrumbs()
 
-        binding.loadingView.visibility = View.VISIBLE
+        binding.loadingView.visibility = if (isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
         binding.emptyView.visibility = View.GONE
         binding.errorView.visibility = View.GONE
         binding.recyclerView.visibility = View.GONE
 
         val requestId = ++currentLoadRequestId
         enrichmentController.nextGeneration()
+        Log.i(TAG, "SEARCH_EXECUTE: query='$cleanQuery' page=$page reqId=$requestId")
 
         uiExecutor.submit {
             val result = runCatching {
@@ -1542,9 +1625,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateHeaderAndBreadcrumbs() {
-        // Use breadcrumb trail in expanded dual-panel mode (more screen real estate),
-        // display title only in compact/medium single-column mode.
-        val baseTitle = if (currentWidthClass() == WindowWidthClass.EXPANDED) {
+        val baseTitle = if (!navManager.isAtRoot || currentWidthClass() == WindowWidthClass.EXPANDED) {
             navManager.breadcrumbTrail()
         } else {
             navManager.displayTitle()
@@ -1579,10 +1660,69 @@ class MainActivity : AppCompatActivity() {
         binding.playlistEditButton.visibility =
             if (navManager.currentParentId.startsWith(RemoteCatalog.PLAYLIST_PREFIX) && !isEditMode) View.VISIBLE else View.GONE
 
+        updateQuickFilterChipsUi()
         updateCollectionActionBar()
         updateCollectionSortButton()
         updateDownloadQueueHeader()
         updateOfflineStorageDashboard()
+    }
+
+    private fun updateQuickFilterChipsUi() {
+        val showBar = !isEditMode && !isQueueVisible && !isLyricsVisible
+        binding.quickFilterScroll?.visibility = if (showBar) View.VISIBLE else View.GONE
+        if (!showBar) return
+
+        val activeId = navManager.activeQuickFilterId()
+        val chips = listOf(
+            binding.filterRootChip to RemoteCatalog.ROOT_ID,
+            binding.filterAllChip to RemoteCatalog.ALL_ID,
+            binding.filterDownloadedChip to RemoteCatalog.DOWNLOADED_ID,
+            binding.filterDeviceChip to RemoteCatalog.DEVICE_LOCAL_ID,
+            binding.filterDriveChip to RemoteCatalog.DRIVE_ID,
+            binding.filterPlaylistsChip to RemoteCatalog.PLAYLISTS_ID,
+        )
+        val activeTextColor = ContextCompat.getColor(this, R.color.accent_primary)
+        val inactiveTextColor = ContextCompat.getColor(this, R.color.text_secondary)
+
+        for ((chipView, chipId) in chips) {
+            val view = chipView ?: continue
+            val isSelected = activeId == chipId
+            view.setBackgroundResource(
+                if (isSelected) R.drawable.bg_quality_chip_active else R.drawable.bg_quality_chip_inactive,
+            )
+            view.setTextColor(if (isSelected) activeTextColor else inactiveTextColor)
+            view.isSelected = isSelected
+        }
+    }
+
+    private fun handleQuickFilterClick(parentId: String, label: String) {
+        if (isEditMode) exitEditMode()
+        searchDebounceRunnable?.let { mainHandler.removeCallbacks(it) }
+        clearSearchInputSilently()
+        Log.i(
+            TAG,
+            "QUICK_FILTER_SELECT: parentId=$parentId label=$label currentParent=${navManager.currentParentId}",
+        )
+        if (parentId == RemoteCatalog.ROOT_ID) {
+            if (navManager.isAtRoot && binding.errorView.visibility != View.VISIBLE) return
+            loadRoot()
+            return
+        }
+        if (parentId == RemoteCatalog.DEVICE_LOCAL_ID) {
+            checkAndRequestLocalAudioPermission {
+                navManager.selectQuickFilter(parentId, label)
+                loadChildren(parentId, 0, label)
+            }
+            return
+        }
+        if (navManager.currentParentId == parentId &&
+            navManager.currentPage == 0 &&
+            binding.errorView.visibility != View.VISIBLE
+        ) {
+            return
+        }
+        navManager.selectQuickFilter(parentId, label)
+        loadChildren(parentId, 0, label)
     }
 
     private fun updateOfflineStorageDashboard() {
@@ -2094,6 +2234,7 @@ class MainActivity : AppCompatActivity() {
         isEditMode = true
         libraryAdapter.setEditMode(true, allowReorder)
         binding.breadcrumbBar.visibility = View.GONE
+        binding.quickFilterScroll?.visibility = View.GONE
         binding.collectionActionBar.visibility = View.GONE
         binding.playlistSyncBar.visibility = View.GONE
         binding.collectionSortButton.visibility = View.GONE
@@ -2160,13 +2301,21 @@ class MainActivity : AppCompatActivity() {
 
     private fun showQueue() {
         if (isEditMode) exitEditMode()
+        if (binding.recyclerView.visibility == View.VISIBLE) {
+            captureCurrentScroll()
+        }
         if (isLyricsVisible) hideLyrics()
         isQueueVisible = true
+        Log.i(
+            TAG,
+            "QUEUE_OPEN: currentParent=${navManager.currentParentId} savedPos=${navManager.currentFirstVisiblePosition} savedOffset=${navManager.currentTopOffsetPx}",
+        )
         binding.queueButton.setColorFilter(ContextCompat.getColor(this, R.color.accent_primary))
         binding.queueButton.setBackgroundResource(R.drawable.bg_button_tertiary_active)
 
         // Hide library / search content views
         binding.breadcrumbBar.visibility = View.GONE
+        binding.quickFilterScroll?.visibility = View.GONE
         binding.collectionActionBar.visibility = View.GONE
         binding.playlistSyncBar.visibility = View.GONE
         binding.offlineStorageHeader.visibility = View.GONE
@@ -2186,6 +2335,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun hideQueue() {
         isQueueVisible = false
+        Log.i(
+            TAG,
+            "QUEUE_CLOSE: currentParent=${navManager.currentParentId} restorePos=${navManager.currentFirstVisiblePosition} restoreOffset=${navManager.currentTopOffsetPx}",
+        )
         binding.queueButton.setColorFilter(ContextCompat.getColor(this, R.color.text_primary))
         binding.queueButton.setBackgroundResource(R.drawable.bg_button_control)
 
@@ -2199,6 +2352,7 @@ class MainActivity : AppCompatActivity() {
         if (libraryAdapter.itemCount > 0) {
             binding.recyclerView.visibility = View.VISIBLE
             binding.emptyView.visibility = View.GONE
+            restoreCurrentScroll()
         } else {
             binding.recyclerView.visibility = View.GONE
             binding.emptyView.visibility = View.VISIBLE
@@ -2258,6 +2412,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun showLyrics() {
         if (isEditMode) exitEditMode()
+        if (binding.recyclerView.visibility == View.VISIBLE) {
+            captureCurrentScroll()
+        }
         if (isQueueVisible) hideQueue()
         isLyricsVisible = true
         binding.lyricsButton?.setTextColor(ContextCompat.getColor(this, R.color.accent_primary))
@@ -2265,6 +2422,7 @@ class MainActivity : AppCompatActivity() {
 
         // Hide library / search content views
         binding.breadcrumbBar.visibility = View.GONE
+        binding.quickFilterScroll?.visibility = View.GONE
         binding.collectionActionBar.visibility = View.GONE
         binding.playlistSyncBar.visibility = View.GONE
         binding.offlineStorageHeader.visibility = View.GONE
@@ -2301,6 +2459,7 @@ class MainActivity : AppCompatActivity() {
         if (libraryAdapter.itemCount > 0) {
             binding.recyclerView.visibility = View.VISIBLE
             binding.emptyView.visibility = View.GONE
+            restoreCurrentScroll()
         } else {
             binding.recyclerView.visibility = View.GONE
             binding.emptyView.visibility = View.VISIBLE
@@ -2309,6 +2468,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showFullscreenLyrics() {
+        if (!isQueueVisible && !isLyricsVisible && binding.recyclerView.visibility == View.VISIBLE) {
+            captureCurrentScroll()
+        }
         isFullscreenLyricsVisible = true
         binding.mainContentContainer?.visibility = View.GONE
         binding.fullscreenLyricsOverlay?.visibility = View.VISIBLE
@@ -2334,6 +2496,9 @@ class MainActivity : AppCompatActivity() {
 
         if (!isLyricsVisible) {
             stopLyricsPositionLoop()
+            if (!isQueueVisible && libraryAdapter.itemCount > 0) {
+                restoreCurrentScroll()
+            }
         } else {
             renderLyricsUiState(currentLyricsUiState)
         }
@@ -3875,7 +4040,8 @@ class MainActivity : AppCompatActivity() {
     private fun renderQueue() {
         val player = browser
         if (player == null) {
-            queueAdapter.submitItems(listOf(QueueListItem.Empty("Chưa có bài trong hàng đợi")))
+            binding.queueTitleView.text = QueueHelper.formatQueueTitle(-1, 0)
+            queueAdapter.submitItems(listOf(QueueListItem.Empty("Hàng đợi đang trống", isFullQueueEmpty = true)))
             binding.queueClearButton.visibility = View.GONE
             return
         }
@@ -3883,8 +4049,22 @@ class MainActivity : AppCompatActivity() {
         val queueItems = buildCurrentQueueList()
         val currentIndex = player.currentMediaItemIndex
         val isPlaying = player.isPlaying
+        binding.queueTitleView.text = QueueHelper.formatQueueTitle(currentIndex, queueItems.size)
 
-        val listItems = QueueHelper.buildQueueList(queueItems, currentIndex, isPlaying)
+        val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
+        val listItems = QueueHelper.buildQueueList(
+            queue = queueItems,
+            currentIndex = currentIndex,
+            isPlaying = isPlaying,
+            sourceBadgeResolver = { item ->
+                val tid = RemoteCatalog.canonicalTrackMediaId(item)
+                    ?.removePrefix(RemoteCatalog.TRACK_PREFIX)
+                    ?.toLongOrNull()
+                    ?: item.mediaId.removePrefix(RemoteCatalog.TRACK_PREFIX).toLongOrNull()
+                val isOffline = tid != null && dm.isOfflineReady(tid)
+                QueueHelper.deriveSourceBadge(item, isOffline)
+            },
+        )
         queueAdapter.submitItems(listItems)
 
         val hasUpcoming = currentIndex in 0 until (queueItems.size - 1)
@@ -3897,6 +4077,10 @@ class MainActivity : AppCompatActivity() {
         val currentIndex = player.currentMediaItemIndex
         val preparedItem = uiCatalog.withCurrentQuality(track.mediaItem)
         val action = QueueHelper.planPlayNext(currentQueue, currentIndex, preparedItem)
+        Log.i(
+            TAG,
+            "QUEUE_PLAY_NEXT: mediaId=${track.id} currentIndex=$currentIndex queueSize=${currentQueue.size} action=${action.javaClass.simpleName}",
+        )
 
         when (action) {
             is PlayNextAction.StartNewQueue -> {
@@ -3934,6 +4118,10 @@ class MainActivity : AppCompatActivity() {
         val currentQueue = buildCurrentQueueList()
         val preparedItem = uiCatalog.withCurrentQuality(track.mediaItem)
         val action = QueueHelper.planAddToQueue(currentQueue, preparedItem)
+        Log.i(
+            TAG,
+            "QUEUE_ADD_END: mediaId=${track.id} queueSize=${currentQueue.size} action=${action.javaClass.simpleName}",
+        )
 
         when (action) {
             is AddToQueueAction.StartNewQueue -> {
@@ -3959,21 +4147,61 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun removeUpcomingItem(targetIndex: Int) {
+    private fun removeQueueItem(targetIndex: Int) {
         val player = browser ?: return
+        val queueSize = player.mediaItemCount
         val currentIndex = player.currentMediaItemIndex
-        if (!QueueHelper.planRemoveUpcoming(player.mediaItemCount, currentIndex, targetIndex)) {
-            return
+        val plan = QueueHelper.planRemoveQueueItem(queueSize, currentIndex, targetIndex)
+        Log.i(
+            TAG,
+            "QUEUE_REMOVE: targetIndex=$targetIndex currentIndex=$currentIndex queueSize=$queueSize result=${plan.javaClass.simpleName}",
+        )
+        when (plan) {
+            is RemoveQueueResult.InvalidIndex -> return
+            is RemoveQueueResult.RemovedBeforeCurrent,
+            is RemoveQueueResult.RemovedAfterCurrent,
+            -> {
+                player.removeMediaItem(targetIndex)
+                updateNowPlaying()
+                schedulePrewarmQueue(buildCurrentQueueList(), player.currentMediaItemIndex)
+                if (isQueueVisible) renderQueue()
+            }
+            is RemoveQueueResult.RemovedCurrentAdvanceNext -> {
+                val wasPlaying = player.isPlaying
+                player.removeMediaItem(targetIndex)
+                if (wasPlaying && !player.isPlaying) {
+                    player.play()
+                }
+                updateNowPlaying()
+                schedulePrewarmQueue(buildCurrentQueueList(), player.currentMediaItemIndex)
+                if (isQueueVisible) renderQueue()
+            }
+            is RemoveQueueResult.RemovedCurrentMovePrevious -> {
+                val wasPlaying = player.isPlaying
+                player.seekToDefaultPosition(plan.newCurrentIndex)
+                player.removeMediaItem(targetIndex)
+                if (wasPlaying) {
+                    player.play()
+                }
+                updateNowPlaying()
+                schedulePrewarmQueue(buildCurrentQueueList(), player.currentMediaItemIndex)
+                if (isQueueVisible) renderQueue()
+            }
+            is RemoveQueueResult.RemovedLastStopEmpty -> {
+                player.stop()
+                player.clearMediaItems()
+                updateNowPlaying()
+                if (isQueueVisible) renderQueue()
+                Toast.makeText(this, "Hàng đợi đang trống", Toast.LENGTH_SHORT).show()
+            }
         }
-        player.removeMediaItem(targetIndex)
-        schedulePrewarmQueue(buildCurrentQueueList(), player.currentMediaItemIndex)
-        if (isQueueVisible) renderQueue()
     }
 
     private fun clearUpcoming() {
         val player = browser ?: return
         val currentIndex = player.currentMediaItemIndex
         val range = QueueHelper.planClearUpcoming(player.mediaItemCount, currentIndex) ?: return
+        Log.i(TAG, "QUEUE_CLEAR_UPCOMING: currentIndex=$currentIndex range=${range.first}..${range.last}")
         player.removeMediaItems(range.first, range.last + 1)
         Toast.makeText(this, "Đã xóa danh sách tiếp theo", Toast.LENGTH_SHORT).show()
         schedulePrewarmQueue(buildCurrentQueueList(), player.currentMediaItemIndex)
@@ -4078,15 +4306,21 @@ class MainActivity : AppCompatActivity() {
                 binding.shuffleButton.visibility = View.VISIBLE
                 binding.repeatButton.visibility = View.VISIBLE
             } else {
-                // Compact/Medium: hide secondary controls when idle to save vertical space
                 binding.seekBar.visibility = View.GONE
                 binding.timeRow.visibility = View.GONE
                 binding.qualityChip.visibility = View.GONE
                 binding.signalPathButton?.visibility = View.GONE
                 binding.lyricsButton?.visibility = View.GONE
-                binding.queueButton.visibility = View.GONE
+                binding.queueButton.visibility = View.VISIBLE
                 binding.shuffleButton.visibility = View.INVISIBLE
                 binding.repeatButton.visibility = View.INVISIBLE
+            }
+            if (isQueueVisible) {
+                binding.queueButton.setColorFilter(ContextCompat.getColor(this, R.color.accent_primary))
+                binding.queueButton.setBackgroundResource(R.drawable.bg_button_tertiary_active)
+            } else {
+                binding.queueButton.setColorFilter(ContextCompat.getColor(this, R.color.text_primary))
+                binding.queueButton.setBackgroundResource(R.drawable.bg_button_control)
             }
 
             libraryAdapter.updateNowPlaying(null, false)
