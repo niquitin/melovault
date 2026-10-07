@@ -202,6 +202,30 @@ class MusicService : MediaLibraryService() {
             }
 
         player.addListener(object : Player.Listener {
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                var audioTrackSelected = false
+                for (group in tracks.groups) {
+                    val trackType = group.type
+                    for (i in 0 until group.length) {
+                        val format = group.getTrackFormat(i)
+                        val isTrackSelected = group.isTrackSelected(i)
+                        if (isTrackSelected && trackType == C.TRACK_TYPE_AUDIO) {
+                            audioTrackSelected = true
+                        }
+                        Log.i(
+                            TAG,
+                            "onTracksChanged: type=$trackType, selected=$isTrackSelected, " +
+                                "sampleMime=${format.sampleMimeType}, containerMime=${format.containerMimeType}, " +
+                                "codecs=${format.codecs}, sampleRate=${format.sampleRate}, " +
+                                "channels=${format.channelCount}, pcmEncoding=${format.pcmEncoding}",
+                        )
+                    }
+                }
+                if (!audioTrackSelected && tracks.groups.isNotEmpty()) {
+                    Log.w(TAG, "onTracksChanged: NO AUDIO TRACK SELECTED - possible unsupported audio codec/subtype")
+                }
+            }
+
             override fun onPlaybackStateChanged(playbackState: Int) {
                 val stateName = when (playbackState) {
                     Player.STATE_IDLE -> "IDLE"

@@ -20,6 +20,14 @@ class GainAudioProcessorTest {
         return AudioProcessor.AudioFormat(sampleRate, channelCount, C.ENCODING_PCM_FLOAT)
     }
 
+    private fun createPcm24Format(sampleRate: Int = 48000, channelCount: Int = 2): AudioProcessor.AudioFormat {
+        return AudioProcessor.AudioFormat(sampleRate, channelCount, C.ENCODING_PCM_24BIT)
+    }
+
+    private fun createPcm32Format(sampleRate: Int = 48000, channelCount: Int = 2): AudioProcessor.AudioFormat {
+        return AudioProcessor.AudioFormat(sampleRate, channelCount, C.ENCODING_PCM_32BIT)
+    }
+
     // Test 18: PCM16 unity is bit-identical
     @Test
     fun testPcm16UnityIsBitIdentical() {
@@ -400,16 +408,170 @@ class GainAudioProcessorTest {
         assertTrue(processor.isEnded)
     }
 
-    // Test 37: unsupported format handled safely
+    private fun putPcm24Sample(buf: ByteBuffer, value: Int) {
+        buf.put((value and 0xFF).toByte())
+        buf.put(((value ushr 8) and 0xFF).toByte())
+        buf.put(((value ushr 16) and 0xFF).toByte())
+    }
+
+    private fun getPcm24Sample(buf: ByteBuffer): Int {
+        val b0 = buf.get().toInt() and 0xFF
+        val b1 = buf.get().toInt() and 0xFF
+        val b2 = buf.get().toInt()
+        return (b2 shl 16) or (b1 shl 8) or b0
+    }
+
+    // Test 37: PCM24 unity is bit-identical
     @Test
-    fun testUnsupportedFormatThrowsUnhandledAudioFormatException() {
+    fun testPcm24UnityIsBitIdentical() {
         val processor = GainAudioProcessor()
-        val unsupported = AudioProcessor.AudioFormat(44100, 2, C.ENCODING_PCM_24BIT)
-        try {
-            processor.configure(unsupported)
-            fail("Expected UnhandledAudioFormatException")
-        } catch (_: AudioProcessor.UnhandledAudioFormatException) {
-            // Expected
+        processor.configure(createPcm24Format())
+        processor.flush()
+        processor.setGainDb(0.0f)
+
+        val input = ByteBuffer.allocateDirect(12).order(ByteOrder.nativeOrder())
+        putPcm24Sample(input, 1000)
+        putPcm24Sample(input, -2000)
+        putPcm24Sample(input, 500000)
+        putPcm24Sample(input, -500000)
+        input.flip()
+
+        val expectedBytes = ByteArray(12)
+        input.duplicate().get(expectedBytes)
+
+        processor.queueInput(input)
+        val output = processor.output
+
+        assertEquals(12, output.remaining())
+        val actualBytes = ByteArray(12)
+        output.get(actualBytes)
+        for (i in 0 until 12) {
+            assertEquals(expectedBytes[i], actualBytes[i])
         }
+    }
+
+    // Test 38: PCM24 scaling and saturation protection
+    @Test
+    fun testPcm24ScalingAndSaturation() {
+        val processor = GainAudioProcessor()
+        processor.configure(createPcm24Format())
+        processor.flush()
+        processor.setGainMultiplier(2.0f)
+
+        val input = ByteBuffer.allocateDirect(12).order(ByteOrder.nativeOrder())
+        putPcm24Sample(input, 100000)     // * 2 = 200000
+        putPcm24Sample(input, -80000)     // * 2 = -160000
+        putPcm24Sample(input, 5000000)    // * 2 = 10000000 -> saturate to 8388607
+        putPcm24Sample(input, -5000000)   // * 2 = -10000000 -> saturate to -8388608
+        input.flip()
+
+        processor.queueInput(input)
+        val output = processor.output.order(ByteOrder.nativeOrder())
+
+        assertEquals(200000, getPcm24Sample(output))
+        assertEquals(-160000, getPcm24Sample(output))
+        assertEquals(8388607, getPcm24Sample(output))
+        assertEquals(-8388608, getPcm24Sample(output))
+    }
+
+    // Test 39: PCM32 unity is bit-identical
+    @Test
+    fun testPcm32UnityIsBitIdentical() {
+        val processor = GainAudioProcessor()
+        processor.configure(createPcm32Format())
+        processor.flush()
+        processor.setGainDb(0.0f)
+
+        val input = ByteBuffer.allocateDirect(16).order(ByteOrder.nativeOrder())
+        input.putInt(10000)
+        input.putInt(-20000)
+        input.putInt(500000000)
+        input.putInt(-500000000)
+        input.flip()
+
+        val expectedBytes = ByteArray(16)
+        input.duplicate().get(expectedBytes)
+
+        processor.queueInput(input)
+        val output = processor.output
+
+        assertEquals(16, output.remaining())
+        val actualBytes = ByteArray(16)
+        output.get(actualBytes)
+        for (i in 0 until 16) {
+            assertEquals(expectedBytes[i], actualBytes[i])
+        }
+    }
+
+    // Test 40: PCM32 scaling and saturation protection
+    @Test
+    fun testPcm32ScalingAndSaturation() {
+        val processor = GainAudioProcessor()
+        processor.configure(createPcm32Format())
+        processor.flush()
+        processor.setGainMultiplier(2.0f)
+
+        val input = ByteBuffer.allocateDirect(16).order(ByteOrder.nativeOrder())
+        input.putInt(1000000)        // * 2 = 2000000
+        input.putInt(-800000)        // * 2 = -1600000
+        input.putInt(1500000000)     // * 2 = 3000000000 -> saturate to Int.MAX_VALUE
+        input.putInt(-1500000000)    // * 2 = -3000000000 -> saturate to Int.MIN_VALUE
+        input.flip()
+
+        processor.queueInput(input)
+        val output = processor.output.order(ByteOrder.nativeOrder())
+
+        assertEquals(2000000, output.int)
+        assertEquals(-1600000, output.int)
+        assertEquals(Int.MAX_VALUE, output.int)
+        assertEquals(Int.MIN_VALUE, output.int)
+    }
+
+    // Test 41: Unsupported format returns NOT_SET and bypasses gracefully
+    @Test
+    fun testUnsupportedFormatBypassesGracefully() {
+        val processor = GainAudioProcessor()
+        val unsupported = AudioProcessor.AudioFormat(44100, 2, C.ENCODING_PCM_8BIT)
+        val result = processor.configure(unsupported)
+        assertEquals(AudioProcessor.AudioFormat.NOT_SET, result)
+        assertFalse("Processor must be inactive when format is unsupported", processor.isActive)
+    }
+
+    // Test 42: Missing loudness metadata yields unity gain
+    @Test
+    fun testMissingLoudnessMetadataYieldsUnityGain() {
+        val processor = GainAudioProcessor()
+        processor.setGainDb(5.0f)
+        assertEquals(5.0f, processor.appliedGainDb, 0.0001f)
+
+        val emptyItem = androidx.media3.common.MediaItem.Builder()
+            .setMediaId("device:test:1")
+            .build()
+        processor.applyMediaItem(emptyItem)
+
+        assertEquals(0.0f, processor.appliedGainDb, 0.0001f)
+        assertEquals(1.0f, processor.gainMultiplier, 0.0001f)
+
+        processor.setGainDb(-3.0f)
+        processor.applyMediaItem(null)
+        assertEquals(0.0f, processor.appliedGainDb, 0.0001f)
+        assertEquals(1.0f, processor.gainMultiplier, 0.0001f)
+    }
+
+    // Test 43: Gain multiplier never zero for valid track or invalid inputs
+    @Test
+    fun testGainMultiplierNeverZeroForValidTrack() {
+        val processor = GainAudioProcessor()
+        processor.setGainMultiplier(0.0f)
+        assertEquals(1.0f, processor.gainMultiplier, 0.0001f)
+        assertEquals(0.0f, processor.appliedGainDb, 0.0001f)
+
+        processor.setGainMultiplier(-2.5f)
+        assertEquals(1.0f, processor.gainMultiplier, 0.0001f)
+        assertEquals(0.0f, processor.appliedGainDb, 0.0001f)
+
+        processor.setGainDb(Float.NaN)
+        assertEquals(1.0f, processor.gainMultiplier, 0.0001f)
+        assertEquals(0.0f, processor.appliedGainDb, 0.0001f)
     }
 }

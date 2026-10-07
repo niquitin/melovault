@@ -12,9 +12,12 @@ import java.nio.ByteBuffer
  *
  * Supported formats:
  * - [C.ENCODING_PCM_16BIT]: 16-bit signed integer PCM with defensive saturation to [-32768, 32767].
+ * - [C.ENCODING_PCM_24BIT]: 24-bit packed signed integer PCM with saturation to [-8388608, 8388607].
+ * - [C.ENCODING_PCM_32BIT]: 32-bit signed integer PCM with saturation to [Int.MIN_VALUE, Int.MAX_VALUE].
  * - [C.ENCODING_PCM_FLOAT]: 32-bit floating point PCM with saturation guard to [-1.0f, 1.0f].
  *
- * All other formats throw [AudioProcessor.UnhandledAudioFormatException].
+ * All other formats return [AudioProcessor.AudioFormat.NOT_SET], gracefully bypassing the processor
+ * without failing AudioSink or interrupting playback.
  *
  * Thread-safety:
  * - Gain state is maintained via @Volatile fields, allowing real-time adjustment from any thread
@@ -45,14 +48,15 @@ class GainAudioProcessor : BaseAudioProcessor() {
             return
         }
         appliedGainDb = gainDb
-        gainMultiplier = LoudnessNormalization.dbToLinearMultiplier(gainDb)
+        val mult = LoudnessNormalization.dbToLinearMultiplier(gainDb)
+        gainMultiplier = if (mult > 0.0f && mult.isFinite()) mult else 1.0f
     }
 
     /**
      * Sets the linear multiplier directly.
      */
     fun setGainMultiplier(multiplier: Float) {
-        if (!multiplier.isFinite() || multiplier < 0.0f) {
+        if (!multiplier.isFinite() || multiplier <= 0.0f) {
             appliedGainDb = 0.0f
             gainMultiplier = 1.0f
             return
@@ -108,12 +112,13 @@ class GainAudioProcessor : BaseAudioProcessor() {
     }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT &&
-            inputAudioFormat.encoding != C.ENCODING_PCM_FLOAT
-        ) {
-            throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
+        return when (inputAudioFormat.encoding) {
+            C.ENCODING_PCM_16BIT,
+            C.ENCODING_PCM_24BIT,
+            C.ENCODING_PCM_32BIT,
+            C.ENCODING_PCM_FLOAT -> inputAudioFormat
+            else -> AudioProcessor.AudioFormat.NOT_SET
         }
-        return inputAudioFormat
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
@@ -141,6 +146,31 @@ class GainAudioProcessor : BaseAudioProcessor() {
                     // Clamp to 16-bit signed range [-32768, 32767] with saturation protection
                     val clamped = scaled.coerceIn(-32768L, 32767L).toShort()
                     output.putShort(clamped)
+                }
+            }
+            C.ENCODING_PCM_24BIT -> {
+                val multDouble = mult.toDouble()
+                while (inputBuffer.remaining() >= 3) {
+                    val b0 = inputBuffer.get().toInt() and 0xFF
+                    val b1 = inputBuffer.get().toInt() and 0xFF
+                    val b2 = inputBuffer.get().toInt() // sign-extended
+                    val sample = (b2 shl 16) or (b1 shl 8) or b0
+                    val scaled = Math.round(sample.toDouble() * multDouble)
+                    // Clamp to 24-bit signed range [-8388608, 8388607] with saturation protection
+                    val clamped = scaled.coerceIn(-8388608L, 8388607L).toInt()
+                    output.put((clamped and 0xFF).toByte())
+                    output.put(((clamped ushr 8) and 0xFF).toByte())
+                    output.put(((clamped ushr 16) and 0xFF).toByte())
+                }
+            }
+            C.ENCODING_PCM_32BIT -> {
+                val multDouble = mult.toDouble()
+                while (inputBuffer.remaining() >= 4) {
+                    val sample = inputBuffer.int
+                    val scaled = Math.round(sample.toDouble() * multDouble)
+                    // Clamp to 32-bit signed range [Int.MIN_VALUE, Int.MAX_VALUE]
+                    val clamped = scaled.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt()
+                    output.putInt(clamped)
                 }
             }
             C.ENCODING_PCM_FLOAT -> {
