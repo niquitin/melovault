@@ -1021,6 +1021,28 @@ open class CarApiClient {
         )
     }
 
+    fun getMusicAccounts(): List<AccountStatusDto> {
+        val json = requestJson("GET", "/car/integrations/accounts")
+        val array = json.optJSONArray("accounts") ?: org.json.JSONArray()
+        val list = mutableListOf<AccountStatusDto>()
+        for (i in 0 until array.length()) {
+            val obj = array.optJSONObject(i) ?: continue
+            list.add(AccountStatusDto.fromJson(obj))
+        }
+        return list
+    }
+
+    fun getProviderStatus(provider: String): AccountStatusDto {
+        val json = requestJson("GET", "/car/integrations/${provider.lowercase()}/status")
+        return AccountStatusDto.fromJson(json)
+    }
+
+    fun disconnectAccount(provider: String): AccountStatusDto {
+        val json = requestJson("DELETE", "/car/integrations/${provider.lowercase()}/connection")
+        val accObj = json.optJSONObject("account") ?: json
+        return AccountStatusDto.fromJson(accObj)
+    }
+
     private fun requestJson(
         method: String,
         path: String,

@@ -361,6 +361,25 @@
                     android:textStyle="bold"
                     android:textColor="@color/text_primary"
                     android:contentDescription="Lời bài hát" />
+
+                <View
+                    android:layout_width="10dp"
+                    android:layout_height="1dp" />
+
+                <TextView
+                    android:id="@+id/accountsButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minWidth="48dp"
+                    android:gravity="center"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:background="@drawable/bg_button_control"
+                    android:text="Tài khoản"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:contentDescription="Tài khoản nhạc" />
             </LinearLayout>
         </LinearLayout>
 

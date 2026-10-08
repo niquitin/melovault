@@ -42,6 +42,10 @@ import com.bsdung.musicassistantcar.databinding.DialogFolderActionsBinding
 import com.bsdung.musicassistantcar.databinding.DialogTrackActionsBinding
 import com.bsdung.musicassistantcar.databinding.DialogPlaylistChooserBinding
 import com.bsdung.musicassistantcar.databinding.DialogSignalPathBinding
+import com.bsdung.musicassistantcar.databinding.DialogMusicAccountsBinding
+import com.bsdung.musicassistantcar.data.AccountConnectionState
+import com.bsdung.musicassistantcar.data.AccountProvider
+import com.bsdung.musicassistantcar.data.AccountStatusDto
 import com.bsdung.musicassistantcar.ui.adapter.PlaylistChoiceAdapter
 import com.bsdung.musicassistantcar.ui.adapter.LyricsCandidateAdapter
 import com.bsdung.musicassistantcar.ui.adapter.SyncedLyricsAdapter
@@ -867,6 +871,10 @@ class MainActivity : AppCompatActivity() {
         binding.lyricsButton?.setOnLongClickListener {
             showFullscreenLyrics()
             true
+        }
+
+        binding.accountsButton?.setOnClickListener {
+            showMusicAccountsDialog()
         }
         binding.lyricsBackButton?.setOnClickListener {
             if (isCandidatePickerOpen) {
@@ -5029,6 +5037,140 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun showMusicAccountsDialog() {
+        val dialog = BottomSheetDialog(this)
+        dialog.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+        dialog.behavior.skipCollapsed = true
+        val bindingDialog = DialogMusicAccountsBinding.inflate(layoutInflater)
+        dialog.setContentView(bindingDialog.root)
+        dialog.window?.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            ?.setBackgroundResource(android.R.color.transparent)
+
+        val client = CarApiClient()
+
+        fun loadAccounts() {
+            bindingDialog.accountsLoadingView.visibility = View.VISIBLE
+            bindingDialog.accountsErrorView.visibility = View.GONE
+            bindingDialog.accountsScrollView.visibility = View.GONE
+
+            kotlin.concurrent.thread {
+                val result: Result<List<AccountStatusDto>> = runCatching {
+                    client.getMusicAccounts()
+                }
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    bindingDialog.accountsLoadingView.visibility = View.GONE
+                    result.fold(
+                        onSuccess = { accounts: List<AccountStatusDto> ->
+                            bindingDialog.accountsScrollView.visibility = View.VISIBLE
+                            bindingDialog.accountsErrorView.visibility = View.GONE
+
+                            val apple = accounts.firstOrNull { it.provider == AccountProvider.APPLE_MUSIC.id }
+                            val yt = accounts.firstOrNull { it.provider == AccountProvider.YOUTUBE.id }
+
+                            // Render Apple Music
+                            if (apple != null) {
+                                bindingDialog.appleStatusBadge.text = apple.state.vietnameseLabel
+                                val badgeColor = when (apple.state) {
+                                    AccountConnectionState.CONNECTED -> getColor(R.color.status_online)
+                                    AccountConnectionState.CONNECTING -> getColor(R.color.status_connecting)
+                                    AccountConnectionState.NOT_CONFIGURED,
+                                    AccountConnectionState.NOT_CONNECTED -> getColor(R.color.text_secondary)
+                                    else -> getColor(R.color.status_offline)
+                                }
+                                bindingDialog.appleStatusBadge.setTextColor(badgeColor)
+
+                                val caps = mutableListOf<String>()
+                                if (apple.capabilities.catalogSearchAvailable) caps.add("Catalog Search")
+                                if (apple.capabilities.personalLibraryAvailable) caps.add("Thư viện cá nhân")
+                                if (apple.capabilities.playlistReadAvailable) caps.add("Danh sách phát")
+                                caps.add("Phát nhạc: Chưa hỗ trợ")
+                                bindingDialog.appleCapabilitiesText.text = "Tính năng: " + caps.joinToString(" · ")
+
+                                if (apple.state == AccountConnectionState.NOT_CONFIGURED) {
+                                    bindingDialog.appleNoticeText.text = "Cần cấu hình Apple MusicKit Developer Token trên máy chủ."
+                                    bindingDialog.appleNoticeText.visibility = View.VISIBLE
+                                } else if (!apple.errorMessage.isNullOrBlank()) {
+                                    bindingDialog.appleNoticeText.text = apple.errorMessage
+                                    bindingDialog.appleNoticeText.visibility = View.VISIBLE
+                                } else {
+                                    bindingDialog.appleNoticeText.visibility = View.GONE
+                                }
+
+                                bindingDialog.appleDisconnectButton.visibility =
+                                    if (apple.state == AccountConnectionState.CONNECTED) View.VISIBLE else View.GONE
+                                bindingDialog.appleDisconnectButton.setOnClickListener {
+                                    bindingDialog.appleDisconnectButton.isEnabled = false
+                                    kotlin.concurrent.thread {
+                                        runCatching { client.disconnectAccount(AccountProvider.APPLE_MUSIC.id) }
+                                        runOnUiThread { loadAccounts() }
+                                    }
+                                }
+                            }
+
+                            // Render YouTube
+                            if (yt != null) {
+                                bindingDialog.youtubeStatusBadge.text = yt.state.vietnameseLabel
+                                val badgeColor = when (yt.state) {
+                                    AccountConnectionState.CONNECTED -> getColor(R.color.status_online)
+                                    AccountConnectionState.CONNECTING -> getColor(R.color.status_connecting)
+                                    AccountConnectionState.NOT_CONFIGURED,
+                                    AccountConnectionState.NOT_CONNECTED -> getColor(R.color.text_secondary)
+                                    else -> getColor(R.color.status_offline)
+                                }
+                                bindingDialog.youtubeStatusBadge.setTextColor(badgeColor)
+
+                                val caps = mutableListOf<String>()
+                                if (yt.capabilities.catalogSearchAvailable) caps.add("Catalog Search")
+                                if (yt.capabilities.playlistReadAvailable) caps.add("Danh sách phát")
+                                caps.add("Phát nhạc: Chưa hỗ trợ")
+                                bindingDialog.youtubeCapabilitiesText.text = "Tính năng: " + caps.joinToString(" · ")
+
+                                if (yt.state == AccountConnectionState.NOT_CONFIGURED) {
+                                    bindingDialog.youtubeNoticeText.text = "Cần cấu hình Google OAuth Client ID trên máy chủ."
+                                    bindingDialog.youtubeNoticeText.visibility = View.VISIBLE
+                                } else if (!yt.errorMessage.isNullOrBlank()) {
+                                    bindingDialog.youtubeNoticeText.text = yt.errorMessage
+                                    bindingDialog.youtubeNoticeText.visibility = View.VISIBLE
+                                } else {
+                                    bindingDialog.youtubeNoticeText.visibility = View.GONE
+                                }
+
+                                bindingDialog.youtubeDisconnectButton.visibility =
+                                    if (yt.state == AccountConnectionState.CONNECTED) View.VISIBLE else View.GONE
+                                bindingDialog.youtubeDisconnectButton.setOnClickListener {
+                                    bindingDialog.youtubeDisconnectButton.isEnabled = false
+                                    kotlin.concurrent.thread {
+                                        runCatching { client.disconnectAccount(AccountProvider.YOUTUBE.id) }
+                                        runOnUiThread { loadAccounts() }
+                                    }
+                                }
+                            }
+                        },
+                        onFailure = { err ->
+                            bindingDialog.accountsScrollView.visibility = View.GONE
+                            bindingDialog.accountsErrorView.visibility = View.VISIBLE
+                            bindingDialog.accountsErrorText.text = "Lỗi kết nối máy chủ: ${err.message ?: "Không xác định"}"
+                        }
+                    )
+                }
+            }
+        }
+
+        bindingDialog.accountsRefreshButton.setOnClickListener {
+            loadAccounts()
+        }
+        bindingDialog.accountsRetryButton.setOnClickListener {
+            loadAccounts()
+        }
+        bindingDialog.accountsCloseButton.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        loadAccounts()
+        dialog.show()
     }
 
     private fun showSignalPathSheet() {
