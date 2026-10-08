@@ -19,7 +19,8 @@ enum class AccountConnectionState(val wireValue: String, val vietnameseLabel: St
     CONNECTED("CONNECTED", "Đã kết nối"),
     TOKEN_EXPIRED("TOKEN_EXPIRED", "Token hết hạn"),
     REAUTH_REQUIRED("REAUTH_REQUIRED", "Cần ủy quyền lại"),
-    ERROR("ERROR", "Lỗi kết nối");
+    ERROR("ERROR", "Lỗi kết nối"),
+    VERIFICATION_UNAVAILABLE("VERIFICATION_UNAVAILABLE", "Chưa thể xác thực");
 
     companion object {
         fun fromWire(value: String?): AccountConnectionState =

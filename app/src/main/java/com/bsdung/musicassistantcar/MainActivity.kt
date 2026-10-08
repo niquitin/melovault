@@ -5077,7 +5077,8 @@ class MainActivity : AppCompatActivity() {
                                     AccountConnectionState.CONNECTED -> getColor(R.color.status_online)
                                     AccountConnectionState.CONNECTING -> getColor(R.color.status_connecting)
                                     AccountConnectionState.NOT_CONFIGURED,
-                                    AccountConnectionState.NOT_CONNECTED -> getColor(R.color.text_secondary)
+                                    AccountConnectionState.NOT_CONNECTED,
+                                    AccountConnectionState.VERIFICATION_UNAVAILABLE -> getColor(R.color.text_secondary)
                                     else -> getColor(R.color.status_offline)
                                 }
                                 bindingDialog.appleStatusBadge.setTextColor(badgeColor)
@@ -5117,7 +5118,8 @@ class MainActivity : AppCompatActivity() {
                                     AccountConnectionState.CONNECTED -> getColor(R.color.status_online)
                                     AccountConnectionState.CONNECTING -> getColor(R.color.status_connecting)
                                     AccountConnectionState.NOT_CONFIGURED,
-                                    AccountConnectionState.NOT_CONNECTED -> getColor(R.color.text_secondary)
+                                    AccountConnectionState.NOT_CONNECTED,
+                                    AccountConnectionState.VERIFICATION_UNAVAILABLE -> getColor(R.color.text_secondary)
                                     else -> getColor(R.color.status_offline)
                                 }
                                 bindingDialog.youtubeStatusBadge.setTextColor(badgeColor)

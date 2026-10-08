@@ -27,6 +27,7 @@ class StreamingAccountsTest {
         assertEquals(AccountConnectionState.TOKEN_EXPIRED, AccountConnectionState.fromWire("TOKEN_EXPIRED"))
         assertEquals(AccountConnectionState.REAUTH_REQUIRED, AccountConnectionState.fromWire("REAUTH_REQUIRED"))
         assertEquals(AccountConnectionState.ERROR, AccountConnectionState.fromWire("ERROR"))
+        assertEquals(AccountConnectionState.VERIFICATION_UNAVAILABLE, AccountConnectionState.fromWire("VERIFICATION_UNAVAILABLE"))
         assertEquals(AccountConnectionState.ERROR, AccountConnectionState.fromWire("UNKNOWN_STATE"))
     }
 
@@ -39,6 +40,7 @@ class StreamingAccountsTest {
         assertEquals("Token hết hạn", AccountConnectionState.TOKEN_EXPIRED.vietnameseLabel)
         assertEquals("Cần ủy quyền lại", AccountConnectionState.REAUTH_REQUIRED.vietnameseLabel)
         assertEquals("Lỗi kết nối", AccountConnectionState.ERROR.vietnameseLabel)
+        assertEquals("Chưa thể xác thực", AccountConnectionState.VERIFICATION_UNAVAILABLE.vietnameseLabel)
     }
 
     @Test
