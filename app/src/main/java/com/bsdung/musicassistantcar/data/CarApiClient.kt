@@ -1043,6 +1043,37 @@ open class CarApiClient {
         return AccountStatusDto.fromJson(accObj)
     }
 
+    fun getYouTubePlaylists(limit: Int = 50, pageToken: String? = null): List<YouTubePlaylistDto> {
+        val query = StringBuilder("/car/integrations/youtube/playlists?limit=$limit")
+        if (!pageToken.isNullOrBlank()) {
+            query.append("&page_token=").append(java.net.URLEncoder.encode(pageToken, "UTF-8"))
+        }
+        val json = requestJson("GET", query.toString())
+        val array = json.optJSONArray("playlists") ?: org.json.JSONArray()
+        val list = mutableListOf<YouTubePlaylistDto>()
+        for (i in 0 until array.length()) {
+            val obj = array.optJSONObject(i) ?: continue
+            list.add(YouTubePlaylistDto.fromJson(obj))
+        }
+        return list
+    }
+
+    fun getYouTubePlaylistItems(playlistId: String, limit: Int = 50, pageToken: String? = null): List<YouTubePlaylistItemDto> {
+        val query = StringBuilder("/car/integrations/youtube/playlists/$playlistId/items?limit=$limit")
+        if (!pageToken.isNullOrBlank()) {
+            query.append("&page_token=").append(java.net.URLEncoder.encode(pageToken, "UTF-8"))
+        }
+        val json = requestJson("GET", query.toString())
+        val array = json.optJSONArray("items") ?: org.json.JSONArray()
+        val list = mutableListOf<YouTubePlaylistItemDto>()
+        for (i in 0 until array.length()) {
+            val obj = array.optJSONObject(i) ?: continue
+            list.add(YouTubePlaylistItemDto.fromJson(obj))
+        }
+        return list
+    }
+
+
     private fun requestJson(
         method: String,
         path: String,

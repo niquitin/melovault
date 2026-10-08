@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="56dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/bg_track_normal"
+    android:paddingStart="12dp"
+    android:paddingEnd="12dp"
+    android:paddingTop="6dp"
+    android:paddingBottom="6dp"
+    android:layout_marginBottom="4dp">
+
+    <TextView
+        android:id="@+id/txtYtItemPosition"
+        android:layout_width="32dp"
+        android:layout_height="wrap_content"
+        android:text="1."
+        android:textSize="13sp"
+        android:textColor="@color/text_secondary"
+        android:gravity="center" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp">
+
+        <TextView
+            android:id="@+id/txtYtItemTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Video Title"
+            android:textSize="14sp"
+            android:textColor="@color/text_primary"
+            android:maxLines="2"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/txtYtItemChannel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Channel Name"
+            android:textSize="12sp"
+            android:textColor="@color/text_secondary"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:layout_marginTop="2dp" />
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/btnYtOpenVideo"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:minHeight="48dp"
+        android:text="Mở YouTube"
+        android:textSize="12sp"
+        android:textColor="@color/text_primary"
+        android:background="@drawable/bg_button_control"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:textAllCaps="false" />
+</LinearLayout>

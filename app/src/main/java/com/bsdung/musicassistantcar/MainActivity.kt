@@ -43,10 +43,15 @@ import com.bsdung.musicassistantcar.databinding.DialogTrackActionsBinding
 import com.bsdung.musicassistantcar.databinding.DialogPlaylistChooserBinding
 import com.bsdung.musicassistantcar.databinding.DialogSignalPathBinding
 import com.bsdung.musicassistantcar.databinding.DialogMusicAccountsBinding
+import com.bsdung.musicassistantcar.databinding.DialogYoutubePlaylistsBinding
 import com.bsdung.musicassistantcar.data.AccountConnectionState
 import com.bsdung.musicassistantcar.data.AccountProvider
 import com.bsdung.musicassistantcar.data.AccountStatusDto
+import com.bsdung.musicassistantcar.data.YouTubePlaylistDto
+import com.bsdung.musicassistantcar.data.YouTubePlaylistItemDto
 import com.bsdung.musicassistantcar.ui.adapter.PlaylistChoiceAdapter
+import com.bsdung.musicassistantcar.ui.adapter.YouTubePlaylistsAdapter
+import com.bsdung.musicassistantcar.ui.adapter.YouTubePlaylistItemsAdapter
 import com.bsdung.musicassistantcar.ui.adapter.LyricsCandidateAdapter
 import com.bsdung.musicassistantcar.ui.adapter.SyncedLyricsAdapter
 import com.bsdung.musicassistantcar.lyrics.LrcParser
@@ -5140,16 +5145,26 @@ class MainActivity : AppCompatActivity() {
                                     bindingDialog.youtubeNoticeText.visibility = View.GONE
                                 }
 
-                                bindingDialog.youtubeDisconnectButton.visibility =
-                                    if (yt.state == AccountConnectionState.CONNECTED) View.VISIBLE else View.GONE
-                                bindingDialog.youtubeDisconnectButton.setOnClickListener {
-                                    bindingDialog.youtubeDisconnectButton.isEnabled = false
-                                    kotlin.concurrent.thread {
-                                        runCatching { client.disconnectAccount(AccountProvider.YOUTUBE.id) }
-                                        runOnUiThread { loadAccounts() }
+                                    // YouTube Playlists button (visible only when CONNECTED and playlistReadAvailable)
+                                    if (yt.state == AccountConnectionState.CONNECTED && yt.capabilities.playlistReadAvailable) {
+                                        bindingDialog.youtubePlaylistsButton.visibility = View.VISIBLE
+                                        bindingDialog.youtubePlaylistsButton.setOnClickListener {
+                                            showYouTubePlaylistsDialog()
+                                        }
+                                    } else {
+                                        bindingDialog.youtubePlaylistsButton.visibility = View.GONE
+                                    }
+
+                                    bindingDialog.youtubeDisconnectButton.visibility =
+                                        if (yt.state == AccountConnectionState.CONNECTED) View.VISIBLE else View.GONE
+                                    bindingDialog.youtubeDisconnectButton.setOnClickListener {
+                                        bindingDialog.youtubeDisconnectButton.isEnabled = false
+                                        kotlin.concurrent.thread {
+                                            runCatching { client.disconnectAccount(AccountProvider.YOUTUBE.id) }
+                                            runOnUiThread { loadAccounts() }
+                                        }
                                     }
                                 }
-                            }
                         },
                         onFailure = { err ->
                             bindingDialog.accountsScrollView.visibility = View.GONE
@@ -5172,6 +5187,114 @@ class MainActivity : AppCompatActivity() {
         }
 
         loadAccounts()
+        dialog.show()
+    }
+
+    private fun showYouTubePlaylistsDialog() {
+        val dialog = BottomSheetDialog(this)
+        dialog.behavior.state = com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED
+        dialog.behavior.skipCollapsed = true
+        val bindingDialog = DialogYoutubePlaylistsBinding.inflate(layoutInflater)
+        dialog.setContentView(bindingDialog.root)
+        dialog.window?.findViewById<View>(com.google.android.material.R.id.design_bottom_sheet)
+            ?.setBackgroundResource(android.R.color.transparent)
+
+        val client = CarApiClient()
+
+        bindingDialog.btnYtPlaylistsClose.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        bindingDialog.btnYtItemsBack.setOnClickListener {
+            bindingDialog.ytPlaylistItemsContainer.visibility = View.GONE
+            bindingDialog.ytPlaylistsListContainer.visibility = View.VISIBLE
+        }
+
+        fun loadPlaylistItems(playlist: YouTubePlaylistDto) {
+            bindingDialog.ytPlaylistsListContainer.visibility = View.GONE
+            bindingDialog.ytPlaylistItemsContainer.visibility = View.VISIBLE
+            bindingDialog.txtYtItemsPlaylistTitle.text = playlist.title
+            bindingDialog.ytItemsLoadingView.visibility = View.VISIBLE
+            bindingDialog.ytItemsStatusText.visibility = View.GONE
+            bindingDialog.ytPlaylistItemsRecyclerView.visibility = View.GONE
+
+            kotlin.concurrent.thread {
+                val result = runCatching { client.getYouTubePlaylistItems(playlist.id) }
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    bindingDialog.ytItemsLoadingView.visibility = View.GONE
+                    result.fold(
+                        onSuccess = { items ->
+                            if (items.isEmpty()) {
+                                bindingDialog.ytItemsStatusText.text = "Danh sách phát không có bài hát"
+                                bindingDialog.ytItemsStatusText.visibility = View.VISIBLE
+                                bindingDialog.ytPlaylistItemsRecyclerView.visibility = View.GONE
+                            } else {
+                                bindingDialog.ytItemsStatusText.visibility = View.GONE
+                                bindingDialog.ytPlaylistItemsRecyclerView.visibility = View.VISIBLE
+                                bindingDialog.ytPlaylistItemsRecyclerView.layoutManager = LinearLayoutManager(this@MainActivity)
+                                bindingDialog.ytPlaylistItemsRecyclerView.adapter = YouTubePlaylistItemsAdapter(items) { item ->
+                                    val videoId = item.videoId ?: return@YouTubePlaylistItemsAdapter
+                                    val appIntent = Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube:$videoId"))
+                                    val webIntent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/watch?v=$videoId"))
+                                    try {
+                                        startActivity(appIntent)
+                                    } catch (_: Exception) {
+                                        try {
+                                            startActivity(webIntent)
+                                        } catch (_: Exception) {
+                                            Toast.makeText(this@MainActivity, "Không thể mở liên kết YouTube", Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        onFailure = { err ->
+                            bindingDialog.ytItemsStatusText.text = "Không thể tải bài hát: ${err.message ?: "Lỗi kết nối"}"
+                            bindingDialog.ytItemsStatusText.visibility = View.VISIBLE
+                            bindingDialog.ytPlaylistItemsRecyclerView.visibility = View.GONE
+                        }
+                    )
+                }
+            }
+        }
+
+        fun loadPlaylists() {
+            bindingDialog.ytPlaylistsLoadingView.visibility = View.VISIBLE
+            bindingDialog.ytPlaylistsStatusText.visibility = View.GONE
+            bindingDialog.ytPlaylistsRecyclerView.visibility = View.GONE
+
+            kotlin.concurrent.thread {
+                val result = runCatching { client.getYouTubePlaylists() }
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    bindingDialog.ytPlaylistsLoadingView.visibility = View.GONE
+                    result.fold(
+                        onSuccess = { playlists ->
+                            if (playlists.isEmpty()) {
+                                bindingDialog.ytPlaylistsStatusText.text = "Không tìm thấy danh sách phát nào trong tài khoản"
+                                bindingDialog.ytPlaylistsStatusText.visibility = View.VISIBLE
+                                bindingDialog.ytPlaylistsRecyclerView.visibility = View.GONE
+                            } else {
+                                bindingDialog.ytPlaylistsStatusText.visibility = View.GONE
+                                bindingDialog.ytPlaylistsRecyclerView.visibility = View.VISIBLE
+                                bindingDialog.ytPlaylistsRecyclerView.layoutManager = LinearLayoutManager(this@MainActivity)
+                                bindingDialog.ytPlaylistsRecyclerView.adapter = YouTubePlaylistsAdapter(playlists) { selected ->
+                                    loadPlaylistItems(selected)
+                                }
+                            }
+                        },
+                        onFailure = { err ->
+                            bindingDialog.ytPlaylistsStatusText.text = "Không thể tải danh sách phát: ${err.message ?: "Lỗi kết nối"}"
+                            bindingDialog.ytPlaylistsStatusText.visibility = View.VISIBLE
+                            bindingDialog.ytPlaylistsRecyclerView.visibility = View.GONE
+                        }
+                    )
+                }
+            }
+        }
+
+        loadPlaylists()
         dialog.show()
     }
 

@@ -128,4 +128,52 @@ class StreamingAccountsTest {
         assertTrue(connectedDto.capabilities.catalogSearchAvailable)
         assertFalse(connectedDto.capabilities.playbackAvailable)
     }
+
+    @Test
+    fun testYouTubePlaylistDtoModel() {
+        val playlist = YouTubePlaylistDto(
+            id = "PL1234567890",
+            title = "My Rock Playlist",
+            description = "Best tracks",
+            itemCount = 42,
+            privacyStatus = "public",
+            thumbnailUrl = "https://i.ytimg.com/vi/xyz/default.jpg",
+            uri = "youtube:playlist:PL1234567890",
+        )
+        assertEquals("PL1234567890", playlist.id)
+        assertEquals("My Rock Playlist", playlist.title)
+        assertEquals(42, playlist.itemCount)
+        assertEquals("public", playlist.privacyStatus)
+        assertEquals("https://i.ytimg.com/vi/xyz/default.jpg", playlist.thumbnailUrl)
+    }
+
+    @Test
+    fun testYouTubePlaylistItemDtoModel() {
+        val item1 = YouTubePlaylistItemDto(
+            id = "item_1",
+            playlistId = "PL1234567890",
+            videoId = "vid_abc",
+            title = "Bohemian Rhapsody",
+            position = 0,
+            channelTitle = "Queen Official",
+            isAvailable = true,
+        )
+        val item2 = YouTubePlaylistItemDto(
+            id = "item_2",
+            playlistId = "PL1234567890",
+            videoId = null,
+            title = "Deleted video",
+            position = 1,
+            channelTitle = null,
+            isAvailable = false,
+        )
+        assertEquals(0, item1.position)
+        assertTrue(item1.isAvailable)
+        assertEquals("vid_abc", item1.videoId)
+        assertEquals("Queen Official", item1.channelTitle)
+
+        assertEquals(1, item2.position)
+        assertFalse(item2.isAvailable)
+        assertNull(item2.videoId)
+    }
 }

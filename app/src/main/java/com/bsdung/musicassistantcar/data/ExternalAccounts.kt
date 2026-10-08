@@ -94,3 +94,62 @@ data class AccountStatusDto(
         }
     }
 }
+
+data class YouTubePlaylistDto(
+    val id: String,
+    val title: String,
+    val description: String,
+    val thumbnailUrl: String?,
+    val itemCount: Int,
+    val privacyStatus: String,
+    val uri: String,
+) {
+    companion object {
+        fun fromJson(json: JSONObject): YouTubePlaylistDto {
+            return YouTubePlaylistDto(
+                id = json.optString("id", ""),
+                title = json.optString("title", "Không có tiêu đề"),
+                description = json.optString("description", ""),
+                thumbnailUrl = json.optString("thumbnail_url").takeIf { it.isNotBlank() },
+                itemCount = json.optInt("item_count", 0),
+                privacyStatus = json.optString("privacy_status", "private"),
+                uri = json.optString("uri", ""),
+            )
+        }
+    }
+}
+
+data class YouTubePlaylistItemDto(
+    val id: String,
+    val playlistId: String,
+    val videoId: String?,
+    val title: String,
+    val channelTitle: String? = null,
+    val position: Int = 0,
+    val thumbnailUrl: String? = null,
+    val videoUrl: String? = null,
+    val privacyStatus: String = "public",
+    val isAvailable: Boolean = true,
+    val uri: String = "",
+    val videoUri: String? = null,
+) {
+    companion object {
+        fun fromJson(json: JSONObject): YouTubePlaylistItemDto {
+            return YouTubePlaylistItemDto(
+                id = json.optString("id", ""),
+                playlistId = json.optString("playlist_id", ""),
+                videoId = json.optString("video_id").takeIf { it.isNotBlank() },
+                title = json.optString("title", "Không có tiêu đề"),
+                channelTitle = json.optString("channel_title").takeIf { it.isNotBlank() },
+                position = json.optInt("position", 0),
+                thumbnailUrl = json.optString("thumbnail_url").takeIf { it.isNotBlank() },
+                videoUrl = json.optString("video_url").takeIf { it.isNotBlank() },
+                privacyStatus = json.optString("privacy_status", "public"),
+                isAvailable = json.optBoolean("is_available", true),
+                uri = json.optString("uri", ""),
+                videoUri = json.optString("video_uri").takeIf { it.isNotBlank() },
+            )
+        }
+    }
+}
+

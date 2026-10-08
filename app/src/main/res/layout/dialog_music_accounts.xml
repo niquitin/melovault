@@ -279,6 +279,21 @@
                     android:gravity="end">
 
                     <Button
+                        android:id="@+id/youtubePlaylistsButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:minHeight="48dp"
+                        android:text="Xem danh sách phát"
+                        android:textSize="13sp"
+                        android:textColor="@color/text_primary"
+                        android:background="@drawable/bg_button_control"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:textAllCaps="false"
+                        android:visibility="gone"
+                        android:layout_marginEnd="8dp" />
+
+                    <Button
                         android:id="@+id/youtubeDisconnectButton"
                         android:layout_width="wrap_content"
                         android:layout_height="48dp"
