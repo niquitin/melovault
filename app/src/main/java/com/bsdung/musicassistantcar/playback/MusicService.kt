@@ -96,6 +96,7 @@ class MusicService : MediaLibraryService() {
     private val resolvedDriveFileIds: MutableSet<Int> =
         Collections.synchronizedSet(mutableSetOf())
     private lateinit var trackResumeStore: TrackResumeStore
+    private var serviceShuttingDown = false
     private var lastActiveMediaId: String? = null
     private var lastKnownPositionMs: Long = 0L
     private var lastKnownDurationMs: Long = 0L
@@ -652,6 +653,47 @@ class MusicService : MediaLibraryService() {
             }
         }.build()
         Log.i(TAG, "onCreate: MediaLibrarySession created successfully")
+        restorePersistedQueueOnStartup()
+    }
+
+    /**
+     * Restore the last queue as a PAUSED timeline, so opening the app after the
+     * playback service was killed immediately shows the previous song and lets
+     * Play/Next resume it. Resolve metadata off the main thread and never
+     * overwrite any newer queue the user chose while resolution was pending.
+     */
+    private fun restorePersistedQueueOnStartup() {
+        val stored = loadPlaybackState() ?: return
+        executor.execute {
+            val restored = stored.mediaIds.mapNotNull { id ->
+                runCatching { catalog.item(id) }
+                    .onFailure { Log.w(TAG, "Queue startup restore skipped $id: ${it.message}") }
+                    .getOrNull()
+            }
+            if (restored.isEmpty()) {
+                Log.w(TAG, "Queue startup restore: no items resolved; saved state retained")
+                return@execute
+            }
+            val index = QueueStartupRestorePolicy.targetIndex(
+                stored.mediaIds,
+                stored.currentIndex,
+                restored.map { it.mediaId },
+            )
+            mainHandler.post {
+                if (!QueueStartupRestorePolicy.shouldApply(
+                        serviceShuttingDown = serviceShuttingDown,
+                        hasSession = librarySession != null,
+                        currentQueueSize = player.mediaItemCount,
+                    )
+                ) {
+                    Log.i(TAG, "Queue startup restore skipped: newer session queue exists")
+                    return@post
+                }
+                // setMediaItems does not start playback or trigger an audio-focus request.
+                player.setMediaItems(restored, index, stored.positionMs)
+                Log.i(TAG, "QUEUE_STARTUP_RESTORED: count=${restored.size}, index=$index, pos=${stored.positionMs}")
+            }
+        }
     }
 
     private fun persistPlaybackModes() {
@@ -1000,6 +1042,7 @@ class MusicService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        serviceShuttingDown = true
         Log.i(TAG, "onDestroy: Tearing down MusicService")
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(prefsListener)
