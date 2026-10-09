@@ -32,7 +32,8 @@ import com.google.android.material.bottomsheet.BottomSheetDialog
 class UnifiedLibraryDialog(
     private val activity: Activity,
     private val client: CarApiClient = CarApiClient(),
-    private val onPlayTrackInLibrary: ((UnifiedTrackDto) -> Unit)? = null,
+    private val onPlayTrackInLibrary: ((UnifiedTrackDto) -> Boolean)? = null,
+    private val onAddToQueue: ((UnifiedTrackDto) -> Boolean)? = null,
 ) {
 
     private val dialog = BottomSheetDialog(activity)
@@ -278,9 +279,18 @@ class UnifiedLibraryDialog(
                 1f
             )
         }
-        adapter = UnifiedTracksAdapter { track, action ->
-            handleItemAction(track, action)
-        }
+        adapter = UnifiedTracksAdapter(
+            onItemClick = { track, action -> handleItemAction(track, action) },
+            onQueueClick = { track ->
+                if (UnifiedActionHelper.resolveAction(track) == UnifiedItemAction.PLAY_IN_LIBRARY) {
+                    if (onAddToQueue == null) {
+                        Toast.makeText(activity, "Hàng đợi chưa sẵn sàng", Toast.LENGTH_SHORT).show()
+                    } else {
+                        onAddToQueue.invoke(track)
+                    }
+                }
+            },
+        )
         recyclerView.adapter = adapter
         root.addView(recyclerView)
 
@@ -532,8 +542,9 @@ class UnifiedLibraryDialog(
         when (action) {
             UnifiedItemAction.PLAY_IN_LIBRARY -> {
                 if (onPlayTrackInLibrary != null) {
-                    onPlayTrackInLibrary.invoke(track)
-                    dialog.dismiss()
+                    if (onPlayTrackInLibrary.invoke(track)) {
+                        dialog.dismiss()
+                    }
                 } else {
                     Toast.makeText(
                         activity,

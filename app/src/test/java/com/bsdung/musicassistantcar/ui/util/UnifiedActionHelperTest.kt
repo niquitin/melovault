@@ -63,7 +63,7 @@ class UnifiedActionHelperTest {
 
         val action = UnifiedActionHelper.resolveAction(track)
         assertEquals(UnifiedItemAction.PLAY_IN_LIBRARY, action)
-        assertEquals("Có trong thư viện", UnifiedActionHelper.getActionButtonText(action))
+        assertEquals("Phát", UnifiedActionHelper.getActionButtonText(action))
     }
 
     @Test

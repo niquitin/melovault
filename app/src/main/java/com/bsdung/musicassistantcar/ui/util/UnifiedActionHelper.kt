@@ -92,7 +92,7 @@ object UnifiedActionHelper {
 
     fun getActionButtonText(action: UnifiedItemAction): String {
         return when (action) {
-            UnifiedItemAction.PLAY_IN_LIBRARY -> "Có trong thư viện"
+            UnifiedItemAction.PLAY_IN_LIBRARY -> "Phát"
             UnifiedItemAction.OPEN_EXTERNAL -> "Mở liên kết"
             UnifiedItemAction.READ_ONLY -> "Chỉ xem"
         }

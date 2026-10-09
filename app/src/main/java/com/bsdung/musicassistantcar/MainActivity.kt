@@ -45,6 +45,8 @@ import com.bsdung.musicassistantcar.databinding.DialogSignalPathBinding
 import com.bsdung.musicassistantcar.databinding.DialogMusicAccountsBinding
 import com.bsdung.musicassistantcar.databinding.DialogYoutubePlaylistsBinding
 import com.bsdung.musicassistantcar.ui.dialog.UnifiedLibraryDialog
+import com.bsdung.musicassistantcar.data.UnifiedTrackDto
+import com.bsdung.musicassistantcar.ui.util.UnifiedPlaybackMapper
 import com.bsdung.musicassistantcar.data.AccountConnectionState
 import com.bsdung.musicassistantcar.data.AccountProvider
 import com.bsdung.musicassistantcar.data.AccountStatusDto
@@ -5184,7 +5186,15 @@ class MainActivity : AppCompatActivity() {
             loadAccounts()
         }
         bindingDialog.btnUnifiedLibrary.setOnClickListener {
-            UnifiedLibraryDialog(this).show()
+            UnifiedLibraryDialog(
+                activity = this,
+                onPlayTrackInLibrary = { track ->
+                    val started = playFromUnifiedLibrary(track)
+                    if (started) dialog.dismiss()
+                    started
+                },
+                onAddToQueue = ::addFromUnifiedLibrary,
+            ).show()
         }
         bindingDialog.accountsCloseButton.setOnClickListener {
             dialog.dismiss()
@@ -5192,6 +5202,61 @@ class MainActivity : AppCompatActivity() {
 
         loadAccounts()
         dialog.show()
+    }
+
+    /**
+     * Unified Library may display external-only catalog entries. Only a canonical,
+     * explicitly STREAM-capable MeloVault track may reach the authenticated Media3
+     * pipeline. No provider URL or untrusted server stream path is opened directly.
+     */
+    private fun unifiedPlayableItem(track: UnifiedTrackDto): MediaItem? {
+        val canonical = UnifiedPlaybackMapper.playableTrack(track) ?: return null
+        return uiCatalog.withCurrentQuality(uiCatalog.trackItem(canonical))
+    }
+
+    private fun playFromUnifiedLibrary(track: UnifiedTrackDto): Boolean {
+        if (browser == null) {
+            Toast.makeText(this, "Chưa kết nối trình phát", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        val item = unifiedPlayableItem(track)
+        if (item == null) {
+            Toast.makeText(this, "Nguồn nhạc này không hỗ trợ phát trực tiếp", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        playQueue(listOf(item), 0)
+        return true
+    }
+
+    private fun addFromUnifiedLibrary(track: UnifiedTrackDto): Boolean {
+        if (browser == null) {
+            Toast.makeText(this, "Chưa kết nối trình phát", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        val item = unifiedPlayableItem(track)
+        if (item == null) {
+            Toast.makeText(this, "Nguồn nhạc này không thể thêm vào hàng đợi", Toast.LENGTH_SHORT).show()
+            return false
+        }
+        // Reuse the existing QueueHelper dedup/append logic and offline fallback.
+        addToQueue(
+            LibraryItem.Track(
+                id = item.mediaId,
+                title = track.title,
+                artist = track.artist,
+                album = track.album,
+                artworkUri = item.mediaMetadata.artworkUri?.toString(),
+                durationMs = track.duration?.takeIf { it.isFinite() && it > 0.0 }
+                    ?.let { (it * 1000).toLong() },
+                isCurrent = false,
+                isPlaying = false,
+                mediaItem = item,
+                sourceBadge = track.sourceBadge,
+                playbackAction = track.playbackAction,
+                isPlayable = true,
+            )
+        )
+        return true
     }
 
     private fun showYouTubePlaylistsDialog() {

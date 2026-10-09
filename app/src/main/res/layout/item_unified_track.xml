@@ -56,6 +56,21 @@
     </LinearLayout>
 
     <Button
+        android:id="@+id/btnUnifiedQueue"
+        android:layout_width="wrap_content"
+        android:layout_height="48dp"
+        android:minHeight="48dp"
+        android:layout_marginEnd="6dp"
+        android:background="@drawable/bg_button_control"
+        android:textColor="@color/text_primary"
+        android:textSize="12sp"
+        android:textAllCaps="false"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:text="+ Queue"
+        android:visibility="gone" />
+
+    <Button
         android:id="@+id/btnUnifiedAction"
         android:layout_width="wrap_content"
         android:layout_height="48dp"

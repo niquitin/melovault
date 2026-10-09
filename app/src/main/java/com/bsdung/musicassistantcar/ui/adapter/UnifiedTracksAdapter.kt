@@ -1,6 +1,7 @@
 package com.bsdung.musicassistantcar.ui.adapter
 
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.bsdung.musicassistantcar.data.UnifiedTrackDto
@@ -11,6 +12,7 @@ import com.bsdung.musicassistantcar.ui.util.UnifiedItemAction
 
 class UnifiedTracksAdapter(
     private val onItemClick: (UnifiedTrackDto, UnifiedItemAction) -> Unit,
+    private val onQueueClick: (UnifiedTrackDto) -> Unit = {},
 ) : RecyclerView.Adapter<UnifiedTracksAdapter.ViewHolder>() {
 
     private val items = mutableListOf<UnifiedTrackDto>()
@@ -62,6 +64,12 @@ class UnifiedTracksAdapter(
             val action = UnifiedActionHelper.resolveAction(item)
             val actionText = UnifiedActionHelper.getActionButtonText(action)
             binding.btnUnifiedAction.text = actionText
+            binding.btnUnifiedQueue.visibility = if (action == UnifiedItemAction.PLAY_IN_LIBRARY) View.VISIBLE else View.GONE
+            binding.btnUnifiedQueue.setOnClickListener {
+                if (UnifiedActionHelper.resolveAction(item) == UnifiedItemAction.PLAY_IN_LIBRARY) {
+                    onQueueClick(item)
+                }
+            }
 
             when (action) {
                 UnifiedItemAction.READ_ONLY -> {
