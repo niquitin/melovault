@@ -2173,7 +2173,13 @@ open class PinnedDownloadManager(
 
     fun toMediaItem(record: OfflineTrackRecord): MediaItem {
         val file = store.getTrackFile(record)
-        val fileUri = Uri.fromFile(file)
+        // Fragmented FLAC-in-M4A without sidx can play but cannot seek in Media3.
+        // The indexed playback copy stays in app cache; the pinned original is untouched.
+        val playbackFile = context?.let { SeekIndexedFragmentedMp4.prepare(file, it.cacheDir) } ?: file
+        if (playbackFile != file) {
+            Log.i(TAG, "Using seek-indexed offline M4A playback copy")
+        }
+        val fileUri = Uri.fromFile(playbackFile)
         val effectiveSize = getEffectiveRecordSizeBytes(record).takeIf { it > 0L } ?: record.fileSizeBytes
         val extras = Bundle().apply {
             putInt("track_id", record.trackId.toInt())
