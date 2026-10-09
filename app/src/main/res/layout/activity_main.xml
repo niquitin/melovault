@@ -11,17 +11,16 @@
     android:layout_height="match_parent"
     android:background="@color/bg_base">
 
-<androidx.core.widget.NestedScrollView
+<FrameLayout
     android:id="@+id/mainScrollContainer"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_base"
-    android:fillViewport="true">
+    android:background="@color/bg_base">
 
     <LinearLayout
         android:id="@+id/mainContentContainer"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
         android:orientation="vertical"
         android:padding="12dp">
 
@@ -615,7 +614,8 @@
         <LinearLayout
             android:id="@+id/libraryCard"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="0dp"
+            android:layout_weight="1"
             android:orientation="vertical"
             android:background="@drawable/bg_surface_card"
             android:padding="12dp">
@@ -1864,14 +1864,15 @@
             <!-- Content Frame -->
             <FrameLayout
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
+                android:layout_height="0dp"
+                android:layout_weight="1"
                 android:minHeight="160dp">
 
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/recyclerView"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:nestedScrollingEnabled="false"
+                    android:layout_height="match_parent"
+                    android:scrollbars="vertical"
                     tools:listitem="@layout/item_library_track" />
 
                 <!-- Loading State -->
@@ -1997,7 +1998,7 @@
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>
-</androidx.core.widget.NestedScrollView>
+</FrameLayout>
 
 <!-- ═══ FULLSCREEN CAR LYRICS OVERLAY (v0.6.30) ═══ -->
 <LinearLayout

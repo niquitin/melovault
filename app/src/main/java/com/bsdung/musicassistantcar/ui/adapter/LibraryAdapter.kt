@@ -12,6 +12,7 @@ import com.bsdung.musicassistantcar.data.MediaTechnicalSummary
 import com.bsdung.musicassistantcar.data.RemoteCatalog
 import com.bsdung.musicassistantcar.databinding.ItemLibraryCategoryBinding
 import com.bsdung.musicassistantcar.databinding.ItemLibraryFolderBinding
+import com.bsdung.musicassistantcar.databinding.ItemLibraryFooterBinding
 import com.bsdung.musicassistantcar.databinding.ItemLibraryTrackBinding
 import com.bsdung.musicassistantcar.ui.controller.ProgressController
 import com.bsdung.musicassistantcar.ui.model.LibraryItem
@@ -35,6 +36,7 @@ class LibraryAdapter(
         private const val TYPE_CATEGORY = 1
         private const val TYPE_FOLDER = 2
         private const val TYPE_TRACK = 3
+        private const val TYPE_FOOTER = 4
         const val PAYLOAD_TECHNICAL_INFO = "PAYLOAD_TECHNICAL_INFO"
     }
 
@@ -110,6 +112,38 @@ class LibraryAdapter(
         runCatching { notifyDataSetChanged() }
     }
 
+    fun appendItems(newItems: List<LibraryItem>) {
+        if (newItems.isEmpty()) return
+        val footerIndex = items.indexOfFirst { it is LibraryItem.LoadingFooter }
+        if (footerIndex >= 0) {
+            items.removeAt(footerIndex)
+            runCatching { notifyItemRemoved(footerIndex) }
+        }
+        val startPos = items.size
+        items.addAll(newItems)
+        runCatching { notifyItemRangeInserted(startPos, newItems.size) }
+    }
+
+    fun showFooter(isError: Boolean = false, errorMessage: String? = null, onRetry: (() -> Unit)? = null) {
+        val footerIndex = items.indexOfFirst { it is LibraryItem.LoadingFooter }
+        val footerItem = LibraryItem.LoadingFooter(isError, errorMessage, onRetry)
+        if (footerIndex >= 0) {
+            items[footerIndex] = footerItem
+            runCatching { notifyItemChanged(footerIndex) }
+        } else {
+            items.add(footerItem)
+            runCatching { notifyItemInserted(items.size - 1) }
+        }
+    }
+
+    fun hideFooter() {
+        val footerIndex = items.indexOfFirst { it is LibraryItem.LoadingFooter }
+        if (footerIndex >= 0) {
+            items.removeAt(footerIndex)
+            runCatching { notifyItemRemoved(footerIndex) }
+        }
+    }
+
     fun getItems(): List<LibraryItem> = items.toList()
 
     fun updateTrackTechnicalInfo(mediaId: String, summary: MediaTechnicalSummary): Boolean {
@@ -169,6 +203,7 @@ class LibraryAdapter(
             is LibraryItem.Category -> TYPE_CATEGORY
             is LibraryItem.Folder -> TYPE_FOLDER
             is LibraryItem.Track -> TYPE_TRACK
+            is LibraryItem.LoadingFooter -> TYPE_FOOTER
         }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
@@ -182,6 +217,10 @@ class LibraryAdapter(
                 val binding = ItemLibraryFolderBinding.inflate(inflater, parent, false)
                 FolderViewHolder(binding)
             }
+            TYPE_FOOTER -> {
+                val binding = ItemLibraryFooterBinding.inflate(inflater, parent, false)
+                FooterViewHolder(binding)
+            }
             else -> {
                 val binding = ItemLibraryTrackBinding.inflate(inflater, parent, false)
                 TrackViewHolder(binding)
@@ -194,6 +233,27 @@ class LibraryAdapter(
             is LibraryItem.Category -> (holder as CategoryViewHolder).bind(item)
             is LibraryItem.Folder -> (holder as FolderViewHolder).bind(item)
             is LibraryItem.Track -> (holder as TrackViewHolder).bind(item)
+            is LibraryItem.LoadingFooter -> (holder as FooterViewHolder).bind(item)
+        }
+    }
+
+    inner class FooterViewHolder(
+        private val binding: ItemLibraryFooterBinding,
+    ) : RecyclerView.ViewHolder(binding.root) {
+
+        fun bind(item: LibraryItem.LoadingFooter) {
+            if (item.isError) {
+                binding.footerLoadingLayout.visibility = View.GONE
+                binding.footerErrorLayout.visibility = View.VISIBLE
+                binding.footerErrorText.text = item.errorMessage ?: "Không tải được thêm"
+                binding.footerRetryButton.setOnClickListener {
+                    item.onRetry?.invoke()
+                }
+            } else {
+                binding.footerLoadingLayout.visibility = View.VISIBLE
+                binding.footerErrorLayout.visibility = View.GONE
+                binding.footerRetryButton.setOnClickListener(null)
+            }
         }
     }
 
@@ -275,7 +335,9 @@ class LibraryAdapter(
                     else -> ""
                 }
             }
+            val durationStr = item.durationMs?.takeIf { it > 0L }?.let { ProgressController.formatTimeMs(it) }
             val combinedInfo = listOfNotNull(
+                durationStr?.takeIf { it.isNotBlank() },
                 sourceLabel.takeIf { it.isNotBlank() },
                 audioInfo?.takeIf { it.isNotBlank() },
             ).joinToString(" · ")
@@ -332,12 +394,7 @@ class LibraryAdapter(
                 binding.trackRoot.setBackgroundResource(R.drawable.bg_track_normal)
                 binding.trackTitle.setTextColor(ContextCompat.getColor(context, R.color.text_primary))
                 binding.nowPlayingIndicator.visibility = View.GONE
-                if (item.durationMs != null && item.durationMs > 0L) {
-                    binding.trackDuration.text = ProgressController.formatTimeMs(item.durationMs)
-                    binding.trackDuration.visibility = View.VISIBLE
-                } else {
-                    binding.trackDuration.visibility = View.GONE
-                }
+                binding.trackDuration.visibility = View.GONE
             }
 
             if (isEditMode) {
@@ -374,6 +431,9 @@ class LibraryAdapter(
                     binding.root.setOnClickListener(null)
                 }
                 binding.root.setOnLongClickListener(null)
+                binding.trackTitle.setOnLongClickListener(null)
+                binding.trackSubtitle.setOnLongClickListener(null)
+                binding.trackAudioInfo.setOnLongClickListener(null)
             } else {
                 binding.trackCheckbox.visibility = View.GONE
                 binding.dragHandle.visibility = View.GONE
@@ -577,10 +637,14 @@ class LibraryAdapter(
                     onTrackClick(item, playableTracks, trackIndex)
                 }
 
-                binding.root.setOnLongClickListener {
+                val onLongClickAction = View.OnLongClickListener {
                     onTrackLongClick?.invoke(item)
                     true
                 }
+                binding.root.setOnLongClickListener(onLongClickAction)
+                binding.trackTitle.setOnLongClickListener(onLongClickAction)
+                binding.trackSubtitle.setOnLongClickListener(onLongClickAction)
+                binding.trackAudioInfo.setOnLongClickListener(onLongClickAction)
             }
         }
     }

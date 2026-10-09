@@ -55,10 +55,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Track Title"
-            android:textSize="14.5sp"
+            android:textSize="15.5sp"
             android:textStyle="bold"
             android:textColor="@color/text_primary"
-            android:maxLines="2"
+            android:maxLines="4"
             android:ellipsize="end" />
 
         <TextView
@@ -84,11 +84,11 @@
             android:visibility="gone" />
     </LinearLayout>
 
-    <!-- Track Duration -->
+    <!-- Track Duration (Hidden to protect title row width; duration shown in metadata) -->
     <TextView
         android:id="@+id/trackDuration"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
         android:textSize="12sp"
         android:textColor="@color/text_tertiary"
         android:visibility="gone"

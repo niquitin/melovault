@@ -41,4 +41,12 @@ sealed class LibraryItem {
         val isPlayable: Boolean = true,
         val externalUrl: String? = null,
     ) : LibraryItem()
+
+    data class LoadingFooter(
+        val isError: Boolean = false,
+        val errorMessage: String? = null,
+        val onRetry: (() -> Unit)? = null,
+    ) : LibraryItem() {
+        override val id: String = "footer:loading"
+    }
 }

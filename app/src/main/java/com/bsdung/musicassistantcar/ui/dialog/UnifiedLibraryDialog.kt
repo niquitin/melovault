@@ -48,6 +48,7 @@ class UnifiedLibraryDialog(
     private var isDismissed: Boolean = false
     private var hasPendingReload: Boolean = false
     private var requestGeneration: Long = 0L
+    private val displayedItems = mutableListOf<UnifiedTrackDto>()
 
     // Views created programmatically
     private val loadingBar: ProgressBar
@@ -278,6 +279,17 @@ class UnifiedLibraryDialog(
                 0,
                 1f
             )
+            addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrolled(rv: RecyclerView, dx: Int, dy: Int) {
+                    if (dy <= 0) return
+                    val lm = rv.layoutManager as? LinearLayoutManager ?: return
+                    val total = lm.itemCount
+                    val lastVisible = lm.findLastVisibleItemPosition()
+                    if (!isLoading && displayedItems.size < totalItems && lastVisible >= total - 4) {
+                        loadNextPage()
+                    }
+                }
+            })
         }
         adapter = UnifiedTracksAdapter(
             onItemClick = { track, action -> handleItemAction(track, action) },
@@ -294,10 +306,11 @@ class UnifiedLibraryDialog(
         recyclerView.adapter = adapter
         root.addView(recyclerView)
 
-        // 8. Pagination Controls Layout
+        // 8. Pagination Controls Layout (Hidden for continuous vertical scrolling)
         val paginationLayout = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
+            visibility = View.GONE
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -360,7 +373,15 @@ class UnifiedLibraryDialog(
         isDismissed = false
         dialog.show()
         currentOffset = 0
-        loadCurrentPage()
+        displayedItems.clear()
+        loadCurrentPage(append = false)
+    }
+
+    private fun loadNextPage() {
+        if (isLoading || isDismissed) return
+        if (displayedItems.size >= totalItems) return
+        currentOffset = displayedItems.size
+        loadCurrentPage(append = true)
     }
 
     private fun applyFilter(filter: UnifiedSourceFilter) {
@@ -375,14 +396,15 @@ class UnifiedLibraryDialog(
         if (currentFilter == newState.filter && currentQuery == newState.query) return
         currentFilter = newState.filter
         currentQuery = newState.query
-        currentOffset = newState.offset
+        currentOffset = 0
+        displayedItems.clear()
         updateFilterButtonStyles()
         requestGeneration++
         if (isLoading) {
             hasPendingReload = true
             return
         }
-        loadCurrentPage()
+        loadCurrentPage(append = false)
     }
 
     private fun applySearch(query: String) {
@@ -394,14 +416,15 @@ class UnifiedLibraryDialog(
         if (currentFilter == newState.filter && currentQuery == newState.query) return
         currentFilter = newState.filter
         currentQuery = newState.query
-        currentOffset = newState.offset
+        currentOffset = 0
+        displayedItems.clear()
         updateFilterButtonStyles()
         requestGeneration++
         if (isLoading) {
             hasPendingReload = true
             return
         }
-        loadCurrentPage()
+        loadCurrentPage(append = false)
     }
 
     private fun updateFilterButtonStyles() {
@@ -416,7 +439,7 @@ class UnifiedLibraryDialog(
         }
     }
 
-    private fun loadCurrentPage() {
+    private fun loadCurrentPage(append: Boolean = false) {
         if (isLoading) {
             hasPendingReload = true
             return
@@ -428,8 +451,10 @@ class UnifiedLibraryDialog(
         val generation = requestGeneration
 
         loadingBar.visibility = View.VISIBLE
-        statusMessageView.visibility = View.GONE
-        retryButton.visibility = View.GONE
+        if (!append) {
+            statusMessageView.visibility = View.GONE
+            retryButton.visibility = View.GONE
+        }
 
         val isSearch = currentQuery.isNotBlank()
         val filterParam = if (currentFilter == UnifiedSourceFilter.ALL) null else currentFilter.serverKey
@@ -469,7 +494,7 @@ class UnifiedLibraryDialog(
                 if (generation != requestGeneration) {
                     if (hasPendingReload) {
                         hasPendingReload = false
-                        loadCurrentPage()
+                        loadCurrentPage(append = false)
                     }
                     return@runOnUiThread
                 }
@@ -477,16 +502,26 @@ class UnifiedLibraryDialog(
                 result.fold(
                     onSuccess = { (items, total) ->
                         totalItems = total
-                        renderTracks(items)
+                        if (append) {
+                            displayedItems.addAll(items)
+                        } else {
+                            displayedItems.clear()
+                            displayedItems.addAll(items)
+                        }
+                        renderTracks(displayedItems)
                     },
                     onFailure = { err ->
-                        showError("Không thể tải danh sách: ${err.message ?: "Lỗi mạng"}")
+                        if (append) {
+                            Toast.makeText(activity, "Không tải được thêm: ${err.message ?: "Lỗi mạng"}", Toast.LENGTH_SHORT).show()
+                        } else {
+                            showError("Không thể tải danh sách: ${err.message ?: "Lỗi mạng"}")
+                        }
                     }
                 )
 
                 if (hasPendingReload) {
                     hasPendingReload = false
-                    loadCurrentPage()
+                    loadCurrentPage(append = false)
                 }
             }
         }
@@ -505,12 +540,13 @@ class UnifiedLibraryDialog(
         } else {
             statusMessageView.visibility = View.GONE
             retryButton.visibility = View.GONE
-            adapter.submitList(items)
+            adapter.submitList(items.toList())
         }
         updatePaginationUI(items.size)
     }
 
     private fun showError(message: String) {
+        displayedItems.clear()
         adapter.submitList(emptyList())
         statusMessageView.text = message
         statusMessageView.visibility = View.VISIBLE

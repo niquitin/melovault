@@ -202,6 +202,10 @@ class MainActivity : AppCompatActivity() {
     private var pendingRestorePosition: Int? = null
     private var pendingRestoreOffset: Int? = null
     private val pageSize = 30
+    private var isPagingLoading: Boolean = false
+    private var isPagingEndReached: Boolean = false
+    private var currentLoadedPages: Int = 0
+    private var pagingGeneration: Long = 0L
     private var currentCollectionRequestId: Long = 0L
     private val collectionFetchExecutor = Executors.newSingleThreadExecutor()
     @Volatile
@@ -614,13 +618,18 @@ class MainActivity : AppCompatActivity() {
                         val currentTrackIds = libraryAdapter.getItems()
                             .filterIsInstance<LibraryItem.Track>()
                             .map { it.id }
-                        val offset = navManager.currentPage * pageSize
+                        if (currentTrackIds.size != currentTrackIds.distinct().size) {
+                            Toast.makeText(this@MainActivity, "Danh sách có bài hát trùng lặp, không thể sắp xếp lại", Toast.LENGTH_SHORT).show()
+                            loadChildren(navManager.currentParentId, 0, navManager.currentLabel)
+                            return
+                        }
+                        val offset = 0
                         uiExecutor.submit {
                             val ok = runCatching { uiCatalog.reorderPlaylist(playlistId, currentTrackIds, offset) }.getOrDefault(false)
                             runOnUiThread {
                                 if (!ok) {
                                     Toast.makeText(this@MainActivity, "Không thể lưu thứ tự danh sách phát", Toast.LENGTH_SHORT).show()
-                                    loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
+                                    loadChildren(navManager.currentParentId, 0, navManager.currentLabel)
                                 }
                             }
                         }
@@ -639,6 +648,16 @@ class MainActivity : AppCompatActivity() {
                 override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                     if (newState == RecyclerView.SCROLL_STATE_IDLE) {
                         triggerVisibleEnrichment()
+                    }
+                }
+
+                override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                    if (dy <= 0) return
+                    val lm = recyclerView.layoutManager as? LinearLayoutManager ?: return
+                    val total = lm.itemCount
+                    val lastVisible = lm.findLastVisibleItemPosition()
+                    if (!isPagingLoading && !isPagingEndReached && total > 0 && lastVisible >= total - 4) {
+                        loadNextPage()
                     }
                 }
             })
@@ -933,8 +952,7 @@ class MainActivity : AppCompatActivity() {
             if (isLyricsVisible) hideLyrics()
             userOpenedFullPlayer = false
             applyMobilePlayerVisibility(isBrowsing = true)
-            val scroll = findViewById<androidx.core.widget.NestedScrollView>(R.id.mainScrollContainer)
-            scroll?.post { scroll.smoothScrollTo(0, binding.libraryCard.top) }
+            binding.recyclerView.scrollToPosition(0)
         }
         binding.quickSourcesButton.setOnClickListener { showMusicAccountsDialog() }
         binding.quickPlaylistsButton.setOnClickListener {
@@ -943,23 +961,17 @@ class MainActivity : AppCompatActivity() {
             userOpenedFullPlayer = false
             applyMobilePlayerVisibility(isBrowsing = true)
             handleQuickFilterClick(RemoteCatalog.PLAYLISTS_ID, "Danh sách phát")
-            // Compact screen keeps the library below Now Playing; reveal it directly.
-            val scroll = findViewById<androidx.core.widget.NestedScrollView>(R.id.mainScrollContainer)
-            scroll?.post { scroll.smoothScrollTo(0, binding.libraryCard.top) }
+            binding.recyclerView.scrollToPosition(0)
         }
 
         // Mini player bar tap/expand and play/pause
         binding.miniPlayerBar?.setOnClickListener {
             userOpenedFullPlayer = true
             applyMobilePlayerVisibility(isBrowsing = false)
-            val scroll = findViewById<androidx.core.widget.NestedScrollView>(R.id.mainScrollContainer)
-            scroll?.post { scroll.smoothScrollTo(0, 0) }
         }
         binding.miniExpandButton?.setOnClickListener {
             userOpenedFullPlayer = true
             applyMobilePlayerVisibility(isBrowsing = false)
-            val scroll = findViewById<androidx.core.widget.NestedScrollView>(R.id.mainScrollContainer)
-            scroll?.post { scroll.smoothScrollTo(0, 0) }
         }
         binding.miniPlayPauseButton?.setOnClickListener {
             handlePlayPauseToggle()
@@ -1451,6 +1463,14 @@ class MainActivity : AppCompatActivity() {
         }
         updateHeaderAndBreadcrumbs()
 
+        if (page == 0) {
+            pagingGeneration++
+            isPagingLoading = false
+            isPagingEndReached = false
+            currentLoadedPages = 0
+            libraryAdapter.hideFooter()
+        }
+
         binding.loadingView.visibility = if (isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
         binding.emptyView.visibility = View.GONE
         binding.errorView.visibility = View.GONE
@@ -1519,6 +1539,13 @@ class MainActivity : AppCompatActivity() {
                         val uiItems = mapToUiItems(rawItems)
                         Log.i(TAG, "MAPPED LIBRARY COUNT: ${uiItems.size}")
 
+                        if (page == 0) {
+                            currentLoadedPages = 1
+                            if (uiItems.size < pageSize || (total >= 0 && uiItems.size >= total)) {
+                                isPagingEndReached = true
+                            }
+                        }
+
                         renderItems(uiItems)
                         Log.i(TAG, "ADAPTER ITEM COUNT: ${libraryAdapter.itemCount}")
                         if (parentId.startsWith(RemoteCatalog.PLAYLIST_PREFIX) && page == 0) {
@@ -1571,6 +1598,14 @@ class MainActivity : AppCompatActivity() {
         }
         updateHeaderAndBreadcrumbs()
 
+        if (page == 0) {
+            pagingGeneration++
+            isPagingLoading = false
+            isPagingEndReached = false
+            currentLoadedPages = 0
+            libraryAdapter.hideFooter()
+        }
+
         binding.loadingView.visibility = if (isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
         binding.emptyView.visibility = View.GONE
         binding.errorView.visibility = View.GONE
@@ -1589,6 +1624,12 @@ class MainActivity : AppCompatActivity() {
                 result
                     .onSuccess { rawItems ->
                         val uiItems = mapToUiItems(rawItems)
+                        if (page == 0) {
+                            currentLoadedPages = 1
+                            if (uiItems.size < pageSize) {
+                                isPagingEndReached = true
+                            }
+                        }
                         renderItems(uiItems)
                     }
                     .onFailure { exc ->
@@ -1724,12 +1765,133 @@ class MainActivity : AppCompatActivity() {
         updateDownloadQueueHeader()
         updateOfflineStorageDashboard()
 
-        val showPagination = !navManager.isAtRoot && !overlayOpen
-        binding.pageBar.visibility = if (showPagination) View.VISIBLE else View.GONE
-        binding.previousPageButton.visibility =
-            if (showPagination && navManager.currentPage > 0) View.VISIBLE else View.INVISIBLE
-        binding.nextPageButton.visibility =
-            if (showPagination && uiItems.size >= pageSize) View.VISIBLE else View.INVISIBLE
+        binding.pageBar.visibility = View.GONE
+        binding.previousPageButton.visibility = View.GONE
+        binding.nextPageButton.visibility = View.GONE
+    }
+
+    private fun loadNextPage() {
+        if (isPagingLoading || isPagingEndReached) return
+        if (navManager.isAtRoot) return
+        val currentParent = navManager.currentParentId
+        if (currentParent.isBlank()) return
+
+        isPagingLoading = true
+        val generation = pagingGeneration
+        val nextPage = currentLoadedPages
+        libraryAdapter.showFooter(isError = false)
+
+        if (currentParent == "search") {
+            val query = navManager.searchQuery
+            if (query.isBlank()) {
+                isPagingLoading = false
+                libraryAdapter.hideFooter()
+                return
+            }
+            uiExecutor.submit {
+                val result = runCatching {
+                    uiCatalog.search(query, nextPage, pageSize)
+                }
+                runOnUiThread {
+                    if (generation != pagingGeneration) {
+                        isPagingLoading = false
+                        return@runOnUiThread
+                    }
+                    result.onSuccess { rawItems ->
+                        val uiItems = mapToUiItems(rawItems)
+                        if (uiItems.isEmpty()) {
+                            isPagingEndReached = true
+                            libraryAdapter.hideFooter()
+                        } else {
+                            currentLoadedPages++
+                            libraryAdapter.appendItems(uiItems)
+                            if (uiItems.size < pageSize) {
+                                isPagingEndReached = true
+                                libraryAdapter.hideFooter()
+                            } else {
+                                libraryAdapter.hideFooter()
+                            }
+                        }
+                        isPagingLoading = false
+                    }.onFailure { exc ->
+                        Log.w(TAG, "Search paging failed: ${exc.message}")
+                        isPagingLoading = false
+                        libraryAdapter.showFooter(
+                            isError = true,
+                            errorMessage = "Không tải được thêm",
+                            onRetry = { loadNextPage() }
+                        )
+                    }
+                }
+            }
+            return
+        }
+
+        val mediaBrowser = browser
+        if (mediaBrowser == null) {
+            isPagingLoading = false
+            libraryAdapter.hideFooter()
+            return
+        }
+
+        val libraryParams = androidx.media3.session.MediaLibraryService.LibraryParams.Builder().apply {
+            val bundle = Bundle().apply {
+                putString("sort", navManager.currentSort)
+            }
+            setExtras(bundle)
+        }.build()
+
+        val future = mediaBrowser.getChildren(currentParent, nextPage, pageSize, libraryParams)
+        future.addListener(
+            {
+                if (generation != pagingGeneration) {
+                    isPagingLoading = false
+                    return@addListener
+                }
+                runCatching { future.get() }
+                    .onSuccess { result ->
+                        val code = result.resultCode
+                        if (code != androidx.media3.session.LibraryResult.RESULT_SUCCESS) {
+                            Log.w(TAG, "getChildren paging error code: $code")
+                            isPagingLoading = false
+                            libraryAdapter.showFooter(
+                                isError = true,
+                                errorMessage = "Không tải được thêm",
+                                onRetry = { loadNextPage() }
+                            )
+                            return@onSuccess
+                        }
+                        val rawItems = result.value.orEmpty()
+                        val uiItems = mapToUiItems(rawItems)
+                        if (uiItems.isEmpty()) {
+                            isPagingEndReached = true
+                            libraryAdapter.hideFooter()
+                        } else {
+                            currentLoadedPages++
+                            libraryAdapter.appendItems(uiItems)
+                            val firstExtras = rawItems.firstOrNull()?.mediaMetadata?.extras
+                            val total = firstExtras?.getInt("collection_total", -1) ?: -1
+                            if (uiItems.size < pageSize || (total >= 0 && libraryAdapter.itemCount >= total)) {
+                                isPagingEndReached = true
+                                libraryAdapter.hideFooter()
+                            } else {
+                                libraryAdapter.hideFooter()
+                            }
+                        }
+                        isPagingLoading = false
+                    }
+                    .onFailure { exc ->
+                        Log.w(TAG, "getChildren paging failed: ${exc.message}")
+                        isPagingLoading = false
+                        libraryAdapter.showFooter(
+                            isError = true,
+                            errorMessage = "Không tải được thêm",
+                            onRetry = { loadNextPage() }
+                        )
+                    }
+            },
+            ContextCompat.getMainExecutor(this),
+        )
     }
 
     private fun triggerVisibleEnrichment() {
@@ -1747,11 +1909,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             navManager.displayTitle()
         }
-        binding.libraryTitleView.text = if (navManager.currentPage == 0) {
-            baseTitle
-        } else {
-            "$baseTitle · Trang ${navManager.currentPage + 1}"
-        }
+        binding.libraryTitleView.text = baseTitle
 
         if (isCollectionContext(navManager.currentParentId)) {
             val total = navManager.currentCollectionTotal
@@ -4672,6 +4830,8 @@ class MainActivity : AppCompatActivity() {
         if (!isPortraitPhone) {
             binding.fullPlayerContainer?.visibility = View.VISIBLE
             binding.miniPlayerBar?.visibility = View.GONE
+            binding.libraryCard.visibility = if (isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
+            binding.searchContainer.visibility = if (isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
             return
         }
 
@@ -4679,6 +4839,8 @@ class MainActivity : AppCompatActivity() {
         if (!hasCurrentItem) {
             binding.fullPlayerContainer?.visibility = View.VISIBLE
             binding.miniPlayerBar?.visibility = View.GONE
+            binding.libraryCard.visibility = if (isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
+            binding.searchContainer.visibility = if (isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
             return
         }
 
@@ -4691,6 +4853,14 @@ class MainActivity : AppCompatActivity() {
 
         binding.fullPlayerContainer?.visibility = if (showMini) View.GONE else View.VISIBLE
         binding.miniPlayerBar?.visibility = if (showMini) View.VISIBLE else View.GONE
+
+        if (showMini) {
+            binding.libraryCard.visibility = if (isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
+            binding.searchContainer.visibility = if (isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
+        } else {
+            binding.libraryCard.visibility = View.GONE
+            binding.searchContainer.visibility = View.GONE
+        }
     }
 
     private fun updateQualityChip() {
