@@ -18,6 +18,7 @@ import com.bsdung.musicassistantcar.ui.model.LibraryItem
 import com.bsdung.musicassistantcar.ui.util.ArtworkLoader
 import com.bsdung.musicassistantcar.ui.util.AudioInfoFormatter
 import com.bsdung.musicassistantcar.ui.util.MetadataDisplayHelper
+import com.bsdung.musicassistantcar.ui.util.MobilePlayerLayoutPolicy
 
 class LibraryAdapter(
     private val onCategoryClick: (LibraryItem.Category) -> Unit,
@@ -465,8 +466,10 @@ class LibraryAdapter(
                         com.bsdung.musicassistantcar.playback.DownloadState.OFFLINE_READY -> {
                             binding.downloadProgressLayout.visibility = View.GONE
                             binding.txtDownloadStatus.visibility = View.VISIBLE
+                            val cfg = context.resources.configuration
+                            val isPortraitPhone = MobilePlayerLayoutPolicy.isPortraitPhone(cfg.screenWidthDp, cfg.screenHeightDp)
                             val isOfflineRow = item.mediaItem.mediaMetadata.extras?.getBoolean("is_offline_download", false) == true
-                            if (isOfflineRow) {
+                            if (isOfflineRow && !isPortraitPhone) {
                                 val rec = dm.getRecord(trackId)
                                 val actualBytes = dm.getEffectiveTrackSizeBytes(trackId).takeIf { it > 0L }
                                     ?: (rec?.fileSizeBytes ?: 0L)
