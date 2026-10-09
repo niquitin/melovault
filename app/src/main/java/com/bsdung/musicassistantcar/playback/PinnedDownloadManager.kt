@@ -2211,6 +2211,7 @@ open class PinnedDownloadManager(
                     .setTitle(record.title.ifBlank { "Bài hát #${record.trackId}" })
                     .setArtist(record.artist.ifBlank { "Nghệ sĩ không rõ" })
                     .setAlbumTitle(record.album)
+                    .setArtworkUri(lastApiClient.trackCoverUri(record.trackId.toInt()))
                     .setExtras(extras)
                     .setIsBrowsable(false)
                     .setIsPlayable(true)
