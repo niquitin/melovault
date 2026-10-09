@@ -68,23 +68,24 @@ object UnifiedActionHelper {
         val action = item.playbackAction.trim().uppercase()
         val hasValidUrl = isValidExternalUrl(item.externalUrl)
 
-        if (action == "EXTERNAL_OPEN") {
-            return if (hasValidUrl) {
-                UnifiedItemAction.OPEN_EXTERNAL
-            } else {
-                UnifiedItemAction.READ_ONLY
+        return when (action) {
+            "EXTERNAL_OPEN" -> {
+                if (hasValidUrl) UnifiedItemAction.OPEN_EXTERNAL else UnifiedItemAction.READ_ONLY
             }
+            "STREAM" -> {
+                val ownedSource = item.primarySource.trim().uppercase() in setOf(
+                    "LOCAL_CACHE", "TELEGRAM", "GOOGLE_DRIVE"
+                )
+                if (ownedSource && item.isPlayable && (item.canonicalTrackId ?: 0) > 0) {
+                    UnifiedItemAction.PLAY_IN_LIBRARY
+                } else {
+                    UnifiedItemAction.READ_ONLY
+                }
+            }
+            // NOT_CONNECTED, DISABLED and unknown actions must not fall back to Media3
+            // or a misleading external-open button solely because a URL is present.
+            else -> UnifiedItemAction.READ_ONLY
         }
-
-        if (item.isPlayable && item.canonicalTrackId != null && item.canonicalTrackId > 0) {
-            return UnifiedItemAction.PLAY_IN_LIBRARY
-        }
-
-        if (hasValidUrl) {
-            return UnifiedItemAction.OPEN_EXTERNAL
-        }
-
-        return UnifiedItemAction.READ_ONLY
     }
 
     const val PLAY_IN_LIBRARY_UNWIRED_TOAST = "Đóng cửa sổ và vào Thư viện chính để chọn phát bài này"

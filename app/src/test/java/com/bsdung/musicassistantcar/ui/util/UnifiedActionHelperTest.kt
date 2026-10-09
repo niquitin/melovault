@@ -130,6 +130,30 @@ class UnifiedActionHelperTest {
     }
 
     @Test
+    fun testCapabilityGatingDeniesContradictoryOrRestrictedItems() {
+        fun item(source: String, action: String, playable: Boolean = true) = UnifiedTrackDto(
+            id = "track:100",
+            title = "Metadata only",
+            artist = "Artist",
+            album = "",
+            duration = 200.0,
+            primarySource = source,
+            playbackAction = action,
+            isPlayable = playable,
+            sourceBadge = source,
+            availableSources = listOf(source),
+            canonicalTrackId = 100,
+            externalUrl = "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        )
+        assertEquals(UnifiedItemAction.READ_ONLY, UnifiedActionHelper.resolveAction(item("YOUTUBE", "STREAM")))
+        assertEquals(UnifiedItemAction.READ_ONLY, UnifiedActionHelper.resolveAction(item("APPLE_MUSIC", "STREAM")))
+        assertEquals(UnifiedItemAction.READ_ONLY, UnifiedActionHelper.resolveAction(item("LOCAL_CACHE", "DISABLED")))
+        assertEquals(UnifiedItemAction.READ_ONLY, UnifiedActionHelper.resolveAction(item("LOCAL_CACHE", "NOT_CONNECTED")))
+        assertEquals(UnifiedItemAction.READ_ONLY, UnifiedActionHelper.resolveAction(item("TELEGRAM", "STREAM", false)))
+        assertEquals(UnifiedItemAction.PLAY_IN_LIBRARY, UnifiedActionHelper.resolveAction(item("GOOGLE_DRIVE", "STREAM")))
+    }
+
+    @Test
     fun testPaginationCalculations() {
         assertEquals(1, UnifiedActionHelper.calculateTotalPages(0, 30))
         assertEquals(1, UnifiedActionHelper.calculateTotalPages(25, 30))

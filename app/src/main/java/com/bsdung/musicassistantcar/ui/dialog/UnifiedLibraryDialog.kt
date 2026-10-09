@@ -429,13 +429,13 @@ class UnifiedLibraryDialog(
         kotlin.concurrent.thread {
             val result: Result<Pair<List<UnifiedTrackDto>, Int>> = runCatching {
                 if (isSearch) {
-                    val items = client.unifiedSearch(
+                    val searchResult = client.unifiedSearch(
                         query = query,
                         limit = pageSize,
                         offset = offset,
                         includeExternal = true,
                     )
-                    Pair(items, if (items.size < pageSize && offset == 0) items.size else (offset + items.size + 1))
+                    Pair(searchResult.items, searchResult.total)
                 } else {
                     val browseResult = client.unifiedBrowse(
                         source = filterParam,
@@ -519,11 +519,7 @@ class UnifiedLibraryDialog(
         }
 
         val hasPrev = currentOffset > 0
-        val hasNext = if (currentQuery.isNotBlank()) {
-            currentBatchSize >= pageSize
-        } else {
-            currentOffset + pageSize < totalItems
-        }
+        val hasNext = currentOffset + pageSize < totalItems
 
         prevButton.isEnabled = hasPrev
         prevButton.alpha = if (hasPrev) 1.0f else 0.5f

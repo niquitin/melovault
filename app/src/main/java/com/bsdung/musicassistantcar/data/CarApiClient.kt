@@ -93,6 +93,13 @@ data class UnifiedBrowseResult(
     val sourceInventory: Map<String, Int>,
 )
 
+data class UnifiedSearchResult(
+    val items: List<UnifiedTrackDto>,
+    val total: Int,
+    val limit: Int,
+    val offset: Int,
+)
+
 data class DriveRoot(
     val index: Int,
     val name: String,
@@ -1394,16 +1401,24 @@ open class CarApiClient {
         limit: Int = 30,
         offset: Int = 0,
         includeExternal: Boolean = true,
-    ): List<UnifiedTrackDto> {
+    ): UnifiedSearchResult {
         val encoded = Uri.encode(query)
         val url = "/car/unified/search?q=$encoded&limit=$limit&offset=$offset&include_external=$includeExternal"
-        val json = getJson(url)
+        return parseUnifiedSearchResponse(getJson(url), limit, offset)
+    }
+
+    internal fun parseUnifiedSearchResponse(json: JSONObject, limit: Int, offset: Int): UnifiedSearchResult {
         val arr = json.optJSONArray("items") ?: JSONArray()
         val items = mutableListOf<UnifiedTrackDto>()
         for (i in 0 until arr.length()) {
             items.add(parseUnifiedTrack(arr.getJSONObject(i)))
         }
-        return items
+        return UnifiedSearchResult(
+            items = items,
+            total = json.optInt("total", offset + items.size).coerceAtLeast(0),
+            limit = json.optInt("limit", limit),
+            offset = json.optInt("offset", offset),
+        )
     }
 
     internal fun parseTrackJson(json: String): CarTrack {
