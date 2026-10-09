@@ -157,10 +157,29 @@ internal object SeekIndexedFragmentedMp4 {
             raf.seek(trun.start + 8)
             val runFlags = raf.readInt() and 0x00FFFFFF
             val samples = uint32(raf.readInt())
-            if (samples == 0L || samples > 100_000L ||
-                (runFlags and 0x100) != 0 // individual durations need a different parser
-            ) return null
-            val fragmentDuration = samples * defaultDuration
+            if (samples == 0L || samples > 100_000L) return null
+            var fragmentDuration = samples * defaultDuration
+            // A fragmented MP4 can override the default duration for individual samples
+            // (e.g. the final FLAC fragment). Rejecting those runs made the full offline
+            // file non-seekable even though every sample duration is available.
+            if ((runFlags and 0x100) != 0) {
+                var fieldPosition = trun.start + 16L
+                if ((runFlags and 0x1) != 0) fieldPosition += 4 // data_offset
+                if ((runFlags and 0x4) != 0) fieldPosition += 4 // first_sample_flags
+                val stride = 4 +
+                    (if ((runFlags and 0x200) != 0) 4 else 0) +
+                    (if ((runFlags and 0x400) != 0) 4 else 0) +
+                    (if ((runFlags and 0x800) != 0) 4 else 0)
+                if (fieldPosition + samples * stride > trun.end) return null
+                fragmentDuration = 0L
+                repeat(samples.toInt()) {
+                    raf.seek(fieldPosition)
+                    val sampleDuration = uint32(raf.readInt())
+                    if (sampleDuration == 0L) return null
+                    fragmentDuration += sampleDuration
+                    fieldPosition += stride
+                }
+            }
             val referenceBytes = moof.size + mdat.size
             if (decodeTime < 0L || fragmentDuration <= 0L ||
                 fragmentDuration > 0xFFFFFFFFL || referenceBytes > 0x7FFFFFFFL

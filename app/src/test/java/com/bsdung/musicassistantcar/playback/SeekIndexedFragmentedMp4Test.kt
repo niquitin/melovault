@@ -40,7 +40,13 @@ class SeekIndexedFragmentedMp4Test {
         return container("trak", container("mdia", mdhd, container("minf", container("stbl", stsd))))
     }
 
-    private fun fragment(decodeTime: Int, samples: Int, duration: Int = 1024): ByteArray {
+    private fun fragment(
+        decodeTime: Int,
+        samples: Int,
+        duration: Int = 1024,
+        individualDurations: IntArray? = null,
+    ): ByteArray {
+        require(individualDurations == null || individualDurations.size == samples)
         val tfhd = atom("tfhd", bytes {
             writeInt(8) // default_sample_duration present
             writeInt(1) // track id
@@ -51,8 +57,9 @@ class SeekIndexedFragmentedMp4Test {
             writeInt(decodeTime)
         })
         val trun = atom("trun", bytes {
-            writeInt(0)
+            writeInt(if (individualDurations != null) 0x100 else 0)
             writeInt(samples)
+            individualDurations?.forEach { writeInt(it) }
         })
         return container("moof", container("traf", tfhd, tfdt, trun)) +
             atom("mdat", ByteArray(samples * 4) { 0x3A })
@@ -99,6 +106,29 @@ class SeekIndexedFragmentedMp4Test {
     }
 
     private fun mockMoovSize(): Int = container("moov", sampleTrack()).size
+
+    @Test
+    fun handlesTrunWithExplicitSampleDurationsWithoutChangingOriginal() {
+        val tmp = Files.createTempDirectory("variable-duration-fragment").toFile()
+        try {
+            val original = File(tmp, "variable.m4a")
+            val input = atom("ftyp", bytes { writeBytes("iso8"); writeInt(0) }) +
+                container("moov", sampleTrack()) +
+                fragment(0, 3) +
+                fragment(3072, 2, individualDurations = intArrayOf(1024, 512))
+            original.writeBytes(input)
+            val indexed = SeekIndexedFragmentedMp4.prepare(original, File(tmp, "cache"))
+            assertNotEquals(original.absolutePath, indexed.absolutePath)
+            val indexedBytes = indexed.readBytes()
+            val start = 16 + mockMoovSize()
+            assertEquals("sidx", String(indexedBytes, start + 4, 4))
+            assertEquals(3072L, intAt(indexedBytes, start + 36))
+            assertEquals(1536L, intAt(indexedBytes, start + 48))
+            assertArrayEquals(input, original.readBytes())
+        } finally {
+            tmp.deleteRecursively()
+        }
+    }
 
     @Test
     fun unsupportedAudioReturnsOriginalAndDoesNotMakeCache() {
