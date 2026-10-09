@@ -14,6 +14,7 @@ import androidx.media3.common.MediaMetadata
 import com.bsdung.musicassistantcar.data.CarApiClient
 import com.bsdung.musicassistantcar.data.CarTrack
 import com.bsdung.musicassistantcar.data.RemoteCatalog
+import com.bsdung.musicassistantcar.ui.util.ArtworkLoader
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -2000,6 +2001,11 @@ open class PinnedDownloadManager(
                 if (!hasActiveJobs()) {
                     serviceController?.onQueueIdle()
                 }
+                context?.let { ctx ->
+                    runCatching {
+                        ArtworkLoader.prefetchArtwork(ctx, lastApiClient.trackCoverUri(trackId.toInt()))
+                    }
+                }
                 notifyCompleted(trackId, record)
             }
         } catch (e: Exception) {
@@ -2211,7 +2217,7 @@ open class PinnedDownloadManager(
                     .setTitle(record.title.ifBlank { "Bài hát #${record.trackId}" })
                     .setArtist(record.artist.ifBlank { "Nghệ sĩ không rõ" })
                     .setAlbumTitle(record.album)
-                    .setArtworkUri(lastApiClient.trackCoverUri(record.trackId.toInt()))
+                    .setArtworkUri(runCatching { lastApiClient.trackCoverUri(record.trackId.toInt()) }.getOrNull())
                     .setExtras(extras)
                     .setIsBrowsable(false)
                     .setIsPlayable(true)
@@ -2223,6 +2229,13 @@ open class PinnedDownloadManager(
     fun getAllDownloadedMediaItems(sortKey: String = getDownloadedSortKey()): List<MediaItem> {
         store.reconcile()
         val readyRecords = store.getAllRecords().filter { isOfflineReady(it.trackId) }
+        context?.let { ctx ->
+            runCatching {
+                readyRecords.forEach { rec ->
+                    ArtworkLoader.prefetchArtwork(ctx, lastApiClient.trackCoverUri(rec.trackId.toInt()))
+                }
+            }
+        }
         return sortDownloadedRecords(readyRecords, sortKey).map { toMediaItem(it) }
     }
 

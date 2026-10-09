@@ -390,15 +390,22 @@ class LibraryAdapter(
                 if (trackId != null && !isDeviceTrack) {
                     val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(context)
                     val status = dm.getDownloadStatus(trackId)
+                    val cfg = context.resources.configuration
+                    val isPortraitPhone = MobilePlayerLayoutPolicy.isPortraitPhone(cfg.screenWidthDp, cfg.screenHeightDp)
 
                     binding.downloadContainer.visibility = View.VISIBLE
                     when (status.state) {
                         com.bsdung.musicassistantcar.playback.DownloadState.NOT_DOWNLOADED -> {
                             binding.downloadProgressLayout.visibility = View.GONE
-                            binding.txtDownloadStatus.visibility = View.VISIBLE
-                            binding.txtDownloadStatus.text = "↓ Tải về"
-                            binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
-                            binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
+                            if (isPortraitPhone) {
+                                binding.txtDownloadStatus.visibility = View.GONE
+                                binding.txtDownloadStatus.setOnClickListener(null)
+                            } else {
+                                binding.txtDownloadStatus.visibility = View.VISIBLE
+                                binding.txtDownloadStatus.text = "↓ Tải về"
+                                binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
+                                binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
+                            }
                             binding.btnDownload.visibility = View.VISIBLE
                             binding.btnDownload.setImageResource(R.drawable.ic_download)
                             binding.btnDownload.setColorFilter(ContextCompat.getColor(context, R.color.text_tertiary))
@@ -407,10 +414,15 @@ class LibraryAdapter(
                         }
                         com.bsdung.musicassistantcar.playback.DownloadState.QUEUED -> {
                             binding.downloadProgressLayout.visibility = View.GONE
-                            binding.txtDownloadStatus.visibility = View.VISIBLE
-                            binding.txtDownloadStatus.text = "Đang chờ tải"
-                            binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
-                            binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
+                            if (isPortraitPhone) {
+                                binding.txtDownloadStatus.visibility = View.GONE
+                                binding.txtDownloadStatus.setOnClickListener(null)
+                            } else {
+                                binding.txtDownloadStatus.visibility = View.VISIBLE
+                                binding.txtDownloadStatus.text = "Đang chờ tải"
+                                binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
+                                binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
+                            }
                             binding.btnDownload.visibility = View.VISIBLE
                             binding.btnDownload.setImageResource(R.drawable.ic_close)
                             binding.btnDownload.setColorFilter(ContextCompat.getColor(context, R.color.text_tertiary))
@@ -419,10 +431,15 @@ class LibraryAdapter(
                         }
                         com.bsdung.musicassistantcar.playback.DownloadState.WAITING_FOR_WIFI -> {
                             binding.downloadProgressLayout.visibility = View.GONE
-                            binding.txtDownloadStatus.visibility = View.VISIBLE
-                            binding.txtDownloadStatus.text = "Đang chờ Wi-Fi"
-                            binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
-                            binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
+                            if (isPortraitPhone) {
+                                binding.txtDownloadStatus.visibility = View.GONE
+                                binding.txtDownloadStatus.setOnClickListener(null)
+                            } else {
+                                binding.txtDownloadStatus.visibility = View.VISIBLE
+                                binding.txtDownloadStatus.text = "Đang chờ Wi-Fi"
+                                binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.text_secondary))
+                                binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
+                            }
                             binding.btnDownload.visibility = View.VISIBLE
                             binding.btnDownload.setImageResource(R.drawable.ic_close)
                             binding.btnDownload.setColorFilter(ContextCompat.getColor(context, R.color.text_tertiary))
@@ -465,29 +482,32 @@ class LibraryAdapter(
                         }
                         com.bsdung.musicassistantcar.playback.DownloadState.OFFLINE_READY -> {
                             binding.downloadProgressLayout.visibility = View.GONE
-                            binding.txtDownloadStatus.visibility = View.VISIBLE
-                            val cfg = context.resources.configuration
-                            val isPortraitPhone = MobilePlayerLayoutPolicy.isPortraitPhone(cfg.screenWidthDp, cfg.screenHeightDp)
-                            val isOfflineRow = item.mediaItem.mediaMetadata.extras?.getBoolean("is_offline_download", false) == true
-                            if (isOfflineRow && !isPortraitPhone) {
-                                val rec = dm.getRecord(trackId)
-                                val actualBytes = dm.getEffectiveTrackSizeBytes(trackId).takeIf { it > 0L }
-                                    ?: (rec?.fileSizeBytes ?: 0L)
-                                val sizeStr = if (actualBytes > 0L) " · ${dm.formatStorageBytes(actualBytes)}" else ""
-                                val targetStr = rec?.storageTarget?.let { " · ${dm.formatStorageTargetLabel(it)}" } ?: ""
-                                val dateStr = if ((rec?.downloadedAtMs ?: 0L) > 0L) {
-                                    "\n${dm.formatDownloadDate(rec!!.downloadedAtMs)}$targetStr"
-                                } else if (targetStr.isNotEmpty()) {
-                                    "\n${targetStr.removePrefix(" · ")}"
-                                } else {
-                                    ""
-                                }
-                                binding.txtDownloadStatus.text = "✓ Offline$sizeStr$dateStr"
+                            if (isPortraitPhone) {
+                                binding.txtDownloadStatus.visibility = View.GONE
+                                binding.txtDownloadStatus.setOnClickListener(null)
                             } else {
-                                binding.txtDownloadStatus.text = "✓ Offline"
+                                binding.txtDownloadStatus.visibility = View.VISIBLE
+                                val isOfflineRow = item.mediaItem.mediaMetadata.extras?.getBoolean("is_offline_download", false) == true
+                                if (isOfflineRow) {
+                                    val rec = dm.getRecord(trackId)
+                                    val actualBytes = dm.getEffectiveTrackSizeBytes(trackId).takeIf { it > 0L }
+                                        ?: (rec?.fileSizeBytes ?: 0L)
+                                    val sizeStr = if (actualBytes > 0L) " · ${dm.formatStorageBytes(actualBytes)}" else ""
+                                    val targetStr = rec?.storageTarget?.let { " · ${dm.formatStorageTargetLabel(it)}" } ?: ""
+                                    val dateStr = if ((rec?.downloadedAtMs ?: 0L) > 0L) {
+                                        "\n${dm.formatDownloadDate(rec!!.downloadedAtMs)}$targetStr"
+                                    } else if (targetStr.isNotEmpty()) {
+                                        "\n${targetStr.removePrefix(" · ")}"
+                                    } else {
+                                        ""
+                                    }
+                                    binding.txtDownloadStatus.text = "✓ Offline$sizeStr$dateStr"
+                                } else {
+                                    binding.txtDownloadStatus.text = "✓ Offline"
+                                }
+                                binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.accent_primary))
+                                binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
                             }
-                            binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.accent_primary))
-                            binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
                             binding.btnDownload.visibility = View.VISIBLE
                             binding.btnDownload.setImageResource(R.drawable.ic_download_done)
                             binding.btnDownload.setColorFilter(ContextCompat.getColor(context, R.color.accent_primary))
@@ -497,7 +517,7 @@ class LibraryAdapter(
                         com.bsdung.musicassistantcar.playback.DownloadState.OFFLINE_MEDIA_UNAVAILABLE -> {
                             binding.downloadProgressLayout.visibility = View.GONE
                             binding.txtDownloadStatus.visibility = View.VISIBLE
-                            binding.txtDownloadStatus.text = "Thẻ nhớ SD không khả dụng"
+                            binding.txtDownloadStatus.text = if (isPortraitPhone) "! Thẻ SD" else "Thẻ nhớ SD không khả dụng"
                             binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.status_offline))
                             binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
                             binding.btnDownload.visibility = View.VISIBLE
@@ -509,7 +529,7 @@ class LibraryAdapter(
                         com.bsdung.musicassistantcar.playback.DownloadState.STORAGE_TARGET_UNAVAILABLE -> {
                             binding.downloadProgressLayout.visibility = View.GONE
                             binding.txtDownloadStatus.visibility = View.VISIBLE
-                            binding.txtDownloadStatus.text = "! Thẻ nhớ SD không khả dụng"
+                            binding.txtDownloadStatus.text = if (isPortraitPhone) "! Thẻ SD" else "! Thẻ nhớ SD không khả dụng"
                             binding.txtDownloadStatus.setTextColor(ContextCompat.getColor(context, R.color.status_offline))
                             binding.txtDownloadStatus.setOnClickListener { onDownloadClick?.invoke(item) }
                             binding.btnDownload.visibility = View.VISIBLE

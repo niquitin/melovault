@@ -557,10 +557,10 @@ open class CarApiClient {
                 "?quality=${PlaybackQuality.current.queryValue}"
         )
 
-    open fun trackCoverUri(trackId: Int): Uri =
-        Uri.parse(
-            "${baseUrl()}/v1/tracks/$trackId/cover"
-        )
+    open fun trackCoverUri(trackId: Int): Uri {
+        val base = activeBaseUrl ?: endpoints.firstOrNull() ?: "http://127.0.0.1:8790"
+        return Uri.parse("$base/v1/tracks/$trackId/cover")
+    }
 
     fun authorizationHeaders(): Map<String, String> =
         mapOf(

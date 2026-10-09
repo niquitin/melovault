@@ -6,6 +6,7 @@ import coil.ImageLoader
 import coil.disk.DiskCache
 import coil.load
 import coil.memory.MemoryCache
+import coil.request.ImageRequest
 import coil.transform.RoundedCornersTransformation
 import com.bsdung.musicassistantcar.R
 import com.bsdung.musicassistantcar.data.RemoteCatalog
@@ -32,6 +33,22 @@ object ArtworkLoader {
                 .respectCacheHeaders(false)
                 .build().also { customImageLoader = it }
         }
+    }
+
+    fun prefetchArtwork(context: Context, uri: Any?) {
+        if (uri == null) return
+        val uriStr = uri.toString()
+        if (uriStr.isBlank()) return
+        val loader = getImageLoader(context)
+        val request = ImageRequest.Builder(context.applicationContext)
+            .data(uri)
+            .apply {
+                headers.forEach { (key, value) ->
+                    setHeader(key, value)
+                }
+            }
+            .build()
+        loader.enqueue(request)
     }
 
     fun loadArtwork(
