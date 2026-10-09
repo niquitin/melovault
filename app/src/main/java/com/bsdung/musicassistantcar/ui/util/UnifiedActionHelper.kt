@@ -87,12 +87,45 @@ object UnifiedActionHelper {
         return UnifiedItemAction.READ_ONLY
     }
 
+    const val PLAY_IN_LIBRARY_UNWIRED_TOAST = "Đóng cửa sổ và vào Thư viện chính để chọn phát bài này"
+
     fun getActionButtonText(action: UnifiedItemAction): String {
         return when (action) {
-            UnifiedItemAction.PLAY_IN_LIBRARY -> "Phát trong thư viện"
+            UnifiedItemAction.PLAY_IN_LIBRARY -> "Có trong thư viện"
             UnifiedItemAction.OPEN_EXTERNAL -> "Mở liên kết"
             UnifiedItemAction.READ_ONLY -> "Chỉ xem"
         }
+    }
+
+    data class DialogSearchFilterState(
+        val filter: UnifiedSourceFilter = UnifiedSourceFilter.ALL,
+        val query: String = "",
+        val offset: Int = 0,
+    )
+
+    fun onUserApplySearch(currentState: DialogSearchFilterState, newQuery: String): DialogSearchFilterState {
+        val trimmed = newQuery.trim()
+        return if (trimmed.isNotBlank()) {
+            // When user starts searching, automatically switch filter to ALL
+            currentState.copy(
+                filter = UnifiedSourceFilter.ALL,
+                query = trimmed,
+                offset = 0
+            )
+        } else {
+            currentState.copy(
+                query = "",
+                offset = 0
+            )
+        }
+    }
+
+    fun onUserSelectFilter(currentState: DialogSearchFilterState, selectedFilter: UnifiedSourceFilter): DialogSearchFilterState {
+        return currentState.copy(
+            filter = selectedFilter,
+            query = "", // Clear active search query when tapping a source chip
+            offset = 0
+        )
     }
 
     fun calculateTotalPages(total: Int, limit: Int): Int {

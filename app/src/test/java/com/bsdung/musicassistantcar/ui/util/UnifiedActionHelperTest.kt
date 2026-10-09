@@ -63,7 +63,7 @@ class UnifiedActionHelperTest {
 
         val action = UnifiedActionHelper.resolveAction(track)
         assertEquals(UnifiedItemAction.PLAY_IN_LIBRARY, action)
-        assertEquals("Phát trong thư viện", UnifiedActionHelper.getActionButtonText(action))
+        assertEquals("Có trong thư viện", UnifiedActionHelper.getActionButtonText(action))
     }
 
     @Test
@@ -151,5 +151,52 @@ class UnifiedActionHelperTest {
         assertEquals("GOOGLE_DRIVE", UnifiedSourceFilter.GOOGLE_DRIVE.serverKey)
         assertEquals("YOUTUBE", UnifiedSourceFilter.YOUTUBE.serverKey)
         assertEquals("APPLE_MUSIC", UnifiedSourceFilter.APPLE_MUSIC.serverKey)
+    }
+
+    @Test
+    fun testTruthfulPlayInLibraryToastMessage() {
+        assertEquals(
+            "Đóng cửa sổ và vào Thư viện chính để chọn phát bài này",
+            UnifiedActionHelper.PLAY_IN_LIBRARY_UNWIRED_TOAST
+        )
+    }
+
+    @Test
+    fun testOnUserApplySearchSwitchesFilterToAllAndResetsOffset() {
+        val initial = UnifiedActionHelper.DialogSearchFilterState(
+            filter = UnifiedSourceFilter.YOUTUBE,
+            query = "",
+            offset = 60
+        )
+        val updated = UnifiedActionHelper.onUserApplySearch(initial, "chopin")
+        assertEquals(UnifiedSourceFilter.ALL, updated.filter)
+        assertEquals("chopin", updated.query)
+        assertEquals(0, updated.offset)
+    }
+
+    @Test
+    fun testOnUserApplySearchWithBlankKeepsFilterAndResetsQuery() {
+        val initial = UnifiedActionHelper.DialogSearchFilterState(
+            filter = UnifiedSourceFilter.LOCAL_CACHE,
+            query = "old query",
+            offset = 30
+        )
+        val updated = UnifiedActionHelper.onUserApplySearch(initial, "   ")
+        assertEquals(UnifiedSourceFilter.LOCAL_CACHE, updated.filter)
+        assertEquals("", updated.query)
+        assertEquals(0, updated.offset)
+    }
+
+    @Test
+    fun testOnUserSelectFilterClearsSearchQueryAndResetsOffset() {
+        val initial = UnifiedActionHelper.DialogSearchFilterState(
+            filter = UnifiedSourceFilter.ALL,
+            query = "mozart",
+            offset = 30
+        )
+        val updated = UnifiedActionHelper.onUserSelectFilter(initial, UnifiedSourceFilter.TELEGRAM)
+        assertEquals(UnifiedSourceFilter.TELEGRAM, updated.filter)
+        assertEquals("", updated.query)
+        assertEquals(0, updated.offset)
     }
 }

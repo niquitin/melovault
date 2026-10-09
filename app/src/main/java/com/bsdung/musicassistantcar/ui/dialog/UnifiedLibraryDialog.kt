@@ -44,6 +44,9 @@ class UnifiedLibraryDialog(
     private val pageSize: Int = 30
     private var totalItems: Int = 0
     private var isLoading: Boolean = false
+    private var isDismissed: Boolean = false
+    private var hasPendingReload: Boolean = false
+    private var requestGeneration: Long = 0L
 
     // Views created programmatically
     private val loadingBar: ProgressBar
@@ -59,6 +62,9 @@ class UnifiedLibraryDialog(
     init {
         dialog.behavior.state = BottomSheetBehavior.STATE_EXPANDED
         dialog.behavior.skipCollapsed = true
+        dialog.setOnDismissListener {
+            isDismissed = true
+        }
 
         val root = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -341,22 +347,50 @@ class UnifiedLibraryDialog(
     }
 
     fun show() {
+        isDismissed = false
         dialog.show()
         currentOffset = 0
         loadCurrentPage()
     }
 
     private fun applyFilter(filter: UnifiedSourceFilter) {
-        if (currentFilter == filter && currentQuery.isBlank()) return
-        currentFilter = filter
-        currentOffset = 0
+        // Tapping a source chip: clear the active search field and query then browse source
+        if (searchEditText.text.isNotEmpty()) {
+            searchEditText.setText("")
+        }
+        val newState = UnifiedActionHelper.onUserSelectFilter(
+            UnifiedActionHelper.DialogSearchFilterState(currentFilter, currentQuery, currentOffset),
+            filter
+        )
+        if (currentFilter == newState.filter && currentQuery == newState.query) return
+        currentFilter = newState.filter
+        currentQuery = newState.query
+        currentOffset = newState.offset
         updateFilterButtonStyles()
+        requestGeneration++
+        if (isLoading) {
+            hasPendingReload = true
+            return
+        }
         loadCurrentPage()
     }
 
     private fun applySearch(query: String) {
-        currentQuery = query
-        currentOffset = 0
+        // When user starts searching: automatically switch filter to ALL and update chips
+        val newState = UnifiedActionHelper.onUserApplySearch(
+            UnifiedActionHelper.DialogSearchFilterState(currentFilter, currentQuery, currentOffset),
+            query
+        )
+        if (currentFilter == newState.filter && currentQuery == newState.query) return
+        currentFilter = newState.filter
+        currentQuery = newState.query
+        currentOffset = newState.offset
+        updateFilterButtonStyles()
+        requestGeneration++
+        if (isLoading) {
+            hasPendingReload = true
+            return
+        }
         loadCurrentPage()
     }
 
@@ -373,8 +407,15 @@ class UnifiedLibraryDialog(
     }
 
     private fun loadCurrentPage() {
-        if (isLoading) return
+        if (isLoading) {
+            hasPendingReload = true
+            return
+        }
+        if (isDismissed) return
+
         isLoading = true
+        hasPendingReload = false
+        val generation = requestGeneration
 
         loadingBar.visibility = View.VISIBLE
         statusMessageView.visibility = View.GONE
@@ -394,13 +435,7 @@ class UnifiedLibraryDialog(
                         offset = offset,
                         includeExternal = true,
                     )
-                    // If filter is active during search, filter client-side if needed
-                    val filtered = if (filterParam != null) {
-                        items.filter { it.primarySource.equals(filterParam, ignoreCase = true) }
-                    } else {
-                        items
-                    }
-                    Pair(filtered, if (filtered.size < pageSize && offset == 0) filtered.size else (offset + filtered.size + 1))
+                    Pair(items, if (items.size < pageSize && offset == 0) items.size else (offset + items.size + 1))
                 } else {
                     val browseResult = client.unifiedBrowse(
                         source = filterParam,
@@ -412,9 +447,22 @@ class UnifiedLibraryDialog(
             }
 
             activity.runOnUiThread {
-                if (activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+                if (activity.isFinishing || activity.isDestroyed || isDismissed) {
+                    isLoading = false
+                    return@runOnUiThread
+                }
+
                 isLoading = false
                 loadingBar.visibility = View.GONE
+
+                // Stale check: if user updated filter/search while in-flight, suppress stale data
+                if (generation != requestGeneration) {
+                    if (hasPendingReload) {
+                        hasPendingReload = false
+                        loadCurrentPage()
+                    }
+                    return@runOnUiThread
+                }
 
                 result.fold(
                     onSuccess = { (items, total) ->
@@ -425,6 +473,11 @@ class UnifiedLibraryDialog(
                         showError("Không thể tải danh sách: ${err.message ?: "Lỗi mạng"}")
                     }
                 )
+
+                if (hasPendingReload) {
+                    hasPendingReload = false
+                    loadCurrentPage()
+                }
             }
         }
     }
@@ -488,7 +541,7 @@ class UnifiedLibraryDialog(
                 } else {
                     Toast.makeText(
                         activity,
-                        "Phát trong thư viện: ${track.title} (ID #${track.canonicalTrackId})",
+                        UnifiedActionHelper.PLAY_IN_LIBRARY_UNWIRED_TOAST,
                         Toast.LENGTH_SHORT
                     ).show()
                 }
