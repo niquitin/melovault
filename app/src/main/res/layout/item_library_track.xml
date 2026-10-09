@@ -55,10 +55,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Track Title"
-            android:textSize="15sp"
+            android:textSize="14.5sp"
             android:textStyle="bold"
             android:textColor="@color/text_primary"
-            android:maxLines="1"
+            android:maxLines="2"
             android:ellipsize="end" />
 
         <TextView
@@ -107,7 +107,7 @@
         <!-- DOWNLOADING progress layout -->
         <LinearLayout
             android:id="@+id/downloadProgressLayout"
-            android:layout_width="96dp"
+            android:layout_width="76dp"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:gravity="center_horizontal"
@@ -137,12 +137,12 @@
             android:id="@+id/txtDownloadStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="11sp"
+            android:textSize="10sp"
             android:textStyle="bold"
-            android:paddingStart="8dp"
-            android:paddingEnd="8dp"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:paddingTop="3dp"
+            android:paddingBottom="3dp"
             android:background="@drawable/bg_button_tertiary"
             android:textColor="@color/text_secondary"
             android:visibility="gone" />
@@ -150,10 +150,10 @@
         <!-- Icon button: can be clicked to start download, retry, or delete -->
         <ImageView
             android:id="@+id/btnDownload"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:padding="7dp"
-            android:layout_marginStart="2dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:padding="12dp"
+            android:layout_marginStart="0dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:src="@drawable/ic_download"
             android:tint="@color/text_tertiary"

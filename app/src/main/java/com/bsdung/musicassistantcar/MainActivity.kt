@@ -4483,12 +4483,36 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Artwork size when track is active: driven by width class
+        // For COMPACT portrait phones we calculate adaptively instead of using a fixed dimen:
+        //   - Target: 76% of available content width (screenWidthDp minus 24dp padding)
+        //   - Cap: 36% of screenHeightDp to ensure Play/Pause, seek and title stay visible
+        //   - Floor: at least 120dp to avoid overly tiny art
+        //   - Short-phone cap (heightDp < 560): use artwork_size_compact_portrait_short fallback
         val activeSizeRes = when (widthClass) {
             WindowWidthClass.COMPACT  -> R.dimen.artwork_size_compact
             WindowWidthClass.MEDIUM   -> R.dimen.artwork_size_medium
             WindowWidthClass.EXPANDED -> R.dimen.artwork_size_expanded
         }
-        val activeSize = resources.getDimensionPixelSize(activeSizeRes)
+        val activeSize = if (widthClass == WindowWidthClass.COMPACT) {
+            val cfg = resources.configuration
+            val isPortrait = cfg.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE
+            if (isPortrait) {
+                val density = resources.displayMetrics.density
+                val contentWidthDp = cfg.screenWidthDp - 24 // 12dp padding each side
+                val targetDp = (contentWidthDp * 0.76f).toInt()
+                val heightCapDp = (cfg.screenHeightDp * 0.36f).toInt()
+                val cappedDp = if (cfg.screenHeightDp < 560) {
+                    resources.getDimensionPixelSize(R.dimen.artwork_size_compact_portrait_short) / density.toInt().coerceAtLeast(1)
+                } else {
+                    minOf(targetDp, heightCapDp)
+                }.coerceAtLeast(120)
+                (cappedDp * density).toInt()
+            } else {
+                resources.getDimensionPixelSize(activeSizeRes)
+            }
+        } else {
+            resources.getDimensionPixelSize(activeSizeRes)
+        }
         val lp = binding.coverView.layoutParams
         if (lp.width != activeSize || lp.height != activeSize) {
             lp.width = activeSize
