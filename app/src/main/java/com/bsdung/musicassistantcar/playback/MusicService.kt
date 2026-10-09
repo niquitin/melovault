@@ -60,6 +60,8 @@ class MusicService : MediaLibraryService() {
         private const val KEY_QUEUE_MEDIA_IDS = "resume_queue_media_ids"
         private const val KEY_QUEUE_INDEX = "resume_queue_index"
         private const val KEY_QUEUE_POSITION_MS = "resume_queue_position_ms"
+        private const val KEY_SHUFFLE_ENABLED = "playback_shuffle_enabled"
+        private const val KEY_REPEAT_MODE = "playback_repeat_mode"
         private const val PERSIST_INTERVAL_MS = 10_000L
         private const val NETWORK_RECOVERY_COOLDOWN_MS = 5_000L
         const val KEY_LOUDNESS_NORMALIZATION = "loudness_normalization"
@@ -234,6 +236,16 @@ class MusicService : MediaLibraryService() {
                 setAudioAttributes(attributes, true)
             }
 
+        // Restore modes before registering the listener, so the restored values
+        // cannot be overwritten by an initial ExoPlayer default-state callback.
+        val restoredModes = PlaybackModeState.restore(
+            shuffleEnabled = prefs.getBoolean(KEY_SHUFFLE_ENABLED, false),
+            storedRepeatMode = prefs.getInt(KEY_REPEAT_MODE, Player.REPEAT_MODE_OFF),
+        )
+        player.shuffleModeEnabled = restoredModes.shuffleEnabled
+        player.repeatMode = restoredModes.repeatMode
+        Log.i(TAG, "onCreate: restored shuffle=${restoredModes.shuffleEnabled}, repeat=${restoredModes.repeatMode}")
+
         player.addListener(object : Player.Listener {
             override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
                 var audioTrackSelected = false
@@ -341,6 +353,14 @@ class MusicService : MediaLibraryService() {
             override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
                 Log.d(TAG, "onTimelineChanged: reason=$reason, queueSize=${player.mediaItemCount}")
                 persistPlaybackState()
+            }
+
+            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+                persistPlaybackModes()
+            }
+
+            override fun onRepeatModeChanged(repeatMode: Int) {
+                persistPlaybackModes()
             }
 
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
@@ -632,6 +652,15 @@ class MusicService : MediaLibraryService() {
             }
         }.build()
         Log.i(TAG, "onCreate: MediaLibrarySession created successfully")
+    }
+
+    private fun persistPlaybackModes() {
+        if (!::player.isInitialized) return
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            .edit()
+            .putBoolean(KEY_SHUFFLE_ENABLED, player.shuffleModeEnabled)
+            .putInt(KEY_REPEAT_MODE, player.repeatMode)
+            .apply()
     }
 
     private fun persistPlaybackState() {
@@ -977,6 +1006,7 @@ class MusicService : MediaLibraryService() {
         gainAudioProcessor.reset()
         persistHandler.removeCallbacks(persistRunnable)
         persistPlaybackState()
+        persistPlaybackModes()
         saveCurrentTrackResume()
         librarySession?.release()
         librarySession = null
