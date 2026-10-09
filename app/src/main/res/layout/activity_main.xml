@@ -85,6 +85,17 @@
             android:background="@drawable/bg_surface_card"
             android:padding="12dp"
             android:layout_marginBottom="10dp">
+            <!-- ═══ FULL NOW-PLAYING CONTAINER ═══
+                 Contains full-size artwork, title, seekbar, controls, and secondary actions.
+                 On portrait phones, this container collapses when browsing library/playlists
+                 to give maximum screen area to content, revealing the miniPlayerBar below.
+            -->
+            <LinearLayout
+                android:id="@+id/fullPlayerContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center_horizontal">
 
             <!-- Artwork — size driven by WindowWidthClass from code -->
             <ImageView
@@ -393,6 +404,8 @@
                     android:textStyle="bold"
                     android:textColor="@color/text_primary"
                     android:contentDescription="Tài khoản nhạc" />
+            </LinearLayout>
+            <!-- ═══ END FULL NOW-PLAYING CONTAINER ═══ -->
             </LinearLayout>
             <!-- One-touch navigation, original MeloVault implementation. -->
             <LinearLayout

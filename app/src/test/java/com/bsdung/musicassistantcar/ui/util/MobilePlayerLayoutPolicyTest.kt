@@ -21,6 +21,11 @@ class MobilePlayerLayoutPolicyTest {
     }
 
     @Test
+    fun isPortraitPhone_617x1097_returnsTrue() {
+        assertTrue(MobilePlayerLayoutPolicy.isPortraitPhone(617, 1097))
+    }
+
+    @Test
     fun isPortraitPhone_landscapeAndNegative_returnsFalse() {
         assertFalse(MobilePlayerLayoutPolicy.isPortraitPhone(400, 300))
         assertFalse(MobilePlayerLayoutPolicy.isPortraitPhone(700, 480))

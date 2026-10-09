@@ -9,13 +9,13 @@ import kotlin.math.roundToInt
 internal object MobilePlayerLayoutPolicy {
 
     /**
-     * Identifies whether the screen belongs to a portrait phone:
-     * narrow width under 420dp and portrait orientation where height > width.
+     * Identifies whether the screen belongs to a portrait phone/mobile layout:
+     * portrait orientation where height > width, and width under 700dp (below car widescreen qualifier).
      * Non-positive / invalid dimensions evaluate to false.
      */
     fun isPortraitPhone(widthDp: Int, heightDp: Int): Boolean {
         if (widthDp <= 0 || heightDp <= 0) return false
-        return widthDp < 420 && heightDp > widthDp
+        return widthDp < 700 && heightDp > widthDp
     }
 
     /**

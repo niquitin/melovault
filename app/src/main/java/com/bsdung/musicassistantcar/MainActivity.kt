@@ -21,6 +21,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.activity.OnBackPressedCallback
 import java.util.Locale
+import kotlin.math.roundToInt
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
@@ -49,6 +50,7 @@ import com.bsdung.musicassistantcar.data.UnifiedTrackDto
 import com.bsdung.musicassistantcar.ui.util.UnifiedPlaybackMapper
 import com.bsdung.musicassistantcar.ui.util.ArtworkGestureAction
 import com.bsdung.musicassistantcar.ui.util.ArtworkGesturePolicy
+import com.bsdung.musicassistantcar.ui.util.MobilePlayerLayoutPolicy
 import com.bsdung.musicassistantcar.data.AccountConnectionState
 import com.bsdung.musicassistantcar.data.AccountProvider
 import com.bsdung.musicassistantcar.data.AccountStatusDto
@@ -166,6 +168,8 @@ class MainActivity : AppCompatActivity() {
     private var currentLyricsSignature: String? = null
     private var currentLyricsSourceSummary: String = "Nguồn: LRCLIB · Tự động"
     private var isEditMode: Boolean = false
+    private var userOpenedFullPlayer: Boolean = false
+    private var currentLoadedArtworkUri: String? = null
     private var libraryItemTouchHelper: ItemTouchHelper? = null
     private val navManager = NavigationManager()
     private val lyricsRepository by lazy {
@@ -424,6 +428,7 @@ class MainActivity : AppCompatActivity() {
             isQueueVisible = savedInstanceState.getBoolean("is_queue_visible", false)
             isLyricsVisible = savedInstanceState.getBoolean("is_lyrics_visible", false)
             isFullscreenLyricsVisible = savedInstanceState.getBoolean("is_fullscreen_lyrics_visible", false)
+            userOpenedFullPlayer = savedInstanceState.getBoolean("user_opened_full_player", false)
             val parentId = savedInstanceState.getString("nav_parent_id", "root") ?: "root"
             val label = savedInstanceState.getString("nav_label", "Thư viện") ?: "Thư viện"
             val page = savedInstanceState.getInt("nav_page", 0)
@@ -472,6 +477,12 @@ class MainActivity : AppCompatActivity() {
                     }
                     if (isQueueVisible) {
                         hideQueue()
+                        return
+                    }
+                    val cfg = resources.configuration
+                    if (userOpenedFullPlayer && MobilePlayerLayoutPolicy.isPortraitPhone(cfg.screenWidthDp, cfg.screenHeightDp)) {
+                        userOpenedFullPlayer = false
+                        applyMobilePlayerVisibility(isBrowsing = true)
                         return
                     }
                     if (!navManager.isAtRoot) {
@@ -920,6 +931,8 @@ class MainActivity : AppCompatActivity() {
         binding.quickLibraryButton.setOnClickListener {
             if (isQueueVisible) hideQueue()
             if (isLyricsVisible) hideLyrics()
+            userOpenedFullPlayer = false
+            applyMobilePlayerVisibility(isBrowsing = true)
             val scroll = findViewById<androidx.core.widget.NestedScrollView>(R.id.mainScrollContainer)
             scroll?.post { scroll.smoothScrollTo(0, binding.libraryCard.top) }
         }
@@ -927,10 +940,29 @@ class MainActivity : AppCompatActivity() {
         binding.quickPlaylistsButton.setOnClickListener {
             if (isQueueVisible) hideQueue()
             if (isLyricsVisible) hideLyrics()
+            userOpenedFullPlayer = false
+            applyMobilePlayerVisibility(isBrowsing = true)
             handleQuickFilterClick(RemoteCatalog.PLAYLISTS_ID, "Danh sách phát")
             // Compact screen keeps the library below Now Playing; reveal it directly.
             val scroll = findViewById<androidx.core.widget.NestedScrollView>(R.id.mainScrollContainer)
             scroll?.post { scroll.smoothScrollTo(0, binding.libraryCard.top) }
+        }
+
+        // Mini player bar tap/expand and play/pause
+        binding.miniPlayerBar?.setOnClickListener {
+            userOpenedFullPlayer = true
+            applyMobilePlayerVisibility(isBrowsing = false)
+            val scroll = findViewById<androidx.core.widget.NestedScrollView>(R.id.mainScrollContainer)
+            scroll?.post { scroll.smoothScrollTo(0, 0) }
+        }
+        binding.miniExpandButton?.setOnClickListener {
+            userOpenedFullPlayer = true
+            applyMobilePlayerVisibility(isBrowsing = false)
+            val scroll = findViewById<androidx.core.widget.NestedScrollView>(R.id.mainScrollContainer)
+            scroll?.post { scroll.smoothScrollTo(0, 0) }
+        }
+        binding.miniPlayPauseButton?.setOnClickListener {
+            handlePlayPauseToggle()
         }
 
         binding.queueBackButton.setOnClickListener {
@@ -2416,6 +2448,8 @@ class MainActivity : AppCompatActivity() {
 
         // Show queue container
         binding.queueContainer.visibility = View.VISIBLE
+        userOpenedFullPlayer = true
+        applyMobilePlayerVisibility(isBrowsing = false)
         renderQueue()
     }
 
@@ -2447,6 +2481,7 @@ class MainActivity : AppCompatActivity() {
             binding.emptyView.visibility = View.VISIBLE
         }
         binding.pageBar.visibility = if (!navManager.isAtRoot) View.VISIBLE else View.GONE
+        applyMobilePlayerVisibility()
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -2554,6 +2589,7 @@ class MainActivity : AppCompatActivity() {
             binding.emptyView.visibility = View.VISIBLE
         }
         binding.pageBar.visibility = if (!navManager.isAtRoot) View.VISIBLE else View.GONE
+        applyMobilePlayerVisibility()
     }
 
     private fun showFullscreenLyrics() {
@@ -2591,6 +2627,7 @@ class MainActivity : AppCompatActivity() {
         } else {
             renderLyricsUiState(currentLyricsUiState)
         }
+        applyMobilePlayerVisibility()
     }
 
     private fun updateFullscreenKeepScreenOn() {
@@ -4360,6 +4397,7 @@ class MainActivity : AppCompatActivity() {
 
         if (currentItem == null) {
             // Idle / Welcome state
+            currentLoadedArtworkUri = null
             binding.favoriteButton.visibility = View.GONE
             currentFavoriteMediaId = null
             currentFavoriteState = null
@@ -4369,6 +4407,11 @@ class MainActivity : AppCompatActivity() {
             binding.technicalInfoView.text = ""
             binding.technicalInfoView.visibility = View.GONE
             binding.coverView.setImageResource(R.drawable.ic_album_placeholder)
+            binding.miniCoverView?.setImageResource(R.drawable.ic_album_placeholder)
+            binding.miniTitleView?.text = ""
+            binding.miniArtistView?.text = ""
+            binding.miniPlayerBar?.visibility = View.GONE
+            binding.fullPlayerContainer?.visibility = View.VISIBLE
 
             // Artwork size at idle: driven by width class, not orientation
             val idleSizeRes = when (widthClass) {
@@ -4482,34 +4525,16 @@ class MainActivity : AppCompatActivity() {
             binding.technicalInfoView.visibility = View.GONE
         }
 
-        // Artwork size when track is active: driven by width class
-        // For COMPACT portrait phones we calculate adaptively instead of using a fixed dimen:
-        //   - Target: 76% of available content width (screenWidthDp minus 24dp padding)
-        //   - Cap: 36% of screenHeightDp to ensure Play/Pause, seek and title stay visible
-        //   - Floor: at least 120dp to avoid overly tiny art
-        //   - Short-phone cap (heightDp < 560): use artwork_size_compact_portrait_short fallback
+        // Artwork size when track is active: driven by width class and MobilePlayerLayoutPolicy
         val activeSizeRes = when (widthClass) {
             WindowWidthClass.COMPACT  -> R.dimen.artwork_size_compact
             WindowWidthClass.MEDIUM   -> R.dimen.artwork_size_medium
             WindowWidthClass.EXPANDED -> R.dimen.artwork_size_expanded
         }
-        val activeSize = if (widthClass == WindowWidthClass.COMPACT) {
-            val cfg = resources.configuration
-            val isPortrait = cfg.orientation != android.content.res.Configuration.ORIENTATION_LANDSCAPE
-            if (isPortrait) {
-                val density = resources.displayMetrics.density
-                val contentWidthDp = cfg.screenWidthDp - 24 // 12dp padding each side
-                val targetDp = (contentWidthDp * 0.76f).toInt()
-                val heightCapDp = (cfg.screenHeightDp * 0.36f).toInt()
-                val cappedDp = if (cfg.screenHeightDp < 560) {
-                    resources.getDimensionPixelSize(R.dimen.artwork_size_compact_portrait_short) / density.toInt().coerceAtLeast(1)
-                } else {
-                    minOf(targetDp, heightCapDp)
-                }.coerceAtLeast(120)
-                (cappedDp * density).toInt()
-            } else {
-                resources.getDimensionPixelSize(activeSizeRes)
-            }
+        val cfg = resources.configuration
+        val activeSize = if (MobilePlayerLayoutPolicy.isPortraitPhone(cfg.screenWidthDp, cfg.screenHeightDp)) {
+            val sizeDp = MobilePlayerLayoutPolicy.artworkSizeDp(cfg.screenWidthDp, cfg.screenHeightDp)
+            (sizeDp * resources.displayMetrics.density).roundToInt()
         } else {
             resources.getDimensionPixelSize(activeSizeRes)
         }
@@ -4520,12 +4545,34 @@ class MainActivity : AppCompatActivity() {
             binding.coverView.layoutParams = lp
         }
 
-        ArtworkLoader.loadArtwork(
-            imageView = binding.coverView,
-            uri = metadata.artworkUri?.toString(),
-            cornerRadiusDp = 16f,
-            placeholderResId = R.drawable.ic_album_placeholder,
-        )
+        val artworkUriStr = metadata.artworkUri?.toString()
+        if (currentLoadedArtworkUri != artworkUriStr) {
+            currentLoadedArtworkUri = artworkUriStr
+            ArtworkLoader.loadArtwork(
+                imageView = binding.coverView,
+                uri = artworkUriStr,
+                cornerRadiusDp = 16f,
+                placeholderResId = R.drawable.ic_album_placeholder,
+            )
+            binding.miniCoverView?.let { miniCover ->
+                ArtworkLoader.loadArtwork(
+                    imageView = miniCover,
+                    uri = artworkUriStr,
+                    cornerRadiusDp = 8f,
+                    placeholderResId = R.drawable.ic_album_placeholder,
+                )
+            }
+        }
+
+        // Mini player text & controls
+        binding.miniTitleView?.text = rawTitle.ifBlank { "Đang phát" }
+        binding.miniArtistView?.text = if (artist.isNotBlank()) artist else (album.ifBlank { "" })
+        binding.miniArtistView?.visibility = if (binding.miniArtistView?.text.isNullOrBlank()) View.GONE else View.VISIBLE
+        if (player.isPlaying) {
+            binding.miniPlayPauseButton?.setImageResource(R.drawable.ic_pause)
+        } else {
+            binding.miniPlayPauseButton?.setImageResource(R.drawable.ic_play_arrow)
+        }
 
         // Make all controls visible in active state
         binding.seekBar.visibility = View.VISIBLE
@@ -4616,6 +4663,34 @@ class MainActivity : AppCompatActivity() {
         progressController.syncWithPlayer()
         libraryAdapter.updateNowPlaying(currentItem.mediaId, player.isPlaying)
         updateFullscreenLyricsPlayerChrome()
+        applyMobilePlayerVisibility()
+    }
+
+    private fun applyMobilePlayerVisibility(isBrowsing: Boolean? = null) {
+        val cfg = resources.configuration
+        val isPortraitPhone = MobilePlayerLayoutPolicy.isPortraitPhone(cfg.screenWidthDp, cfg.screenHeightDp)
+        if (!isPortraitPhone) {
+            binding.fullPlayerContainer?.visibility = View.VISIBLE
+            binding.miniPlayerBar?.visibility = View.GONE
+            return
+        }
+
+        val hasCurrentItem = browser?.currentMediaItem != null
+        if (!hasCurrentItem) {
+            binding.fullPlayerContainer?.visibility = View.VISIBLE
+            binding.miniPlayerBar?.visibility = View.GONE
+            return
+        }
+
+        val browsing = isBrowsing ?: (!isQueueVisible && !isFullscreenLyricsVisible)
+        val showMini = MobilePlayerLayoutPolicy.shouldShowMiniPlayer(
+            isPortraitPhone = true,
+            isBrowsing = browsing,
+            userOpenedFullPlayer = userOpenedFullPlayer,
+        )
+
+        binding.fullPlayerContainer?.visibility = if (showMini) View.GONE else View.VISIBLE
+        binding.miniPlayerBar?.visibility = if (showMini) View.VISIBLE else View.GONE
     }
 
     private fun updateQualityChip() {
@@ -5110,6 +5185,7 @@ class MainActivity : AppCompatActivity() {
         outState.putBoolean("is_queue_visible", isQueueVisible)
         outState.putBoolean("is_lyrics_visible", isLyricsVisible)
         outState.putBoolean("is_fullscreen_lyrics_visible", isFullscreenLyricsVisible)
+        outState.putBoolean("user_opened_full_player", userOpenedFullPlayer)
         outState.putString("nav_parent_id", navManager.currentParentId)
         outState.putString("nav_label", navManager.currentLabel)
         outState.putInt("nav_page", navManager.currentPage)
