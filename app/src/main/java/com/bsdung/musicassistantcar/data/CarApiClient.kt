@@ -550,7 +550,7 @@ open class CarApiClient {
                 "?quality=${PlaybackQuality.current.queryValue}"
         )
 
-    fun trackCoverUri(trackId: Int): Uri =
+    open fun trackCoverUri(trackId: Int): Uri =
         Uri.parse(
             "${baseUrl()}/v1/tracks/$trackId/cover"
         )

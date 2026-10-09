@@ -349,6 +349,8 @@ class OfflineReadyStateTest {
         val fakeApi = object : CarApiClient() {
             override fun track(tId: Int): CarTrack = remoteTrack
             override fun streamUri(tId: Int): Uri = streamUri
+            override fun trackCoverUri(tId: Int): Uri =
+                Uri.parse("http://127.0.0.1:8790/v1/tracks/$tId/cover")
         }
 
         val catalog = RemoteCatalog(

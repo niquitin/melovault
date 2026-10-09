@@ -801,6 +801,8 @@ class NetworkDownloadPolicyTest {
         val fakeApi = object : CarApiClient() {
             override fun track(tId: Int): CarTrack = remoteTrack
             override fun streamUri(tId: Int): android.net.Uri = expectedStreamUri
+            override fun trackCoverUri(tId: Int): android.net.Uri =
+                android.net.Uri.parse("http://127.0.0.1:8790/v1/tracks/$tId/cover")
         }
         val catalog = com.bsdung.musicassistantcar.data.RemoteCatalog(
             api = fakeApi,
