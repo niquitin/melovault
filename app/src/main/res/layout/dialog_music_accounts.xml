@@ -324,6 +324,20 @@
                 </LinearLayout>
             </LinearLayout>
 
+            <!-- Unified Library Button -->
+            <Button
+                android:id="@+id/btnUnifiedLibrary"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:minHeight="48dp"
+                android:text="Thư viện hợp nhất"
+                android:textSize="14sp"
+                android:textColor="@color/accent_primary"
+                android:background="@drawable/bg_button_control"
+                android:textAllCaps="false"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="8dp" />
+
             <!-- Close Dialog Button -->
             <Button
                 android:id="@+id/accountsCloseButton"

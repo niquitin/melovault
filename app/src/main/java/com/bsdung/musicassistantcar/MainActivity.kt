@@ -44,6 +44,7 @@ import com.bsdung.musicassistantcar.databinding.DialogPlaylistChooserBinding
 import com.bsdung.musicassistantcar.databinding.DialogSignalPathBinding
 import com.bsdung.musicassistantcar.databinding.DialogMusicAccountsBinding
 import com.bsdung.musicassistantcar.databinding.DialogYoutubePlaylistsBinding
+import com.bsdung.musicassistantcar.ui.dialog.UnifiedLibraryDialog
 import com.bsdung.musicassistantcar.data.AccountConnectionState
 import com.bsdung.musicassistantcar.data.AccountProvider
 import com.bsdung.musicassistantcar.data.AccountStatusDto
@@ -5181,6 +5182,9 @@ class MainActivity : AppCompatActivity() {
         }
         bindingDialog.accountsRetryButton.setOnClickListener {
             loadAccounts()
+        }
+        bindingDialog.btnUnifiedLibrary.setOnClickListener {
+            UnifiedLibraryDialog(this).show()
         }
         bindingDialog.accountsCloseButton.setOnClickListener {
             dialog.dismiss()
