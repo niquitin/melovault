@@ -93,7 +93,18 @@
                 android:layout_height="@dimen/artwork_size_compact_idle"
                 android:scaleType="centerCrop"
                 android:src="@drawable/ic_album_placeholder"
-                android:contentDescription="Album artwork"
+                android:contentDescription="@string/cover_gesture_action"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:id="@+id/coverGestureHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:maxLines="2"
+                android:text="@string/cover_gesture_hint"
+                android:textSize="10sp"
+                android:textColor="@color/text_tertiary"
                 android:layout_marginBottom="8dp" />
 
             <!-- Title / Artist / Album / Tech info + Favorite row -->
@@ -380,6 +391,62 @@
                     android:textStyle="bold"
                     android:textColor="@color/text_primary"
                     android:contentDescription="Tài khoản nhạc" />
+            </LinearLayout>
+            <!-- One-touch navigation, original MeloVault implementation. -->
+            <LinearLayout
+                android:id="@+id/quickNavigationRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:layout_marginTop="8dp">
+
+                <TextView
+                    android:id="@+id/quickLibraryButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:background="@drawable/bg_button_tertiary_active"
+                    android:text="Thư viện"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:contentDescription="Đi đến Thư viện nhạc" />
+
+                <View
+                    android:layout_width="6dp"
+                    android:layout_height="1dp" />
+
+                <TextView
+                    android:id="@+id/quickQueueButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:background="@drawable/bg_button_control"
+                    android:text="Tiếp theo"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:contentDescription="Mở danh sách bài tiếp theo" />
+
+                <View
+                    android:layout_width="6dp"
+                    android:layout_height="1dp" />
+
+                <TextView
+                    android:id="@+id/quickSourcesButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:background="@drawable/bg_button_control"
+                    android:text="Nguồn nhạc"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:contentDescription="Mở các nguồn Telegram và Google Drive" />
             </LinearLayout>
         </LinearLayout>
 

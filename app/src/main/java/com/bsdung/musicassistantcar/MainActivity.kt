@@ -47,6 +47,8 @@ import com.bsdung.musicassistantcar.databinding.DialogYoutubePlaylistsBinding
 import com.bsdung.musicassistantcar.ui.dialog.UnifiedLibraryDialog
 import com.bsdung.musicassistantcar.data.UnifiedTrackDto
 import com.bsdung.musicassistantcar.ui.util.UnifiedPlaybackMapper
+import com.bsdung.musicassistantcar.ui.util.ArtworkGestureAction
+import com.bsdung.musicassistantcar.ui.util.ArtworkGesturePolicy
 import com.bsdung.musicassistantcar.data.AccountConnectionState
 import com.bsdung.musicassistantcar.data.AccountProvider
 import com.bsdung.musicassistantcar.data.AccountStatusDto
@@ -789,6 +791,54 @@ class MainActivity : AppCompatActivity() {
             handlePlayPauseToggle()
         }
 
+        // Album-art gestures: left/right skips a track, tap opens the queue.
+        // Vertical drags yield to the parent scroller, avoiding accidental skips.
+        binding.coverView.setOnClickListener { toggleQueue() }
+        val artworkSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop.toFloat()
+        val artworkSwipeThreshold = 64f * resources.displayMetrics.density
+        var artworkDownX = 0f
+        var artworkDownY = 0f
+        binding.coverView.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    artworkDownX = event.x
+                    artworkDownY = event.y
+                    view.parent?.requestDisallowInterceptTouchEvent(true)
+                    true
+                }
+                android.view.MotionEvent.ACTION_MOVE -> {
+                    val dx = event.x - artworkDownX
+                    val dy = event.y - artworkDownY
+                    if (kotlin.math.abs(dy) > artworkSlop &&
+                        kotlin.math.abs(dy) > kotlin.math.abs(dx)
+                    ) {
+                        view.parent?.requestDisallowInterceptTouchEvent(false)
+                    }
+                    true
+                }
+                android.view.MotionEvent.ACTION_UP -> {
+                    view.parent?.requestDisallowInterceptTouchEvent(false)
+                    when (ArtworkGesturePolicy.classify(
+                        event.x - artworkDownX,
+                        event.y - artworkDownY,
+                        artworkSwipeThreshold,
+                        artworkSlop,
+                    )) {
+                        ArtworkGestureAction.OPEN_QUEUE -> view.performClick()
+                        ArtworkGestureAction.NEXT_TRACK -> browser?.seekToNextMediaItem()
+                        ArtworkGestureAction.PREVIOUS_TRACK -> browser?.seekToPreviousMediaItem()
+                        ArtworkGestureAction.IGNORE -> Unit
+                    }
+                    true
+                }
+                android.view.MotionEvent.ACTION_CANCEL -> {
+                    view.parent?.requestDisallowInterceptTouchEvent(false)
+                    true
+                }
+                else -> false
+            }
+        }
+
         binding.previousButton.setOnClickListener {
             browser?.seekToPreviousMediaItem()
         }
@@ -863,6 +913,17 @@ class MainActivity : AppCompatActivity() {
         binding.queueButton.setOnClickListener {
             toggleQueue()
         }
+
+        // Poweramp-inspired direct destinations: no hidden swipe/menu required.
+        // These call existing navigation paths, preserving Queue and scroll state.
+        binding.quickQueueButton.setOnClickListener { toggleQueue() }
+        binding.quickLibraryButton.setOnClickListener {
+            if (isQueueVisible) hideQueue()
+            if (isLyricsVisible) hideLyrics()
+            val scroll = findViewById<androidx.core.widget.NestedScrollView>(R.id.mainScrollContainer)
+            scroll?.post { scroll.smoothScrollTo(0, binding.libraryCard.top) }
+        }
+        binding.quickSourcesButton.setOnClickListener { showMusicAccountsDialog() }
 
         binding.queueBackButton.setOnClickListener {
             hideQueue()
@@ -2328,6 +2389,8 @@ class MainActivity : AppCompatActivity() {
         )
         binding.queueButton.setColorFilter(ContextCompat.getColor(this, R.color.accent_primary))
         binding.queueButton.setBackgroundResource(R.drawable.bg_button_tertiary_active)
+        binding.quickQueueButton.setBackgroundResource(R.drawable.bg_button_tertiary_active)
+        binding.quickLibraryButton.setBackgroundResource(R.drawable.bg_button_control)
 
         // Hide library / search content views
         binding.breadcrumbBar.visibility = View.GONE
@@ -2357,6 +2420,8 @@ class MainActivity : AppCompatActivity() {
         )
         binding.queueButton.setColorFilter(ContextCompat.getColor(this, R.color.text_primary))
         binding.queueButton.setBackgroundResource(R.drawable.bg_button_control)
+        binding.quickQueueButton.setBackgroundResource(R.drawable.bg_button_control)
+        binding.quickLibraryButton.setBackgroundResource(R.drawable.bg_button_tertiary_active)
 
         binding.queueContainer.visibility = View.GONE
 

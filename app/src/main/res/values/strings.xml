@@ -4,4 +4,6 @@
     <string name="loudness_normalization_title">Chuẩn hóa âm lượng</string>
     <string name="loudness_normalization_on">Bật</string>
     <string name="loudness_normalization_off">Tắt</string>
+    <string name="cover_gesture_hint">Vuốt bìa để đổi bài · Chạm để mở Tiếp theo</string>
+    <string name="cover_gesture_action">Ảnh bìa. Vuốt ngang để chuyển bài, chạm để mở hàng đợi</string>
 </resources>
