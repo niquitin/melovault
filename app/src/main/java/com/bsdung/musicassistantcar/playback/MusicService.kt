@@ -665,20 +665,25 @@ class MusicService : MediaLibraryService() {
     private fun restorePersistedQueueOnStartup() {
         val stored = loadPlaybackState() ?: return
         executor.execute {
-            val restored = stored.mediaIds.mapNotNull { id ->
+            val restoredWithSourceIndices = stored.mediaIds.mapIndexedNotNull { sourceIndex, id ->
                 runCatching { catalog.item(id) }
                     .onFailure { Log.w(TAG, "Queue startup restore skipped $id: ${it.message}") }
                     .getOrNull()
+                    ?.let { sourceIndex to it }
             }
-            if (restored.isEmpty()) {
+            if (restoredWithSourceIndices.isEmpty()) {
                 Log.w(TAG, "Queue startup restore: no items resolved; saved state retained")
                 return@execute
             }
-            val index = QueueStartupRestorePolicy.targetIndex(
-                stored.mediaIds,
-                stored.currentIndex,
-                restored.map { it.mediaId },
+            val restored = restoredWithSourceIndices.map { it.second }
+            val target = QueueStartupRestorePolicy.selectTarget(
+                savedIndex = stored.currentIndex,
+                savedPositionMs = stored.positionMs,
+                restoredSourceIndices = restoredWithSourceIndices.map { it.first },
             )
+            if (target.positionMs == 0L && stored.positionMs > 0L) {
+                Log.w(TAG, "Queue startup restore: selected track unavailable; discarding stale seek position")
+            }
             mainHandler.post {
                 if (!QueueStartupRestorePolicy.shouldApply(
                         serviceShuttingDown = serviceShuttingDown,
@@ -690,8 +695,8 @@ class MusicService : MediaLibraryService() {
                     return@post
                 }
                 // setMediaItems does not start playback or trigger an audio-focus request.
-                player.setMediaItems(restored, index, stored.positionMs)
-                Log.i(TAG, "QUEUE_STARTUP_RESTORED: count=${restored.size}, index=$index, pos=${stored.positionMs}")
+                player.setMediaItems(restored, target.index, target.positionMs)
+                Log.i(TAG, "QUEUE_STARTUP_RESTORED: count=${restored.size}, index=${target.index}, pos=${target.positionMs}")
             }
         }
     }

@@ -40,4 +40,43 @@ class QueueStartupRestorePolicyTest {
         assertEquals(0, QueueStartupRestorePolicy.targetIndex(listOf("track:1"), 999, listOf("track:1")))
         assertEquals(0, QueueStartupRestorePolicy.targetIndex(listOf("track:1"), -1, emptyList()))
     }
+
+    @Test fun duplicateTracksRestoreSelectedOccurrenceRatherThanFirstCopy() {
+        assertEquals(2, QueueStartupRestorePolicy.targetIndex(
+            listOf("track:1", "track:2", "track:1"),
+            2, listOf("track:1", "track:2", "track:1"),
+        ))
+    }
+
+    @Test fun selectedDuplicateAfterUnavailableTrackKeepsCorrectOccurrenceAndPosition() {
+        assertEquals(
+            QueueRestoreTarget(1, 54_321L),
+            QueueStartupRestorePolicy.selectTarget(2, 54_321L, listOf(0, 2)),
+        )
+    }
+
+    @Test fun missingCurrentTrackUsesNextSongWithoutLeakingPreviousPosition() {
+        assertEquals(
+            QueueRestoreTarget(1, 0L),
+            QueueStartupRestorePolicy.selectTarget(1, 98_765L, listOf(0, 2)),
+        )
+    }
+
+    @Test fun missingLastSongUsesPreviousSurvivorFromStart() {
+        assertEquals(
+            QueueRestoreTarget(1, 0L),
+            QueueStartupRestorePolicy.selectTarget(3, 80_000L, listOf(0, 2)),
+        )
+    }
+
+    @Test fun emptyRestoreAndMalformedPositionAreSafelyClamped() {
+        assertEquals(
+            QueueRestoreTarget(0, 0L),
+            QueueStartupRestorePolicy.selectTarget(0, 34_567L, emptyList()),
+        )
+        assertEquals(
+            QueueRestoreTarget(0, 0L),
+            QueueStartupRestorePolicy.selectTarget(0, -4_000L, listOf(0)),
+        )
+    }
 }
