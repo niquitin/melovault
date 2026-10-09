@@ -36,5 +36,9 @@ sealed class LibraryItem {
         val bitrate: Int? = null,
         val sampleRate: Int? = null,
         val channels: Int? = null,
+        val sourceBadge: String? = null,
+        val playbackAction: String? = null,
+        val isPlayable: Boolean = true,
+        val externalUrl: String? = null,
     ) : LibraryItem()
 }

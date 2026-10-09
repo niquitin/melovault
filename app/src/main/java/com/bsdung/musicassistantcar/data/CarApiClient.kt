@@ -60,6 +60,37 @@ data class CarTrack(
     val truePeakDbtp: Double? = null,
     val loudnessRangeLu: Double? = null,
     val loudnessAnalysisVersion: Int? = null,
+    val sourceBadge: String? = null,
+    val playbackAction: String? = null,
+    val isPlayable: Boolean = true,
+    val unifiedId: String? = null,
+    val externalUrl: String? = null,
+)
+
+data class UnifiedTrackDto(
+    val id: String,
+    val title: String,
+    val artist: String,
+    val album: String,
+    val duration: Double?,
+    val primarySource: String,
+    val playbackAction: String,
+    val isPlayable: Boolean,
+    val sourceBadge: String,
+    val availableSources: List<String>,
+    val canonicalTrackId: Int? = null,
+    val externalUrl: String? = null,
+    val coverPath: String? = null,
+    val streamPath: String? = null,
+)
+
+data class UnifiedBrowseResult(
+    val items: List<UnifiedTrackDto>,
+    val total: Int,
+    val limit: Int,
+    val offset: Int,
+    val sourceFilter: String,
+    val sourceInventory: Map<String, Int>,
 )
 
 data class DriveRoot(
@@ -1203,6 +1234,15 @@ open class CarApiClient {
             truePeakDbtp = truePeakDbtp,
             loudnessRangeLu = loudnessRangeLu,
             loudnessAnalysisVersion = loudnessAnalysisVersion,
+            sourceBadge = cleanString(item, "source_badge").takeIf { it.isNotBlank() },
+            playbackAction = cleanString(item, "playback_action").takeIf { it.isNotBlank() },
+            isPlayable = if (item.has("is_playable") && !item.isNull("is_playable")) {
+                item.optBoolean("is_playable", true)
+            } else {
+                true
+            },
+            unifiedId = cleanString(item, "unified_id").takeIf { it.isNotBlank() },
+            externalUrl = cleanString(item, "external_url").takeIf { it.isNotBlank() },
         )
     }
 
@@ -1242,7 +1282,128 @@ open class CarApiClient {
             truePeakDbtp = truePeakDbtp,
             loudnessRangeLu = loudnessRangeLu,
             loudnessAnalysisVersion = loudnessAnalysisVersion,
+            sourceBadge = cleanStr("source_badge").takeIf { it.isNotBlank() },
+            playbackAction = cleanStr("playback_action").takeIf { it.isNotBlank() },
+            isPlayable = (map["is_playable"] as? Boolean) ?: true,
+            unifiedId = cleanStr("unified_id").takeIf { it.isNotBlank() },
+            externalUrl = cleanStr("external_url").takeIf { it.isNotBlank() },
         )
+    }
+
+    internal fun parseUnifiedTrack(item: JSONObject): UnifiedTrackDto {
+        val availSourcesArr = item.optJSONArray("available_sources")
+        val sourcesList = mutableListOf<String>()
+        if (availSourcesArr != null) {
+            for (i in 0 until availSourcesArr.length()) {
+                sourcesList.add(availSourcesArr.getString(i))
+            }
+        }
+        val canonId = if (item.has("canonical_track_id") && !item.isNull("canonical_track_id")) {
+            item.optInt("canonical_track_id").takeIf { it > 0 }
+        } else null
+        val duration = if (item.has("duration") && !item.isNull("duration")) {
+            runCatching { item.getDouble("duration") }.getOrNull()
+        } else null
+
+        return UnifiedTrackDto(
+            id = item.optString("id"),
+            title = cleanString(item, "title"),
+            artist = cleanString(item, "artist"),
+            album = cleanString(item, "album"),
+            duration = duration,
+            primarySource = cleanString(item, "primary_source"),
+            playbackAction = cleanString(item, "playback_action"),
+            isPlayable = item.optBoolean("is_playable", false),
+            sourceBadge = cleanString(item, "source_badge"),
+            availableSources = sourcesList,
+            canonicalTrackId = canonId,
+            externalUrl = cleanString(item, "external_url").takeIf { it.isNotBlank() },
+            coverPath = cleanString(item, "cover_path").takeIf { it.isNotBlank() },
+            streamPath = cleanString(item, "stream_path").takeIf { it.isNotBlank() },
+        )
+    }
+
+    internal fun parseUnifiedTrack(map: Map<String, Any?>): UnifiedTrackDto {
+        fun cleanStr(key: String, fallback: String = ""): String {
+            val v = map[key]?.toString()?.trim() ?: fallback
+            return if (v.equals("null", ignoreCase = true)) fallback else v
+        }
+
+        val availSources = when (val sources = map["available_sources"]) {
+            is List<*> -> sources.mapNotNull { it?.toString() }
+            else -> emptyList()
+        }
+        val canonId = (map["canonical_track_id"] as? Number)?.toInt()?.takeIf { it > 0 }
+        val duration = (map["duration"] as? Number)?.toDouble()
+
+        return UnifiedTrackDto(
+            id = cleanStr("id"),
+            title = cleanStr("title"),
+            artist = cleanStr("artist"),
+            album = cleanStr("album"),
+            duration = duration,
+            primarySource = cleanStr("primary_source"),
+            playbackAction = cleanStr("playback_action"),
+            isPlayable = (map["is_playable"] as? Boolean) ?: false,
+            sourceBadge = cleanStr("source_badge"),
+            availableSources = availSources,
+            canonicalTrackId = canonId,
+            externalUrl = cleanStr("external_url").takeIf { it.isNotBlank() },
+            coverPath = cleanStr("cover_path").takeIf { it.isNotBlank() },
+            streamPath = cleanStr("stream_path").takeIf { it.isNotBlank() },
+        )
+    }
+
+
+    fun unifiedBrowse(
+        source: String? = null,
+        limit: Int = 50,
+        offset: Int = 0,
+    ): UnifiedBrowseResult {
+        val query = StringBuilder("/car/unified/browse?limit=$limit&offset=$offset")
+        if (!source.isNullOrBlank()) {
+            query.append("&source=").append(Uri.encode(source))
+        }
+        val json = getJson(query.toString())
+        val arr = json.optJSONArray("items") ?: JSONArray()
+        val items = mutableListOf<UnifiedTrackDto>()
+        for (i in 0 until arr.length()) {
+            items.add(parseUnifiedTrack(arr.getJSONObject(i)))
+        }
+        val invObj = json.optJSONObject("source_inventory")
+        val inv = mutableMapOf<String, Int>()
+        invObj?.let {
+            val keys = it.keys()
+            while (keys.hasNext()) {
+                val k = keys.next()
+                inv[k] = it.optInt(k, 0)
+            }
+        }
+        return UnifiedBrowseResult(
+            items = items,
+            total = json.optInt("total", items.size),
+            limit = json.optInt("limit", limit),
+            offset = json.optInt("offset", offset),
+            sourceFilter = json.optString("source_filter", "ALL"),
+            sourceInventory = inv,
+        )
+    }
+
+    fun unifiedSearch(
+        query: String,
+        limit: Int = 30,
+        offset: Int = 0,
+        includeExternal: Boolean = true,
+    ): List<UnifiedTrackDto> {
+        val encoded = Uri.encode(query)
+        val url = "/car/unified/search?q=$encoded&limit=$limit&offset=$offset&include_external=$includeExternal"
+        val json = getJson(url)
+        val arr = json.optJSONArray("items") ?: JSONArray()
+        val items = mutableListOf<UnifiedTrackDto>()
+        for (i in 0 until arr.length()) {
+            items.add(parseUnifiedTrack(arr.getJSONObject(i)))
+        }
+        return items
     }
 
     internal fun parseTrackJson(json: String): CarTrack {
