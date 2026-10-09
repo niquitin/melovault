@@ -516,6 +516,16 @@
                     android:visibility="gone" />
             </LinearLayout>
 
+            <TextView
+                android:id="@+id/queueSummaryView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:textSize="11sp"
+                android:maxLines="2"
+                android:textColor="@color/text_secondary"
+                android:text="Mở Thư viện để chọn bài" />
+
             <View
                 android:layout_width="match_parent"
                 android:layout_height="1dp"

@@ -11,6 +11,7 @@ import com.bsdung.musicassistantcar.databinding.ItemQueueEmptyBinding
 import com.bsdung.musicassistantcar.databinding.ItemQueueHeaderBinding
 import com.bsdung.musicassistantcar.databinding.ItemQueueTrackBinding
 import com.bsdung.musicassistantcar.playback.QueueListItem
+import com.bsdung.musicassistantcar.playback.QueueHelper
 import com.bsdung.musicassistantcar.ui.util.ArtworkLoader
 
 class QueueAdapter(
@@ -161,6 +162,7 @@ class QueueAdapter(
                 binding.activeIndicator.visibility = View.VISIBLE
                 binding.trackRoot.setBackgroundResource(R.drawable.bg_track_active)
                 binding.trackTitle.setTextColor(ContextCompat.getColor(context, R.color.accent_primary))
+                binding.queueCurrentBadge.text = QueueHelper.currentTrackBadge(item.isPlaying)
                 binding.queueCurrentBadge.visibility = View.VISIBLE
                 binding.nowPlayingIndicator.visibility = View.VISIBLE
                 binding.nowPlayingIndicator.setImageResource(

@@ -4118,10 +4118,14 @@ class MainActivity : AppCompatActivity() {
 
 
 
+    private fun isCompactPlayerLayout(): Boolean =
+        findViewById<View>(R.id.mainScrollContainer) != null
+
     private fun renderQueue() {
         val player = browser
         if (player == null) {
             binding.queueTitleView.text = QueueHelper.formatQueueTitle(-1, 0)
+            binding.queueSummaryView.text = QueueHelper.formatQueueSummary(-1, 0)
             queueAdapter.submitItems(listOf(QueueListItem.Empty("Hàng đợi đang trống", isFullQueueEmpty = true)))
             binding.queueClearButton.visibility = View.GONE
             return
@@ -4131,6 +4135,7 @@ class MainActivity : AppCompatActivity() {
         val currentIndex = player.currentMediaItemIndex
         val isPlaying = player.isPlaying
         binding.queueTitleView.text = QueueHelper.formatQueueTitle(currentIndex, queueItems.size)
+        binding.queueSummaryView.text = QueueHelper.formatQueueSummary(currentIndex, queueItems.size)
 
         val dm = com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this)
         val listItems = QueueHelper.buildQueueList(
@@ -4383,7 +4388,7 @@ class MainActivity : AppCompatActivity() {
                 binding.qualityChip.visibility = View.VISIBLE
                 binding.signalPathButton?.visibility = View.VISIBLE
                 binding.lyricsButton?.visibility = View.VISIBLE
-                binding.queueButton.visibility = View.VISIBLE
+                binding.queueButton.visibility = if (isCompactPlayerLayout()) View.GONE else View.VISIBLE
                 binding.shuffleButton.visibility = View.VISIBLE
                 binding.repeatButton.visibility = View.VISIBLE
             } else {
@@ -4392,7 +4397,7 @@ class MainActivity : AppCompatActivity() {
                 binding.qualityChip.visibility = View.GONE
                 binding.signalPathButton?.visibility = View.GONE
                 binding.lyricsButton?.visibility = View.GONE
-                binding.queueButton.visibility = View.VISIBLE
+                binding.queueButton.visibility = if (isCompactPlayerLayout()) View.GONE else View.VISIBLE
                 binding.shuffleButton.visibility = View.INVISIBLE
                 binding.repeatButton.visibility = View.INVISIBLE
             }
@@ -4497,7 +4502,7 @@ class MainActivity : AppCompatActivity() {
         binding.qualityChip.visibility = View.VISIBLE
         binding.signalPathButton?.visibility = View.VISIBLE
         binding.lyricsButton?.visibility = View.VISIBLE
-        binding.queueButton.visibility = View.VISIBLE
+        binding.queueButton.visibility = if (isCompactPlayerLayout()) View.GONE else View.VISIBLE
         binding.shuffleButton.visibility = View.VISIBLE
         binding.repeatButton.visibility = View.VISIBLE
 

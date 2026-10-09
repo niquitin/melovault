@@ -95,7 +95,7 @@
         android:id="@+id/queueCurrentBadge"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Đang phát"
+        android:text="Bài hiện tại"
         android:textSize="11sp"
         android:textStyle="bold"
         android:paddingStart="8dp"

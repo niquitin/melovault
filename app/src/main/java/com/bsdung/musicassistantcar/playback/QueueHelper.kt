@@ -76,6 +76,22 @@ object QueueHelper {
         return "Hàng đợi · ${currentIndex + 1}/$totalCount"
     }
 
+    /** Short contextual hint: clarify which songs can be played or reordered. */
+    fun formatQueueSummary(currentIndex: Int, totalCount: Int): String {
+        if (totalCount <= 0 || currentIndex !in 0 until totalCount) {
+            return "Mở Thư viện để chọn bài"
+        }
+        val upcoming = totalCount - currentIndex - 1
+        return if (upcoming == 0) {
+            "Không còn bài tiếp theo · Chạm bài để phát lại"
+        } else {
+            "$upcoming bài tiếp theo · Chạm bài để phát · Kéo để sắp xếp"
+        }
+    }
+
+    fun currentTrackBadge(isPlaying: Boolean): String =
+        if (isPlaying) "Đang phát" else "Bài hiện tại"
+
     fun deriveSourceBadge(
         item: MediaItem,
         isOfflineDownloaded: Boolean = false,

@@ -348,6 +348,7 @@
                     android:id="@+id/queueButton"
                     android:layout_width="48dp"
                     android:layout_height="48dp"
+                    android:visibility="gone"
                     android:padding="12dp"
                     android:background="@drawable/bg_button_control"
                     android:src="@drawable/ic_queue_music"
@@ -381,6 +382,7 @@
                     android:id="@+id/accountsButton"
                     android:layout_width="wrap_content"
                     android:layout_height="48dp"
+                    android:visibility="gone"
                     android:minWidth="48dp"
                     android:gravity="center"
                     android:paddingStart="14dp"
@@ -557,6 +559,16 @@
                         android:textColor="@color/text_secondary"
                         android:visibility="gone" />
                 </LinearLayout>
+
+                <TextView
+                    android:id="@+id/queueSummaryView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:textSize="11sp"
+                    android:maxLines="2"
+                    android:textColor="@color/text_secondary"
+                    android:text="Mở Thư viện để chọn bài" />
 
                 <View
                     android:layout_width="match_parent"
