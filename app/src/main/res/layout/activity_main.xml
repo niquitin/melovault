@@ -421,6 +421,23 @@
                     android:layout_height="1dp" />
 
                 <TextView
+                    android:id="@+id/quickPlaylistsButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:background="@drawable/bg_button_control"
+                    android:text="Playlist"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:contentDescription="Mở danh sách Playlist của tôi" />
+
+                <View
+                    android:layout_width="6dp"
+                    android:layout_height="1dp" />
+
+                <TextView
                     android:id="@+id/quickQueueButton"
                     android:layout_width="0dp"
                     android:layout_height="48dp"

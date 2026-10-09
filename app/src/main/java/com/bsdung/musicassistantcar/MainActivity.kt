@@ -924,6 +924,14 @@ class MainActivity : AppCompatActivity() {
             scroll?.post { scroll.smoothScrollTo(0, binding.libraryCard.top) }
         }
         binding.quickSourcesButton.setOnClickListener { showMusicAccountsDialog() }
+        binding.quickPlaylistsButton.setOnClickListener {
+            if (isQueueVisible) hideQueue()
+            if (isLyricsVisible) hideLyrics()
+            handleQuickFilterClick(RemoteCatalog.PLAYLISTS_ID, "Danh sách phát")
+            // Compact screen keeps the library below Now Playing; reveal it directly.
+            val scroll = findViewById<androidx.core.widget.NestedScrollView>(R.id.mainScrollContainer)
+            scroll?.post { scroll.smoothScrollTo(0, binding.libraryCard.top) }
+        }
 
         binding.queueBackButton.setOnClickListener {
             hideQueue()

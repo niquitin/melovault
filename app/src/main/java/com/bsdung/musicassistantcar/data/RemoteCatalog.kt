@@ -274,7 +274,9 @@ class RemoteCatalog(
                     )
                 )
             }
-            return items
+            // The new-playlist action occupies one slot on the first page.
+            // Page every row (rather than returning the whole catalog repeatedly).
+            return PlaylistBrowsePaging.page(items, page, pageSize)
         }
 
         if (parentId == DRIVE_ID) {
