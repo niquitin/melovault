@@ -50,7 +50,9 @@ import com.bsdung.musicassistantcar.data.UnifiedTrackDto
 import com.bsdung.musicassistantcar.ui.util.UnifiedPlaybackMapper
 import com.bsdung.musicassistantcar.ui.util.ArtworkGestureAction
 import com.bsdung.musicassistantcar.ui.util.ArtworkGesturePolicy
+import com.bsdung.musicassistantcar.ui.util.ContinuousPagingPolicy
 import com.bsdung.musicassistantcar.ui.util.MobilePlayerLayoutPolicy
+import com.bsdung.musicassistantcar.ui.util.PlaylistReorderGuard
 import com.bsdung.musicassistantcar.data.AccountConnectionState
 import com.bsdung.musicassistantcar.data.AccountProvider
 import com.bsdung.musicassistantcar.data.AccountStatusDto
@@ -201,11 +203,14 @@ class MainActivity : AppCompatActivity() {
     private var savedRecyclerState: Parcelable? = null
     private var pendingRestorePosition: Int? = null
     private var pendingRestoreOffset: Int? = null
-    private val pageSize = 30
-    private var isPagingLoading: Boolean = false
-    private var isPagingEndReached: Boolean = false
-    private var currentLoadedPages: Int = 0
+    private val pagingPolicy = ContinuousPagingPolicy(pageSize = 30)
+    private val pageSize: Int get() = pagingPolicy.pageSize
+    private val isPagingLoading: Boolean get() = pagingPolicy.isLoading
+    private val isPagingEndReached: Boolean get() = pagingPolicy.isEndReached
+    private val currentLoadedPages: Int get() = pagingPolicy.currentLoadedPages
     private var pagingGeneration: Long = 0L
+    private var dragInitialItems: List<com.bsdung.musicassistantcar.ui.model.LibraryItem>? = null
+    private var dragInitialTrackIds: List<String>? = null
     private var currentCollectionRequestId: Long = 0L
     private val collectionFetchExecutor = Executors.newSingleThreadExecutor()
     @Volatile
@@ -596,6 +601,16 @@ class MainActivity : AppCompatActivity() {
                 return 0
             }
 
+            override fun onSelectedChanged(viewHolder: RecyclerView.ViewHolder?, actionState: Int) {
+                super.onSelectedChanged(viewHolder, actionState)
+                if (actionState == ItemTouchHelper.ACTION_STATE_DRAG) {
+                    dragInitialItems = libraryAdapter.getItems()
+                    dragInitialTrackIds = libraryAdapter.getItems()
+                        .filterIsInstance<LibraryItem.Track>()
+                        .map { it.id }
+                }
+            }
+
             override fun onMove(
                 recyclerView: RecyclerView,
                 viewHolder: RecyclerView.ViewHolder,
@@ -604,6 +619,13 @@ class MainActivity : AppCompatActivity() {
                 val from = viewHolder.bindingAdapterPosition
                 val to = target.bindingAdapterPosition
                 if (from == RecyclerView.NO_POSITION || to == RecyclerView.NO_POSITION) return false
+                val canMove = PlaylistReorderGuard.canMove(
+                    isEditMode = libraryAdapter.isEditMode,
+                    canReorder = libraryAdapter.canReorder,
+                    fromIsTrack = viewHolder is LibraryAdapter.TrackViewHolder,
+                    toIsTrack = target is LibraryAdapter.TrackViewHolder,
+                )
+                if (!canMove) return false
                 return libraryAdapter.moveItem(from, to)
             }
 
@@ -612,29 +634,49 @@ class MainActivity : AppCompatActivity() {
             override fun clearView(recyclerView: RecyclerView, viewHolder: RecyclerView.ViewHolder) {
                 super.clearView(recyclerView, viewHolder)
                 val currentParent = navManager.currentParentId
-                if (currentParent.startsWith(RemoteCatalog.PLAYLIST_PREFIX)) {
-                    val playlistId = currentParent.removePrefix(RemoteCatalog.PLAYLIST_PREFIX).toIntOrNull()
-                    if (playlistId != null) {
-                        val currentTrackIds = libraryAdapter.getItems()
-                            .filterIsInstance<LibraryItem.Track>()
-                            .map { it.id }
-                        if (currentTrackIds.size != currentTrackIds.distinct().size) {
-                            Toast.makeText(this@MainActivity, "Danh sách có bài hát trùng lặp, không thể sắp xếp lại", Toast.LENGTH_SHORT).show()
-                            loadChildren(navManager.currentParentId, 0, navManager.currentLabel)
-                            return
-                        }
-                        val offset = 0
+                val playlistId = if (currentParent.startsWith(RemoteCatalog.PLAYLIST_PREFIX)) {
+                    currentParent.removePrefix(RemoteCatalog.PLAYLIST_PREFIX).toIntOrNull()
+                } else null
+
+                val currentTrackIds = libraryAdapter.getItems()
+                    .filterIsInstance<LibraryItem.Track>()
+                    .map { it.id }
+                val initialTrackIds = dragInitialTrackIds ?: currentTrackIds
+                val snapshot = dragInitialItems ?: libraryAdapter.getItems()
+
+                when (val decision = PlaylistReorderGuard.evaluateReorder(
+                    playlistId = playlistId,
+                    initialTrackIds = initialTrackIds,
+                    currentTrackIds = currentTrackIds,
+                    isPagingLoading = pagingPolicy.isLoading,
+                )) {
+                    is PlaylistReorderGuard.Decision.NoOp -> {
+                        // Drag was a no-op or not in a playlist; no action needed
+                    }
+                    is PlaylistReorderGuard.Decision.RejectedInFlightPaging -> {
+                        Toast.makeText(this@MainActivity, decision.reason, Toast.LENGTH_SHORT).show()
+                        libraryAdapter.submitItems(snapshot)
+                    }
+                    is PlaylistReorderGuard.Decision.RejectedDuplicateTracks -> {
+                        Toast.makeText(this@MainActivity, decision.reason, Toast.LENGTH_SHORT).show()
+                        libraryAdapter.submitItems(snapshot)
+                    }
+                    is PlaylistReorderGuard.Decision.Proceed -> {
                         uiExecutor.submit {
-                            val ok = runCatching { uiCatalog.reorderPlaylist(playlistId, currentTrackIds, offset) }.getOrDefault(false)
+                            val ok = runCatching {
+                                uiCatalog.reorderPlaylist(decision.playlistId, decision.trackIds, decision.offset)
+                            }.getOrDefault(false)
                             runOnUiThread {
                                 if (!ok) {
                                     Toast.makeText(this@MainActivity, "Không thể lưu thứ tự danh sách phát", Toast.LENGTH_SHORT).show()
-                                    loadChildren(navManager.currentParentId, 0, navManager.currentLabel)
+                                    libraryAdapter.submitItems(snapshot)
                                 }
                             }
                         }
                     }
                 }
+                dragInitialItems = null
+                dragInitialTrackIds = null
             }
         }
         libraryItemTouchHelper = ItemTouchHelper(libraryTouchCallback).also {
@@ -656,7 +698,7 @@ class MainActivity : AppCompatActivity() {
                     val lm = recyclerView.layoutManager as? LinearLayoutManager ?: return
                     val total = lm.itemCount
                     val lastVisible = lm.findLastVisibleItemPosition()
-                    if (!isPagingLoading && !isPagingEndReached && total > 0 && lastVisible >= total - 4) {
+                    if (pagingPolicy.shouldFetchOnScroll(dy, lastVisible, total)) {
                         loadNextPage()
                     }
                 }
@@ -1464,10 +1506,7 @@ class MainActivity : AppCompatActivity() {
         updateHeaderAndBreadcrumbs()
 
         if (page == 0) {
-            pagingGeneration++
-            isPagingLoading = false
-            isPagingEndReached = false
-            currentLoadedPages = 0
+            pagingGeneration = pagingPolicy.reset()
             libraryAdapter.hideFooter()
         }
 
@@ -1540,10 +1579,12 @@ class MainActivity : AppCompatActivity() {
                         Log.i(TAG, "MAPPED LIBRARY COUNT: ${uiItems.size}")
 
                         if (page == 0) {
-                            currentLoadedPages = 1
-                            if (uiItems.size < pageSize || (total >= 0 && uiItems.size >= total)) {
-                                isPagingEndReached = true
-                            }
+                            pagingPolicy.onPageSuccess(
+                                callbackGeneration = pagingGeneration,
+                                newItemsCount = uiItems.size,
+                                totalInCollection = total,
+                                loadedItemsCount = uiItems.size,
+                            )
                         }
 
                         renderItems(uiItems)
@@ -1599,10 +1640,7 @@ class MainActivity : AppCompatActivity() {
         updateHeaderAndBreadcrumbs()
 
         if (page == 0) {
-            pagingGeneration++
-            isPagingLoading = false
-            isPagingEndReached = false
-            currentLoadedPages = 0
+            pagingGeneration = pagingPolicy.reset()
             libraryAdapter.hideFooter()
         }
 
@@ -1625,10 +1663,10 @@ class MainActivity : AppCompatActivity() {
                     .onSuccess { rawItems ->
                         val uiItems = mapToUiItems(rawItems)
                         if (page == 0) {
-                            currentLoadedPages = 1
-                            if (uiItems.size < pageSize) {
-                                isPagingEndReached = true
-                            }
+                            pagingPolicy.onPageSuccess(
+                                callbackGeneration = pagingGeneration,
+                                newItemsCount = uiItems.size,
+                            )
                         }
                         renderItems(uiItems)
                     }
@@ -1770,21 +1808,26 @@ class MainActivity : AppCompatActivity() {
         binding.nextPageButton.visibility = View.GONE
     }
 
-    private fun loadNextPage() {
-        if (isPagingLoading || isPagingEndReached) return
-        if (navManager.isAtRoot) return
-        val currentParent = navManager.currentParentId
-        if (currentParent.isBlank()) return
-
-        isPagingLoading = true
+    private fun loadNextPage(isRetry: Boolean = false) {
         val generation = pagingGeneration
-        val nextPage = currentLoadedPages
+        if (!pagingPolicy.startLoading(generation, isRetry = isRetry)) return
+        if (navManager.isAtRoot) {
+            pagingPolicy.onPageFailure(generation, "At root")
+            return
+        }
+        val currentParent = navManager.currentParentId
+        if (currentParent.isBlank()) {
+            pagingPolicy.onPageFailure(generation, "Blank parent")
+            return
+        }
+
+        val nextPage = pagingPolicy.currentLoadedPages
         libraryAdapter.showFooter(isError = false)
 
         if (currentParent == "search") {
             val query = navManager.searchQuery
             if (query.isBlank()) {
-                isPagingLoading = false
+                pagingPolicy.onPageFailure(generation, "Blank query")
                 libraryAdapter.hideFooter()
                 return
             }
@@ -1794,32 +1837,25 @@ class MainActivity : AppCompatActivity() {
                 }
                 runOnUiThread {
                     if (generation != pagingGeneration) {
-                        isPagingLoading = false
                         return@runOnUiThread
                     }
                     result.onSuccess { rawItems ->
                         val uiItems = mapToUiItems(rawItems)
                         if (uiItems.isEmpty()) {
-                            isPagingEndReached = true
+                            pagingPolicy.onPageSuccess(generation, 0)
                             libraryAdapter.hideFooter()
                         } else {
-                            currentLoadedPages++
+                            pagingPolicy.onPageSuccess(generation, uiItems.size)
                             libraryAdapter.appendItems(uiItems)
-                            if (uiItems.size < pageSize) {
-                                isPagingEndReached = true
-                                libraryAdapter.hideFooter()
-                            } else {
-                                libraryAdapter.hideFooter()
-                            }
+                            libraryAdapter.hideFooter()
                         }
-                        isPagingLoading = false
                     }.onFailure { exc ->
                         Log.w(TAG, "Search paging failed: ${exc.message}")
-                        isPagingLoading = false
+                        pagingPolicy.onPageFailure(generation, exc.message)
                         libraryAdapter.showFooter(
                             isError = true,
-                            errorMessage = "Không tải được thêm",
-                            onRetry = { loadNextPage() }
+                            errorMessage = pagingPolicy.errorMessage ?: "Không tải được thêm",
+                            onRetry = { loadNextPage(isRetry = true) }
                         )
                     }
                 }
@@ -1829,7 +1865,7 @@ class MainActivity : AppCompatActivity() {
 
         val mediaBrowser = browser
         if (mediaBrowser == null) {
-            isPagingLoading = false
+            pagingPolicy.onPageFailure(generation, "Browser disconnected")
             libraryAdapter.hideFooter()
             return
         }
@@ -1845,7 +1881,6 @@ class MainActivity : AppCompatActivity() {
         future.addListener(
             {
                 if (generation != pagingGeneration) {
-                    isPagingLoading = false
                     return@addListener
                 }
                 runCatching { future.get() }
@@ -1853,40 +1888,39 @@ class MainActivity : AppCompatActivity() {
                         val code = result.resultCode
                         if (code != androidx.media3.session.LibraryResult.RESULT_SUCCESS) {
                             Log.w(TAG, "getChildren paging error code: $code")
-                            isPagingLoading = false
+                            pagingPolicy.onPageFailure(generation, "Lỗi mã $code")
                             libraryAdapter.showFooter(
                                 isError = true,
-                                errorMessage = "Không tải được thêm",
-                                onRetry = { loadNextPage() }
+                                errorMessage = pagingPolicy.errorMessage ?: "Không tải được thêm",
+                                onRetry = { loadNextPage(isRetry = true) }
                             )
                             return@onSuccess
                         }
                         val rawItems = result.value.orEmpty()
                         val uiItems = mapToUiItems(rawItems)
                         if (uiItems.isEmpty()) {
-                            isPagingEndReached = true
+                            pagingPolicy.onPageSuccess(generation, 0)
                             libraryAdapter.hideFooter()
                         } else {
-                            currentLoadedPages++
-                            libraryAdapter.appendItems(uiItems)
                             val firstExtras = rawItems.firstOrNull()?.mediaMetadata?.extras
                             val total = firstExtras?.getInt("collection_total", -1) ?: -1
-                            if (uiItems.size < pageSize || (total >= 0 && libraryAdapter.itemCount >= total)) {
-                                isPagingEndReached = true
-                                libraryAdapter.hideFooter()
-                            } else {
-                                libraryAdapter.hideFooter()
-                            }
+                            pagingPolicy.onPageSuccess(
+                                callbackGeneration = generation,
+                                newItemsCount = uiItems.size,
+                                totalInCollection = total,
+                                loadedItemsCount = libraryAdapter.itemCount + uiItems.size,
+                            )
+                            libraryAdapter.appendItems(uiItems)
+                            libraryAdapter.hideFooter()
                         }
-                        isPagingLoading = false
                     }
                     .onFailure { exc ->
                         Log.w(TAG, "getChildren paging failed: ${exc.message}")
-                        isPagingLoading = false
+                        pagingPolicy.onPageFailure(generation, exc.message)
                         libraryAdapter.showFooter(
                             isError = true,
-                            errorMessage = "Không tải được thêm",
-                            onRetry = { loadNextPage() }
+                            errorMessage = pagingPolicy.errorMessage ?: "Không tải được thêm",
+                            onRetry = { loadNextPage(isRetry = true) }
                         )
                     }
             },

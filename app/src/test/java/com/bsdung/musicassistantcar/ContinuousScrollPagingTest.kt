@@ -199,4 +199,139 @@ class ContinuousScrollPagingTest {
         assertEquals("drive-file:0", adapter.getItems().first().id)
         assertEquals("drive-file:135", adapter.getItems().last().id)
     }
+
+    @Test
+    fun testPagingPolicyPreventsScrollStormOnError() {
+        val policy = com.bsdung.musicassistantcar.ui.util.ContinuousPagingPolicy(pageSize = 30)
+        val gen = policy.reset()
+
+        // Page 0 succeeds
+        assertTrue(policy.startLoading(gen))
+        assertTrue(policy.onPageSuccess(gen, newItemsCount = 30))
+        assertEquals(com.bsdung.musicassistantcar.ui.util.ContinuousPagingPolicy.State.IDLE, policy.state)
+
+        // User scrolls near bottom -> start loading Page 1
+        assertTrue(policy.shouldFetchOnScroll(dy = 10, lastVisiblePosition = 27, totalItemCount = 30))
+        assertTrue(policy.startLoading(gen))
+        assertEquals(com.bsdung.musicassistantcar.ui.util.ContinuousPagingPolicy.State.LOADING, policy.state)
+
+        // Backend returns error (e.g. 500 or timeout)
+        assertTrue(policy.onPageFailure(gen, "500 Server Error"))
+        assertEquals(com.bsdung.musicassistantcar.ui.util.ContinuousPagingPolicy.State.ERROR, policy.state)
+        assertEquals("500 Server Error", policy.errorMessage)
+
+        // User continues scrolling down: MUST NOT trigger load or storm network!
+        assertFalse("Scroll must be blocked in ERROR state", policy.shouldFetchOnScroll(dy = 15, lastVisiblePosition = 27, totalItemCount = 30))
+        assertFalse("Direct startLoading without retry must be rejected", policy.startLoading(gen, isRetry = false))
+        assertEquals(com.bsdung.musicassistantcar.ui.util.ContinuousPagingPolicy.State.ERROR, policy.state)
+
+        // User clicks retry button on footer: explicit retry allowed
+        assertTrue("Explicit retry must be accepted", policy.startLoading(gen, isRetry = true))
+        assertEquals(com.bsdung.musicassistantcar.ui.util.ContinuousPagingPolicy.State.LOADING, policy.state)
+
+        // Retry succeeds
+        assertTrue(policy.onPageSuccess(gen, newItemsCount = 30))
+        assertEquals(com.bsdung.musicassistantcar.ui.util.ContinuousPagingPolicy.State.IDLE, policy.state)
+    }
+
+    @Test
+    fun testPagingPolicyRejectsStaleCallbacksFromOlderGenerations() {
+        val policy = com.bsdung.musicassistantcar.ui.util.ContinuousPagingPolicy(pageSize = 30)
+        val oldGen = policy.reset()
+
+        assertTrue(policy.startLoading(oldGen))
+
+        // User navigates away to another folder
+        val newGen = policy.reset()
+        assertTrue(newGen > oldGen)
+
+        // Stale response arrives from oldGen
+        assertFalse("Stale success must be ignored", policy.onPageSuccess(oldGen, newItemsCount = 30))
+        assertFalse("Stale failure must be ignored", policy.onPageFailure(oldGen, "Timeout"))
+        assertEquals(0, policy.currentLoadedPages)
+        assertEquals(com.bsdung.musicassistantcar.ui.util.ContinuousPagingPolicy.State.IDLE, policy.state)
+    }
+
+    @Test
+    fun testPagingPolicyEndReachedStopsFurtherFetches() {
+        val policy = com.bsdung.musicassistantcar.ui.util.ContinuousPagingPolicy(pageSize = 30)
+        val gen = policy.reset()
+
+        // Page returns fewer than pageSize items -> reached end
+        assertTrue(policy.startLoading(gen))
+        assertTrue(policy.onPageSuccess(gen, newItemsCount = 15, totalInCollection = 45, loadedItemsCount = 45))
+        assertTrue(policy.isEndReached)
+
+        // Further scroll events must never fetch
+        assertFalse(policy.shouldFetchOnScroll(dy = 20, lastVisiblePosition = 44, totalItemCount = 45))
+        assertFalse(policy.startLoading(gen))
+    }
+
+    @Test
+    fun testPlaylistReorderGuardContractAndRollback() {
+        val guard = com.bsdung.musicassistantcar.ui.util.PlaylistReorderGuard
+
+        // 1. No-op drag (items dragged and returned to original order)
+        val originalIds = listOf("track:101", "track:102", "track:103", "track:104")
+        val noOpDecision = guard.evaluateReorder(
+            playlistId = 42,
+            initialTrackIds = originalIds,
+            currentTrackIds = originalIds,
+            isPagingLoading = false,
+        )
+        assertTrue(noOpDecision is com.bsdung.musicassistantcar.ui.util.PlaylistReorderGuard.Decision.NoOp)
+
+        // 2. In-flight paging fetch reject
+        val reorderedIds = listOf("track:102", "track:101", "track:103", "track:104")
+        val inFlightDecision = guard.evaluateReorder(
+            playlistId = 42,
+            initialTrackIds = originalIds,
+            currentTrackIds = reorderedIds,
+            isPagingLoading = true,
+        )
+        assertTrue(inFlightDecision is com.bsdung.musicassistantcar.ui.util.PlaylistReorderGuard.Decision.RejectedInFlightPaging)
+
+        // 3. Duplicate track IDs in playlist reject
+        val duplicateIds = listOf("track:102", "track:101", "track:102", "track:104")
+        val dupDecision = guard.evaluateReorder(
+            playlistId = 42,
+            initialTrackIds = originalIds,
+            currentTrackIds = duplicateIds,
+            isPagingLoading = false,
+        )
+        assertTrue(dupDecision is com.bsdung.musicassistantcar.ui.util.PlaylistReorderGuard.Decision.RejectedDuplicateTracks)
+
+        // 4. Multi-page prefix reorder succeeds with offset = 0
+        val multiPagePrefix = (1..60).map { "track:$it" }
+        val multiPageReordered = listOf("track:2") + (1..60).filter { it != 2 }.map { "track:$it" }
+        val proceedDecision = guard.evaluateReorder(
+            playlistId = 42,
+            initialTrackIds = multiPagePrefix,
+            currentTrackIds = multiPageReordered,
+            isPagingLoading = false,
+        )
+        assertTrue(proceedDecision is com.bsdung.musicassistantcar.ui.util.PlaylistReorderGuard.Decision.Proceed)
+        val proceed = proceedDecision as com.bsdung.musicassistantcar.ui.util.PlaylistReorderGuard.Decision.Proceed
+        assertEquals(42, proceed.playlistId)
+        assertEquals(0, proceed.offset)
+        assertEquals(multiPageReordered, proceed.trackIds)
+
+        // 5. Non-track target rejection (e.g. footer)
+        assertFalse(guard.canMove(isEditMode = true, canReorder = true, fromIsTrack = true, toIsTrack = false))
+        assertTrue(guard.canMove(isEditMode = true, canReorder = true, fromIsTrack = true, toIsTrack = true))
+
+        // 6. Rollback snapshot simulation on adapter
+        val adapter = LibraryAdapter({}, {}, { _, _, _ -> })
+        val snapshot = (1..10).map { createTrack("track:$it", "Song $it") }
+        adapter.submitItems(snapshot)
+
+        // Simulate local drag mutation
+        adapter.moveItem(0, 1)
+        assertEquals("track:2", adapter.getItems()[0].id)
+
+        // Rollback to snapshot on failure restores exact original state
+        adapter.submitItems(snapshot)
+        assertEquals("track:1", adapter.getItems()[0].id)
+        assertEquals(10, adapter.itemCount)
+    }
 }

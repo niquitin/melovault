@@ -49,12 +49,16 @@ class UnifiedLibraryDialog(
     private var hasPendingReload: Boolean = false
     private var requestGeneration: Long = 0L
     private val displayedItems = mutableListOf<UnifiedTrackDto>()
+    private var isAppendError: Boolean = false
 
     // Views created programmatically
     private val loadingBar: ProgressBar
     private val statusMessageView: TextView
     private val retryButton: Button
     private val recyclerView: RecyclerView
+    private val appendRetryBar: LinearLayout
+    private val appendErrorText: TextView
+    private val appendRetryButton: Button
     private val prevButton: Button
     private val nextButton: Button
     private val pageIndicatorView: TextView
@@ -285,7 +289,7 @@ class UnifiedLibraryDialog(
                     val lm = rv.layoutManager as? LinearLayoutManager ?: return
                     val total = lm.itemCount
                     val lastVisible = lm.findLastVisibleItemPosition()
-                    if (!isLoading && displayedItems.size < totalItems && lastVisible >= total - 4) {
+                    if (!isLoading && !isAppendError && displayedItems.size < totalItems && lastVisible >= total - 4) {
                         loadNextPage()
                     }
                 }
@@ -305,6 +309,41 @@ class UnifiedLibraryDialog(
         )
         recyclerView.adapter = adapter
         root.addView(recyclerView)
+
+        // 7b. Append Error / Retry Bar (Continuous Scrolling)
+        appendRetryBar = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            visibility = View.GONE
+            setPadding(0, dp(8), 0, dp(8))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+        appendErrorText = TextView(activity).apply {
+            text = "Không tải được thêm"
+            textSize = 13f
+            setTextColor(ContextCompat.getColor(activity, R.color.text_secondary))
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        appendRetryButton = Button(activity).apply {
+            text = "Thử lại"
+            textSize = 12f
+            isAllCaps = false
+            setTextColor(ContextCompat.getColor(activity, R.color.text_primary))
+            setBackgroundResource(R.drawable.bg_button_control)
+            minHeight = dp(44)
+            setPadding(dp(12), 0, dp(12), 0)
+            setOnClickListener {
+                isAppendError = false
+                appendRetryBar.visibility = View.GONE
+                loadNextPage()
+            }
+        }
+        appendRetryBar.addView(appendErrorText)
+        appendRetryBar.addView(appendRetryButton)
+        root.addView(appendRetryBar)
 
         // 8. Pagination Controls Layout (Hidden for continuous vertical scrolling)
         val paginationLayout = LinearLayout(activity).apply {
@@ -374,11 +413,13 @@ class UnifiedLibraryDialog(
         dialog.show()
         currentOffset = 0
         displayedItems.clear()
+        isAppendError = false
+        appendRetryBar.visibility = View.GONE
         loadCurrentPage(append = false)
     }
 
     private fun loadNextPage() {
-        if (isLoading || isDismissed) return
+        if (isLoading || isDismissed || isAppendError) return
         if (displayedItems.size >= totalItems) return
         currentOffset = displayedItems.size
         loadCurrentPage(append = true)
@@ -398,6 +439,8 @@ class UnifiedLibraryDialog(
         currentQuery = newState.query
         currentOffset = 0
         displayedItems.clear()
+        isAppendError = false
+        appendRetryBar.visibility = View.GONE
         updateFilterButtonStyles()
         requestGeneration++
         if (isLoading) {
@@ -418,6 +461,8 @@ class UnifiedLibraryDialog(
         currentQuery = newState.query
         currentOffset = 0
         displayedItems.clear()
+        isAppendError = false
+        appendRetryBar.visibility = View.GONE
         updateFilterButtonStyles()
         requestGeneration++
         if (isLoading) {
@@ -502,6 +547,8 @@ class UnifiedLibraryDialog(
                 result.fold(
                     onSuccess = { (items, total) ->
                         totalItems = total
+                        isAppendError = false
+                        appendRetryBar.visibility = View.GONE
                         if (append) {
                             displayedItems.addAll(items)
                         } else {
@@ -512,6 +559,9 @@ class UnifiedLibraryDialog(
                     },
                     onFailure = { err ->
                         if (append) {
+                            isAppendError = true
+                            appendRetryBar.visibility = View.VISIBLE
+                            appendErrorText.text = "Không tải được thêm: ${err.message ?: "Lỗi kết nối"}"
                             Toast.makeText(activity, "Không tải được thêm: ${err.message ?: "Lỗi mạng"}", Toast.LENGTH_SHORT).show()
                         } else {
                             showError("Không thể tải danh sách: ${err.message ?: "Lỗi mạng"}")
