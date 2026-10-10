@@ -38,7 +38,9 @@ object NetworkRecoveryPolicy {
         if (networkRecoveryInProgress) {
             return false
         }
-        if (nowMs - lastNetworkRecoveryAttemptMs < NETWORK_RECOVERY_COOLDOWN_MS) {
+        if (lastNetworkRecoveryAttemptMs > 0L &&
+            nowMs - lastNetworkRecoveryAttemptMs < NETWORK_RECOVERY_COOLDOWN_MS
+        ) {
             return false
         }
         return true

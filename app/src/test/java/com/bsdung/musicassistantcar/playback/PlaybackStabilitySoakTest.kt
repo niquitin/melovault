@@ -10,6 +10,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import kotlin.math.roundToInt
 
@@ -430,6 +431,48 @@ class PlaybackStabilitySoakTest {
     }
 
     @Test
+    fun testFaultInjection_firstAttemptAllowedEvenWhenNowMsUnderCooldownThreshold() {
+        val errorCode = PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+
+        // First attempt ever: lastNetworkRecoveryAttemptMs = 0L, nowMs = 1_500L (< 5,000ms cooldown threshold)
+        // Must be ALLOWED immediately without waiting 5 seconds from boot
+        val firstAttemptAllowed = NetworkRecoveryPolicy.canAttemptRecovery(
+            isShuttingDown = false,
+            isPlayerInitialized = true,
+            queueSize = 5,
+            networkRecoveryInProgress = false,
+            nowMs = 1_500L,
+            lastNetworkRecoveryAttemptMs = 0L,
+            errorCode = errorCode,
+        )
+        assertTrue("First recovery attempt must succeed even when nowMs < 5000ms", firstAttemptAllowed)
+
+        // Second immediate attempt at 2,000ms: cooldown is now active (nowMs - last = 500ms < 5000ms)
+        val secondAttemptBlocked = NetworkRecoveryPolicy.canAttemptRecovery(
+            isShuttingDown = false,
+            isPlayerInitialized = true,
+            queueSize = 5,
+            networkRecoveryInProgress = false,
+            nowMs = 2_000L,
+            lastNetworkRecoveryAttemptMs = 1_500L,
+            errorCode = errorCode,
+        )
+        assertFalse("Subsequent attempt within 5000ms must be blocked by cooldown", secondAttemptBlocked)
+
+        // Third attempt at 6,501ms: cooldown satisfied (> 5000ms elapsed since 1,500L)
+        val thirdAttemptAllowed = NetworkRecoveryPolicy.canAttemptRecovery(
+            isShuttingDown = false,
+            isPlayerInitialized = true,
+            queueSize = 5,
+            networkRecoveryInProgress = false,
+            nowMs = 6_501L,
+            lastNetworkRecoveryAttemptMs = 1_500L,
+            errorCode = errorCode,
+        )
+        assertTrue("Attempt after cooldown must succeed", thirdAttemptAllowed)
+    }
+
+    @Test
     fun testFaultInjection_sourceBadgesAndOfflinePrioritization() {
         val offlineItem = MediaItem.Builder()
             .setMediaId("car_offline_1")
@@ -534,17 +577,22 @@ class PlaybackStabilitySoakTest {
     }
 
     // =========================================================================
-    // 8. EXTENDED HEADLESS PLAYBACK STABILITY SOAK (Triggered by file or env)
+    // 8. EXTENDED SIMULATED TIMELINE SOAK (Triggered by file or env; SKIPPED by default)
     // =========================================================================
 
+    /**
+     * Optional extended timeline soak simulating playhead/queue pacing with Kotlin variables.
+     * Note: This does NOT invoke real ExoPlayer audio hardware, MediaSession binder, or real decoder.
+     * When soak_trigger.txt and SOAK_MINUTES are absent, this test is cleanly SKIPPED via Assume.
+     */
     @Test
-    fun testExtendedHeadlessPlaybackSoak() {
+    fun testExtendedSimulatedTimelineSoak_manualTriggerOnly() {
         val triggerFile = java.io.File("C:\\Bots\\MeloVaultReports\\20261010\\soak_trigger.txt")
         val envMinutes = System.getenv("SOAK_MINUTES")?.toIntOrNull() ?: 0
-        if (!triggerFile.exists() && envMinutes <= 0) {
-            // Skipped in default test runs to keep unit test cycle fast (<1s)
-            return
-        }
+        assumeTrue(
+            "Extended simulated soak skipped: requires soak_trigger.txt or SOAK_MINUTES env",
+            triggerFile.exists() || envMinutes > 0,
+        )
 
         val configText = if (triggerFile.exists()) triggerFile.readText().trim() else ""
         val soakMinutes = Regex("minutes=(\\d+)").find(configText)?.groupValues?.get(1)?.toIntOrNull()
