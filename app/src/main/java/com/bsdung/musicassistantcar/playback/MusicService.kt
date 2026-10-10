@@ -97,6 +97,8 @@ class MusicService : MediaLibraryService() {
         Collections.synchronizedSet(mutableSetOf())
     private lateinit var trackResumeStore: TrackResumeStore
     private var serviceShuttingDown = false
+    @Volatile private var incomingBrowseQueue: Pair<QueueBrowseSeed, List<String>>? = null
+    private var browseQueueCursor: QueuePageCursor? = null
     private var lastActiveMediaId: String? = null
     private var lastKnownPositionMs: Long = 0L
     private var lastKnownDurationMs: Long = 0L
@@ -353,6 +355,7 @@ class MusicService : MediaLibraryService() {
 
             override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
                 Log.d(TAG, "onTimelineChanged: reason=$reason, queueSize=${player.mediaItemCount}")
+                syncBrowseQueue()
                 persistPlaybackState()
             }
 
@@ -478,6 +481,7 @@ class MusicService : MediaLibraryService() {
                 }
                 val currentIndex = player.currentMediaItemIndex
                 val queueSize = player.mediaItemCount
+                maybeExtendBrowseQueue()
                 val playbackSource = when {
                     mediaItem?.mediaMetadata?.extras?.getBoolean("is_offline_download") == true ||
                     mediaItem?.mediaMetadata?.extras?.getString("playback_source") == "PINNED_DOWNLOAD" ||
@@ -645,6 +649,9 @@ class MusicService : MediaLibraryService() {
                 ::loadPlaybackState,
                 onSessionRestore = { targetId ->
                     sessionRestoredMediaId = targetId
+                },
+                onBrowseQueueRequested = { seed, seedIds ->
+                    incomingBrowseQueue = seed?.let { it to seedIds }
                 },
             ),
         ).apply {
@@ -1016,6 +1023,88 @@ class MusicService : MediaLibraryService() {
         return START_STICKY
     }
 
+    private fun currentQueueIds(): List<String> =
+        (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }
+
+    /**
+     * Called only on the player application looper. A changed queue disables automatic
+     * extension rather than rewriting a user-edited queue with older source results.
+     */
+    private fun syncBrowseQueue() {
+        val actual = currentQueueIds()
+        val incoming = incomingBrowseQueue
+        if (incoming != null && incoming.second == actual) {
+            browseQueueCursor?.cancel()
+            browseQueueCursor = QueuePageCursor(incoming.first, actual)
+            incomingBrowseQueue = null
+            Log.i(TAG, "QUEUE_PAGING_START: source=${incoming.first.parentId}, nextPage=${incoming.first.nextPage}, size=${actual.size}")
+        } else if (browseQueueCursor != null && browseQueueCursor?.isUnchanged(actual) != true) {
+            Log.i(TAG, "QUEUE_PAGING_CANCEL: player queue edited/replaced")
+            browseQueueCursor?.cancel()
+            browseQueueCursor = null
+            incomingBrowseQueue = null
+        }
+        maybeExtendBrowseQueue()
+    }
+
+    private fun maybeExtendBrowseQueue() {
+        if (serviceShuttingDown || !::player.isInitialized || !::executor.isInitialized) return
+        val cursor = browseQueueCursor ?: return
+        val page = cursor.beginFetch(player.currentMediaItemIndex) ?: return
+        executor.execute {
+            val response = runCatching {
+                if (cursor.seed.parentId == "search") {
+                    catalog.search(cursor.seed.query, page, cursor.seed.pageSize)
+                } else {
+                    catalog.children(cursor.seed.parentId, page, cursor.seed.pageSize, cursor.seed.sort)
+                }
+            }
+            mainHandler.post {
+                if (serviceShuttingDown || browseQueueCursor !== cursor || !::player.isInitialized) {
+                    return@post
+                }
+                if (!cursor.isUnchanged(currentQueueIds())) {
+                    cursor.cancel()
+                    browseQueueCursor = null
+                    return@post
+                }
+                response.onSuccess { rows ->
+                    val tracks = rows.filter {
+                        it.mediaMetadata.isPlayable == true &&
+                            (it.mediaId.startsWith(RemoteCatalog.TRACK_PREFIX) ||
+                                it.mediaId.startsWith(RemoteCatalog.DRIVE_FILE_PREFIX) ||
+                                it.mediaId.startsWith(RemoteCatalog.DEVICE_PREFIX))
+                    }.map { item ->
+                        val id = RemoteCatalog.canonicalTrackMediaId(item)
+                            ?.removePrefix(RemoteCatalog.TRACK_PREFIX)?.toLongOrNull()
+                        val offline = id?.let {
+                            val manager = PinnedDownloadManager.getDefault(this)
+                            if (manager.isOfflineReady(it)) manager.getRecord(it)?.let(manager::toMediaItem) else null
+                        }
+                        offline ?: catalog.withCurrentQuality(item)
+                    }
+                    if (!cursor.acceptPage(page, rows.size, tracks.map { it.mediaId })) {
+                        return@onSuccess
+                    }
+                    if (tracks.isNotEmpty()) {
+                        player.addMediaItems(tracks)
+                        Log.i(TAG, "QUEUE_PAGING_APPEND: page=$page, appended=${tracks.size}, queue=${player.mediaItemCount}")
+                    } else {
+                        Log.i(TAG, "QUEUE_PAGING_EMPTY_ROWS: page=$page, sourceRows=${rows.size}")
+                    }
+                    // In a mixed folder-only page we may still have more playable tracks.
+                    // Delay the next request to avoid a tight loop or a busy server.
+                    if (rows.isNotEmpty() && tracks.isEmpty() && !cursor.endReached) {
+                        mainHandler.postDelayed({ maybeExtendBrowseQueue() }, 350L)
+                    }
+                }.onFailure { error ->
+                    cursor.fail(page)
+                    Log.w(TAG, "QUEUE_PAGING_PAUSED: page=$page; waiting for explicit user action", error)
+                }
+            }
+        }
+    }
+
     override fun onTaskRemoved(rootIntent: Intent?) {
         Log.i(
             TAG,
@@ -1050,6 +1139,9 @@ class MusicService : MediaLibraryService() {
 
     override fun onDestroy() {
         serviceShuttingDown = true
+        browseQueueCursor?.cancel()
+        browseQueueCursor = null
+        incomingBrowseQueue = null
         Log.i(TAG, "onDestroy: Tearing down MusicService")
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(prefsListener)
@@ -1074,6 +1166,7 @@ private class LibraryCallback(
     private val player: ExoPlayer,
     private val storedPlaybackState: () -> StoredPlaybackState?,
     private val onSessionRestore: (String?) -> Unit = {},
+    private val onBrowseQueueRequested: (QueueBrowseSeed?, List<String>) -> Unit = { _, _ -> },
 ) : MediaLibrarySession.Callback {
 
     companion object {
@@ -1309,6 +1402,24 @@ private class LibraryCallback(
         mediaItems: MutableList<MediaItem>,
     ): ListenableFuture<MutableList<MediaItem>> =
         executor.submit<MutableList<MediaItem>> {
+            val first = mediaItems.firstOrNull()
+            val extras = first?.mediaMetadata?.extras
+            val parent = extras?.getString(QueueBrowseSeed.KEY_PARENT).orEmpty()
+            val query = extras?.getString(QueueBrowseSeed.KEY_QUERY).orEmpty()
+            val nextPage = extras?.getInt(QueueBrowseSeed.KEY_NEXT_PAGE, 0) ?: 0
+            val pageSize = extras?.getInt(QueueBrowseSeed.KEY_PAGE_SIZE, 0) ?: 0
+            val seed = if (QueueBrowseSeed.supports(parent, query) &&
+                nextPage > 0 && pageSize in 1..100 && mediaItems.isNotEmpty()
+            ) {
+                QueueBrowseSeed(
+                    parentId = parent,
+                    sort = extras?.getString(QueueBrowseSeed.KEY_SORT).orEmpty(),
+                    query = query,
+                    nextPage = nextPage,
+                    pageSize = pageSize,
+                )
+            } else null
+            onBrowseQueueRequested(seed, mediaItems.map { it.mediaId })
             val queueSize = mediaItems.size
             val driveFileCount = mediaItems.count { it.mediaId.startsWith(RemoteCatalog.DRIVE_FILE_PREFIX) }
             Log.i(

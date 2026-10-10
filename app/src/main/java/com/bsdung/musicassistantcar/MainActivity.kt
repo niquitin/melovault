@@ -82,6 +82,7 @@ import com.bsdung.musicassistantcar.data.SignalPathInfo
 import com.bsdung.musicassistantcar.ui.util.SignalPathFormatter
 import com.bsdung.musicassistantcar.databinding.ActivityMainBinding
 import com.bsdung.musicassistantcar.playback.MusicService
+import com.bsdung.musicassistantcar.playback.QueueBrowseSeed
 import com.bsdung.musicassistantcar.ui.adapter.LibraryAdapter
 import com.bsdung.musicassistantcar.ui.adapter.QueueAdapter
 import com.bsdung.musicassistantcar.playback.QueueHelper
@@ -569,7 +570,7 @@ class MainActivity : AppCompatActivity() {
                 if (navManager.currentParentId == RemoteCatalog.DOWNLOADING_ID || item.mediaItem.mediaMetadata.extras?.getBoolean("is_download_job") == true) {
                     handleTrackDownloadClick(item)
                 } else {
-                    playQueue(tracks, index)
+                    playBrowseQueue(tracks, index)
                 }
             },
             onTrackLongClick = { track ->
@@ -4545,6 +4546,32 @@ class MainActivity : AppCompatActivity() {
                 add(player.getMediaItemAt(i))
             }
         }
+    }
+
+    /**
+     * A browse tap carries the NEXT source page into MusicService. The service,
+     * not this Activity, appends further pages even when the UI is backgrounded.
+     * Manual Play From Here / Queue edits intentionally do not carry this context.
+     */
+    private fun playBrowseQueue(items: List<MediaItem>, selectedIndex: Int) {
+        val parent = navManager.currentParentId
+        val query = if (parent == "search") navManager.searchQuery else ""
+        if (!QueueBrowseSeed.supports(parent, query) || items.isEmpty()) {
+            playQueue(items, selectedIndex)
+            return
+        }
+        val first = items.first()
+        val extras = Bundle(first.mediaMetadata.extras ?: Bundle()).apply {
+            putString(QueueBrowseSeed.KEY_PARENT, parent)
+            putString(QueueBrowseSeed.KEY_SORT, navManager.currentSort)
+            putString(QueueBrowseSeed.KEY_QUERY, query)
+            putInt(QueueBrowseSeed.KEY_NEXT_PAGE, currentLoadedPages.coerceAtLeast(1))
+            putInt(QueueBrowseSeed.KEY_PAGE_SIZE, pageSize)
+        }
+        val seededFirst = first.buildUpon()
+            .setMediaMetadata(first.mediaMetadata.buildUpon().setExtras(extras).build())
+            .build()
+        playQueue(listOf(seededFirst) + items.drop(1), selectedIndex)
     }
 
     private fun playQueue(items: List<MediaItem>, selectedIndex: Int) {
