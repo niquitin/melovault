@@ -52,6 +52,8 @@ import com.bsdung.musicassistantcar.ui.util.ArtworkGestureAction
 import com.bsdung.musicassistantcar.ui.util.ArtworkGesturePolicy
 import com.bsdung.musicassistantcar.ui.util.ContinuousPagingPolicy
 import com.bsdung.musicassistantcar.ui.util.MobilePlayerLayoutPolicy
+import com.bsdung.musicassistantcar.ui.util.QueuePlaylistExport
+import com.bsdung.musicassistantcar.ui.util.QueuePlaylistExportPolicy
 import com.bsdung.musicassistantcar.ui.util.PlaylistReorderGuard
 import com.bsdung.musicassistantcar.data.AccountConnectionState
 import com.bsdung.musicassistantcar.data.AccountProvider
@@ -1026,6 +1028,9 @@ class MainActivity : AppCompatActivity() {
 
         binding.queueClearButton.setOnClickListener {
             clearUpcoming()
+        }
+        binding.queueSavePlaylistButton.setOnClickListener {
+            saveQueueAsPlaylist()
         }
 
         // Lyrics Button & Panel Controls (Inline + Fullscreen Car UX)
@@ -2604,6 +2609,48 @@ class MainActivity : AppCompatActivity() {
                 }.onFailure {
                     Toast.makeText(this, "Không thể xóa bài hát", Toast.LENGTH_SHORT).show()
                 }
+            }
+        }
+    }
+
+    /**
+     * Poweramp-style one-touch snapshot: saves the queue currently loaded in
+     * MediaSession, without touching playback order, shuffle or seek position.
+     * Pages not yet fetched by MediaService are intentionally not represented.
+     */
+    private fun saveQueueAsPlaylist() {
+        val ids = buildCurrentQueueList().map { it.mediaId }
+        when (val plan = QueuePlaylistExportPolicy.plan(ids)) {
+            is QueuePlaylistExport.Empty -> {
+                Toast.makeText(this, "Không có bài từ kho nhạc để lưu", Toast.LENGTH_SHORT).show()
+            }
+            is QueuePlaylistExport.TooLarge -> {
+                AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                    .setTitle("Hàng đợi quá dài")
+                    .setMessage("Đang có ${plan.queueSize} mục, giới hạn lưu mỗi lần là ${plan.limit} mục. Hãy chọn Playlist hoặc thư mục để lưu toàn bộ danh sách.")
+                    .setPositiveButton("Đóng", null)
+                    .show()
+            }
+            is QueuePlaylistExport.Ready -> {
+                val notes = buildList {
+                    if (plan.ignoredUnsupported > 0) {
+                        add("${plan.ignoredUnsupported} bài từ nguồn chưa hỗ trợ lưu Playlist sẽ được bỏ qua.")
+                    }
+                    if (plan.ignoredDuplicates > 0) {
+                        add("${plan.ignoredDuplicates} bài trùng trong hàng đợi được lược bỏ.")
+                    }
+                    add("Nếu thư mục còn trang chưa tải, chỉ các bài hiện đang có trong hàng đợi được lưu.")
+                }
+                AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                    .setTitle("Lưu ${plan.mediaIds.size} bài thành Playlist")
+                    .setMessage(notes.joinToString("\n\n"))
+                    .setPositiveButton("Tiếp tục") { _, _ ->
+                        // Snapshot is fixed before the dialog opens, so rapid Next
+                        // or queue edits cannot change what the user chose to save.
+                        showCreatePlaylistDialog(initialTrackIds = plan.mediaIds)
+                    }
+                    .setNegativeButton("Hủy", null)
+                    .show()
             }
         }
     }
@@ -4373,6 +4420,7 @@ class MainActivity : AppCompatActivity() {
             binding.queueSummaryView.text = QueueHelper.formatQueueSummary(-1, 0)
             queueAdapter.submitItems(listOf(QueueListItem.Empty("Hàng đợi đang trống", isFullQueueEmpty = true)))
             binding.queueClearButton.visibility = View.GONE
+            binding.queueSavePlaylistButton.visibility = View.GONE
             return
         }
 
@@ -4400,6 +4448,7 @@ class MainActivity : AppCompatActivity() {
 
         val hasUpcoming = currentIndex in 0 until (queueItems.size - 1)
         binding.queueClearButton.visibility = if (hasUpcoming) View.VISIBLE else View.GONE
+        binding.queueSavePlaylistButton.visibility = if (queueItems.isNotEmpty()) View.VISIBLE else View.GONE
     }
 
     private fun playNext(track: LibraryItem.Track) {
@@ -6384,10 +6433,29 @@ class MainActivity : AppCompatActivity() {
                         result.onSuccess { playlist ->
                             if (!initialTrackIds.isNullOrEmpty()) {
                                 uiExecutor.submit {
-                                    val addRes = runCatching { uiCatalog.batchAddToPlaylist(playlist.id, initialTrackIds) }.getOrNull()
+                                    // The backend has a hard 100-track batch limit.
+                                    // Persist every accepted queue item in its original order.
+                                    var added = 0
+                                    var skipped = 0
+                                    var failed = false
+                                    for (batch in initialTrackIds.chunked(QueuePlaylistExportPolicy.BATCH_SIZE)) {
+                                        val result = runCatching {
+                                            uiCatalog.batchAddToPlaylist(playlist.id, batch)
+                                        }.getOrNull()
+                                        if (result == null) {
+                                            failed = true
+                                            break
+                                        }
+                                        added += result.added
+                                        skipped += result.skipped
+                                    }
                                     runOnUiThread {
-                                        val count = addRes?.added ?: initialTrackIds.size
-                                        Toast.makeText(this@MainActivity, "Đã tạo \"$name\" và thêm $count bài hát", Toast.LENGTH_SHORT).show()
+                                        val message = when {
+                                            failed -> "Đã tạo \"$name\", lưu được $added/${initialTrackIds.size} bài. Kiểm tra Playlist để thử lại phần còn thiếu."
+                                            skipped > 0 -> "Đã tạo \"$name\": thêm $added bài, bỏ qua $skipped bài không khả dụng hoặc trùng."
+                                            else -> "Đã tạo \"$name\" và thêm $added bài hát"
+                                        }
+                                        Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
                                         if (isEditMode) exitEditMode()
                                     }
                                 }
