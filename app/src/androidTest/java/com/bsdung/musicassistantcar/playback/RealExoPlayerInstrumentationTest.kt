@@ -13,6 +13,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -21,13 +22,32 @@ import org.junit.runner.RunWith
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+
+/**
+ * Immutable thread-safe snapshot of ExoPlayer state captured strictly on the Main Application Looper.
+ */
+data class PlayerStateSnapshot(
+    val playbackState: Int,
+    val playWhenReady: Boolean,
+    val isPlaying: Boolean,
+    val currentPosition: Long,
+    val duration: Long,
+    val mediaItemCount: Int,
+    val currentMediaItemIndex: Int,
+    val shuffleModeEnabled: Boolean,
+    val repeatMode: Int,
+    val playerError: PlaybackException?,
+    val isCurrentMediaItemSeekable: Boolean,
+)
 
 /**
  * Self-contained Android Instrumentation Test Harness for actual ExoPlayer playback.
  * Instantiates real ExoPlayer on the Android runtime, decodes actual PCM WAV audio fixtures,
  * and asserts real wall-clock playhead advancement, queue transitions, and fault handling.
+ *
+ * Thread Safety: All ExoPlayer interactions (gets and sets) are strictly dispatched to the
+ * Application Looper via instrumentation.runOnMainSync to prevent thread violations.
  */
 @RunWith(AndroidJUnit4::class)
 class RealExoPlayerInstrumentationTest {
@@ -61,6 +81,38 @@ class RealExoPlayerInstrumentationTest {
     }
 
     // =========================================================================
+    // THREAD-SAFE HELPERS (MANDATORY MAIN LOOPER DISPATCH)
+    // =========================================================================
+
+    private fun runOnMain(action: (ExoPlayer) -> Unit) {
+        instrumentation.runOnMainSync {
+            val p = player ?: error("Player is not initialized")
+            action(p)
+        }
+    }
+
+    private fun getPlayerSnapshot(): PlayerStateSnapshot {
+        var snapshot: PlayerStateSnapshot? = null
+        instrumentation.runOnMainSync {
+            val p = player ?: error("Player is not initialized")
+            snapshot = PlayerStateSnapshot(
+                playbackState = p.playbackState,
+                playWhenReady = p.playWhenReady,
+                isPlaying = p.isPlaying,
+                currentPosition = p.currentPosition,
+                duration = p.duration,
+                mediaItemCount = p.mediaItemCount,
+                currentMediaItemIndex = p.currentMediaItemIndex,
+                shuffleModeEnabled = p.shuffleModeEnabled,
+                repeatMode = p.repeatMode,
+                playerError = p.playerError,
+                isCurrentMediaItemSeekable = p.isCurrentMediaItemSeekable,
+            )
+        }
+        return snapshot ?: error("Failed to capture PlayerStateSnapshot on main thread")
+    }
+
+    // =========================================================================
     // 1. REAL EXOPLAYER WALL-CLOCK PLAYHEAD & PLAY/PAUSE/SEEK
     // =========================================================================
 
@@ -88,13 +140,11 @@ class RealExoPlayerInstrumentationTest {
 
         // Measure playhead progression over real wall time
         SystemClock.sleep(500) // Allow audio clock to settle
-        var pos1 = 0L
-        instrumentation.runOnMainSync { pos1 = player!!.currentPosition }
+        val pos1 = getPlayerSnapshot().currentPosition
         val wallStart = SystemClock.elapsedRealtime()
 
         SystemClock.sleep(1500) // 1.5 seconds real elapsed time
-        var pos2 = 0L
-        instrumentation.runOnMainSync { pos2 = player!!.currentPosition }
+        val pos2 = getPlayerSnapshot().currentPosition
         val wallElapsed = SystemClock.elapsedRealtime() - wallStart
 
         assertTrue("Playhead must advance monotonically: pos1=$pos1, pos2=$pos2", pos2 > pos1)
@@ -105,20 +155,17 @@ class RealExoPlayerInstrumentationTest {
         )
 
         // Pause test: position must freeze
-        instrumentation.runOnMainSync { player!!.pause() }
+        runOnMain { it.pause() }
         SystemClock.sleep(300)
-        var posPaused1 = 0L
-        instrumentation.runOnMainSync { posPaused1 = player!!.currentPosition }
+        val posPaused1 = getPlayerSnapshot().currentPosition
         SystemClock.sleep(600)
-        var posPaused2 = 0L
-        instrumentation.runOnMainSync { posPaused2 = player!!.currentPosition }
+        val posPaused2 = getPlayerSnapshot().currentPosition
         assertTrue("Paused player must freeze playhead: $posPaused1 vs $posPaused2", Math.abs(posPaused2 - posPaused1) < 50)
 
         // Seek test: position moves near target
-        instrumentation.runOnMainSync { player!!.seekTo(3500L) }
+        runOnMain { it.seekTo(3500L) }
         SystemClock.sleep(300)
-        var posSeeked = 0L
-        instrumentation.runOnMainSync { posSeeked = player!!.currentPosition }
+        val posSeeked = getPlayerSnapshot().currentPosition
         assertTrue("Seek target 3500ms must be reached: posSeeked=$posSeeked", Math.abs(posSeeked - 3500L) < 300)
     }
 
@@ -155,30 +202,36 @@ class RealExoPlayerInstrumentationTest {
         }
 
         assertTrue("ExoPlayer queue must reach STATE_READY within 5s", readyLatch.await(5, TimeUnit.SECONDS))
-        assertEquals(3, player!!.mediaItemCount)
-        assertEquals(0, player!!.currentMediaItemIndex)
+
+        var snapshot = getPlayerSnapshot()
+        assertEquals(3, snapshot.mediaItemCount)
+        assertEquals(0, snapshot.currentMediaItemIndex)
 
         // Advance to next media item
-        instrumentation.runOnMainSync { player!!.seekToNextMediaItem() }
+        runOnMain { it.seekToNextMediaItem() }
         SystemClock.sleep(200)
-        assertEquals(1, player!!.currentMediaItemIndex)
+        snapshot = getPlayerSnapshot()
+        assertEquals(1, snapshot.currentMediaItemIndex)
 
         // Repeat mode ALL wraps to index 0 when skipping from last track
-        instrumentation.runOnMainSync {
-            player!!.repeatMode = Player.REPEAT_MODE_ALL
-            player!!.seekToDefaultPosition(2) // Jump to last track
+        runOnMain {
+            it.repeatMode = Player.REPEAT_MODE_ALL
+            it.seekToDefaultPosition(2) // Jump to last track
         }
         SystemClock.sleep(200)
-        assertEquals(2, player!!.currentMediaItemIndex)
+        snapshot = getPlayerSnapshot()
+        assertEquals(2, snapshot.currentMediaItemIndex)
 
-        instrumentation.runOnMainSync { player!!.seekToNextMediaItem() }
+        runOnMain { it.seekToNextMediaItem() }
         SystemClock.sleep(200)
-        assertEquals("Repeat ALL must wrap to index 0", 0, player!!.currentMediaItemIndex)
+        snapshot = getPlayerSnapshot()
+        assertEquals("Repeat ALL must wrap to index 0", 0, snapshot.currentMediaItemIndex)
 
         // Shuffle mode toggles without modifying queue count
-        instrumentation.runOnMainSync { player!!.shuffleModeEnabled = true }
-        assertTrue(player!!.shuffleModeEnabled)
-        assertEquals(3, player!!.mediaItemCount)
+        runOnMain { it.shuffleModeEnabled = true }
+        snapshot = getPlayerSnapshot()
+        assertTrue(snapshot.shuffleModeEnabled)
+        assertEquals(3, snapshot.mediaItemCount)
     }
 
     // =========================================================================
@@ -186,9 +239,8 @@ class RealExoPlayerInstrumentationTest {
     // =========================================================================
 
     @Test
-    fun testRealExoPlayer_faultInjectionWithLocalServer() {
-        val f1 = fixtureTrack1 ?: error("Fixture missing")
-        val server = FakeHttpStreamServer(f1).apply { start() }
+    fun testRealExoPlayer_faultInjection_http401_unrecoverableError() {
+        val server = FakeHttpStreamServer().apply { start() }
         fakeServer = server
 
         val errorRef = AtomicReference<PlaybackException?>(null)
@@ -203,7 +255,6 @@ class RealExoPlayerInstrumentationTest {
                     errorLatch.countDown()
                 }
             })
-            // Point to HTTP 401 endpoint on loopback
             exo.setMediaItem(MediaItem.fromUri("${server.baseUrl()}/stream/401"))
             exo.prepare()
             exo.play()
@@ -212,16 +263,133 @@ class RealExoPlayerInstrumentationTest {
         assertTrue("ExoPlayer must receive PlaybackException on HTTP 401 within 5s", errorLatch.await(5, TimeUnit.SECONDS))
         val err = errorRef.get()
         assertNotNull(err)
-        // 401 is not a recoverable network error in policy
         assertFalse("HTTP 401 must not trigger endless network retry", NetworkRecoveryPolicy.isRecoverableNetworkError(err!!))
     }
 
+    @Test
+    fun testRealExoPlayer_faultInjection_http404_unrecoverableError() {
+        val server = FakeHttpStreamServer().apply { start() }
+        fakeServer = server
+
+        val errorRef = AtomicReference<PlaybackException?>(null)
+        val errorLatch = CountDownLatch(1)
+
+        instrumentation.runOnMainSync {
+            val exo = ExoPlayer.Builder(context).build()
+            player = exo
+            exo.addListener(object : Player.Listener {
+                override fun onPlayerError(error: PlaybackException) {
+                    errorRef.set(error)
+                    errorLatch.countDown()
+                }
+            })
+            exo.setMediaItem(MediaItem.fromUri("${server.baseUrl()}/stream/404"))
+            exo.prepare()
+            exo.play()
+        }
+
+        assertTrue("ExoPlayer must receive PlaybackException on HTTP 404 within 5s", errorLatch.await(5, TimeUnit.SECONDS))
+        val err = errorRef.get()
+        assertNotNull(err)
+        assertFalse("HTTP 404 must not trigger endless network retry", NetworkRecoveryPolicy.isRecoverableNetworkError(err!!))
+    }
+
+    @Test
+    fun testRealExoPlayer_faultInjection_http503_errorHandled() {
+        val server = FakeHttpStreamServer().apply { start() }
+        fakeServer = server
+
+        val errorRef = AtomicReference<PlaybackException?>(null)
+        val errorLatch = CountDownLatch(1)
+
+        instrumentation.runOnMainSync {
+            val exo = ExoPlayer.Builder(context).build()
+            player = exo
+            exo.addListener(object : Player.Listener {
+                override fun onPlayerError(error: PlaybackException) {
+                    errorRef.set(error)
+                    errorLatch.countDown()
+                }
+            })
+            exo.setMediaItem(MediaItem.fromUri("${server.baseUrl()}/stream/503"))
+            exo.prepare()
+            exo.play()
+        }
+
+        assertTrue("ExoPlayer must receive PlaybackException on HTTP 503 within 5s", errorLatch.await(5, TimeUnit.SECONDS))
+        val err = errorRef.get()
+        assertNotNull(err)
+    }
+
+    @Test
+    fun testRealExoPlayer_faultInjection_partialStream_abruptTermination() {
+        val server = FakeHttpStreamServer().apply { start() }
+        fakeServer = server
+
+        val errorRef = AtomicReference<PlaybackException?>(null)
+        val errorLatch = CountDownLatch(1)
+
+        instrumentation.runOnMainSync {
+            val exo = ExoPlayer.Builder(context).build()
+            player = exo
+            exo.addListener(object : Player.Listener {
+                override fun onPlayerError(error: PlaybackException) {
+                    errorRef.set(error)
+                    errorLatch.countDown()
+                }
+            })
+            exo.setMediaItem(MediaItem.fromUri("${server.baseUrl()}/stream/partial"))
+            exo.prepare()
+            exo.play()
+        }
+
+        assertTrue("ExoPlayer must handle abrupt stream termination within 5s", errorLatch.await(5, TimeUnit.SECONDS))
+        val err = errorRef.get()
+        assertNotNull(err)
+    }
+
+    @Test
+    fun testRealExoPlayer_faultInjection_validLocalhostStream_playsSuccessfully() {
+        val f1 = fixtureTrack1 ?: error("Fixture missing")
+        val server = FakeHttpStreamServer(f1).apply { start() }
+        fakeServer = server
+
+        val readyLatch = CountDownLatch(1)
+        val errorRef = AtomicReference<PlaybackException?>(null)
+
+        instrumentation.runOnMainSync {
+            val exo = ExoPlayer.Builder(context).build()
+            player = exo
+            exo.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_READY) {
+                        readyLatch.countDown()
+                    }
+                }
+                override fun onPlayerError(error: PlaybackException) {
+                    errorRef.set(error)
+                }
+            })
+            exo.setMediaItem(MediaItem.fromUri("${server.baseUrl()}/stream/valid"))
+            exo.prepare()
+            exo.play()
+        }
+
+        assertTrue("Valid stream on localhost must reach STATE_READY within 5s", readyLatch.await(5, TimeUnit.SECONDS))
+        assertNull("Valid stream must not emit player error", errorRef.get())
+
+        SystemClock.sleep(800)
+        val snapshot = getPlayerSnapshot()
+        assertTrue("Valid stream must be playing or ready", snapshot.playbackState == Player.STATE_READY)
+        assertTrue("Playhead must advance on valid stream", snapshot.currentPosition > 0L)
+    }
+
     // =========================================================================
-    // 4. SERVICE TEARDOWN & RECOVERY COOLDOWN INVARIANTS
+    // 4. POLICY GUARDS & LIFECYCLE TEARDOWN SAFETY
     // =========================================================================
 
     @Test
-    fun testRealExoPlayer_serviceTeardownSafety() {
+    fun testPolicyGuards_networkRecoveryTeardownAndFirstAttempt() {
         val errorCode = PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
 
         // First attempt ever: nowMs = 1_000L, lastAttempt = 0L -> Allowed
@@ -249,6 +417,46 @@ class RealExoPlayerInstrumentationTest {
                 errorCode = errorCode,
             )
         )
+
+        // Uninitialized player guard -> Blocked
+        assertFalse(
+            NetworkRecoveryPolicy.canAttemptRecovery(
+                isShuttingDown = false,
+                isPlayerInitialized = false,
+                queueSize = 5,
+                networkRecoveryInProgress = false,
+                nowMs = 1_000L,
+                lastNetworkRecoveryAttemptMs = 0L,
+                errorCode = errorCode,
+            )
+        )
+
+        // Empty queue guard -> Blocked
+        assertFalse(
+            NetworkRecoveryPolicy.canAttemptRecovery(
+                isShuttingDown = false,
+                isPlayerInitialized = true,
+                queueSize = 0,
+                networkRecoveryInProgress = false,
+                nowMs = 1_000L,
+                lastNetworkRecoveryAttemptMs = 0L,
+                errorCode = errorCode,
+            )
+        )
+    }
+
+    @Test
+    fun testRealExoPlayer_releaseTeardownSafety() {
+        val f1 = fixtureTrack1 ?: error("Fixture missing")
+
+        instrumentation.runOnMainSync {
+            val exo = ExoPlayer.Builder(context).build()
+            exo.setMediaItem(MediaItem.fromUri(Uri.fromFile(f1)))
+            exo.prepare()
+            // Release immediately to verify lifecycle clean teardown
+            exo.release()
+            assertEquals("Released player playbackState should be STATE_IDLE", Player.STATE_IDLE, exo.playbackState)
+        }
     }
 
     // =========================================================================
@@ -266,48 +474,100 @@ class RealExoPlayerInstrumentationTest {
         val isPilotRequested = args.getString("pilotSoak") == "true"
         assumeTrue("3-minute Pilot Soak skipped by default. Run with -e pilotSoak true", isPilotRequested)
 
-        val targetSeconds = 180 // 3 minutes
+        val targetDurationMs = 180_000L // 3 minutes
         val f1 = fixtureTrack1 ?: error("Fixture 1 missing")
         val f2 = fixtureTrack2 ?: error("Fixture 2 missing")
 
-        val startTimeMs = SystemClock.elapsedRealtime()
+        val readyLatch = CountDownLatch(1)
+        val playerErrorRef = AtomicReference<PlaybackException?>(null)
         var transitions = 0
         var stalls = 0
 
-        instrumentation.runOnMainSync {
-            val exo = ExoPlayer.Builder(context).build()
-            player = exo
+        runOnMain { exo ->
             exo.repeatMode = Player.REPEAT_MODE_ALL
             exo.addListener(object : Player.Listener {
-                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                    transitions++
-                }
                 override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_BUFFERING) {
+                    if (playbackState == Player.STATE_READY) {
+                        readyLatch.countDown()
+                    } else if (playbackState == Player.STATE_BUFFERING) {
                         stalls++
                     }
                 }
+
+                override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                    transitions++
+                }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    playerErrorRef.set(error)
+                }
             })
-            exo.setMediaItems(listOf(MediaItem.fromUri(Uri.fromFile(f1)), MediaItem.fromUri(Uri.fromFile(f2))))
+            exo.setMediaItems(
+                listOf(
+                    MediaItem.fromUri(Uri.fromFile(f1)),
+                    MediaItem.fromUri(Uri.fromFile(f2))
+                )
+            )
             exo.prepare()
             exo.play()
         }
 
-        // Wait out the pilot duration in 10-second heartbeat increments
-        for (sec in 10..targetSeconds step 10) {
-            SystemClock.sleep(10_000L)
-            val currentNativeHeapMb = Debug.getNativeHeapAllocatedSize() / (1024.0 * 1024.0)
-            println("[PilotSoak Heartbeat] ${sec}s / ${targetSeconds}s, transitions=$transitions, nativeHeap=${"%.2f".format(currentNativeHeapMb)}MB")
+        // 1. Must reach STATE_READY within bounded timeout (10s)
+        assertTrue("ExoPlayer must reach STATE_READY within 10s", readyLatch.await(10, TimeUnit.SECONDS))
+
+        val startTimeMs = SystemClock.elapsedRealtime()
+        var lastSampledPosition = -1L
+        var lastMediaItemIndex = -1
+
+        // 2. Periodic sampling loop with heartbeats
+        val sampleIntervalMs = 10_000L
+        while (SystemClock.elapsedRealtime() - startTimeMs < targetDurationMs) {
+            SystemClock.sleep(sampleIntervalMs)
+
+            // Fail-fast on player error
+            val currentError = playerErrorRef.get()
+            assertNull("Player must not encounter PlaybackException during soak: ${currentError?.message}", currentError)
+
+            val snapshot = getPlayerSnapshot()
+
+            // Verify playback state is active (READY or transient BUFFERING)
+            assertTrue(
+                "Player state must be READY or BUFFERING during soak: actual=${snapshot.playbackState}",
+                snapshot.playbackState == Player.STATE_READY || snapshot.playbackState == Player.STATE_BUFFERING
+            )
+            assertTrue("playWhenReady must remain true", snapshot.playWhenReady)
+
+            // Verify playhead motion
+            if (snapshot.currentMediaItemIndex == lastMediaItemIndex) {
+                assertTrue(
+                    "Playhead must advance monotonically within same track: last=$lastSampledPosition, curr=${snapshot.currentPosition}",
+                    snapshot.currentPosition >= lastSampledPosition
+                )
+            }
+            lastSampledPosition = snapshot.currentPosition
+            lastMediaItemIndex = snapshot.currentMediaItemIndex
+
+            // Memory metrics capture (measured: Debug.MemoryInfo.totalPss and NativeHeap)
+            val nativeHeapMb = Debug.getNativeHeapAllocatedSize() / (1024.0 * 1024.0)
+            val memInfo = Debug.MemoryInfo().apply { Debug.getMemoryInfo(this) }
+            val totalPssMb = memInfo.totalPss / 1024.0
+            val elapsedSec = (SystemClock.elapsedRealtime() - startTimeMs) / 1000
+
+            println(
+                "[PilotSoak Heartbeat] ${elapsedSec}s / 180s | trackIndex=${snapshot.currentMediaItemIndex} | " +
+                    "pos=${snapshot.currentPosition}ms | transitions=$transitions | stalls=$stalls | " +
+                    "nativeHeap=${"%.2f".format(nativeHeapMb)}MB | totalPss=${"%.2f".format(totalPssMb)}MB"
+            )
         }
 
         val totalWallElapsedMs = SystemClock.elapsedRealtime() - startTimeMs
-        instrumentation.runOnMainSync { player?.pause() }
+        runOnMain { it.pause() }
 
-        println(
-            "PilotSoak completed: wallElapsed=${totalWallElapsedMs}ms, " +
-                "transitions=$transitions, stalls=$stalls, nativeHeap=${Debug.getNativeHeapAllocatedSize() / (1024 * 1024)}MB"
-        )
-        assertTrue("Wall duration must be at least 175s", totalWallElapsedMs >= 175_000L)
+        // 3. Substantive post-soak assertions
+        assertNull("No player error during pilot soak", playerErrorRef.get())
+        assertTrue("Wall duration must be at least 175s: actual=${totalWallElapsedMs}ms", totalWallElapsedMs >= 175_000L)
+        assertTrue("Transitions must occur when looping 5s tracks for 3 minutes: actual=$transitions", transitions >= 10)
+        assertTrue("Stall count must remain bounded: actual=$stalls", stalls <= 10)
     }
 
     // =========================================================================
@@ -325,37 +585,92 @@ class RealExoPlayerInstrumentationTest {
         val is30MinRequested = args.getString("soak30Min") == "true"
         assumeTrue("30-minute Real Soak skipped by default. Run with -e soak30Min true", is30MinRequested)
 
-        val targetSeconds = 1800 // 30 minutes
+        val targetDurationMs = 1800_000L // 30 minutes
         val f1 = fixtureTrack1 ?: error("Fixture 1 missing")
         val f2 = fixtureTrack2 ?: error("Fixture 2 missing")
 
-        val startTimeMs = SystemClock.elapsedRealtime()
+        val readyLatch = CountDownLatch(1)
+        val playerErrorRef = AtomicReference<PlaybackException?>(null)
         var transitions = 0
+        var stalls = 0
 
-        instrumentation.runOnMainSync {
-            val exo = ExoPlayer.Builder(context).build()
-            player = exo
+        runOnMain { exo ->
             exo.repeatMode = Player.REPEAT_MODE_ALL
             exo.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_READY) {
+                        readyLatch.countDown()
+                    } else if (playbackState == Player.STATE_BUFFERING) {
+                        stalls++
+                    }
+                }
+
                 override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                     transitions++
                 }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    playerErrorRef.set(error)
+                }
             })
-            exo.setMediaItems(listOf(MediaItem.fromUri(Uri.fromFile(f1)), MediaItem.fromUri(Uri.fromFile(f2))))
+            exo.setMediaItems(
+                listOf(
+                    MediaItem.fromUri(Uri.fromFile(f1)),
+                    MediaItem.fromUri(Uri.fromFile(f2))
+                )
+            )
             exo.prepare()
             exo.play()
         }
 
-        for (sec in 60..targetSeconds step 60) {
-            SystemClock.sleep(60_000L)
+        assertTrue("ExoPlayer must reach STATE_READY within 10s", readyLatch.await(10, TimeUnit.SECONDS))
+
+        val startTimeMs = SystemClock.elapsedRealtime()
+        var lastSampledPosition = -1L
+        var lastMediaItemIndex = -1
+
+        val sampleIntervalMs = 60_000L // 1-minute heartbeats
+        while (SystemClock.elapsedRealtime() - startTimeMs < targetDurationMs) {
+            SystemClock.sleep(sampleIntervalMs)
+
+            val currentError = playerErrorRef.get()
+            assertNull("Player must not encounter PlaybackException during soak: ${currentError?.message}", currentError)
+
+            val snapshot = getPlayerSnapshot()
+
+            assertTrue(
+                "Player state must be READY or BUFFERING during soak: actual=${snapshot.playbackState}",
+                snapshot.playbackState == Player.STATE_READY || snapshot.playbackState == Player.STATE_BUFFERING
+            )
+            assertTrue("playWhenReady must remain true", snapshot.playWhenReady)
+
+            if (snapshot.currentMediaItemIndex == lastMediaItemIndex) {
+                assertTrue(
+                    "Playhead must advance monotonically within same track: last=$lastSampledPosition, curr=${snapshot.currentPosition}",
+                    snapshot.currentPosition >= lastSampledPosition
+                )
+            }
+            lastSampledPosition = snapshot.currentPosition
+            lastMediaItemIndex = snapshot.currentMediaItemIndex
+
             val nativeHeapMb = Debug.getNativeHeapAllocatedSize() / (1024.0 * 1024.0)
-            println("[30MinSoak Heartbeat] ${sec / 60}m / 30m, transitions=$transitions, nativeHeap=${"%.2f".format(nativeHeapMb)}MB")
+            val memInfo = Debug.MemoryInfo().apply { Debug.getMemoryInfo(this) }
+            val totalPssMb = memInfo.totalPss / 1024.0
+            val elapsedMin = (SystemClock.elapsedRealtime() - startTimeMs) / 60_000
+
+            println(
+                "[30MinSoak Heartbeat] ${elapsedMin}m / 30m | trackIndex=${snapshot.currentMediaItemIndex} | " +
+                    "pos=${snapshot.currentPosition}ms | transitions=$transitions | stalls=$stalls | " +
+                    "nativeHeap=${"%.2f".format(nativeHeapMb)}MB | totalPss=${"%.2f".format(totalPssMb)}MB"
+            )
         }
 
         val totalWallElapsedMs = SystemClock.elapsedRealtime() - startTimeMs
-        instrumentation.runOnMainSync { player?.pause() }
+        runOnMain { it.pause() }
 
-        println("30MinSoak completed: wallElapsed=${totalWallElapsedMs}ms, transitions=$transitions")
-        assertTrue("Wall duration must be at least 1790s", totalWallElapsedMs >= 1790_000L)
+        assertNull("No player error during 30-minute soak", playerErrorRef.get())
+        assertTrue("Wall duration must be at least 1790s: actual=${totalWallElapsedMs}ms", totalWallElapsedMs >= 1790_000L)
+        assertTrue("Transitions must occur during 30-minute loop: actual=$transitions", transitions >= 100)
+        assertTrue("Stall count must remain bounded: actual=$stalls", stalls <= 50)
     }
 }

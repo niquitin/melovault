@@ -1,7 +1,6 @@
 package com.bsdung.musicassistantcar.playback
 
 import java.io.BufferedReader
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.InputStreamReader
@@ -10,11 +9,20 @@ import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * In-process fake HTTP stream server bound strictly to localhost (127.0.0.1).
  * Allows fault injection without disabling or affecting external host/Tailscale networking.
+ *
+ * Provides endpoints:
+ * - /stream/valid: serves valid WAV audio with correct Content-Type and Length.
+ * - /stream/401: HTTP 401 Unauthorized (fatal error).
+ * - /stream/404: HTTP 404 Not Found (fatal error).
+ * - /stream/503: HTTP 503 Service Unavailable (server error).
+ * - /stream/timeout: stalls response beyond standard client timeout.
+ * - /stream/partial: sends truncated payload and abruptly closes socket.
  */
 class FakeHttpStreamServer(private val validAudioFile: File? = null) {
 
@@ -35,6 +43,8 @@ class FakeHttpStreamServer(private val validAudioFile: File? = null) {
             while (running.get() && !socket.isClosed) {
                 try {
                     val client = socket.accept()
+                    // Set client socket timeout to prevent hung connections
+                    client.soTimeout = 5000
                     executor.execute { handleClient(client) }
                 } catch (_: Exception) {
                     // Socket closed on shutdown
@@ -49,6 +59,11 @@ class FakeHttpStreamServer(private val validAudioFile: File? = null) {
             serverSocket?.close()
         } catch (_: Exception) {}
         executor.shutdownNow()
+        try {
+            executor.awaitTermination(1, TimeUnit.SECONDS)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
     }
 
     fun baseUrl(): String = "http://127.0.0.1:$port"
@@ -70,16 +85,28 @@ class FakeHttpStreamServer(private val validAudioFile: File? = null) {
                     path.startsWith("/stream/404") -> serveStatus(out, 404, "Not Found")
                     path.startsWith("/stream/503") -> serveStatus(out, 503, "Service Unavailable")
                     path.startsWith("/stream/timeout") -> {
-                        // Delay or stall to trigger timeout
-                        Thread.sleep(8000L)
-                        serveStatus(out, 500, "Internal Server Error")
+                        // Stalls response in short increments to allow graceful shutdown
+                        val deadline = System.currentTimeMillis() + 8000L
+                        while (System.currentTimeMillis() < deadline && running.get()) {
+                            try {
+                                Thread.sleep(200L)
+                            } catch (_: InterruptedException) {
+                                break
+                            }
+                        }
+                        if (running.get()) {
+                            serveStatus(out, 504, "Gateway Timeout")
+                        }
                     }
                     path.startsWith("/stream/partial") -> {
-                        // Send partial header and terminate abruptly
-                        val partialHeader = "HTTP/1.1 200 OK\r\nContent-Type: audio/wav\r\n\r\nRIFF".toByteArray()
-                        out.write(partialHeader)
+                        // Send partial header with partial body and terminate abruptly
+                        val partialData = ("HTTP/1.1 200 OK\r\n" +
+                            "Content-Type: audio/wav\r\n" +
+                            "Content-Length: 1048576\r\n\r\n" +
+                            "RIFF\u0000\u0000\u0000\u0000WAVEfmt ").toByteArray(Charsets.US_ASCII)
+                        out.write(partialData)
                         out.flush()
-                        // Socket closes on block exit, simulating TCP abort
+                        // Socket closure upon exiting use block simulates TCP RST/FIN abort
                     }
                     else -> serveStatus(out, 404, "Not Found")
                 }
@@ -118,7 +145,7 @@ class FakeHttpStreamServer(private val validAudioFile: File? = null) {
         FileInputStream(file).use { fis ->
             val buffer = ByteArray(8192)
             var read: Int
-            while (fis.read(buffer).also { read = it } != -1) {
+            while (fis.read(buffer).also { read = it } != -1 && running.get()) {
                 out.write(buffer, 0, read)
             }
         }
