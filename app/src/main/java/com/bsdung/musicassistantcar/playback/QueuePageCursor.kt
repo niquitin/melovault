@@ -43,6 +43,8 @@ class QueuePageCursor(
     private val expected = initialMediaIds.toMutableList()
     private var prefetched = false
     private var scanningFolderOnlyPages = false
+    private var retryAtMs = 0L
+    private var automaticRetryUsed = false
     var nextPage: Int = seed.nextPage
         private set
     var loading: Boolean = false
@@ -59,8 +61,8 @@ class QueuePageCursor(
         !loading && !endReached && !pausedOnError && currentIndex >= 0 &&
             (!prefetched || scanningFolderOnlyPages || currentIndex >= (expected.size - 12).coerceAtLeast(0))
 
-    fun beginFetch(currentIndex: Int): Int? {
-        if (!shouldFetch(currentIndex)) return null
+    fun beginFetch(currentIndex: Int, nowMs: Long = Long.MAX_VALUE): Int? {
+        if (!shouldFetch(currentIndex) || nowMs < retryAtMs) return null
         loading = true
         return nextPage
     }
@@ -82,6 +84,19 @@ class QueuePageCursor(
             loading = false
             pausedOnError = true // never retry failing servers on each track transition
         }
+    }
+
+    /** Permit one delayed automatic retry across this source session, never a loop. */
+    fun failWithOneAutoRetry(requestPage: Int, nowMs: Long, backoffMs: Long = 5_000): Boolean {
+        if (!loading || requestPage != nextPage || endReached) return false
+        if (automaticRetryUsed) {
+            fail(requestPage)
+            return false
+        }
+        automaticRetryUsed = true
+        loading = false
+        retryAtMs = nowMs + backoffMs.coerceAtLeast(0L)
+        return true
     }
 
     fun cancel() {

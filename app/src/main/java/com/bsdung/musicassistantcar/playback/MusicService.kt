@@ -99,6 +99,10 @@ class MusicService : MediaLibraryService() {
     private var serviceShuttingDown = false
     @Volatile private var incomingBrowseQueue: Pair<QueueBrowseSeed, List<String>>? = null
     private var browseQueueCursor: QueuePageCursor? = null
+    // Do not queue source pagination behind metadata/details for dozens of rapid skips.
+    private val queueBrowseExecutor = Executors.newSingleThreadExecutor()
+    private val rapidSkipBufferPolicy = RapidSkipBufferPolicy()
+    private var rapidBufferCheck: Runnable? = null
     private var lastActiveMediaId: String? = null
     private var lastKnownPositionMs: Long = 0L
     private var lastKnownDurationMs: Long = 0L
@@ -317,6 +321,11 @@ class MusicService : MediaLibraryService() {
                         "mediaId=${player.currentMediaItem?.mediaId}, " +
                         "queueSize=${player.mediaItemCount}",
                 )
+                if (playbackState == Player.STATE_BUFFERING) {
+                    maybeWatchRapidBuffer()
+                } else {
+                    cancelRapidBufferCheck()
+                }
                 if (playbackState == Player.STATE_ENDED) {
                     player.currentMediaItem?.let { item ->
                         val mediaId = TrackResumeStore.getMediaIdentity(item)
@@ -384,9 +393,11 @@ class MusicService : MediaLibraryService() {
                 )
                 persistPlaybackState()
                 if (!playWhenReady) {
+                    cancelRapidBufferCheck()
                     saveCurrentTrackResume()
                 }
                 updatePersistenceLoop()
+                if (playWhenReady) maybeExtendBrowseQueue()
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -481,6 +492,10 @@ class MusicService : MediaLibraryService() {
                 }
                 val currentIndex = player.currentMediaItemIndex
                 val queueSize = player.mediaItemCount
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
+                    rapidSkipBufferPolicy.recordSeek(SystemClock.elapsedRealtime())
+                    maybeWatchRapidBuffer()
+                }
                 maybeExtendBrowseQueue()
                 val playbackSource = when {
                     mediaItem?.mediaMetadata?.extras?.getBoolean("is_offline_download") == true ||
@@ -896,21 +911,35 @@ class MusicService : MediaLibraryService() {
             mainHandler.post {
                 if (serviceShuttingDown || !::player.isInitialized) return@post
                 if (index >= player.mediaItemCount) return@post
-                // Confirm this slot still holds the same media ID before replacing.
+                // Ignore stale responses from earlier rapid Next presses. Updating remote
+                // media sources long after navigation can provoke extra timeline churn.
                 val current = runCatching { player.getMediaItemAt(index) }.getOrNull()
-                if (current?.mediaId == mediaId) {
-                    player.replaceMediaItem(index, resolved)
-                    if (index == player.currentMediaItemIndex) {
-                        applyNormalizationForMediaItem(resolved)
-                    }
-                    Log.i(TAG, "lazyResolveDriveFile: replaceMediaItem index=$index id=$driveFileId")
-                } else {
-                    Log.i(
-                        TAG,
-                        "lazyResolveDriveFile: slot $index changed (was $mediaId, " +
-                            "now ${current?.mediaId}), skip replace",
+                val activeIndex = player.currentMediaItemIndex
+                if (!DriveMetadataUpdatePolicy.shouldApply(
+                        originalSlotStillMatches = current?.mediaId == mediaId,
+                        requestIndex = index,
+                        currentIndex = activeIndex,
+                        currentReady = player.playbackState == Player.STATE_READY,
                     )
+                ) {
+                    resolvedDriveFileIds.remove(driveFileId)
+                    Log.d(TAG, "lazyResolveDriveFile: stale/buffering index=$index active=$activeIndex; skip")
+                    return@post
                 }
+                // Keep the original playback URI and offline/source extras. The metadata
+                // detail endpoint can choose a different URL/host: replacing that URI while
+                // audio is active would force ExoPlayer to open the stream again.
+                val metadata = current!!.mediaMetadata.buildUpon()
+                    .setTitle(resolved.mediaMetadata.title ?: current.mediaMetadata.title)
+                    .setArtist(resolved.mediaMetadata.artist ?: current.mediaMetadata.artist)
+                    .setAlbumTitle(resolved.mediaMetadata.albumTitle ?: current.mediaMetadata.albumTitle)
+                    .build()
+                val enriched = current.buildUpon().setMediaMetadata(metadata).build()
+                player.replaceMediaItem(index, enriched)
+                if (index == activeIndex) {
+                    applyNormalizationForMediaItem(enriched)
+                }
+                Log.i(TAG, "lazyResolveDriveFile: metadataOnly index=$index id=$driveFileId")
             }
         }
     }
@@ -1023,6 +1052,54 @@ class MusicService : MediaLibraryService() {
         return START_STICKY
     }
 
+    private fun cancelRapidBufferCheck() {
+        rapidBufferCheck?.let(mainHandler::removeCallbacks)
+        rapidBufferCheck = null
+    }
+
+    /**
+     * A burst of media-key Next presses can leave an HTTP stream waiting for a
+     * backend read timeout even though the user has moved to another track.
+     * Only in that specific scenario, reopen the CURRENT item once after 25 s.
+     * No network toggle, no queue rebuild, and no retry storm.
+     */
+    private fun maybeWatchRapidBuffer() {
+        cancelRapidBufferCheck()
+        if (serviceShuttingDown || !::player.isInitialized ||
+            player.playbackState != Player.STATE_BUFFERING || !player.playWhenReady
+        ) return
+        val id = player.currentMediaItem?.mediaId ?: return
+        val now = SystemClock.elapsedRealtime()
+        if (!rapidSkipBufferPolicy.canWatch(now, id)) return
+        val originalIndex = player.currentMediaItemIndex
+        val check = Runnable {
+            rapidBufferCheck = null
+            val elapsed = SystemClock.elapsedRealtime()
+            if (!::player.isInitialized || !rapidSkipBufferPolicy.shouldRecover(
+                    nowMs = elapsed,
+                    armedAtMs = now,
+                    mediaId = id,
+                    currentMediaId = player.currentMediaItem?.mediaId,
+                    isBuffering = player.playbackState == Player.STATE_BUFFERING &&
+                        player.currentMediaItemIndex == originalIndex,
+                    playWhenReady = player.playWhenReady,
+                    shuttingDown = serviceShuttingDown,
+                )
+            ) return@Runnable
+            rapidSkipBufferPolicy.markRecovery(id)
+            val position = player.currentPosition.coerceAtLeast(0L)
+            Log.w(TAG, "RAPID_SKIP_STALL: restarting one current stream after ${elapsed - now}ms; index=$originalIndex")
+            // stop() keeps the current timeline; prepare() forces a fresh upstream connection.
+            // Never call setMediaItems() here: that would erase lazy queue extension.
+            player.stop()
+            player.seekTo(originalIndex, position)
+            player.prepare()
+            player.play()
+        }
+        rapidBufferCheck = check
+        mainHandler.postDelayed(check, rapidSkipBufferPolicy.timeoutMs)
+    }
+
     private fun currentQueueIds(): List<String> =
         (0 until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }
 
@@ -1050,8 +1127,8 @@ class MusicService : MediaLibraryService() {
     private fun maybeExtendBrowseQueue() {
         if (serviceShuttingDown || !::player.isInitialized || !::executor.isInitialized) return
         val cursor = browseQueueCursor ?: return
-        val page = cursor.beginFetch(player.currentMediaItemIndex) ?: return
-        executor.execute {
+        val page = cursor.beginFetch(player.currentMediaItemIndex, SystemClock.elapsedRealtime()) ?: return
+        queueBrowseExecutor.execute {
             val response = runCatching {
                 if (cursor.seed.parentId == "search") {
                     catalog.search(cursor.seed.query, page, cursor.seed.pageSize)
@@ -1098,8 +1175,27 @@ class MusicService : MediaLibraryService() {
                         mainHandler.postDelayed({ maybeExtendBrowseQueue() }, 350L)
                     }
                 }.onFailure { error ->
-                    cursor.fail(page)
-                    Log.w(TAG, "QUEUE_PAGING_PAUSED: page=$page; waiting for explicit user action", error)
+                    val transient = generateSequence(error) { it.cause }.any {
+                        it is java.net.SocketTimeoutException ||
+                            it is java.net.ConnectException ||
+                            it is java.net.SocketException
+                    }
+                    if (transient && cursor.failWithOneAutoRetry(
+                            requestPage = page,
+                            nowMs = SystemClock.elapsedRealtime(),
+                        )
+                    ) {
+                        Log.w(TAG, "QUEUE_PAGING_RETRY_ONCE: page=$page, backoff=5000ms", error)
+                        mainHandler.postDelayed({
+                            if (!serviceShuttingDown && browseQueueCursor === cursor &&
+                                ::player.isInitialized && cursor.isUnchanged(currentQueueIds()) &&
+                                player.playWhenReady
+                            ) maybeExtendBrowseQueue()
+                        }, 5_000L)
+                    } else {
+                        cursor.fail(page)
+                        Log.w(TAG, "QUEUE_PAGING_PAUSED: page=$page; retry exhausted/non-transient", error)
+                    }
                 }
             }
         }
@@ -1139,6 +1235,7 @@ class MusicService : MediaLibraryService() {
 
     override fun onDestroy() {
         serviceShuttingDown = true
+        cancelRapidBufferCheck()
         browseQueueCursor?.cancel()
         browseQueueCursor = null
         incomingBrowseQueue = null
@@ -1154,6 +1251,7 @@ class MusicService : MediaLibraryService() {
         librarySession?.release()
         librarySession = null
         player.release()
+        queueBrowseExecutor.shutdownNow()
         executor.shutdownNow()
         super.onDestroy()
     }
