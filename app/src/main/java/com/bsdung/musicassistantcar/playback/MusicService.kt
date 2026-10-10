@@ -63,7 +63,7 @@ class MusicService : MediaLibraryService() {
         private const val KEY_SHUFFLE_ENABLED = "playback_shuffle_enabled"
         private const val KEY_REPEAT_MODE = "playback_repeat_mode"
         private const val PERSIST_INTERVAL_MS = 10_000L
-        private const val NETWORK_RECOVERY_COOLDOWN_MS = 5_000L
+        const val NETWORK_RECOVERY_COOLDOWN_MS = NetworkRecoveryPolicy.NETWORK_RECOVERY_COOLDOWN_MS
         const val KEY_LOUDNESS_NORMALIZATION = "loudness_normalization"
     }
 
@@ -685,6 +685,9 @@ class MusicService : MediaLibraryService() {
                 Log.w(TAG, "Queue startup restore: selected track unavailable; discarding stale seek position")
             }
             mainHandler.post {
+                if (serviceShuttingDown || !::player.isInitialized) {
+                    return@post
+                }
                 if (!QueueStartupRestorePolicy.shouldApply(
                         serviceShuttingDown = serviceShuttingDown,
                         hasSession = librarySession != null,
@@ -884,7 +887,7 @@ class MusicService : MediaLibraryService() {
                     "album='${resolved.mediaMetadata.albumTitle}'",
             )
             mainHandler.post {
-                if (!::player.isInitialized) return@post
+                if (serviceShuttingDown || !::player.isInitialized) return@post
                 if (index >= player.mediaItemCount) return@post
                 // Confirm this slot still holds the same media ID before replacing.
                 val current = runCatching { player.getMediaItemAt(index) }.getOrNull()
@@ -907,29 +910,22 @@ class MusicService : MediaLibraryService() {
 
     private fun isRecoverableNetworkError(
         error: PlaybackException,
-    ): Boolean = when (error.errorCode) {
-        PlaybackException.ERROR_CODE_TIMEOUT,
-        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
-        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> true
-        else -> false
-    }
+    ): Boolean = NetworkRecoveryPolicy.isRecoverableNetworkError(error)
 
     private fun recoverNetworkPlayback(
         error: PlaybackException,
     ) {
-        if (
-            !isRecoverableNetworkError(error) ||
-            !::player.isInitialized ||
-            player.mediaItemCount <= 0
-        ) {
-            return
-        }
-
         val now = SystemClock.elapsedRealtime()
         if (
-            networkRecoveryInProgress ||
-            now - lastNetworkRecoveryAttemptMs <
-                NETWORK_RECOVERY_COOLDOWN_MS
+            !NetworkRecoveryPolicy.canAttemptRecovery(
+                isShuttingDown = serviceShuttingDown,
+                isPlayerInitialized = ::player.isInitialized,
+                queueSize = if (::player.isInitialized) player.mediaItemCount else 0,
+                networkRecoveryInProgress = networkRecoveryInProgress,
+                nowMs = now,
+                lastNetworkRecoveryAttemptMs = lastNetworkRecoveryAttemptMs,
+                errorCode = error.errorCode,
+            )
         ) {
             return
         }
@@ -971,8 +967,14 @@ class MusicService : MediaLibraryService() {
                 val result = runCatching { future.get() }
                 persistHandler.post {
                     networkRecoveryInProgress = false
+                    if (serviceShuttingDown || !::player.isInitialized) {
+                        return@post
+                    }
                     result.onSuccess { refreshed ->
                         if (refreshed.isEmpty()) {
+                            return@onSuccess
+                        }
+                        if (serviceShuttingDown || !::player.isInitialized) {
                             return@onSuccess
                         }
                         val targetIndex = currentIndex
@@ -1052,10 +1054,11 @@ class MusicService : MediaLibraryService() {
         getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
             .unregisterOnSharedPreferenceChangeListener(prefsListener)
         gainAudioProcessor.reset()
-        persistHandler.removeCallbacks(persistRunnable)
         persistPlaybackState()
         persistPlaybackModes()
         saveCurrentTrackResume()
+        persistHandler.removeCallbacksAndMessages(null)
+        mainHandler.removeCallbacksAndMessages(null)
         librarySession?.release()
         librarySession = null
         player.release()
