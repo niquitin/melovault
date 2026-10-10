@@ -102,6 +102,7 @@ class MusicService : MediaLibraryService() {
     // Do not queue source pagination behind metadata/details for dozens of rapid skips.
     private val queueBrowseExecutor = Executors.newSingleThreadExecutor()
     private val rapidSkipBufferPolicy = RapidSkipBufferPolicy()
+    private val memorySamplePolicy = MemorySamplePolicy()
     private var rapidBufferCheck: Runnable? = null
     private var lastActiveMediaId: String? = null
     private var lastKnownPositionMs: Long = 0L
@@ -116,6 +117,10 @@ class MusicService : MediaLibraryService() {
             if (::player.isInitialized && player.isPlaying) {
                 persistPlaybackState()
                 saveCurrentTrackResume()
+                // Once per five minutes: PSS breakdown for Java/native/graphics leak analysis.
+                if (memorySamplePolicy.shouldSample(SystemClock.elapsedRealtime(), player.isPlaying)) {
+                    PlaybackMemoryDiagnostics.snapshot("PLAYING_5MIN")
+                }
                 if (::historyTracker.isInitialized) {
                     historyTracker.onPeriodicTick(
                         player.isPlaying,
@@ -1235,6 +1240,7 @@ class MusicService : MediaLibraryService() {
 
     override fun onDestroy() {
         serviceShuttingDown = true
+        memorySamplePolicy.reset()
         cancelRapidBufferCheck()
         browseQueueCursor?.cancel()
         browseQueueCursor = null
