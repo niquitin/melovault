@@ -334,4 +334,299 @@ class ContinuousScrollPagingTest {
         assertEquals("track:1", adapter.getItems()[0].id)
         assertEquals(10, adapter.itemCount)
     }
+
+    @Test
+    fun testContentItemCountExcludesFooterWhilePreservingContent() {
+        val adapter = LibraryAdapter({}, {}, { _, _, _ -> })
+        val dummyMediaItem = MediaItem.Builder().setMediaId("dummy").build()
+
+        val category = LibraryItem.Category("cat:1", "Category", "Sub", 0, dummyMediaItem)
+        val folder = LibraryItem.Folder("folder:1", "Folder", "Sub", dummyMediaItem)
+        val track1 = createTrack("track:1", "Song 1")
+        val track2 = createTrack("track:2", "Song 2")
+        val duplicateTrack1 = createTrack("track:1", "Song 1 (Dup)")
+
+        adapter.submitItems(listOf(category, folder, track1, track2, duplicateTrack1))
+        assertEquals(5, adapter.itemCount)
+        assertEquals(5, adapter.getContentItemCount())
+        assertFalse(adapter.hasFooter())
+        assertEquals(5, adapter.getContentItems().size)
+
+        // Add loading footer
+        adapter.showFooter(isError = false)
+        assertEquals(6, adapter.itemCount) // UI itemCount includes footer
+        assertEquals(5, adapter.getContentItemCount()) // content count strictly excludes footer
+        assertTrue(adapter.hasFooter())
+        assertEquals(5, adapter.getContentItems().size)
+
+        // Remove footer
+        adapter.hideFooter()
+        assertEquals(5, adapter.itemCount)
+        assertEquals(5, adapter.getContentItemCount())
+        assertFalse(adapter.hasFooter())
+    }
+
+    @Test
+    fun testProductionPagingWithFooterCountBoundaryMilestones() {
+        val milestones = listOf(30, 31, 60, 61, 90, 91, 136, 151)
+        val pageSize = 30
+
+        for (total in milestones) {
+            val adapter = LibraryAdapter({}, {}, { _, _, _ -> })
+            val policy = com.bsdung.musicassistantcar.ui.util.ContinuousPagingPolicy(pageSize = pageSize)
+            val gen = policy.reset()
+
+            // Page 0
+            val page0Size = minOf(pageSize, total)
+            val page0 = (0 until page0Size).map { createTrack("track:$it", "Song $it") }
+            adapter.submitItems(page0)
+
+            policy.onPageSuccess(
+                callbackGeneration = gen,
+                newItemsCount = page0.size,
+                totalInCollection = total,
+                loadedItemsCount = adapter.getContentItemCount(),
+            )
+
+            if (total <= pageSize) {
+                assertTrue("Total $total <= pageSize should reach end on page 0", policy.isEndReached)
+            } else {
+                assertFalse("Total $total > pageSize should NOT reach end on page 0", policy.isEndReached)
+            }
+
+            // Continuous scroll loop
+            var pageIndex = 1
+            while (!policy.isEndReached) {
+                assertTrue(
+                    "Should fetch on scroll for page $pageIndex (total=$total)",
+                    policy.shouldFetchOnScroll(dy = 10, lastVisiblePosition = adapter.itemCount - 1, totalItemCount = adapter.itemCount)
+                )
+                assertTrue(policy.startLoading(gen))
+
+                // Production: show footer while in-flight
+                adapter.showFooter(isError = false)
+                assertTrue(adapter.hasFooter())
+                assertEquals("itemCount must be content + 1 footer", adapter.getContentItemCount() + 1, adapter.itemCount)
+
+                // Fetch next page
+                val from = adapter.getContentItemCount()
+                val to = minOf(from + pageSize, total)
+                val batch = (from until to).map { createTrack("track:$it", "Song $it") }
+
+                // Production sequence: appendItems removes footer and appends batch
+                adapter.appendItems(batch)
+                assertFalse("Footer must be removed after appendItems", adapter.hasFooter())
+
+                val currentLoaded = adapter.getContentItemCount()
+                policy.onPageSuccess(
+                    callbackGeneration = gen,
+                    newItemsCount = batch.size,
+                    totalInCollection = total,
+                    loadedItemsCount = currentLoaded,
+                )
+                adapter.hideFooter()
+                pageIndex++
+            }
+
+            // Verify final state
+            assertTrue("Policy must reach end for total $total", policy.isEndReached)
+            assertEquals("Exact total items must be loaded for total $total", total, adapter.getContentItemCount())
+            assertEquals("Adapter itemCount must match total for total $total", total, adapter.itemCount)
+            assertFalse(policy.shouldFetchOnScroll(dy = 10, lastVisiblePosition = adapter.itemCount - 1, totalItemCount = adapter.itemCount))
+
+            // Verify sequential ordering of all items from first to last
+            val loadedItems = adapter.getItems().filterIsInstance<LibraryItem.Track>()
+            assertEquals(total, loadedItems.size)
+            assertEquals("track:0", loadedItems.first().id)
+            assertEquals("track:${total - 1}", loadedItems.last().id)
+        }
+    }
+
+    @Test
+    fun testRegressionTotal61FooterOffByOneBugReproduction() {
+        val total = 61
+        val pageSize = 30
+
+        // --- 1. REPRODUCE BUGGY BEHAVIOR (Old code) ---
+        run {
+            val buggyAdapter = LibraryAdapter({}, {}, { _, _, _ -> })
+            val buggyPolicy = com.bsdung.musicassistantcar.ui.util.ContinuousPagingPolicy(pageSize = pageSize)
+            val gen = buggyPolicy.reset()
+
+            // Page 0
+            val page0 = (0 until 30).map { createTrack("track:$it") }
+            buggyAdapter.submitItems(page0)
+            buggyPolicy.onPageSuccess(gen, newItemsCount = 30, totalInCollection = total, loadedItemsCount = 30)
+            assertFalse(buggyPolicy.isEndReached)
+
+            // User scrolls -> show footer
+            buggyAdapter.showFooter(isError = false)
+            assertEquals(31, buggyAdapter.itemCount) // 30 tracks + 1 footer
+
+            // Page 1 arrives (30 tracks)
+            val page1 = (30 until 60).map { createTrack("track:$it") }
+
+            // OLD BUGGY CALCULATION: loadedItemsCount = buggyAdapter.itemCount + page1.size = 31 + 30 = 61!
+            val buggyLoadedCount = buggyAdapter.itemCount + page1.size
+            assertEquals(61, buggyLoadedCount)
+
+            // Buggy call BEFORE appendItems
+            buggyPolicy.onPageSuccess(gen, newItemsCount = page1.size, totalInCollection = total, loadedItemsCount = buggyLoadedCount)
+            assertTrue("BUG: Policy incorrectly marks END_REACHED at 60 items!", buggyPolicy.isEndReached)
+
+            buggyAdapter.appendItems(page1)
+            buggyAdapter.hideFooter()
+
+            // Notice: Only 60 items loaded, but policy is at END_REACHED! Item 60 (track:60, the 61st song) is LOST!
+            assertEquals(60, buggyAdapter.itemCount)
+            assertFalse("BUG: Scroll is permanently blocked, 61st song is never reachable!",
+                buggyPolicy.shouldFetchOnScroll(10, 59, 60))
+        }
+
+        // --- 2. VERIFY FIXED PRODUCTION BEHAVIOR ---
+        run {
+            val fixedAdapter = LibraryAdapter({}, {}, { _, _, _ -> })
+            val fixedPolicy = com.bsdung.musicassistantcar.ui.util.ContinuousPagingPolicy(pageSize = pageSize)
+            val gen = fixedPolicy.reset()
+
+            // Page 0
+            val page0 = (0 until 30).map { createTrack("track:$it") }
+            fixedAdapter.submitItems(page0)
+            fixedPolicy.onPageSuccess(gen, newItemsCount = 30, totalInCollection = total, loadedItemsCount = fixedAdapter.getContentItemCount())
+            assertFalse(fixedPolicy.isEndReached)
+
+            // User scrolls -> show footer
+            fixedAdapter.showFooter(isError = false)
+            assertEquals(31, fixedAdapter.itemCount)
+            assertEquals(30, fixedAdapter.getContentItemCount())
+
+            // Page 1 arrives (30 tracks)
+            val page1 = (30 until 60).map { createTrack("track:$it") }
+
+            // FIXED PRODUCTION LOGIC: appendItems first, then count accurate content items
+            fixedAdapter.appendItems(page1)
+            val currentLoaded = fixedAdapter.getContentItemCount()
+            assertEquals(60, currentLoaded)
+
+            fixedPolicy.onPageSuccess(gen, newItemsCount = page1.size, totalInCollection = total, loadedItemsCount = currentLoaded)
+            fixedAdapter.hideFooter()
+
+            // FIX VERIFIED: Policy correctly stays IDLE so Page 2 can be fetched!
+            assertFalse("FIX: Policy must NOT mark END_REACHED when only 60 of 61 items loaded", fixedPolicy.isEndReached)
+            assertTrue(fixedPolicy.shouldFetchOnScroll(10, 59, 60))
+
+            // Page 2 arrives (the 61st song!)
+            assertTrue(fixedPolicy.startLoading(gen))
+            fixedAdapter.showFooter(isError = false)
+            val page2 = listOf(createTrack("track:60")) // 61st song
+
+            fixedAdapter.appendItems(page2)
+            val finalLoaded = fixedAdapter.getContentItemCount()
+            assertEquals(61, finalLoaded)
+
+            fixedPolicy.onPageSuccess(gen, newItemsCount = page2.size, totalInCollection = total, loadedItemsCount = finalLoaded)
+            fixedAdapter.hideFooter()
+
+            assertTrue("FIX: Policy marks END_REACHED once all 61 items are loaded", fixedPolicy.isEndReached)
+            assertEquals(61, fixedAdapter.itemCount)
+            assertEquals("track:60", fixedAdapter.getItems().last().id)
+            assertFalse(fixedPolicy.shouldFetchOnScroll(10, 60, 61))
+        }
+    }
+
+    @Test
+    fun testLargeCollection11001ItemsReachesAllItems() {
+        val total = 11001
+        val pageSize = 30
+        val adapter = LibraryAdapter({}, {}, { _, _, _ -> })
+        val policy = com.bsdung.musicassistantcar.ui.util.ContinuousPagingPolicy(pageSize = pageSize)
+        val gen = policy.reset()
+
+        // Page 0
+        val page0 = (0 until 30).map { createTrack("track:$it") }
+        adapter.submitItems(page0)
+        policy.onPageSuccess(gen, newItemsCount = 30, totalInCollection = total, loadedItemsCount = adapter.getContentItemCount())
+
+        while (!policy.isEndReached) {
+            policy.startLoading(gen)
+            adapter.showFooter(isError = false)
+            val from = adapter.getContentItemCount()
+            val to = minOf(from + pageSize, total)
+            val batch = (from until to).map { createTrack("track:$it") }
+            adapter.appendItems(batch)
+            policy.onPageSuccess(gen, newItemsCount = batch.size, totalInCollection = total, loadedItemsCount = adapter.getContentItemCount())
+            adapter.hideFooter()
+        }
+
+        assertTrue(policy.isEndReached)
+        assertEquals(11001, adapter.getContentItemCount())
+        assertEquals("track:0", adapter.getItems().first().id)
+        assertEquals("track:11000", adapter.getItems().last().id)
+    }
+
+    @Test
+    fun testUnknownTotalAndShortPagePagination() {
+        val adapter = LibraryAdapter({}, {}, { _, _, _ -> })
+        val policy = com.bsdung.musicassistantcar.ui.util.ContinuousPagingPolicy(pageSize = 30)
+        val gen = policy.reset()
+
+        // Page 0 (30 items, unknown total = -1)
+        adapter.submitItems((0 until 30).map { createTrack("track:$it") })
+        policy.onPageSuccess(gen, newItemsCount = 30, totalInCollection = -1, loadedItemsCount = 30)
+        assertFalse(policy.isEndReached)
+
+        // Page 1 (30 items, unknown total = -1)
+        policy.startLoading(gen)
+        adapter.showFooter(isError = false)
+        adapter.appendItems((30 until 60).map { createTrack("track:$it") })
+        policy.onPageSuccess(gen, newItemsCount = 30, totalInCollection = -1, loadedItemsCount = adapter.getContentItemCount())
+        adapter.hideFooter()
+        assertFalse(policy.isEndReached)
+
+        // Page 2 (14 items < 30 pageSize -> short page indicates end)
+        policy.startLoading(gen)
+        adapter.showFooter(isError = false)
+        adapter.appendItems((60 until 74).map { createTrack("track:$it") })
+        policy.onPageSuccess(gen, newItemsCount = 14, totalInCollection = -1, loadedItemsCount = adapter.getContentItemCount())
+        adapter.hideFooter()
+
+        assertTrue("Short page must automatically trigger END_REACHED", policy.isEndReached)
+        assertEquals(74, adapter.getContentItemCount())
+        assertEquals("track:73", adapter.getItems().last().id)
+        assertFalse(policy.shouldFetchOnScroll(10, 73, 74))
+    }
+
+    @Test
+    fun testUnifiedLibraryDialogPaginationContractWithTotal61() {
+        val totalItems = 61
+        val pageSize = 30
+        val displayedItems = mutableListOf<String>()
+
+        // Page 0
+        var currentOffset = 0
+        val page0 = (currentOffset until minOf(currentOffset + pageSize, totalItems)).map { "item:$it" }
+        displayedItems.addAll(page0)
+        assertEquals(30, displayedItems.size)
+
+        // Continuous scroll condition
+        fun canFetchNext(): Boolean = displayedItems.size < totalItems
+        assertTrue(canFetchNext())
+
+        // Page 1
+        currentOffset = displayedItems.size
+        val page1 = (currentOffset until minOf(currentOffset + pageSize, totalItems)).map { "item:$it" }
+        displayedItems.addAll(page1)
+        assertEquals(60, displayedItems.size)
+        assertTrue(canFetchNext()) // Still 1 item left!
+
+        // Page 2
+        currentOffset = displayedItems.size
+        val page2 = (currentOffset until minOf(currentOffset + pageSize, totalItems)).map { "item:$it" }
+        displayedItems.addAll(page2)
+        assertEquals(61, displayedItems.size)
+        assertFalse(canFetchNext()) // Reached 61, no further request
+
+        assertEquals("item:0", displayedItems.first())
+        assertEquals("item:60", displayedItems.last())
+    }
 }

@@ -146,6 +146,22 @@ class LibraryAdapter(
 
     fun getItems(): List<LibraryItem> = items.toList()
 
+    /**
+     * Returns the count of legitimate collection/content items (Categories, Folders, Tracks),
+     * strictly excluding any transient UI elements such as [LibraryItem.LoadingFooter].
+     */
+    fun getContentItemCount(): Int = items.count { it !is LibraryItem.LoadingFooter }
+
+    /**
+     * Returns whether a transient UI footer is currently present in the adapter.
+     */
+    fun hasFooter(): Boolean = items.any { it is LibraryItem.LoadingFooter }
+
+    /**
+     * Returns a snapshot of collection/content items, excluding any transient [LibraryItem.LoadingFooter].
+     */
+    fun getContentItems(): List<LibraryItem> = items.filter { it !is LibraryItem.LoadingFooter }
+
     fun updateTrackTechnicalInfo(mediaId: String, summary: MediaTechnicalSummary): Boolean {
         val index = items.indexOfFirst { it is LibraryItem.Track && it.id == mediaId }
         if (index >= 0) {

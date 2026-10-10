@@ -1845,8 +1845,14 @@ class MainActivity : AppCompatActivity() {
                             pagingPolicy.onPageSuccess(generation, 0)
                             libraryAdapter.hideFooter()
                         } else {
-                            pagingPolicy.onPageSuccess(generation, uiItems.size)
                             libraryAdapter.appendItems(uiItems)
+                            val currentLoadedCount = libraryAdapter.getContentItemCount()
+                            pagingPolicy.onPageSuccess(
+                                callbackGeneration = generation,
+                                newItemsCount = uiItems.size,
+                                totalInCollection = -1,
+                                loadedItemsCount = currentLoadedCount,
+                            )
                             libraryAdapter.hideFooter()
                         }
                     }.onFailure { exc ->
@@ -1904,13 +1910,14 @@ class MainActivity : AppCompatActivity() {
                         } else {
                             val firstExtras = rawItems.firstOrNull()?.mediaMetadata?.extras
                             val total = firstExtras?.getInt("collection_total", -1) ?: -1
+                            libraryAdapter.appendItems(uiItems)
+                            val currentLoadedCount = libraryAdapter.getContentItemCount()
                             pagingPolicy.onPageSuccess(
                                 callbackGeneration = generation,
                                 newItemsCount = uiItems.size,
                                 totalInCollection = total,
-                                loadedItemsCount = libraryAdapter.itemCount + uiItems.size,
+                                loadedItemsCount = currentLoadedCount,
                             )
-                            libraryAdapter.appendItems(uiItems)
                             libraryAdapter.hideFooter()
                         }
                     }
