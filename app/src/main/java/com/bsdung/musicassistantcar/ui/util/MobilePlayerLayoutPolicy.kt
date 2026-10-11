@@ -57,6 +57,27 @@ internal object MobilePlayerLayoutPolicy {
         if (widthDp >= 700 && heightDp in 340..430) 46 else null
 
     /**
+     * Only the wide landscape player can use tap-to-expand artwork. The portrait
+     * phone retains its original tap-to-open-Queue interaction.
+     */
+    fun supportsLandscapeArtworkExpansion(widthDp: Int, heightDp: Int): Boolean =
+        widthDp >= 700 && heightDp > 0 && widthDp > heightDp
+
+    /**
+     * Increase the artwork by about 2x on FYT-class shallow landscape windows.
+     * Hiding the quick navigation row recovers the necessary vertical space;
+     * larger landscape screens can support a larger artwork size.
+     */
+    fun expandedLandscapeArtworkSizeDp(widthDp: Int, heightDp: Int): Int? {
+        if (!supportsLandscapeArtworkExpansion(widthDp, heightDp)) return null
+        return if (heightDp <= 430) {
+            minOf(96, (heightDp * 0.26f).roundToInt()).coerceAtLeast(1)
+        } else {
+            minOf(260, (heightDp * 0.47f).roundToInt())
+        }
+    }
+
+    /**
      * Determines if the mini player should be shown.
      * Mini player is only shown when browsing on a portrait phone, unless the full player
      * has been explicitly opened by the user.

@@ -67,6 +67,25 @@ class MobilePlayerLayoutPolicyTest {
     }
 
     @Test
+    fun landscapeArtworkExpand_onlyWideLandscape() {
+        assertTrue(MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(710, 377))
+        assertTrue(MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(912, 381))
+        assertFalse(MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(411, 881))
+        assertFalse(MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(699, 377))
+        assertFalse(MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(710, 710))
+        assertFalse(MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(710, 0))
+    }
+
+    @Test
+    fun landscapeArtworkExpandedSize_biggerThanE4OnShortFyt() {
+        assertEquals(96, MobilePlayerLayoutPolicy.expandedLandscapeArtworkSizeDp(710, 377))
+        assertEquals(96, MobilePlayerLayoutPolicy.expandedLandscapeArtworkSizeDp(912, 381))
+        assertEquals(226, MobilePlayerLayoutPolicy.expandedLandscapeArtworkSizeDp(900, 480))
+        assertNull(MobilePlayerLayoutPolicy.expandedLandscapeArtworkSizeDp(411, 881))
+        assertNull(MobilePlayerLayoutPolicy.expandedLandscapeArtworkSizeDp(699, 377))
+    }
+
+    @Test
     fun playerVisibility_portraitBrowsing_showsMiniAndReversesWhenFullOpened() {
         assertTrue(
             MobilePlayerLayoutPolicy.shouldShowMiniPlayer(

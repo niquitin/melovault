@@ -175,6 +175,7 @@ class MainActivity : AppCompatActivity() {
     private var currentLyricsSourceSummary: String = "Nguồn: LRCLIB · Tự động"
     private var isEditMode: Boolean = false
     private var userOpenedFullPlayer: Boolean = false
+    private var isLandscapeArtworkExpanded: Boolean = false
     private var currentLoadedArtworkUri: String? = null
     private var libraryItemTouchHelper: ItemTouchHelper? = null
     private val navManager = NavigationManager()
@@ -442,6 +443,7 @@ class MainActivity : AppCompatActivity() {
             isLyricsVisible = savedInstanceState.getBoolean("is_lyrics_visible", false)
             isFullscreenLyricsVisible = savedInstanceState.getBoolean("is_fullscreen_lyrics_visible", false)
             userOpenedFullPlayer = savedInstanceState.getBoolean("user_opened_full_player", false)
+            isLandscapeArtworkExpanded = savedInstanceState.getBoolean("landscape_artwork_expanded", false)
             val parentId = savedInstanceState.getString("nav_parent_id", "root") ?: "root"
             val label = savedInstanceState.getString("nav_label", "Thư viện") ?: "Thư viện"
             val page = savedInstanceState.getInt("nav_page", 0)
@@ -468,10 +470,18 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        applyLandscapeArtworkNavigation()
+
         onBackPressedDispatcher.addCallback(
             this,
             object : OnBackPressedCallback(true) {
                 override fun handleOnBackPressed() {
+                    if (isLandscapeArtworkExpanded) {
+                        isLandscapeArtworkExpanded = false
+                        applyLandscapeArtworkNavigation()
+                        if (browser != null) updateNowPlaying()
+                        return
+                    }
                     if (isCandidatePickerOpen) {
                         closeLyricsCandidatePicker()
                         return
@@ -518,6 +528,21 @@ class MainActivity : AppCompatActivity() {
      */
     private fun currentWidthClass(): WindowWidthClass =
         widthClassFor(resources.configuration.screenWidthDp)
+
+    /**
+     * E5: tapping the artwork on a wide landscape screen grows the cover and
+     * hides only the bottom quick shortcuts, leaving Queue and media controls intact.
+     * Reset expansion when rotating to portrait or entering a narrower FYT pane.
+     */
+    private fun applyLandscapeArtworkNavigation() {
+        val cfg = resources.configuration
+        val supported = MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(
+            cfg.screenWidthDp, cfg.screenHeightDp
+        )
+        if (!supported) isLandscapeArtworkExpanded = false
+        binding.quickNavigationRow.visibility =
+            if (supported && isLandscapeArtworkExpanded) View.GONE else View.VISIBLE
+    }
 
     /**
      * Emit a structured log line for FYT field validation.
@@ -867,9 +892,22 @@ class MainActivity : AppCompatActivity() {
             handlePlayPauseToggle()
         }
 
-        // Album-art gestures: left/right skips a track, tap opens the queue.
-        // Vertical drags yield to the parent scroller, avoiding accidental skips.
-        binding.coverView.setOnClickListener { toggleQueue() }
+        // Album art: tap expands/collapses cover only in wide landscape.
+        // Portrait preserves its existing tap-to-Queue action; horizontal swipes
+        // retain their Next/Previous behavior on every window size.
+        binding.coverView.setOnClickListener {
+            val cfg = resources.configuration
+            if (MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(
+                    cfg.screenWidthDp, cfg.screenHeightDp
+                )
+            ) {
+                isLandscapeArtworkExpanded = !isLandscapeArtworkExpanded
+                applyLandscapeArtworkNavigation()
+                if (browser != null) updateNowPlaying()
+            } else {
+                toggleQueue()
+            }
+        }
         val artworkSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop.toFloat()
         val artworkSwipeThreshold = 64f * resources.displayMetrics.density
         var artworkDownX = 0f
@@ -4677,6 +4715,11 @@ class MainActivity : AppCompatActivity() {
         val shortExpandedArtworkPx = MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(
             cfg.screenWidthDp, cfg.screenHeightDp
         )?.let { (it * resources.displayMetrics.density).roundToInt() }
+        val expandedArtworkPx = if (isLandscapeArtworkExpanded) {
+            MobilePlayerLayoutPolicy.expandedLandscapeArtworkSizeDp(
+                cfg.screenWidthDp, cfg.screenHeightDp
+            )?.let { (it * resources.displayMetrics.density).roundToInt() }
+        } else null
 
         if (currentItem == null) {
             // Idle / Welcome state
@@ -4702,7 +4745,8 @@ class MainActivity : AppCompatActivity() {
                 WindowWidthClass.MEDIUM   -> R.dimen.artwork_size_medium_idle
                 WindowWidthClass.EXPANDED -> R.dimen.artwork_size_expanded_idle
             }
-            val idleSize = shortExpandedArtworkPx ?: resources.getDimensionPixelSize(idleSizeRes)
+            val idleSize = expandedArtworkPx ?: shortExpandedArtworkPx
+                ?: resources.getDimensionPixelSize(idleSizeRes)
             val lp = binding.coverView.layoutParams
             if (lp.width != idleSize || lp.height != idleSize) {
                 lp.width = idleSize
@@ -4814,7 +4858,9 @@ class MainActivity : AppCompatActivity() {
             WindowWidthClass.MEDIUM   -> R.dimen.artwork_size_medium
             WindowWidthClass.EXPANDED -> R.dimen.artwork_size_expanded
         }
-        val activeSize = if (shortExpandedArtworkPx != null) {
+        val activeSize = if (expandedArtworkPx != null) {
+            expandedArtworkPx
+        } else if (shortExpandedArtworkPx != null) {
             shortExpandedArtworkPx
         } else if (MobilePlayerLayoutPolicy.isPortraitPhone(cfg.screenWidthDp, cfg.screenHeightDp)) {
             val sizeDp = MobilePlayerLayoutPolicy.artworkSizeDp(cfg.screenWidthDp, cfg.screenHeightDp)
@@ -5465,6 +5511,7 @@ class MainActivity : AppCompatActivity() {
         logWindowMetrics("onConfigurationChanged")
         // Re-apply artwork sizing to match new window dimensions.
         // Full recreation is handled by Android when qualifier boundary is crossed.
+        applyLandscapeArtworkNavigation()
         if (browser != null) {
             updateNowPlaying()
         }
@@ -5487,6 +5534,7 @@ class MainActivity : AppCompatActivity() {
         outState.putBoolean("is_lyrics_visible", isLyricsVisible)
         outState.putBoolean("is_fullscreen_lyrics_visible", isFullscreenLyricsVisible)
         outState.putBoolean("user_opened_full_player", userOpenedFullPlayer)
+        outState.putBoolean("landscape_artwork_expanded", isLandscapeArtworkExpanded)
         outState.putString("nav_parent_id", navManager.currentParentId)
         outState.putString("nav_label", navManager.currentLabel)
         outState.putInt("nav_page", navManager.currentPage)
