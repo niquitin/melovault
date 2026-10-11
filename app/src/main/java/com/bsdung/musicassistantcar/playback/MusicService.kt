@@ -104,6 +104,7 @@ class MusicService : MediaLibraryService() {
     private val streamPrefetchExecutor = Executors.newSingleThreadExecutor { work ->
         Thread(work, "melovault-e6-prefetch").apply { isDaemon = true }
     }
+    private var streamPrefetchJob: java.util.concurrent.Future<*>? = null
     private lateinit var prefetchHttpFactory: DefaultHttpDataSource.Factory
     private var lastPrefetchSignature = ""
     private val rapidSkipBufferPolicy = RapidSkipBufferPolicy()
@@ -156,7 +157,8 @@ class MusicService : MediaLibraryService() {
 
         val app = applicationContext
         val factory = prefetchHttpFactory
-        streamPrefetchExecutor.execute {
+        streamPrefetchJob?.cancel(true)
+        streamPrefetchJob = streamPrefetchExecutor.submit {
             val metered = runCatching {
                 val cm = app.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
                 cm.isActiveNetworkMetered
@@ -452,6 +454,7 @@ class MusicService : MediaLibraryService() {
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                StreamCacheManager.onPlaybackStateChanged(isPlaying)
                 Log.i(
                     TAG,
                     "onIsPlayingChanged: isPlaying=$isPlaying, " +
@@ -1304,7 +1307,9 @@ class MusicService : MediaLibraryService() {
         librarySession?.release()
         librarySession = null
         player.release()
+        StreamCacheManager.onPlaybackStateChanged(false)
         queueBrowseExecutor.shutdownNow()
+        streamPrefetchJob?.cancel(true)
         streamPrefetchExecutor.shutdownNow()
         executor.shutdownNow()
         super.onDestroy()

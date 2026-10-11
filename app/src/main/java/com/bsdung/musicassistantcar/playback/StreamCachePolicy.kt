@@ -9,6 +9,8 @@ object StreamCachePolicy {
     const val PREFETCH_NEXT_COUNT = 2
     const val PREFETCH_UNMETERED_BYTES = 3L * 1024 * 1024
     const val PREFETCH_METERED_BYTES = 512L * 1024
+    const val MIN_SD_USABLE_BYTES = 256L * 1024 * 1024 // 256 MiB
+    const val MIN_STREAM_CACHE_BYTES = 64L * 1024 * 1024 // 64 MiB
 
     fun defaultCapGiB(totalBytes: Long): Int =
         if (totalBytes >= 200L * GIB) DEFAULT_LARGE_GIB else DEFAULT_SMALL_GIB
@@ -16,6 +18,11 @@ object StreamCachePolicy {
     fun safeCapBytes(desired: Long, free: Long, existing: Long, total: Long): Long {
         val reserve = minOf(RESERVE_GIB * GIB, total / 4)
         return minOf(desired, (free + existing - reserve).coerceAtLeast(0L))
+    }
+
+    fun hasSufficientSpace(free: Long, total: Long): Boolean {
+        val reserve = minOf(RESERVE_GIB * GIB, total / 4)
+        return free > reserve
     }
 
     fun nextIndices(index: Int, count: Int): List<Int> =

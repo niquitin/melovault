@@ -35,6 +35,22 @@ object StreamCacheManager {
     @Volatile private var activeBase: File? = null
     @Volatile private var activeTarget: String? = null
     @Volatile private var activeCap: Int = -1
+    @Volatile private var isPlaybackActive: Boolean = false
+    private val activePrefetchCount = java.util.concurrent.atomic.AtomicInteger(0)
+
+    fun onPlaybackStateChanged(isPlaying: Boolean) {
+        isPlaybackActive = isPlaying
+    }
+
+    fun onPrefetchStarted() {
+        activePrefetchCount.incrementAndGet()
+    }
+
+    fun onPrefetchFinished() {
+        activePrefetchCount.decrementAndGet()
+    }
+
+    fun isCacheInUse(): Boolean = isPlaybackActive || activePrefetchCount.get() > 0
 
     private fun prefs(ctx: Context) =
         ctx.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -94,43 +110,121 @@ object StreamCacheManager {
         val where = if (preferredTarget(ctx) == TARGET_SD) "microSD" else "Bộ nhớ trong"
         val sdWarning = if (preferredTarget(ctx) == TARGET_SD && !sdAvailable(ctx))
             " (thẻ không khả dụng: fallback bộ nhớ trong)" else ""
-        val restart = if (isRestartRequired(ctx)) " • Cần khởi động lại dịch vụ phát nhạc" else ""
+        val restart = if (isRestartRequired(ctx)) " • Cần khởi động lại ứng dụng" else ""
         return where + sdWarning + " • " + configuredCapGiB(ctx) + " GB • Đã lưu " +
             (getCurrentCacheSizeBytes(ctx) / 1048576L) + " MB" + restart
     }
 
     private fun internalBase(ctx: Context): File = ctx.externalCacheDir ?: ctx.cacheDir
 
+    fun repairStreamCacheDir(dir: File) {
+        if (dir.name != CACHE_DIR_NAME) {
+            Log.e(TAG, "Refusing to clean non-stream cache directory: ${dir.name}")
+            return
+        }
+        runCatching {
+            dir.listFiles()?.forEach { file ->
+                file.deleteRecursively()
+            }
+        }
+    }
+
     @Synchronized
     fun getCache(ctx: Context): SimpleCache {
         simpleCache?.let { return it }
         val app = ctx.applicationContext
         val requestedTarget = effectiveTarget(app)
-        val selectedBase = if (requestedTarget == TARGET_SD) removableBase(app) else internalBase(app)
-        var root = File(selectedBase ?: internalBase(app), CACHE_DIR_NAME)
-        var actualTarget = requestedTarget
-        if (!root.exists() && !root.mkdirs()) {
-            if (actualTarget != TARGET_SD) throw IllegalStateException("Internal cache unavailable")
-            root = File(internalBase(app), CACHE_DIR_NAME)
-            actualTarget = TARGET_INTERNAL
-            if (!root.exists() && !root.mkdirs()) throw IllegalStateException("Cache unavailable")
-        }
-        // Reuse existing internal cache path from Stable v0.6.39, avoiding needless redownload.
-        // Include nested Media3 cache-span folders when honoring the free-space reserve.
-        val existingBytes = root.walkTopDown().filter { it.isFile }.sumOf { it.length() }
         val capGiB = configuredCapGiB(app)
-        val safeCap = StreamCachePolicy.safeCapBytes(capGiB * StreamCachePolicy.GIB,
-            root.usableSpace, existingBytes, root.totalSpace)
-        val db = StandaloneDatabaseProvider(app)
-        val result = SimpleCache(root, LeastRecentlyUsedCacheEvictor(safeCap), db)
-        simpleCache = result
-        databaseProvider = db
-        activeBase = root
-        activeTarget = actualTarget
-        activeCap = capGiB
-        Log.i(TAG, "E6 init target=" + actualTarget + " capBytes=" + safeCap)
-        return result
+        val desiredBytes = capGiB * StreamCachePolicy.GIB
+
+        // Attempt 1: SD card target (when requested and mounted)
+        if (requestedTarget == TARGET_SD) {
+            val sdBase = removableBase(app)
+            if (sdBase != null) {
+                val sdRoot = File(sdBase, CACHE_DIR_NAME)
+                val existingBytes = runCatching {
+                    sdRoot.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+                }.getOrDefault(0L)
+                val safeCap = StreamCachePolicy.safeCapBytes(
+                    desiredBytes,
+                    sdRoot.usableSpace,
+                    existingBytes,
+                    sdRoot.totalSpace
+                )
+                if (sdRoot.usableSpace >= StreamCachePolicy.MIN_SD_USABLE_BYTES && safeCap > 0L) {
+                    if (sdRoot.exists() || sdRoot.mkdirs()) {
+                        try {
+                            val db = StandaloneDatabaseProvider(app)
+                            val result = SimpleCache(sdRoot, LeastRecentlyUsedCacheEvictor(safeCap), db)
+                            simpleCache = result
+                            databaseProvider = db
+                            activeBase = sdRoot
+                            activeTarget = TARGET_SD
+                            activeCap = capGiB
+                            Log.i(TAG, "E6 init target=sd capBytes=$safeCap")
+                            return result
+                        } catch (e: Exception) {
+                            Log.w(TAG, "SimpleCache init on SD failed: ${e.message}. Falling back to internal storage.", e)
+                        }
+                    } else {
+                        Log.w(TAG, "Cannot create SD cache directory. Falling back to internal storage.")
+                    }
+                } else {
+                    Log.w(TAG, "SD card has insufficient capacity (usable=${sdRoot.usableSpace}, safeCap=$safeCap). Falling back to internal storage.")
+                }
+            } else {
+                Log.w(TAG, "SD card not mounted or removable. Falling back to internal storage.")
+            }
+        }
+
+        // Attempt 2: Internal storage (default or fallback)
+        val intBase = internalBase(app)
+        var intRoot = File(intBase, CACHE_DIR_NAME)
+        if (!intRoot.exists() && !intRoot.mkdirs()) {
+            intRoot = File(app.cacheDir, CACHE_DIR_NAME)
+            if (!intRoot.exists() && !intRoot.mkdirs()) {
+                throw IllegalStateException("Internal cache storage unavailable")
+            }
+        }
+
+        val existingBytes = runCatching {
+            intRoot.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        }.getOrDefault(0L)
+        var safeCap = StreamCachePolicy.safeCapBytes(
+            desiredBytes,
+            intRoot.usableSpace,
+            existingBytes,
+            intRoot.totalSpace
+        )
+        if (safeCap <= 0L) {
+            safeCap = minOf(StreamCachePolicy.MIN_STREAM_CACHE_BYTES, intRoot.usableSpace.coerceAtLeast(1024L * 1024L))
+        }
+
+        try {
+            val db = StandaloneDatabaseProvider(app)
+            val result = SimpleCache(intRoot, LeastRecentlyUsedCacheEvictor(safeCap.coerceAtLeast(1024L * 1024L)), db)
+            simpleCache = result
+            databaseProvider = db
+            activeBase = intRoot
+            activeTarget = TARGET_INTERNAL
+            activeCap = capGiB
+            Log.i(TAG, "E6 init target=internal capBytes=$safeCap")
+            return result
+        } catch (e: Exception) {
+            Log.w(TAG, "Internal stream cache corrupted: ${e.message}. Attempting self-repair of stream cache dir.", e)
+            repairStreamCacheDir(intRoot)
+            val db = StandaloneDatabaseProvider(app)
+            val result = SimpleCache(intRoot, LeastRecentlyUsedCacheEvictor(safeCap.coerceAtLeast(1024L * 1024L)), db)
+            simpleCache = result
+            databaseProvider = db
+            activeBase = intRoot
+            activeTarget = TARGET_INTERNAL
+            activeCap = capGiB
+            Log.i(TAG, "E6 self-repair success: target=internal capBytes=$safeCap")
+            return result
+        }
     }
+
 
     /** Quality contributes to cache identity; tokens and transient queries never do. */
     fun buildCacheKey(uri: Uri): String {
@@ -162,27 +256,32 @@ object StreamCacheManager {
     /** Prefetches only a bounded prefix; never a full album, nor any pinned download. */
     fun prefetchIntro(ctx: Context, uri: Uri, http: DataSource.Factory, maxBytes: Long): Long {
         if (uri.scheme !in listOf("https", "http") || maxBytes <= 0 || !isPreloadEnabled(ctx)) return 0
-        val cache = getCache(ctx)
-        val base = activeBase ?: return 0
-        val reserve = minOf(StreamCachePolicy.RESERVE_GIB * StreamCachePolicy.GIB, base.totalSpace / 4)
-        if (base.usableSpace <= reserve) return 0
-        if (cache.getCachedBytes(buildCacheKey(uri), 0, maxBytes) >= maxBytes) return 0
-        val source = cachedFactory(ctx, http).createDataSource()
-        var bytes = 0L
+        onPrefetchStarted()
         try {
-            source.open(DataSpec.Builder().setUri(uri).setPosition(0).setLength(maxBytes).build())
-            val buf = ByteArray(65536)
-            while (bytes < maxBytes && !Thread.currentThread().isInterrupted) {
-                val n = source.read(buf, 0, minOf(65536L, maxBytes - bytes).toInt())
-                if (n <= 0) break
-                bytes += n
+            val cache = getCache(ctx)
+            val base = activeBase ?: return 0
+            val reserve = minOf(StreamCachePolicy.RESERVE_GIB * StreamCachePolicy.GIB, base.totalSpace / 4)
+            if (base.usableSpace <= reserve) return 0
+            if (cache.getCachedBytes(buildCacheKey(uri), 0, maxBytes) >= maxBytes) return 0
+            val source = cachedFactory(ctx, http).createDataSource()
+            var bytes = 0L
+            try {
+                source.open(DataSpec.Builder().setUri(uri).setPosition(0).setLength(maxBytes).build())
+                val buf = ByteArray(65536)
+                while (bytes < maxBytes && !Thread.currentThread().isInterrupted) {
+                    val n = source.read(buf, 0, minOf(65536L, maxBytes - bytes).toInt())
+                    if (n <= 0) break
+                    bytes += n
+                }
+            } catch (e: Exception) {
+                Log.d(TAG, "Prefetch unavailable " + e.javaClass.simpleName)
+            } finally {
+                runCatching { source.close() }
             }
-        } catch (e: Exception) {
-            Log.d(TAG, "Prefetch unavailable " + e.javaClass.simpleName)
+            return bytes
         } finally {
-            runCatching { source.close() }
+            onPrefetchFinished()
         }
-        return bytes
     }
 
     @Synchronized fun clearCache(ctx: Context) {
@@ -204,5 +303,7 @@ object StreamCacheManager {
         activeBase = null
         activeTarget = null
         activeCap = -1
+        isPlaybackActive = false
+        activePrefetchCount.set(0)
     }
 }

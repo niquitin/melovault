@@ -2169,7 +2169,7 @@ class MainActivity : AppCompatActivity() {
                         .setAdapter(streamCacheOptionAdapter(arrayOf("Bộ nhớ trong", "Thẻ microSD"))) { _, idx ->
                             val target = if (idx == 1) cache.TARGET_SD else cache.TARGET_INTERNAL
                             val ok = cache.setPreferredTarget(this, target)
-                            val message = if (ok) "Đã lưu. Khởi động lại dịch vụ phát nhạc để áp dụng."
+                            val message = if (ok) "Đã lưu. Cần khởi động lại ứng dụng để áp dụng vị trí mới."
                                 else "Không tìm thấy thẻ microSD ghi được. Không đổi nơi lưu."
                             Toast.makeText(this, message, Toast.LENGTH_LONG).show()
                         }
@@ -2178,7 +2178,7 @@ class MainActivity : AppCompatActivity() {
                         .setTitle("Dung lượng cache online")
                         .setAdapter(streamCacheOptionAdapter(arrayOf("5 GB", "10 GB", "20 GB", "30 GB", "50 GB"))) { _, idx ->
                             cache.setCapGiB(this, listOf(5, 10, 20, 30, 50)[idx])
-                            Toast.makeText(this, "Đã lưu giới hạn. Khởi động lại dịch vụ để áp dụng.", Toast.LENGTH_LONG).show()
+                            Toast.makeText(this, "Đã lưu giới hạn. Cần khởi động lại ứng dụng để áp dụng.", Toast.LENGTH_LONG).show()
                         }
                         .setNegativeButton("Đóng", null).show()
                     2 -> {
