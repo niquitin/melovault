@@ -54,6 +54,7 @@ import com.bsdung.musicassistantcar.ui.util.ContinuousPagingPolicy
 import com.bsdung.musicassistantcar.ui.util.MobilePlayerLayoutPolicy
 import com.bsdung.musicassistantcar.ui.util.QueuePlaylistExport
 import com.bsdung.musicassistantcar.ui.util.QueuePlaylistExportPolicy
+import com.bsdung.musicassistantcar.ui.util.PlaylistBatchWriter
 import com.bsdung.musicassistantcar.ui.util.PlaylistReorderGuard
 import com.bsdung.musicassistantcar.data.AccountConnectionState
 import com.bsdung.musicassistantcar.data.AccountProvider
@@ -2642,12 +2643,15 @@ class MainActivity : AppCompatActivity() {
                     add("Nếu thư mục còn trang chưa tải, chỉ các bài hiện đang có trong hàng đợi được lưu.")
                 }
                 AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
-                    .setTitle("Lưu ${plan.mediaIds.size} bài thành Playlist")
+                    .setTitle("Lưu ${plan.mediaIds.size} bài vào Playlist")
                     .setMessage(notes.joinToString("\n\n"))
-                    .setPositiveButton("Tiếp tục") { _, _ ->
+                    .setPositiveButton("Playlist mới") { _, _ ->
                         // Snapshot is fixed before the dialog opens, so rapid Next
                         // or queue edits cannot change what the user chose to save.
                         showCreatePlaylistDialog(initialTrackIds = plan.mediaIds)
+                    }
+                    .setNeutralButton("Playlist có sẵn") { _, _ ->
+                        showPlaylistChooserForTracks(plan.mediaIds)
                     }
                     .setNegativeButton("Hủy", null)
                     .show()
@@ -6297,24 +6301,21 @@ class MainActivity : AppCompatActivity() {
                     bindingDialog.playlistRecyclerView.adapter = PlaylistChoiceAdapter(playlists) { playlist ->
                         dialog.dismiss()
                         uiExecutor.submit {
-                            val result = runCatching { uiCatalog.batchAddToPlaylist(playlist.id, trackIds) }
+                            val outcome = PlaylistBatchWriter.write(trackIds) { ids ->
+                                val res = uiCatalog.batchAddToPlaylist(playlist.id, ids)
+                                PlaylistBatchWriter.Counts(res.added, res.skipped)
+                            }
                             runOnUiThread {
-                                result.onSuccess { batchRes ->
-                                    val cleanName = MetadataDisplayHelper.cleanPlaylistName(playlist.name)
-                                    val msg = if (trackIds.size == 1) {
-                                        "Đã thêm vào \"$cleanName\""
-                                    } else {
-                                        "Đã thêm ${batchRes.added} bài vào \"$cleanName\""
-                                    }
-                                    Toast.makeText(this@MainActivity, msg, Toast.LENGTH_SHORT).show()
-                                    if (isEditMode) {
-                                        exitEditMode()
-                                    }
-                                    if (playlist.name.contains("Favorites", ignoreCase = true) || playlist.name.contains("Yêu thích", ignoreCase = true)) {
-                                        refreshFavoriteForCurrentTrack()
-                                    }
-                                }.onFailure {
-                                    Toast.makeText(this@MainActivity, "Không thể thêm vào danh sách phát", Toast.LENGTH_SHORT).show()
+                                val cleanName = MetadataDisplayHelper.cleanPlaylistName(playlist.name)
+                                val msg = when {
+                                    outcome.failed -> "Đã thêm ${outcome.added}/${outcome.requested} bài vào \"$cleanName\". Kiểm tra Playlist trước khi thử lại."
+                                    outcome.skipped > 0 -> "Đã thêm ${outcome.added} bài vào \"$cleanName\", bỏ qua ${outcome.skipped} bài trùng/không khả dụng."
+                                    else -> "Đã thêm ${outcome.added} bài vào \"$cleanName\""
+                                }
+                                Toast.makeText(this@MainActivity, msg, Toast.LENGTH_LONG).show()
+                                if (isEditMode) exitEditMode()
+                                if (outcome.added > 0 && (playlist.name.contains("Favorites", ignoreCase = true) || playlist.name.contains("Yêu thích", ignoreCase = true))) {
+                                    refreshFavoriteForCurrentTrack()
                                 }
                             }
                         }
