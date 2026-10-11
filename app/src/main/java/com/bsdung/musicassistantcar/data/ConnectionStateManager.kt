@@ -205,8 +205,10 @@ class ConnectionStateManager(
     )
 
     fun onPlaybackTransportChanged(transport: PlaybackTransport) {
+        if (currentPlaybackTransport == transport) return
+        val prev = currentPlaybackTransport
         currentPlaybackTransport = transport
-        logDiagnostic("PLAYBACK", "Playback transport changed to $transport")
+        logDiagnostic("PLAYBACK", "Playback transport changed: $prev -> $transport")
         notifyStateChanged()
     }
 
@@ -389,6 +391,10 @@ class ConnectionStateManager(
                     val caps = cm.getNetworkCapabilities(network)
                     isNetworkPhysicallyAvailable = true
                     currentTransport = determineTransport(caps)
+                    com.bsdung.musicassistantcar.playback.PlaybackDiagnosticTracker.onNetworkTransition(
+                        currentTransport.name,
+                        true,
+                    )
                     logDiagnostic("NETWORK", "Network onAvailable: transport=$currentTransport")
 
                     // When network returns after being lost, verify backend with a short debounce
@@ -410,6 +416,10 @@ class ConnectionStateManager(
                     if (activeNet == null || activeNet == network) {
                         isNetworkPhysicallyAvailable = false
                         currentTransport = NetworkTransport.NONE
+                        com.bsdung.musicassistantcar.playback.PlaybackDiagnosticTracker.onNetworkTransition(
+                            currentTransport.name,
+                            false,
+                        )
                         logDiagnostic("NETWORK", "Network onLost: All networks disconnected")
                         currentBackendHealth = BackendHealth.UNREACHABLE
                         updateUiStatus(UiConnectionStatus.OFFLINE)
@@ -420,6 +430,10 @@ class ConnectionStateManager(
                     val transport = determineTransport(networkCapabilities)
                     if (transport != currentTransport) {
                         currentTransport = transport
+                        com.bsdung.musicassistantcar.playback.PlaybackDiagnosticTracker.onNetworkTransition(
+                            currentTransport.name,
+                            isNetworkPhysicallyAvailable,
+                        )
                         logDiagnostic("NETWORK", "Transport updated to $currentTransport")
                         notifyStateChanged()
                     }
@@ -444,10 +458,11 @@ class ConnectionStateManager(
 
     private fun logDiagnostic(category: String, message: String, latencyMs: Long? = null, httpCode: Int? = null) {
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS", Locale.US)
+        val sanitized = com.bsdung.musicassistantcar.playback.PlaybackDiagnosticTracker.sanitizeForDiagnostics(message)
         val event = DiagnosticEvent(
             timestampIso = sdf.format(Date()),
             category = category,
-            message = message,
+            message = sanitized,
             latencyMs = latencyMs,
             httpCode = httpCode
         )
@@ -455,12 +470,13 @@ class ConnectionStateManager(
         while (diagnosticHistory.size > maxHistorySize) {
             diagnosticHistory.poll()
         }
-        runCatching { Log.d(TAG, "[$category] $message") }
+        runCatching { Log.d(TAG, "[$category] $sanitized") }
     }
 
     /**
-     * Generates a comprehensive, sanitized Connectivity Diagnostics report.
+     * Generates a comprehensive, sanitized Connectivity & Real Playback Diagnostics report.
      * Contains NO authentication tokens, passwords, or personal credentials.
+     * Distinguishes Control Plane (backend /health) from Data Plane (real audio stream stability).
      */
     fun exportDiagnosticsReport(): String {
         val snap = snapshot()
@@ -472,6 +488,7 @@ class ConnectionStateManager(
         sb.appendLine("1. CURRENT STATE SUMMARY")
         sb.appendLine("--------------------------------------------------------------------------------")
         sb.appendLine("UI Status:              ${snap.uiStatus.name} (${snap.uiStatus.label})")
+        sb.appendLine("Control Plane Note:     ONLINE only indicates backend reachability; see Section 2 for real playback stability.")
         sb.appendLine("Physical Network:       ${if (snap.isNetworkConnected) "CONNECTED" else "DISCONNECTED"}")
         sb.appendLine("Active Transport:       ${snap.networkTransport.name}")
         sb.appendLine("Backend Health:         ${snap.backendHealth.name}")
@@ -480,9 +497,11 @@ class ConnectionStateManager(
         sb.appendLine("Active Endpoint:        ${snap.activeEndpoint ?: "None"}")
         sb.appendLine("Consecutive Failures:   ${snap.consecutiveFailures}")
         sb.appendLine("Last Probe Latency:     ${if (snap.lastProbeLatencyMs >= 0) "${snap.lastProbeLatencyMs} ms" else "N/A"}")
-        sb.appendLine("Last Error:             ${snap.lastErrorMessage ?: "None"}")
+        sb.appendLine("Last Error:             ${com.bsdung.musicassistantcar.playback.PlaybackDiagnosticTracker.sanitizeForDiagnostics(snap.lastErrorMessage ?: "None")}")
         sb.appendLine()
-        sb.appendLine("2. SHANLING M3 ULTRA / TAILSCALE AUDIT METRICS")
+        sb.append(com.bsdung.musicassistantcar.playback.PlaybackDiagnosticTracker.formatDiagnosticsSection())
+        sb.appendLine()
+        sb.appendLine("3. SHANLING M3 ULTRA / TAILSCALE AUDIT METRICS")
         sb.appendLine("--------------------------------------------------------------------------------")
         sb.appendLine("Probe Timeout Config:   ${PROBE_TIMEOUT_MS} ms")
         sb.appendLine("Grace Period:           ${GRACE_PERIOD_MS} ms")
@@ -490,7 +509,7 @@ class ConnectionStateManager(
         sb.appendLine("Resume Freshness:       ${RESUME_FRESHNESS_MS} ms")
         sb.appendLine("Damping / Hysteresis:   ACTIVE")
         sb.appendLine()
-        sb.appendLine("3. RECENT CONNECTIVITY EVENTS (Last ${diagnosticHistory.size})")
+        sb.appendLine("4. RECENT CONNECTIVITY EVENTS (Last ${diagnosticHistory.size})")
         sb.appendLine("--------------------------------------------------------------------------------")
         for (evt in diagnosticHistory) {
             val latencyStr = evt.latencyMs?.let { " (${it}ms)" } ?: ""

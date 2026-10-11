@@ -126,6 +126,15 @@ class MusicService : MediaLibraryService() {
     private fun syncPlaybackTransport() {
         if (!::player.isInitialized) return
         val currentItem = player.currentMediaItem
+        PlaybackDiagnosticTracker.onPlayerStateUpdate(
+            mediaId = currentItem?.mediaId,
+            uriString = currentItem?.localConfiguration?.uri?.toString(),
+            playbackState = player.playbackState,
+            playWhenReady = player.playWhenReady,
+            isPlaying = player.isPlaying,
+            positionMs = player.currentPosition.coerceAtLeast(0L),
+            bufferedPositionMs = player.bufferedPosition.coerceAtLeast(0L),
+        )
         val isOffline = currentItem?.mediaMetadata?.extras?.getBoolean("is_offline_download") == true ||
             currentItem?.mediaMetadata?.extras?.getString("playback_source") == "PINNED_DOWNLOAD" ||
             currentItem?.localConfiguration?.uri?.scheme == "file"
@@ -141,11 +150,26 @@ class MusicService : MediaLibraryService() {
         connectionStateManager.onPlaybackTransportChanged(transport)
     }
 
+    private fun exportDiagnosticsSnapshotAsync() {
+        if (!::executor.isInitialized || serviceShuttingDown) return
+        runCatching {
+            executor.execute {
+                runCatching {
+                    val report = connectionStateManager.exportDiagnosticsReport()
+                    val file = java.io.File(getExternalFilesDir(null) ?: cacheDir, "connectivity_diagnostics.txt")
+                    file.writeText(report)
+                }
+            }
+        }
+    }
+
     private val persistRunnable = object : Runnable {
         override fun run() {
             if (::player.isInitialized && player.isPlaying) {
+                syncPlaybackTransport()
                 persistPlaybackState()
                 saveCurrentTrackResume()
+                exportDiagnosticsSnapshotAsync()
                 // Once per five minutes: PSS breakdown for Java/native/graphics leak analysis.
                 if (memorySamplePolicy.shouldSample(SystemClock.elapsedRealtime(), player.isPlaying)) {
                     PlaybackMemoryDiagnostics.snapshot("PLAYING_5MIN")
@@ -398,10 +422,15 @@ class MusicService : MediaLibraryService() {
                 )
                 syncPlaybackTransport()
                 if (playbackState == Player.STATE_BUFFERING) {
+                    StreamCacheManager.onPlaybackBufferingChanged(true)
+                    streamPrefetchJob?.cancel(true)
+                    lastPrefetchSignature = ""
                     maybeWatchRapidBuffer()
                 } else {
+                    StreamCacheManager.onPlaybackBufferingChanged(false)
                     cancelRapidBufferCheck()
                 }
+                exportDiagnosticsSnapshotAsync()
                 if (playbackState == Player.STATE_ENDED) {
                     player.currentMediaItem?.let { item ->
                         val mediaId = TrackResumeStore.getMediaIdentity(item)
@@ -532,6 +561,16 @@ class MusicService : MediaLibraryService() {
                     "onPositionDiscontinuity: reason=$reasonName, " +
                         "oldPos=${oldPosition.positionMs}ms, newPos=${newPosition.positionMs}ms",
                 )
+                if (reason == Player.DISCONTINUITY_REASON_SEEK &&
+                    oldPosition.mediaItemIndex == newPosition.mediaItemIndex
+                ) {
+                    PlaybackDiagnosticTracker.onSeekDiscontinuity(
+                        mediaId = player.currentMediaItem?.mediaId,
+                        oldPositionMs = oldPosition.positionMs.coerceAtLeast(0L),
+                        newPositionMs = newPosition.positionMs.coerceAtLeast(0L),
+                        bufferedPositionMs = player.bufferedPosition.coerceAtLeast(0L),
+                    )
+                }
                 if (reason == Player.DISCONTINUITY_REASON_SEEK && !isRestoringResume) {
                     if (oldPosition.mediaItemIndex == newPosition.mediaItemIndex) {
                         // Intra-track seek by user
@@ -573,6 +612,15 @@ class MusicService : MediaLibraryService() {
                 }
                 val currentIndex = player.currentMediaItemIndex
                 val queueSize = player.mediaItemCount
+                if (currentOccurrenceMediaId == null || currentOccurrenceMediaId != TrackResumeStore.getMediaIdentity(mediaItem)) {
+                    PlaybackDiagnosticTracker.onTrackTransition(
+                        mediaId = mediaItem?.mediaId,
+                        uriString = mediaItem?.localConfiguration?.uri?.toString(),
+                        reasonName = reasonName,
+                        positionMs = player.currentPosition.coerceAtLeast(0L),
+                        bufferedPositionMs = player.bufferedPosition.coerceAtLeast(0L),
+                    )
+                }
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK) {
                     rapidSkipBufferPolicy.recordSeek(SystemClock.elapsedRealtime())
                     maybeWatchRapidBuffer()
@@ -716,10 +764,17 @@ class MusicService : MediaLibraryService() {
             override fun onPlayerError(error: PlaybackException) {
                 Log.e(
                     TAG,
-                    "onPlayerError: errorCode=${error.errorCode}, message=${error.message}",
+                    "onPlayerError: errorCode=${error.errorCode}, message=${PlaybackDiagnosticTracker.sanitizeForDiagnostics(error.message)}",
                     error,
                 )
+                PlaybackDiagnosticTracker.onPlaybackError(
+                    mediaId = player.currentMediaItem?.mediaId,
+                    error = error,
+                    positionMs = player.currentPosition.coerceAtLeast(0L),
+                    bufferedPositionMs = player.bufferedPosition.coerceAtLeast(0L),
+                )
                 syncPlaybackTransport()
+                exportDiagnosticsSnapshotAsync()
                 recoverNetworkPlayback(error)
             }
         })

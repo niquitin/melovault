@@ -12,8 +12,28 @@ object StreamCachePolicy {
     const val MIN_SD_USABLE_BYTES = 256L * 1024 * 1024 // 256 MiB
     const val MIN_STREAM_CACHE_BYTES = 64L * 1024 * 1024 // 64 MiB
 
-    fun defaultCapGiB(totalBytes: Long): Int =
-        if (totalBytes >= 200L * GIB) DEFAULT_LARGE_GIB else DEFAULT_SMALL_GIB
+    fun recommendedCapGiB(
+        totalBytes: Long,
+        usableBytes: Long,
+        existingBytes: Long = 0L,
+    ): Int {
+        val targetDefault = if (totalBytes >= 200L * GIB) DEFAULT_LARGE_GIB else DEFAULT_SMALL_GIB
+        val reserve = minOf(RESERVE_GIB * GIB, totalBytes / 4)
+        val availableAboveReserve = (usableBytes + existingBytes - reserve).coerceAtLeast(0L)
+        return when {
+            targetDefault == DEFAULT_LARGE_GIB && availableAboveReserve >= DEFAULT_LARGE_GIB * GIB -> DEFAULT_LARGE_GIB
+            availableAboveReserve >= DEFAULT_SMALL_GIB * GIB -> DEFAULT_SMALL_GIB
+            availableAboveReserve >= 5L * GIB -> 5
+            else -> DEFAULT_SMALL_GIB
+        }
+    }
+
+    @JvmOverloads
+    fun defaultCapGiB(
+        totalBytes: Long,
+        usableBytes: Long = totalBytes,
+        existingBytes: Long = 0L,
+    ): Int = recommendedCapGiB(totalBytes, usableBytes, existingBytes)
 
     fun safeCapBytes(desired: Long, free: Long, existing: Long, total: Long): Long {
         val reserve = minOf(RESERVE_GIB * GIB, total / 4)

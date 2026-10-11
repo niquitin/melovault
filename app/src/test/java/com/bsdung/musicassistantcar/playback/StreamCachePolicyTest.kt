@@ -30,4 +30,27 @@ class StreamCachePolicyTest {
         assertEquals(3L * 1024 * 1024, StreamCachePolicy.PREFETCH_UNMETERED_BYTES)
         assertEquals(512L * 1024, StreamCachePolicy.PREFETCH_METERED_BYTES)
     }
+
+    @Test fun testShanlingM3UltraMicroSdRecommends10GiBNot30GiB() {
+        val g = StreamCachePolicy.GIB
+        // Shanling M3 Ultra real metrics: 239 GiB total microSD, 37 GiB usable free space.
+        // With 20 GiB minimum reserve, available budget above reserve is 17 GiB (< 30 GiB).
+        // Must recommend 10 GB (DEFAULT_SMALL_GIB), never auto-granting 30 GB!
+        val recommended = StreamCachePolicy.recommendedCapGiB(
+            totalBytes = 239L * g,
+            usableBytes = 37L * g,
+            existingBytes = 0L,
+        )
+        assertEquals("With 37 GiB free and 20 GiB reserve, must recommend 10 GB, not 30 GB", 10, recommended)
+        assertEquals(
+            10,
+            StreamCachePolicy.defaultCapGiB(totalBytes = 239L * g, usableBytes = 37L * g)
+        )
+
+        // When free space is 60 GiB (40 GiB above 20 GiB reserve >= 30 GiB), 30 GB is permitted
+        assertEquals(
+            30,
+            StreamCachePolicy.defaultCapGiB(totalBytes = 239L * g, usableBytes = 60L * g)
+        )
+    }
 }

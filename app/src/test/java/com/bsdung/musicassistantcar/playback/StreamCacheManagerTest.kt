@@ -214,4 +214,179 @@ class StreamCacheManagerTest {
             tempDir.deleteRecursively()
         }
     }
+
+    @Test
+    fun testSdRootNotYetExisting_CreatedFirstBeforeCheckingUsableSpace_SucceedsOnSd() {
+        val tempRoot = java.io.File(System.getProperty("java.io.tmpdir"), "melovault_sd_statvfs_" + System.nanoTime())
+        val sdBase = java.io.File(tempRoot, "external_sd1_files")
+        val intBase = java.io.File(tempRoot, "internal_cache")
+        sdBase.mkdirs()
+        intBase.mkdirs()
+        try {
+            val sdCacheSubdir = java.io.File(sdBase, "melovault_stream_cache")
+            org.junit.Assert.assertFalse("Precondition: melovault_stream_cache must NOT exist yet", sdCacheSubdir.exists())
+
+            val g = StreamCachePolicy.GIB
+            // Simulate Android 10 statvfs behavior: returns 0L if directory does not exist on disk yet!
+            val resolution = StreamCacheManager.resolveCacheDirectory(
+                requestedTarget = StreamCacheManager.TARGET_SD,
+                sdBase = sdBase,
+                intBase = intBase,
+                explicitCapGiB = null,
+                usableSpaceProvider = { file -> if (file.exists()) 37L * g else 0L },
+                totalSpaceProvider = { file -> if (file.exists()) 239L * g else 0L },
+            )
+
+            assertEquals("Must select TARGET_SD after creating sdRoot first", StreamCacheManager.TARGET_SD, resolution.target)
+            assertEquals("No fallback must occur", StreamCacheManager.FallbackReason.NONE, resolution.fallbackReason)
+            org.junit.Assert.assertTrue("sdRoot directory must now exist", resolution.cacheDir.exists())
+            assertEquals("melovault_stream_cache", resolution.cacheDir.name)
+            // With 37 GiB usable and 239 GiB total (20 GiB reserve -> 17 GiB available), must recommend 10 GB, not 30 GB
+            assertEquals("Shanling M3 37 GiB free must default to 10 GB", 10, resolution.capGiB)
+            assertEquals("Evictor bytes must be 10 GiB", 10L * g, resolution.evictorBytes)
+        } finally {
+            tempRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun testSdDirectoryNotWritable_FallsBackSafelyToInternal() {
+        val tempRoot = java.io.File(System.getProperty("java.io.tmpdir"), "melovault_sd_readonly_" + System.nanoTime())
+        val sdBase = java.io.File(tempRoot, "external_sd1_files")
+        val intBase = java.io.File(tempRoot, "internal_cache")
+        sdBase.mkdirs()
+        intBase.mkdirs()
+        try {
+            val g = StreamCachePolicy.GIB
+            val resolution = StreamCacheManager.resolveCacheDirectory(
+                requestedTarget = StreamCacheManager.TARGET_SD,
+                sdBase = sdBase,
+                intBase = intBase,
+                explicitCapGiB = 10,
+                usableSpaceProvider = { if (it.absolutePath.contains("external_sd1")) 37L * g else 2L * g },
+                totalSpaceProvider = { if (it.absolutePath.contains("external_sd1")) 239L * g else 21L * g },
+                writableChecker = { dir -> !dir.absolutePath.contains("external_sd1") },
+            )
+
+            assertEquals("Must fall back to TARGET_INTERNAL when SD dir is not writable", StreamCacheManager.TARGET_INTERNAL, resolution.target)
+            assertEquals(StreamCacheManager.FallbackReason.SD_CACHE_DIR_NOT_WRITABLE, resolution.fallbackReason)
+            org.junit.Assert.assertTrue(resolution.cacheDir.absolutePath.contains("internal_cache"))
+        } finally {
+            tempRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun testSdDirectoryMkdirsFailure_FallsBackSafelyToInternal() {
+        val tempRoot = java.io.File(System.getProperty("java.io.tmpdir"), "melovault_sd_mkdirfail_" + System.nanoTime())
+        val sdBase = java.io.File(tempRoot, "external_sd1_files")
+        val intBase = java.io.File(tempRoot, "internal_cache")
+        sdBase.mkdirs()
+        intBase.mkdirs()
+        try {
+            val g = StreamCachePolicy.GIB
+            val resolution = StreamCacheManager.resolveCacheDirectory(
+                requestedTarget = StreamCacheManager.TARGET_SD,
+                sdBase = sdBase,
+                intBase = intBase,
+                explicitCapGiB = 10,
+                usableSpaceProvider = { 37L * g },
+                totalSpaceProvider = { 239L * g },
+                mkdirsProvider = { dir ->
+                    if (dir.absolutePath.contains("external_sd1")) false else dir.mkdirs()
+                },
+            )
+
+            assertEquals(StreamCacheManager.TARGET_INTERNAL, resolution.target)
+            assertEquals(StreamCacheManager.FallbackReason.SD_CACHE_DIR_CREATE_FAILED, resolution.fallbackReason)
+        } finally {
+            tempRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun testSdCardRemovedOrUnmounted_FallsBackSafelyToInternal() {
+        val tempRoot = java.io.File(System.getProperty("java.io.tmpdir"), "melovault_sd_removed_" + System.nanoTime())
+        val intBase = java.io.File(tempRoot, "internal_cache")
+        intBase.mkdirs()
+        try {
+            val g = StreamCachePolicy.GIB
+            val resolution = StreamCacheManager.resolveCacheDirectory(
+                requestedTarget = StreamCacheManager.TARGET_SD,
+                sdBase = null, // SD card unmounted / removed
+                intBase = intBase,
+                explicitCapGiB = 10,
+                usableSpaceProvider = { 2L * g },
+                totalSpaceProvider = { 21L * g },
+            )
+
+            assertEquals("Must fall back to TARGET_INTERNAL when SD card is removed", StreamCacheManager.TARGET_INTERNAL, resolution.target)
+            assertEquals(StreamCacheManager.FallbackReason.SD_UNMOUNTED_OR_REMOVED, resolution.fallbackReason)
+            org.junit.Assert.assertTrue("Internal cache dir must be created", resolution.cacheDir.exists())
+        } finally {
+            tempRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun testSdCardInsufficientSpaceAfterReserve_FallsBackSafelyToInternal() {
+        val tempRoot = java.io.File(System.getProperty("java.io.tmpdir"), "melovault_sd_lowspace_" + System.nanoTime())
+        val sdBase = java.io.File(tempRoot, "external_sd1_files")
+        val intBase = java.io.File(tempRoot, "internal_cache")
+        sdBase.mkdirs()
+        intBase.mkdirs()
+        try {
+            val g = StreamCachePolicy.GIB
+            // SD card only has 15 GiB free on a 239 GiB card (< 20 GiB reserve -> safeCap = 0)
+            val resolution = StreamCacheManager.resolveCacheDirectory(
+                requestedTarget = StreamCacheManager.TARGET_SD,
+                sdBase = sdBase,
+                intBase = intBase,
+                explicitCapGiB = 10,
+                usableSpaceProvider = { if (it.absolutePath.contains("external_sd1")) 15L * g else 2L * g },
+                totalSpaceProvider = { if (it.absolutePath.contains("external_sd1")) 239L * g else 21L * g },
+            )
+
+            assertEquals(StreamCacheManager.TARGET_INTERNAL, resolution.target)
+            assertEquals(StreamCacheManager.FallbackReason.SD_INSUFFICIENT_USABLE_SPACE, resolution.fallbackReason)
+        } finally {
+            tempRoot.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun testOfflineDownloadsPreservedDuringSdStreamCacheInitAndOperations() {
+        val tempRoot = java.io.File(System.getProperty("java.io.tmpdir"), "melovault_sd_isolation_" + System.nanoTime())
+        val sdBase = java.io.File(tempRoot, "external_sd1_files")
+        val intBase = java.io.File(tempRoot, "internal_cache")
+        sdBase.mkdirs()
+        intBase.mkdirs()
+        try {
+            // Create protected melovault_offline sibling folder with offline tracks
+            val offlineDir = java.io.File(sdBase, "melovault_offline")
+            offlineDir.mkdirs()
+            val offlineTrack = java.io.File(offlineDir, "track_11232.mp3")
+            val payload = "PROTECTED_OFFLINE_AUDIO_PAYLOAD_SHANLING_M3".toByteArray()
+            offlineTrack.writeBytes(payload)
+
+            val g = StreamCachePolicy.GIB
+            val resolution = StreamCacheManager.resolveCacheDirectory(
+                requestedTarget = StreamCacheManager.TARGET_SD,
+                sdBase = sdBase,
+                intBase = intBase,
+                usableSpaceProvider = { 37L * g },
+                totalSpaceProvider = { 239L * g },
+            )
+
+            assertEquals(StreamCacheManager.TARGET_SD, resolution.target)
+            org.junit.Assert.assertTrue("Offline track must still exist", offlineTrack.exists())
+            org.junit.Assert.assertArrayEquals("Offline track bytes must be untouched", payload, offlineTrack.readBytes())
+            org.junit.Assert.assertFalse(
+                "Write probe file must be cleaned up immediately",
+                java.io.File(resolution.cacheDir, ".melovault_write_probe").exists()
+            )
+        } finally {
+            tempRoot.deleteRecursively()
+        }
+    }
 }
