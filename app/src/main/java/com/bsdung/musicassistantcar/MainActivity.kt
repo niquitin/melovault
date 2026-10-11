@@ -4673,6 +4673,10 @@ class MainActivity : AppCompatActivity() {
         val player = browser ?: return
         val currentItem = player.currentMediaItem
         val widthClass = currentWidthClass()
+        val cfg = resources.configuration
+        val shortExpandedArtworkPx = MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(
+            cfg.screenWidthDp, cfg.screenHeightDp
+        )?.let { (it * resources.displayMetrics.density).roundToInt() }
 
         if (currentItem == null) {
             // Idle / Welcome state
@@ -4698,7 +4702,7 @@ class MainActivity : AppCompatActivity() {
                 WindowWidthClass.MEDIUM   -> R.dimen.artwork_size_medium_idle
                 WindowWidthClass.EXPANDED -> R.dimen.artwork_size_expanded_idle
             }
-            val idleSize = resources.getDimensionPixelSize(idleSizeRes)
+            val idleSize = shortExpandedArtworkPx ?: resources.getDimensionPixelSize(idleSizeRes)
             val lp = binding.coverView.layoutParams
             if (lp.width != idleSize || lp.height != idleSize) {
                 lp.width = idleSize
@@ -4810,8 +4814,9 @@ class MainActivity : AppCompatActivity() {
             WindowWidthClass.MEDIUM   -> R.dimen.artwork_size_medium
             WindowWidthClass.EXPANDED -> R.dimen.artwork_size_expanded
         }
-        val cfg = resources.configuration
-        val activeSize = if (MobilePlayerLayoutPolicy.isPortraitPhone(cfg.screenWidthDp, cfg.screenHeightDp)) {
+        val activeSize = if (shortExpandedArtworkPx != null) {
+            shortExpandedArtworkPx
+        } else if (MobilePlayerLayoutPolicy.isPortraitPhone(cfg.screenWidthDp, cfg.screenHeightDp)) {
             val sizeDp = MobilePlayerLayoutPolicy.artworkSizeDp(cfg.screenWidthDp, cfg.screenHeightDp)
             (sizeDp * resources.displayMetrics.density).roundToInt()
         } else {

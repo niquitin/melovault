@@ -89,10 +89,10 @@
 
             <ImageView
                 android:id="@+id/coverView"
-                android:layout_width="@dimen/artwork_size_expanded"
-                android:layout_height="@dimen/artwork_size_expanded"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
                 android:layout_gravity="center"
-                android:scaleType="centerCrop"
+                android:scaleType="fitCenter"
                 android:src="@drawable/ic_album_placeholder"
                 android:contentDescription="@string/cover_gesture_action" />
         </FrameLayout>
@@ -106,7 +106,8 @@
             android:text="@string/cover_gesture_hint"
             android:textSize="10sp"
             android:textColor="@color/text_tertiary"
-            android:layout_marginBottom="3dp" />
+            android:layout_marginBottom="3dp"
+                android:visibility="gone" />
 
         <!-- Track Metadata -->
         <LinearLayout
@@ -366,14 +367,16 @@
                 android:layout_height="48dp"
                 android:minWidth="48dp"
                 android:gravity="center"
-                android:paddingStart="14dp"
-                android:paddingEnd="14dp"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
                 android:background="@drawable/bg_quality_chip_inactive"
-                android:text="Lời bài hát"
+                android:text="Lời"
                 android:textSize="12sp"
                 android:textStyle="bold"
                 android:textColor="@color/text_primary"
-                android:contentDescription="Lời bài hát" />
+                android:contentDescription="Lời bài hát"
+                android:maxLines="1"
+                android:ellipsize="end" />
 
             <View
                 android:layout_width="10dp"
@@ -411,10 +414,12 @@
                     android:gravity="center"
                     android:background="@drawable/bg_button_tertiary_active"
                     android:text="Thư viện"
-                    android:textSize="12sp"
+                    android:textSize="10sp"
                     android:textStyle="bold"
                     android:textColor="@color/text_primary"
-                    android:contentDescription="Đi đến Thư viện nhạc" />
+                    android:contentDescription="Đi đến Thư viện nhạc"
+                android:maxLines="1"
+                android:ellipsize="end" />
 
                 <View
                     android:layout_width="6dp"
@@ -428,10 +433,12 @@
                     android:gravity="center"
                     android:background="@drawable/bg_button_control"
                     android:text="Playlist"
-                    android:textSize="12sp"
+                    android:textSize="10sp"
                     android:textStyle="bold"
                     android:textColor="@color/text_primary"
-                    android:contentDescription="Mở danh sách Playlist của tôi" />
+                    android:contentDescription="Mở danh sách Playlist của tôi"
+                android:maxLines="1"
+                android:ellipsize="end" />
 
                 <View
                     android:layout_width="6dp"
@@ -444,11 +451,13 @@
                     android:layout_weight="1"
                     android:gravity="center"
                     android:background="@drawable/bg_button_control"
-                    android:text="Tiếp theo"
-                    android:textSize="12sp"
+                    android:text="Tiếp"
+                    android:textSize="10sp"
                     android:textStyle="bold"
                     android:textColor="@color/text_primary"
-                    android:contentDescription="Mở danh sách bài tiếp theo" />
+                    android:contentDescription="Mở danh sách bài tiếp theo"
+                android:maxLines="1"
+                android:ellipsize="end" />
 
                 <View
                     android:layout_width="6dp"
@@ -461,11 +470,13 @@
                     android:layout_weight="1"
                     android:gravity="center"
                     android:background="@drawable/bg_button_control"
-                    android:text="Nguồn nhạc"
-                    android:textSize="12sp"
+                    android:text="Nguồn"
+                    android:textSize="10sp"
                     android:textStyle="bold"
                     android:textColor="@color/text_primary"
-                    android:contentDescription="Mở các nguồn Telegram và Google Drive" />
+                    android:contentDescription="Mở các nguồn Telegram và Google Drive"
+                android:maxLines="1"
+                android:ellipsize="end" />
             </LinearLayout>
     </LinearLayout>
 

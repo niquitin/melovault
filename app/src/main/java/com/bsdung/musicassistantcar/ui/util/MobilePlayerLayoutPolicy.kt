@@ -48,6 +48,15 @@ internal object MobilePlayerLayoutPolicy {
     }
 
     /**
+     * Short car-landscape panels have little vertical space once seek, transport
+     * and navigation controls are laid out. Preserve a *complete* small square
+     * album cover rather than letting a 200dp cover be clipped to a thin banner.
+     * Keep portrait phone and taller tablet artwork behavior unchanged.
+     */
+    fun shortExpandedArtworkSizeDp(widthDp: Int, heightDp: Int): Int? =
+        if (widthDp >= 700 && heightDp in 340..430) 46 else null
+
+    /**
      * Determines if the mini player should be shown.
      * Mini player is only shown when browsing on a portrait phone, unless the full player
      * has been explicitly opened by the user.

@@ -52,6 +52,21 @@ class MobilePlayerLayoutPolicyTest {
     }
 
     @Test
+    fun shortExpandedArtwork_710x377_staysFullyVisibleInCarPanel() {
+        assertEquals(46, MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(710, 377))
+        assertEquals(46, MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(912, 381))
+    }
+
+    @Test
+    fun shortExpandedArtwork_preservesPortraitAndTallerScreens() {
+        assertNull(MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(411, 881))
+        assertNull(MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(710, 600))
+        assertNull(MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(699, 377))
+        assertNull(MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(710, 0))
+        assertNull(MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(-1, 377))
+    }
+
+    @Test
     fun playerVisibility_portraitBrowsing_showsMiniAndReversesWhenFullOpened() {
         assertTrue(
             MobilePlayerLayoutPolicy.shouldShowMiniPlayer(
