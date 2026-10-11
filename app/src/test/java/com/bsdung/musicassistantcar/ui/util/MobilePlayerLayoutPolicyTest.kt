@@ -85,6 +85,30 @@ class MobilePlayerLayoutPolicyTest {
     }
 
     @Test
+    fun queuePanel_portraitKeepsMiniEvenAfterFullPlayerOpened() {
+        assertTrue(MobilePlayerLayoutPolicy.shouldShowMiniPlayerForPanel(
+            isPortraitPhone = true, isBrowsing = false, userOpenedFullPlayer = true,
+            isQueueVisible = true, isLyricsVisible = false,
+        ))
+        assertTrue(MobilePlayerLayoutPolicy.shouldShowMiniPlayerForPanel(
+            isPortraitPhone = true, isBrowsing = false, userOpenedFullPlayer = true,
+            isQueueVisible = false, isLyricsVisible = true,
+        ))
+        assertFalse(MobilePlayerLayoutPolicy.shouldShowMiniPlayerForPanel(
+            isPortraitPhone = true, isBrowsing = false, userOpenedFullPlayer = true,
+            isQueueVisible = false, isLyricsVisible = false,
+        ))
+    }
+
+    @Test
+    fun carQueuePanel_keepsFullPlayerWithoutForcingMini() {
+        assertFalse(MobilePlayerLayoutPolicy.shouldShowMiniPlayerForPanel(
+            isPortraitPhone = false, isBrowsing = true, userOpenedFullPlayer = false,
+            isQueueVisible = true, isLyricsVisible = false,
+        ))
+    }
+
+    @Test
     fun playerVisibility_carLandscape_showsFullPlayer() {
         assertTrue(
             MobilePlayerLayoutPolicy.shouldShowFullPlayer(

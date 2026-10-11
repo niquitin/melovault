@@ -4951,32 +4951,37 @@ class MainActivity : AppCompatActivity() {
         if (!isPortraitPhone) {
             binding.fullPlayerContainer?.visibility = View.VISIBLE
             binding.miniPlayerBar?.visibility = View.GONE
-            binding.libraryCard.visibility = if (isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
+            // Car queue and inline lyrics live inside the library panel.
+            binding.libraryCard.visibility = View.VISIBLE
             binding.searchContainer.visibility = if (isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
             return
         }
 
         val hasCurrentItem = browser?.currentMediaItem != null
         if (!hasCurrentItem) {
-            binding.fullPlayerContainer?.visibility = View.VISIBLE
-            binding.miniPlayerBar?.visibility = View.GONE
-            binding.libraryCard.visibility = if (isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
+            val showingPanel = isQueueVisible || isLyricsVisible
+            binding.fullPlayerContainer?.visibility = if (showingPanel) View.GONE else View.VISIBLE
+            binding.miniPlayerBar?.visibility = if (showingPanel) View.VISIBLE else View.GONE
+            binding.libraryCard.visibility = View.VISIBLE
             binding.searchContainer.visibility = if (isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
             return
         }
 
         val browsing = isBrowsing ?: (!isQueueVisible && !isFullscreenLyricsVisible)
-        val showMini = MobilePlayerLayoutPolicy.shouldShowMiniPlayer(
+        val showMini = MobilePlayerLayoutPolicy.shouldShowMiniPlayerForPanel(
             isPortraitPhone = true,
             isBrowsing = browsing,
             userOpenedFullPlayer = userOpenedFullPlayer,
+            isQueueVisible = isQueueVisible,
+            isLyricsVisible = isLyricsVisible,
         )
 
         binding.fullPlayerContainer?.visibility = if (showMini) View.GONE else View.VISIBLE
         binding.miniPlayerBar?.visibility = if (showMini) View.VISIBLE else View.GONE
 
         if (showMini) {
-            binding.libraryCard.visibility = if (isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
+            // The queue/lyrics panel lives inside libraryCard, including in portrait.
+            binding.libraryCard.visibility = View.VISIBLE
             binding.searchContainer.visibility = if (isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
         } else {
             binding.libraryCard.visibility = View.GONE

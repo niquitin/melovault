@@ -61,6 +61,23 @@ internal object MobilePlayerLayoutPolicy {
     }
 
     /**
+     * Queue and inline lyrics are hosted inside libraryCard. On portrait phones,
+     * they must keep the compact player visible even when the user previously
+     * expanded the full player, or their entire parent panel becomes hidden.
+     * Landscape/car UI retains its independent side-by-side full player.
+     */
+    fun shouldShowMiniPlayerForPanel(
+        isPortraitPhone: Boolean,
+        isBrowsing: Boolean,
+        userOpenedFullPlayer: Boolean,
+        isQueueVisible: Boolean,
+        isLyricsVisible: Boolean,
+    ): Boolean = isPortraitPhone && (
+        isQueueVisible || isLyricsVisible ||
+            shouldShowMiniPlayer(isPortraitPhone, isBrowsing, userOpenedFullPlayer)
+    )
+
+    /**
      * Boolean complement of [shouldShowMiniPlayer].
      */
     fun shouldShowFullPlayer(
