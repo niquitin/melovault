@@ -26,7 +26,7 @@ object ArtworkLoader {
                 .diskCache {
                     DiskCache.Builder()
                         .directory(context.applicationContext.cacheDir.resolve("coil_artwork_cache"))
-                        .maxSizeBytes(50L * 1024 * 1024) // 50MB disk cache
+                        .maxSizeBytes(256L * 1024 * 1024) // E6 256MB disk LRU
                         .build()
                 }
                 .crossfade(200)

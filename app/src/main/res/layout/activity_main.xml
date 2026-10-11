@@ -1846,6 +1846,21 @@
                             android:layout_marginEnd="6dp" />
 
                         <Button
+                            android:id="@+id/btnStreamCache"
+                            android:layout_width="wrap_content"
+                            android:layout_height="32dp"
+                            android:minHeight="0dp"
+                            android:minWidth="0dp"
+                            android:paddingStart="10dp"
+                            android:paddingEnd="10dp"
+                            android:text="Cache online"
+                            android:textAllCaps="false"
+                            android:textSize="11sp"
+                            android:textColor="@color/text_primary"
+                            android:background="@drawable/bg_button_control"
+                            android:layout_marginEnd="6dp" />
+
+                        <Button
                             android:id="@+id/btnOfflineMultiSelect"
                             android:layout_width="wrap_content"
                             android:layout_height="32dp"

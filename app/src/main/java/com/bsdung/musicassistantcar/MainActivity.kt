@@ -1375,6 +1375,9 @@ class MainActivity : AppCompatActivity() {
             showOfflineStorageCapDialog()
         }
 
+        binding.btnStreamCache.setOnClickListener {
+            showStreamCacheSettingsDialog()
+        }
         binding.btnOfflineNetworkPolicy.setOnClickListener {
             showDownloadNetworkPolicyDialog()
         }
@@ -2126,6 +2129,69 @@ class MainActivity : AppCompatActivity() {
         binding.btnOfflineMultiSelect.alpha = if (hasTracks) 1.0f else 0.5f
         binding.btnDeleteAllOffline.isEnabled = hasTracks
         binding.btnDeleteAllOffline.alpha = if (hasTracks) 1.0f else 0.5f
+    }
+
+    /**
+     * Cache online (including Shanling M3 Ultra microSD) is independent of offline music.
+     * The active ExoPlayer cache is never force-closed while listening.
+     */
+    /** Explicit foreground text colors for dark-themed AlertDialog list rows. */
+    private fun streamCacheOptionAdapter(values: Array<String>): android.widget.ArrayAdapter<String> =
+        object : android.widget.ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, values) {
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                val row = super.getView(position, convertView, parent)
+                row.findViewById<android.widget.TextView>(android.R.id.text1).apply {
+                    setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
+                    textSize = 15f
+                    val d = resources.displayMetrics.density
+                    setPadding((18 * d).toInt(), (12 * d).toInt(),
+                        (18 * d).toInt(), (12 * d).toInt())
+                }
+                return row
+            }
+        }
+
+    private fun showStreamCacheSettingsDialog() {
+        val cache = com.bsdung.musicassistantcar.playback.StreamCacheManager
+        val where = if (cache.preferredTarget(this) == cache.TARGET_SD) "Thẻ microSD" else "Bộ nhớ trong"
+        val list = arrayOf(
+            "Nơi lưu cache: " + where,
+            "Giới hạn cache: " + cache.configuredCapGiB(this) + " GB",
+            "Tải trước 2 bài: " + if (cache.isPreloadEnabled(this)) "Bật" else "Tắt",
+            "Thông tin cache",
+        )
+        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            .setTitle("Cache nhạc online (không phải nhạc offline)")
+            .setAdapter(streamCacheOptionAdapter(list)) { _, selected ->
+                when (selected) {
+                    0 -> AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                        .setTitle("Nơi lưu cache online")
+                        .setAdapter(streamCacheOptionAdapter(arrayOf("Bộ nhớ trong", "Thẻ microSD"))) { _, idx ->
+                            val target = if (idx == 1) cache.TARGET_SD else cache.TARGET_INTERNAL
+                            val ok = cache.setPreferredTarget(this, target)
+                            val message = if (ok) "Đã lưu. Khởi động lại dịch vụ phát nhạc để áp dụng."
+                                else "Không tìm thấy thẻ microSD ghi được. Không đổi nơi lưu."
+                            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+                        }
+                        .setNegativeButton("Đóng", null).show()
+                    1 -> AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                        .setTitle("Dung lượng cache online")
+                        .setAdapter(streamCacheOptionAdapter(arrayOf("5 GB", "10 GB", "20 GB", "30 GB", "50 GB"))) { _, idx ->
+                            cache.setCapGiB(this, listOf(5, 10, 20, 30, 50)[idx])
+                            Toast.makeText(this, "Đã lưu giới hạn. Khởi động lại dịch vụ để áp dụng.", Toast.LENGTH_LONG).show()
+                        }
+                        .setNegativeButton("Đóng", null).show()
+                    2 -> {
+                        cache.setPreloadEnabled(this, !cache.isPreloadEnabled(this))
+                        Toast.makeText(this, "Đã thay đổi cài đặt tải trước.", Toast.LENGTH_SHORT).show()
+                    }
+                    3 -> AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                        .setTitle("Trạng thái cache online")
+                        .setMessage(cache.status(this) + "\nChỉ cache online tự dọn; nhạc tải offline không bị xóa.")
+                        .setPositiveButton("Đóng", null).show()
+                }
+            }
+            .setNegativeButton("Đóng", null).show()
     }
 
     private fun showOfflineStorageTargetDialog() {

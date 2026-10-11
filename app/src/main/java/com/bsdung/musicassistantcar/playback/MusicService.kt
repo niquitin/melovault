@@ -101,6 +101,11 @@ class MusicService : MediaLibraryService() {
     private var browseQueueCursor: QueuePageCursor? = null
     // Do not queue source pagination behind metadata/details for dozens of rapid skips.
     private val queueBrowseExecutor = Executors.newSingleThreadExecutor()
+    private val streamPrefetchExecutor = Executors.newSingleThreadExecutor { work ->
+        Thread(work, "melovault-e6-prefetch").apply { isDaemon = true }
+    }
+    private lateinit var prefetchHttpFactory: DefaultHttpDataSource.Factory
+    private var lastPrefetchSignature = ""
     private val rapidSkipBufferPolicy = RapidSkipBufferPolicy()
     private val memorySamplePolicy = MemorySamplePolicy()
     private var rapidBufferCheck: Runnable? = null
@@ -128,6 +133,40 @@ class MusicService : MediaLibraryService() {
                     )
                 }
                 persistHandler.postDelayed(this, PERSIST_INTERVAL_MS)
+            }
+        }
+    }
+
+    /**
+     * Best-effort E6 preload: captures next two HTTP media URIs on the player thread,
+     * then warms short byte ranges asynchronously. Never blocks ExoPlayer or writes
+     * protected offline downloads. A duplicate queue does not trigger redownload.
+     */
+    private fun scheduleStreamPreload() {
+        if (serviceShuttingDown || !::player.isInitialized || !::prefetchHttpFactory.isInitialized ||
+            player.playbackState != Player.STATE_READY || !StreamCacheManager.isPreloadEnabled(this)) return
+
+        val candidates = StreamCachePolicy.nextIndices(player.currentMediaItemIndex, player.mediaItemCount)
+            .mapNotNull { player.getMediaItemAt(it).localConfiguration?.uri }
+            .filter { it.scheme == "https" || it.scheme == "http" }
+        if (candidates.isEmpty()) return
+        val signature = candidates.joinToString("|") { StreamCacheManager.buildCacheKey(it) }
+        if (signature == lastPrefetchSignature) return
+        lastPrefetchSignature = signature
+
+        val app = applicationContext
+        val factory = prefetchHttpFactory
+        streamPrefetchExecutor.execute {
+            val metered = runCatching {
+                val cm = app.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+                cm.isActiveNetworkMetered
+            }.getOrDefault(true)
+            val budget = if (metered) StreamCachePolicy.PREFETCH_METERED_BYTES
+                else StreamCachePolicy.PREFETCH_UNMETERED_BYTES
+            for (uri in candidates) {
+                if (Thread.currentThread().isInterrupted || serviceShuttingDown ||
+                    !StreamCacheManager.isPreloadEnabled(app)) break
+                StreamCacheManager.prefetchIntro(app, uri, factory, budget)
             }
         }
     }
@@ -180,6 +219,10 @@ class MusicService : MediaLibraryService() {
                 catalog.authorizationHeaders()
             )
         val dataSourceFactory = StreamCacheManager.createDataSourceFactory(this, httpFactory)
+        prefetchHttpFactory = DefaultHttpDataSource.Factory()
+            .setConnectTimeoutMs(8_000)
+            .setReadTimeoutMs(12_000)
+            .setDefaultRequestProperties(catalog.authorizationHeaders())
         val mediaSourceFactory =
             DefaultMediaSourceFactory(this)
                 .setDataSourceFactory(dataSourceFactory)
@@ -345,6 +388,8 @@ class MusicService : MediaLibraryService() {
                     persistPlaybackState()
                 }
                 if (playbackState == Player.STATE_READY) {
+                    // Only preload after current song is ready; never compete with startup buffer.
+                    scheduleStreamPreload()
                     val currentIndex = player.currentMediaItemIndex
                     val queueSize = player.mediaItemCount
                     applyNormalizationForMediaItem(player.currentMediaItem)
@@ -371,6 +416,7 @@ class MusicService : MediaLibraryService() {
                 Log.d(TAG, "onTimelineChanged: reason=$reason, queueSize=${player.mediaItemCount}")
                 syncBrowseQueue()
                 persistPlaybackState()
+                scheduleStreamPreload()
             }
 
             override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
@@ -519,6 +565,7 @@ class MusicService : MediaLibraryService() {
                         "index=$currentIndex/$queueSize",
                 )
                 persistPlaybackState()
+                scheduleStreamPreload()
 
                 val currentIdentity = TrackResumeStore.getMediaIdentity(mediaItem)
 
@@ -1258,6 +1305,7 @@ class MusicService : MediaLibraryService() {
         librarySession = null
         player.release()
         queueBrowseExecutor.shutdownNow()
+        streamPrefetchExecutor.shutdownNow()
         executor.shutdownNow()
         super.onDestroy()
     }

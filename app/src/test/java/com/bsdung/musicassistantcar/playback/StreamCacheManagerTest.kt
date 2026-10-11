@@ -7,16 +7,25 @@ import org.junit.Test
 class StreamCacheManagerTest {
 
     @Test
-    fun testCacheSizeIs10GiB() {
-        val expected10GiB = 10L * 1024 * 1024 * 1024
-        assertEquals(expected10GiB, StreamCacheManager.MAX_CACHE_SIZE_BYTES)
+    fun testCacheSizeIs30GiB() {
+        val expected30GiB = 30L * 1024 * 1024 * 1024
+        assertEquals(expected30GiB, StreamCacheManager.MAX_CACHE_SIZE_BYTES)
     }
 
     @Test
     fun testBuildCacheKeyStripsQueryParameters() {
         val uriWithParams = Uri.parse("https://api.melovault.internal/v1/tracks/11209/stream?token=secret123&quality=ORIGINAL")
         val cacheKey = StreamCacheManager.buildCacheKey(uriWithParams)
-        assertEquals("https://api.melovault.internal/v1/tracks/11209/stream", cacheKey)
+        assertEquals("https://api.melovault.internal/v1/tracks/11209/stream?quality=original", cacheKey)
+    }
+
+    @Test
+    fun testQualityVariantsNeverShareCachedAudio() {
+        val path = "https://api.melovault.internal/v1/tracks/11209/stream"
+        val a = StreamCacheManager.buildCacheKey(Uri.parse("$path?quality=original&token=one"))
+        val b = StreamCacheManager.buildCacheKey(Uri.parse("$path?quality=mobile&token=two"))
+        org.junit.Assert.assertNotEquals(a, b)
+        assertEquals("$path?quality=mobile", b)
     }
 
     @Test
