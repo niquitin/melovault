@@ -17,7 +17,7 @@ import java.io.File
 
 /**
  * E6: audio streaming LRU cache, isolated from protected melovault_offline downloads.
- * Directory changes take effect on a fresh service start, not during active playback.
+ * Directory changes take effect on a fresh application restart, not during active playback.
  */
 object StreamCacheManager {
     private const val TAG = "StreamCacheManager"
