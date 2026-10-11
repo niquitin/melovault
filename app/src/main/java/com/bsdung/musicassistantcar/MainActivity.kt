@@ -46,6 +46,7 @@ import com.bsdung.musicassistantcar.databinding.DialogSignalPathBinding
 import com.bsdung.musicassistantcar.databinding.DialogMusicAccountsBinding
 import com.bsdung.musicassistantcar.databinding.DialogYoutubePlaylistsBinding
 import com.bsdung.musicassistantcar.ui.dialog.UnifiedLibraryDialog
+import com.bsdung.musicassistantcar.data.ConnectionStateManager
 import com.bsdung.musicassistantcar.data.UnifiedTrackDto
 import com.bsdung.musicassistantcar.ui.util.UnifiedPlaybackMapper
 import com.bsdung.musicassistantcar.ui.util.ArtworkGestureAction
@@ -188,12 +189,22 @@ class MainActivity : AppCompatActivity() {
     }
     private val lyricsExecutor = Executors.newSingleThreadExecutor()
     private val uiCatalog by lazy {
+        val client = CarApiClient()
+        client.connectionStateManager = ConnectionStateManager.getInstance(applicationContext) { client }
         RemoteCatalog(
-            api = CarApiClient(),
+            api = client,
             localRepoSupplier = { com.bsdung.musicassistantcar.data.LocalMediaRepository.getDefault(this) },
             downloadManagerSupplier = { com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this) },
             playlistSyncCoordinatorSupplier = { com.bsdung.musicassistantcar.playback.OfflinePlaylistSyncCoordinator.getDefault(this) },
         )
+    }
+    private val connectionManager by lazy {
+        ConnectionStateManager.getInstance(applicationContext) { uiCatalog.api }
+    }
+    private val connectionListener: (ConnectionStateManager.UiConnectionStatus, ConnectionStateManager.StateSnapshot) -> Unit = { status, snap ->
+        runOnUiThread {
+            updateConnectionUi(status, snap)
+        }
     }
     private val uiExecutor = Executors.newSingleThreadExecutor()
     private val prewarmExecutor = Executors.newSingleThreadExecutor()
@@ -518,6 +529,7 @@ class MainActivity : AppCompatActivity() {
             },
         )
 
+        connectionManager.addListener(connectionListener)
         connectBrowser()
     }
 
@@ -1200,14 +1212,30 @@ class MainActivity : AppCompatActivity() {
             browser?.seekToNextMediaItem()
         }
 
-        // Connection Dot
+        // Connection Dot & Diagnostics
         binding.connectionContainer.setOnClickListener {
-            val message = if (activeBackendUrl != null) {
-                "Đã kết nối máy chủ:\n$activeBackendUrl"
-            } else {
-                "Chưa kết nối máy chủ.\nKiểm tra Tailscale hoặc mạng Wi‑Fi nội bộ."
+            val snap = connectionManager.snapshot()
+            val message = when (snap.uiStatus) {
+                ConnectionStateManager.UiConnectionStatus.ONLINE ->
+                    "Đã kết nối máy chủ:\n${snap.activeEndpoint}\nĐộ trễ: ${if (snap.lastProbeLatencyMs >= 0) "${snap.lastProbeLatencyMs} ms" else "N/A"} · Mạng: ${snap.networkTransport.name}\n(Nhấn giữ để xuất chẩn đoán kết nối)"
+                ConnectionStateManager.UiConnectionStatus.CONNECTING ->
+                    "Đang kết nối tới máy chủ...\nKiểm tra Tailscale hoặc Wi‑Fi nội bộ."
+                ConnectionStateManager.UiConnectionStatus.AUTH_ERROR ->
+                    "Lỗi xác thực API (401 Unauthorized).\nKiểm tra token cấu hình trong BuildConfig."
+                ConnectionStateManager.UiConnectionStatus.OFFLINE -> {
+                    connectionManager.retryConnectionExplicitly()
+                    "Chưa kết nối máy chủ.\nLỗi: ${snap.lastErrorMessage ?: "Không phản hồi"}\nĐang thử kết nối lại... (Nhấn giữ để xuất chẩn đoán)"
+                }
             }
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        }
+
+        binding.connectionContainer.setOnLongClickListener {
+            val report = connectionManager.exportDiagnosticsReport()
+            val file = java.io.File(getExternalFilesDir(null) ?: cacheDir, "connectivity_diagnostics.txt")
+            file.writeText(report)
+            Toast.makeText(this, "Đã xuất chẩn đoán kết nối:\n${file.absolutePath}", Toast.LENGTH_LONG).show()
+            true
         }
 
         // Search Bar
@@ -5203,25 +5231,35 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun refreshBackendStatus() {
-        binding.statusDot.setImageResource(R.drawable.bg_status_dot_connecting)
-        binding.statusText.text = "Connecting"
-        uiExecutor.submit {
-            val result = runCatching { uiCatalog.backendLabel() }
-            runOnUiThread {
-                result
-                    .onSuccess { url ->
-                        if (activeBackendUrl != null && activeBackendUrl != url) {
-                            enrichmentController.clearCaches()
-                        }
-                        activeBackendUrl = url
-                        binding.statusDot.setImageResource(R.drawable.bg_status_dot_online)
-                        binding.statusText.text = "Online"
-                    }
-                    .onFailure {
-                        activeBackendUrl = null
-                        binding.statusDot.setImageResource(R.drawable.bg_status_dot_offline)
-                        binding.statusText.text = "Offline"
-                    }
+        connectionManager.checkOnResume()
+    }
+
+    private fun updateConnectionUi(
+        uiStatus: ConnectionStateManager.UiConnectionStatus,
+        snapshot: ConnectionStateManager.StateSnapshot,
+    ) {
+        when (uiStatus) {
+            ConnectionStateManager.UiConnectionStatus.ONLINE -> {
+                if (activeBackendUrl != null && activeBackendUrl != snapshot.activeEndpoint) {
+                    enrichmentController.clearCaches()
+                }
+                activeBackendUrl = snapshot.activeEndpoint
+                binding.statusDot.setImageResource(R.drawable.bg_status_dot_online)
+                binding.statusText.text = "Online"
+            }
+            ConnectionStateManager.UiConnectionStatus.CONNECTING -> {
+                binding.statusDot.setImageResource(R.drawable.bg_status_dot_connecting)
+                binding.statusText.text = "Connecting"
+            }
+            ConnectionStateManager.UiConnectionStatus.OFFLINE -> {
+                activeBackendUrl = null
+                binding.statusDot.setImageResource(R.drawable.bg_status_dot_offline)
+                binding.statusText.text = "Offline"
+            }
+            ConnectionStateManager.UiConnectionStatus.AUTH_ERROR -> {
+                activeBackendUrl = snapshot.activeEndpoint
+                binding.statusDot.setImageResource(R.drawable.bg_status_dot_offline)
+                binding.statusText.text = "Lỗi Token"
             }
         }
     }
@@ -6634,6 +6672,7 @@ class MainActivity : AppCompatActivity() {
         com.bsdung.musicassistantcar.playback.PinnedDownloadManager.getDefault(this).removeListener(downloadListener)
         lyricsExecutor.shutdownNow()
         uiExecutor.shutdownNow()
+        connectionManager.removeListener(connectionListener)
         super.onDestroy()
     }
 }

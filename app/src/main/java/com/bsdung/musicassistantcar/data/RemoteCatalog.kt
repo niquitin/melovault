@@ -5,7 +5,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 
 class RemoteCatalog(
-    private val api: CarApiClient = CarApiClient(),
+    val api: CarApiClient = CarApiClient(),
     private val localRepoSupplier: () -> LocalMediaRepository? = { null },
     private val downloadManagerSupplier: () -> com.bsdung.musicassistantcar.playback.PinnedDownloadManager? = { null },
     private val playlistSyncCoordinatorSupplier: () -> com.bsdung.musicassistantcar.playback.OfflinePlaylistSyncCoordinator? = { null },

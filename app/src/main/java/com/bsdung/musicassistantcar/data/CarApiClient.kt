@@ -200,6 +200,10 @@ open class CarApiClient {
     @Volatile
     private var activeBaseUrl: String? = null
 
+    @Volatile
+    var connectionStateManager: ConnectionStateManager? = null
+    private val endpointFailures = java.util.concurrent.ConcurrentHashMap<String, Int>()
+
     private fun orderedEndpoints(): List<String> = buildList {
         activeBaseUrl?.let(::add)
         endpoints.forEach { endpoint ->
@@ -218,27 +222,37 @@ open class CarApiClient {
     fun activeEndpoint(): String? =
         activeBaseUrl
 
-    fun probe(): String {
+    open fun probe(): String {
         var lastError: Exception? = null
         for (endpoint in orderedEndpoints()) {
+            val endpointStart = System.currentTimeMillis()
             try {
+                // Timeout increased to 5000ms for Shanling M3 Ultra DAP Wi-Fi standby and Tailscale VPN routing
                 val connection = open(
                     "$endpoint/health",
                     authenticated = false,
-                    connectTimeoutMs = 1800,
-                    readTimeoutMs = 1800,
+                    connectTimeoutMs = 5000,
+                    readTimeoutMs = 5000,
                 )
                 connection.useResponse { code, body ->
+                    val latency = System.currentTimeMillis() - endpointStart
                     if (code in 200..299) {
                         activeBaseUrl = endpoint
+                        endpointFailures[endpoint] = 0
+                        connectionStateManager?.reportApiCall("/health", endpoint, success = true, httpCode = code, latencyMs = latency)
                         return endpoint
                     }
                     lastError = IOException(
                         "Health $endpoint returned $code: $body"
                     )
+                    connectionStateManager?.reportApiCall("/health", endpoint, success = false, httpCode = code, latencyMs = latency, error = lastError)
                 }
             } catch (exc: Exception) {
                 lastError = exc
+                val latency = System.currentTimeMillis() - endpointStart
+                val fails = (endpointFailures[endpoint] ?: 0) + 1
+                endpointFailures[endpoint] = fails
+                connectionStateManager?.reportApiCall("/health", endpoint, success = false, latencyMs = latency, error = exc)
             }
         }
         activeBaseUrl = null
@@ -1116,12 +1130,13 @@ open class CarApiClient {
         method: String,
         path: String,
         bodyJson: JSONObject? = null,
-        connectTimeoutMs: Int = 4_000,
+        connectTimeoutMs: Int = 6_000,
         readTimeoutMs: Int = 15_000,
     ): JSONObject {
         var lastError: Exception? = null
         val bodyBytes = bodyJson?.toString()?.toByteArray(Charsets.UTF_8)
         for (base in orderedEndpoints()) {
+            val reqStart = System.currentTimeMillis()
             try {
                 val connection = URL("$base$path").openConnection() as HttpURLConnection
                 connection.requestMethod = method
@@ -1135,16 +1150,24 @@ open class CarApiClient {
                     connection.outputStream.use { it.write(bodyBytes) }
                 }
                 val result = connection.useResponse { code, body ->
+                    val latency = System.currentTimeMillis() - reqStart
                     if (code !in 200..299) {
+                        connectionStateManager?.reportApiCall(path, base, success = false, httpCode = code, latencyMs = latency)
                         throw IOException("Backend $code at $base: $body")
                     }
+                    connectionStateManager?.reportApiCall(path, base, success = true, httpCode = code, latencyMs = latency)
                     if (body.isBlank()) JSONObject() else JSONObject(body)
                 }
                 activeBaseUrl = base
+                endpointFailures[base] = 0
                 return result
             } catch (exc: Exception) {
                 lastError = exc
-                if (activeBaseUrl == base) {
+                val latency = System.currentTimeMillis() - reqStart
+                val currentFails = (endpointFailures[base] ?: 0) + 1
+                endpointFailures[base] = currentFails
+                connectionStateManager?.reportApiCall(path, base, success = false, latencyMs = latency, error = exc)
+                if (activeBaseUrl == base && currentFails >= 2) {
                     activeBaseUrl = null
                 }
             }
@@ -1449,26 +1472,35 @@ open class CarApiClient {
     private fun getJson(path: String): JSONObject {
         var lastError: Exception? = null
         for (base in orderedEndpoints()) {
+            val reqStart = System.currentTimeMillis()
             try {
                 val connection = open(
                     "$base$path",
                     authenticated = true,
-                    connectTimeoutMs = 4000,
+                    connectTimeoutMs = 6000,
                     readTimeoutMs = 15000,
                 )
                 val result = connection.useResponse { code, body ->
+                    val latency = System.currentTimeMillis() - reqStart
                     if (code !in 200..299) {
+                        connectionStateManager?.reportApiCall(path, base, success = false, httpCode = code, latencyMs = latency)
                         throw IOException(
                             "Backend $code at $base: $body"
                         )
                     }
+                    connectionStateManager?.reportApiCall(path, base, success = true, httpCode = code, latencyMs = latency)
                     JSONObject(body)
                 }
                 activeBaseUrl = base
+                endpointFailures[base] = 0
                 return result
             } catch (exc: Exception) {
                 lastError = exc
-                if (activeBaseUrl == base) {
+                val latency = System.currentTimeMillis() - reqStart
+                val currentFails = (endpointFailures[base] ?: 0) + 1
+                endpointFailures[base] = currentFails
+                connectionStateManager?.reportApiCall(path, base, success = false, latencyMs = latency, error = exc)
+                if (activeBaseUrl == base && currentFails >= 2) {
                     activeBaseUrl = null
                 }
             }

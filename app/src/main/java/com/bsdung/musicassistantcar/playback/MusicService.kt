@@ -35,6 +35,7 @@ import androidx.media3.session.MediaLibraryService.MediaLibrarySession
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionCommand
 import com.bsdung.musicassistantcar.data.CarApiClient
+import com.bsdung.musicassistantcar.data.ConnectionStateManager
 import com.bsdung.musicassistantcar.data.PlaybackQuality
 import com.bsdung.musicassistantcar.data.RemoteCatalog
 import com.bsdung.musicassistantcar.data.StreamQuality
@@ -118,6 +119,28 @@ class MusicService : MediaLibraryService() {
     private var sessionRestoredMediaId: String? = null
     private var isRestoringResume: Boolean = false
 
+    private val connectionStateManager by lazy {
+        ConnectionStateManager.getInstance(applicationContext) { catalog.api }
+    }
+
+    private fun syncPlaybackTransport() {
+        if (!::player.isInitialized) return
+        val currentItem = player.currentMediaItem
+        val isOffline = currentItem?.mediaMetadata?.extras?.getBoolean("is_offline_download") == true ||
+            currentItem?.mediaMetadata?.extras?.getString("playback_source") == "PINNED_DOWNLOAD" ||
+            currentItem?.localConfiguration?.uri?.scheme == "file"
+
+        val transport = when {
+            player.playerError != null -> ConnectionStateManager.PlaybackTransport.ERROR
+            player.playbackState == Player.STATE_BUFFERING -> ConnectionStateManager.PlaybackTransport.BUFFERING
+            player.playbackState == Player.STATE_IDLE || (!player.playWhenReady && !player.isPlaying) ->
+                ConnectionStateManager.PlaybackTransport.IDLE
+            isOffline -> ConnectionStateManager.PlaybackTransport.CACHE_OR_OFFLINE
+            else -> ConnectionStateManager.PlaybackTransport.NETWORK_STREAM
+        }
+        connectionStateManager.onPlaybackTransportChanged(transport)
+    }
+
     private val persistRunnable = object : Runnable {
         override fun run() {
             if (::player.isInitialized && player.isPlaying) {
@@ -193,8 +216,10 @@ class MusicService : MediaLibraryService() {
         gainAudioProcessor.isNormalizationEnabled = normEnabled
         prefs.registerOnSharedPreferenceChangeListener(prefsListener)
 
+        val apiClient = CarApiClient()
+        apiClient.connectionStateManager = ConnectionStateManager.getInstance(applicationContext) { apiClient }
         catalog = RemoteCatalog(
-            api = CarApiClient(),
+            api = apiClient,
             localRepoSupplier = { com.bsdung.musicassistantcar.data.LocalMediaRepository.getDefault(this) },
             downloadManagerSupplier = { PinnedDownloadManager.getDefault(this) },
             playlistSyncCoordinatorSupplier = { OfflinePlaylistSyncCoordinator.getDefault(this) },
@@ -371,6 +396,7 @@ class MusicService : MediaLibraryService() {
                         "mediaId=${player.currentMediaItem?.mediaId}, " +
                         "queueSize=${player.mediaItemCount}",
                 )
+                syncPlaybackTransport()
                 if (playbackState == Player.STATE_BUFFERING) {
                     maybeWatchRapidBuffer()
                 } else {
@@ -462,6 +488,7 @@ class MusicService : MediaLibraryService() {
                         "pos=${player.currentPosition}ms, " +
                         "queueSize=${player.mediaItemCount}",
                 )
+                syncPlaybackTransport()
                 persistPlaybackState()
                 if (!isPlaying) {
                     saveCurrentTrackResume()
@@ -692,6 +719,7 @@ class MusicService : MediaLibraryService() {
                     "onPlayerError: errorCode=${error.errorCode}, message=${error.message}",
                     error,
                 )
+                syncPlaybackTransport()
                 recoverNetworkPlayback(error)
             }
         })
@@ -1035,6 +1063,15 @@ class MusicService : MediaLibraryService() {
         val positionMs = player.currentPosition
             .coerceAtLeast(0L)
         val shouldResume = player.playWhenReady || player.isPlaying
+
+        val currentItem = queue.getOrNull(currentIndex)
+        val isOffline = currentItem?.mediaMetadata?.extras?.getBoolean("is_offline_download") == true ||
+            currentItem?.mediaMetadata?.extras?.getString("playback_source") == "PINNED_DOWNLOAD" ||
+            currentItem?.localConfiguration?.uri?.scheme == "file"
+        if (isOffline) {
+            Log.w(TAG, "recoverNetworkPlayback: error on offline track ${currentItem?.mediaId}, skipping remote network failover")
+            return
+        }
 
         networkRecoveryInProgress = true
         lastNetworkRecoveryAttemptMs = now
