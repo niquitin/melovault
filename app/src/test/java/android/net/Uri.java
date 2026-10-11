@@ -6,6 +6,7 @@ import java.net.URI;
 public abstract class Uri implements Comparable<Uri> {
 
     public abstract String getScheme();
+    public abstract String getPath();
     public abstract String toString();
     public abstract Builder buildUpon();
 
@@ -74,6 +75,15 @@ public abstract class Uri implements Comparable<Uri> {
             } catch (Exception e) {
                 int colon = uriString.indexOf(':');
                 return colon > 0 ? uriString.substring(0, colon) : null;
+            }
+        }
+
+        @Override
+        public String getPath() {
+            try {
+                return URI.create(uriString).getPath();
+            } catch (Exception e) {
+                return null;
             }
         }
 

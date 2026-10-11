@@ -35,8 +35,22 @@ object StreamCacheManager {
     @Volatile private var activeBase: File? = null
     @Volatile private var activeTarget: String? = null
     @Volatile private var activeCap: Int = -1
+    @Volatile private var activeCapBytes: Long = -1L
     @Volatile private var isPlaybackActive: Boolean = false
     private val activePrefetchCount = java.util.concurrent.atomic.AtomicInteger(0)
+
+    fun activeCapGiB(): Int = activeCap
+    fun activeCapBytes(): Long = activeCapBytes
+
+    fun getActiveEvictorMaxBytes(): Long {
+        val cache = simpleCache ?: return -1L
+        return runCatching {
+            val evictorField = SimpleCache::class.java.getDeclaredField("evictor").apply { isAccessible = true }
+            val evictor = evictorField.get(cache)
+            val maxBytesField = evictor.javaClass.getDeclaredField("maxBytes").apply { isAccessible = true }
+            maxBytesField.getLong(evictor)
+        }.getOrDefault(activeCapBytes)
+    }
 
     fun onPlaybackStateChanged(isPlaying: Boolean) {
         isPlaybackActive = isPlaying
@@ -159,15 +173,21 @@ object StreamCacheManager {
                 )
                 if (sdRoot.usableSpace >= StreamCachePolicy.MIN_SD_USABLE_BYTES && safeCap > 0L) {
                     if (sdRoot.exists() || sdRoot.mkdirs()) {
+                        val evictorBytes = safeCap.coerceAtLeast(1024L * 1024L)
                         try {
-                            val db = StandaloneDatabaseProvider(app)
-                            val result = SimpleCache(sdRoot, LeastRecentlyUsedCacheEvictor(safeCap), db)
+                            val db = runCatching { StandaloneDatabaseProvider(app) }.getOrNull()
+                            val result = if (db != null) {
+                                SimpleCache(sdRoot, LeastRecentlyUsedCacheEvictor(evictorBytes), db)
+                            } else {
+                                SimpleCache(sdRoot, LeastRecentlyUsedCacheEvictor(evictorBytes))
+                            }
                             simpleCache = result
                             databaseProvider = db
                             activeBase = sdRoot
                             activeTarget = TARGET_SD
                             activeCap = capGiB
-                            Log.i(TAG, "E6 init target=sd capBytes=$safeCap")
+                            activeCapBytes = evictorBytes
+                            Log.i(TAG, "E6 init target=sd capBytes=$evictorBytes")
                             return result
                         } catch (e: Exception) {
                             Log.w(TAG, "SimpleCache init on SD failed: ${e.message}. Falling back to internal storage.", e)
@@ -206,27 +226,38 @@ object StreamCacheManager {
             safeCap = minOf(StreamCachePolicy.MIN_STREAM_CACHE_BYTES, intRoot.usableSpace.coerceAtLeast(1024L * 1024L))
         }
 
+        val evictorBytes = safeCap.coerceAtLeast(1024L * 1024L)
         try {
-            val db = StandaloneDatabaseProvider(app)
-            val result = SimpleCache(intRoot, LeastRecentlyUsedCacheEvictor(safeCap.coerceAtLeast(1024L * 1024L)), db)
+            val db = runCatching { StandaloneDatabaseProvider(app) }.getOrNull()
+            val result = if (db != null) {
+                SimpleCache(intRoot, LeastRecentlyUsedCacheEvictor(evictorBytes), db)
+            } else {
+                SimpleCache(intRoot, LeastRecentlyUsedCacheEvictor(evictorBytes))
+            }
             simpleCache = result
             databaseProvider = db
             activeBase = intRoot
             activeTarget = TARGET_INTERNAL
             activeCap = capGiB
-            Log.i(TAG, "E6 init target=internal capBytes=$safeCap")
+            activeCapBytes = evictorBytes
+            Log.i(TAG, "E6 init target=internal capBytes=$evictorBytes")
             return result
         } catch (e: Exception) {
             Log.w(TAG, "Internal stream cache corrupted: ${e.message}. Attempting self-repair of stream cache dir.", e)
             repairStreamCacheDir(intRoot)
-            val db = StandaloneDatabaseProvider(app)
-            val result = SimpleCache(intRoot, LeastRecentlyUsedCacheEvictor(safeCap.coerceAtLeast(1024L * 1024L)), db)
+            val db = runCatching { StandaloneDatabaseProvider(app) }.getOrNull()
+            val result = if (db != null) {
+                SimpleCache(intRoot, LeastRecentlyUsedCacheEvictor(evictorBytes), db)
+            } else {
+                SimpleCache(intRoot, LeastRecentlyUsedCacheEvictor(evictorBytes))
+            }
             simpleCache = result
             databaseProvider = db
             activeBase = intRoot
             activeTarget = TARGET_INTERNAL
             activeCap = capGiB
-            Log.i(TAG, "E6 self-repair success: target=internal capBytes=$safeCap")
+            activeCapBytes = evictorBytes
+            Log.i(TAG, "E6 self-repair success: target=internal capBytes=$evictorBytes")
             return result
         }
     }
@@ -249,27 +280,31 @@ object StreamCacheManager {
         return if (quality == null) base else base + "?quality=" + quality
     }
 
-    private fun cachedFactory(ctx: Context, upstream: DataSource.Factory): DataSource.Factory =
-        CacheDataSource.Factory()
-            .setCache(getCache(ctx))
-            .setUpstreamDataSourceFactory(upstream)
+    fun createCacheDataSourceFactory(http: DataSource.Factory): CacheDataSource.Factory {
+        val cache = simpleCache ?: throw IllegalStateException("Cache not initialized")
+        return CacheDataSource.Factory()
+            .setCache(cache)
+            .setUpstreamDataSourceFactory(http)
             .setCacheKeyFactory(CacheKeyFactory { buildCacheKey(it.uri) })
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+    }
+
+    private fun cachedFactory(ctx: Context, upstream: DataSource.Factory): DataSource.Factory {
+        getCache(ctx)
+        return createCacheDataSourceFactory(upstream)
+    }
 
     fun createDataSourceFactory(ctx: Context, http: DataSource.Factory): DataSource.Factory =
         DefaultDataSource.Factory(ctx, cachedFactory(ctx, http))
 
-    /** Prefetches only a bounded prefix; never a full album, nor any pinned download. */
-    fun prefetchIntro(ctx: Context, uri: Uri, http: DataSource.Factory, maxBytes: Long): Long {
-        if (uri.scheme !in listOf("https", "http") || maxBytes <= 0 || !isPreloadEnabled(ctx)) return 0
+    fun prefetchIntroDirect(uri: Uri, http: DataSource.Factory, maxBytes: Long): Long {
+        if (uri.scheme !in listOf("https", "http") || maxBytes <= 0) return 0
+        val cache = simpleCache ?: return 0
         onPrefetchStarted()
         try {
-            val cache = getCache(ctx)
-            val base = activeBase ?: return 0
-            val reserve = minOf(StreamCachePolicy.RESERVE_GIB * StreamCachePolicy.GIB, base.totalSpace / 4)
-            if (base.usableSpace <= reserve) return 0
-            if (cache.getCachedBytes(buildCacheKey(uri), 0, maxBytes) >= maxBytes) return 0
-            val source = cachedFactory(ctx, http).createDataSource()
+            val key = buildCacheKey(uri)
+            if (cache.getCachedBytes(key, 0, maxBytes) >= maxBytes) return 0
+            val source = createCacheDataSourceFactory(http).createDataSource()
             var bytes = 0L
             try {
                 source.open(DataSpec.Builder().setUri(uri).setPosition(0).setLength(maxBytes).build())
@@ -290,6 +325,16 @@ object StreamCacheManager {
         }
     }
 
+    /** Prefetches only a bounded prefix; never a full album, nor any pinned download. */
+    fun prefetchIntro(ctx: Context, uri: Uri, http: DataSource.Factory, maxBytes: Long): Long {
+        if (uri.scheme !in listOf("https", "http") || maxBytes <= 0 || !isPreloadEnabled(ctx)) return 0
+        val cache = getCache(ctx)
+        val base = activeBase ?: return 0
+        val reserve = minOf(StreamCachePolicy.RESERVE_GIB * StreamCachePolicy.GIB, base.totalSpace / 4)
+        if (base.usableSpace <= reserve) return 0
+        return prefetchIntroDirect(uri, http, maxBytes)
+    }
+
     @Synchronized fun clearCache(ctx: Context) {
         val c = simpleCache ?: return
         try {
@@ -302,6 +347,20 @@ object StreamCacheManager {
     fun getCurrentCacheSizeBytes(ctx: Context): Long =
         runCatching { getCache(ctx).cacheSpace }.getOrDefault(0L)
 
+    @Synchronized
+    fun initForTesting(cacheDir: File, capGiB: Int, isSd: Boolean = false): SimpleCache {
+        releaseForTesting()
+        val capBytes = capGiB * StreamCachePolicy.GIB
+        val evictor = LeastRecentlyUsedCacheEvictor(capBytes)
+        val cache = SimpleCache(cacheDir, evictor)
+        simpleCache = cache
+        activeBase = cacheDir
+        activeTarget = if (isSd) TARGET_SD else TARGET_INTERNAL
+        activeCap = capGiB
+        activeCapBytes = capBytes
+        return cache
+    }
+
     @Synchronized fun releaseForTesting() {
         runCatching { simpleCache?.release() }
         simpleCache = null
@@ -309,6 +368,7 @@ object StreamCacheManager {
         activeBase = null
         activeTarget = null
         activeCap = -1
+        activeCapBytes = -1L
         isPlaybackActive = false
         activePrefetchCount.set(0)
     }
