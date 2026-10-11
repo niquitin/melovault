@@ -264,4 +264,56 @@ class PlaybackDiagnosticTrackerTest {
             tempDir.deleteRecursively()
         }
     }
+
+    @Test
+    fun testVerdictDoesNotContradictZeroRebuffersWhenStreamErrorOccurs() {
+        // Track starts and plays smoothly
+        PlaybackDiagnosticTracker.onTrackTransition("track:11220", "http://100.82.19.36:8790/v1/tracks/11220/stream", "AUTO", 0L, 0L)
+        PlaybackDiagnosticTracker.onPlayerStateUpdate("track:11220", null, Player.STATE_READY, true, true, 5_000L, 25_000L)
+
+        // Stream error occurs without any mid-track rebuffer stall
+        PlaybackDiagnosticTracker.onPlaybackError("track:11220", IOException("Backend connection reset by peer"))
+
+        val snap = PlaybackDiagnosticTracker.snapshot()
+        assertEquals("Must record 0 rebuffers", 0, snap.realRebufferCount)
+        assertEquals("Must record 1 HTTP stream error", 1, snap.httpErrorCount)
+        // Must NEVER claim DEGRADED_MINOR_REBUFFER when realRebufferCount is 0!
+        assertEquals(
+            "Verdict must be PLAYBACK_ERROR, never DEGRADED_MINOR_REBUFFER when zero rebuffers occurred",
+            PlaybackDiagnosticTracker.PlaybackStabilityVerdict.PLAYBACK_ERROR,
+            snap.stabilityVerdict,
+        )
+
+        val report = PlaybackDiagnosticTracker.formatDiagnosticsSection()
+        assertTrue(report.contains("Real Rebuffer Stalls:   0"))
+        assertTrue(report.contains("PLAYBACK_ERROR"))
+        assertFalse("Must not falsely declare mid-track rebuffer in description", report.contains("1 brief mid-track rebuffer"))
+    }
+
+    @Test
+    fun testPrefetchAndArtworkErrorsDoNotCorruptPlaybackStreamErrorCounter() {
+        // Active audio playback is completely stable
+        PlaybackDiagnosticTracker.onTrackTransition("track:11221", "http://100.82.19.36:8790/v1/tracks/11221/stream", "AUTO", 0L, 0L)
+        PlaybackDiagnosticTracker.onPlayerStateUpdate("track:11221", null, Player.STATE_READY, true, true, 10_000L, 30_000L)
+
+        // Non-fatal auxiliary failures: artwork load times out, background prefetch times out
+        PlaybackDiagnosticTracker.onArtworkError("http://100.82.19.36:8790/v1/tracks/11221/cover", IOException("SocketTimeoutException: timeout"))
+        PlaybackDiagnosticTracker.onPrefetchError("track:11222", IOException("SocketTimeoutException: timeout"))
+
+        val snap = PlaybackDiagnosticTracker.snapshot()
+        assertEquals("Active stream error count must remain 0", 0, snap.httpErrorCount)
+        assertEquals("Artwork error count must be 1", 1, snap.artworkErrorCount)
+        assertEquals("Prefetch error count must be 1", 1, snap.prefetchErrorCount)
+        assertEquals("Real rebuffer stalls must remain 0", 0, snap.realRebufferCount)
+        assertEquals(
+            "Active audio stream verdict must remain STABLE despite non-fatal auxiliary failures",
+            PlaybackDiagnosticTracker.PlaybackStabilityVerdict.STABLE_AUDIBLE_STREAM,
+            snap.stabilityVerdict,
+        )
+
+        val report = PlaybackDiagnosticTracker.formatDiagnosticsSection()
+        assertTrue(report.contains("HTTP / Stream Errors:   0"))
+        assertTrue(report.contains("Auxiliary Errors:       1 artwork errors, 1 prefetch warnings"))
+        assertTrue(report.contains("STABLE (Zero mid-track rebuffer stalls, zero HTTP stream errors)"))
+    }
 }

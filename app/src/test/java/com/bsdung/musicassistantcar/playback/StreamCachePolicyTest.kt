@@ -13,6 +13,13 @@ class StreamCachePolicyTest {
         assertEquals(listOf(74), StreamCachePolicy.nextIndices(73, 75))
         assertTrue(StreamCachePolicy.nextIndices(74, 75).isEmpty())
     }
+    @Test fun startupHeadIndex() {
+        assertEquals(listOf(0), StreamCachePolicy.startupIndices(0, 75))
+        assertEquals(listOf(5), StreamCachePolicy.startupIndices(5, 75))
+        assertTrue(StreamCachePolicy.startupIndices(-1, 75).isEmpty())
+        assertTrue(StreamCachePolicy.startupIndices(75, 75).isEmpty())
+        assertTrue(StreamCachePolicy.startupIndices(0, 0).isEmpty())
+    }
     @Test fun reservedFreeSpace() {
         val g = StreamCachePolicy.GIB
         assertEquals(30L * g, StreamCachePolicy.safeCapBytes(30 * g, 100 * g, 0, 256 * g))

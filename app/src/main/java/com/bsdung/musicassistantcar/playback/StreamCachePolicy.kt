@@ -45,6 +45,10 @@ object StreamCachePolicy {
         return free > reserve
     }
 
+    fun startupIndices(index: Int, count: Int): List<Int> =
+        if (count <= 0 || index !in 0 until count) emptyList()
+        else listOf(index)
+
     fun nextIndices(index: Int, count: Int): List<Int> =
         if (index !in 0 until count - 1) emptyList()
         else ((index + 1) until minOf(count, index + PREFETCH_NEXT_COUNT + 1)).toList()

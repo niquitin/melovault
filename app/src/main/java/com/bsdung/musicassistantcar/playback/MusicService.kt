@@ -192,10 +192,22 @@ class MusicService : MediaLibraryService() {
      */
     private fun scheduleStreamPreload() {
         if (serviceShuttingDown || !::player.isInitialized || !::prefetchHttpFactory.isInitialized ||
-            player.playbackState != Player.STATE_READY || !StreamCacheManager.isPreloadEnabled(this)) return
+            !StreamCacheManager.isPreloadEnabled(this)) return
 
-        val candidates = StreamCachePolicy.nextIndices(player.currentMediaItemIndex, player.mediaItemCount)
-            .mapNotNull { player.getMediaItemAt(it).localConfiguration?.uri }
+        // When actively buffering, yield full bandwidth to the active stream buffer
+        if (player.playbackState == Player.STATE_BUFFERING) return
+
+        val indices = if (player.isPlaying) {
+            StreamCachePolicy.nextIndices(player.currentMediaItemIndex, player.mediaItemCount)
+        } else if (player.mediaItemCount > 0) {
+            // E6 R8: Pre-warm queue head on cold start while idle/paused to eliminate initial startup latency
+            StreamCachePolicy.startupIndices(player.currentMediaItemIndex, player.mediaItemCount)
+        } else {
+            emptyList()
+        }
+
+        val candidates = indices
+            .mapNotNull { if (it in 0 until player.mediaItemCount) player.getMediaItemAt(it).localConfiguration?.uri else null }
             .filter { it.scheme == "https" || it.scheme == "http" }
         if (candidates.isEmpty()) return
         val signature = candidates.joinToString("|") { StreamCacheManager.buildCacheKey(it) }
@@ -860,6 +872,7 @@ class MusicService : MediaLibraryService() {
                 // setMediaItems does not start playback or trigger an audio-focus request.
                 player.setMediaItems(restored, target.index, target.positionMs)
                 Log.i(TAG, "QUEUE_STARTUP_RESTORED: count=${restored.size}, index=${target.index}, pos=${target.positionMs}")
+                scheduleStreamPreload()
             }
         }
     }

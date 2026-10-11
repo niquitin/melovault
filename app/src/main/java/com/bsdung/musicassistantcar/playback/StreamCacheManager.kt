@@ -475,6 +475,7 @@ object StreamCacheManager {
 
     private class UpstreamCountingDataSource(
         private val delegate: DataSource,
+        private val isPrefetch: Boolean = false,
     ) : DataSource {
         override fun addTransferListener(transferListener: androidx.media3.datasource.TransferListener) {
             delegate.addTransferListener(transferListener)
@@ -484,10 +485,15 @@ object StreamCacheManager {
             return try {
                 delegate.open(dataSpec)
             } catch (e: Exception) {
-                PlaybackDiagnosticTracker.onPlaybackError(
-                    mediaId = buildCacheKey(dataSpec.uri),
-                    error = e,
-                )
+                val key = buildCacheKey(dataSpec.uri)
+                if (isPrefetch) {
+                    PlaybackDiagnosticTracker.onPrefetchError(key, e)
+                } else {
+                    PlaybackDiagnosticTracker.onPlaybackError(
+                        mediaId = key,
+                        error = e,
+                    )
+                }
                 throw e
             }
         }
@@ -496,10 +502,15 @@ object StreamCacheManager {
             val n = try {
                 delegate.read(buffer, offset, length)
             } catch (e: Exception) {
-                PlaybackDiagnosticTracker.onPlaybackError(
-                    mediaId = delegate.uri?.let { buildCacheKey(it) },
-                    error = e,
-                )
+                val key = delegate.uri?.let { buildCacheKey(it) }
+                if (isPrefetch) {
+                    PlaybackDiagnosticTracker.onPrefetchError(key, e)
+                } else {
+                    PlaybackDiagnosticTracker.onPlaybackError(
+                        mediaId = key,
+                        error = e,
+                    )
+                }
                 throw e
             }
             if (n > 0) {
@@ -517,10 +528,10 @@ object StreamCacheManager {
         }
     }
 
-    fun createCacheDataSourceFactory(http: DataSource.Factory): CacheDataSource.Factory {
+    fun createCacheDataSourceFactory(http: DataSource.Factory, isPrefetch: Boolean = false): CacheDataSource.Factory {
         val cache = simpleCache ?: throw IllegalStateException("Cache not initialized")
         val countingUpstreamFactory = DataSource.Factory {
-            UpstreamCountingDataSource(http.createDataSource())
+            UpstreamCountingDataSource(http.createDataSource(), isPrefetch = isPrefetch)
         }
         return CacheDataSource.Factory()
             .setCache(cache)
@@ -556,7 +567,7 @@ object StreamCacheManager {
         try {
             val key = buildCacheKey(uri)
             if (cache.getCachedBytes(key, 0, maxBytes) >= maxBytes) return 0
-            val source = createCacheDataSourceFactory(http).createDataSource()
+            val source = createCacheDataSourceFactory(http, isPrefetch = true).createDataSource()
             var bytes = 0L
             try {
                 source.open(DataSpec.Builder().setUri(uri).setPosition(0).setLength(maxBytes).build())

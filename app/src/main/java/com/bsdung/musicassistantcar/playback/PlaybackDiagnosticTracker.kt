@@ -77,6 +77,8 @@ object PlaybackDiagnosticTracker {
         val httpErrorCount: Int,
         val lastHttpStatusCode: Int?,
         val lastSanitizedError: String?,
+        val artworkErrorCount: Int = 0,
+        val prefetchErrorCount: Int = 0,
         val networkTransitionCount: Int,
         val cachedBytesRead: Long,
         val upstreamBytesRead: Long,
@@ -116,6 +118,10 @@ object PlaybackDiagnosticTracker {
     private val httpErrorCount = AtomicInteger(0)
     @Volatile private var lastHttpStatusCode: Int? = null
     @Volatile private var lastSanitizedError: String? = null
+    private val artworkErrorCount = AtomicInteger(0)
+    @Volatile private var lastArtworkError: String? = null
+    private val prefetchErrorCount = AtomicInteger(0)
+    @Volatile private var lastPrefetchError: String? = null
     private val networkTransitionCount = AtomicInteger(0)
 
     private val events = ConcurrentLinkedQueue<PlaybackEvent>()
@@ -297,6 +303,28 @@ object PlaybackDiagnosticTracker {
         )
     }
 
+    fun onArtworkError(uri: String?, error: Throwable) {
+        artworkErrorCount.incrementAndGet()
+        val sanitizedMsg = sanitizeForDiagnostics("${error.javaClass.simpleName}: ${error.message ?: "unknown"}")
+        lastArtworkError = sanitizedMsg
+        recordEvent(
+            type = "ARTWORK_ERROR",
+            stallDurationMs = null,
+            detail = "uri=${sanitizeForDiagnostics(uri ?: "none")} error=$sanitizedMsg",
+        )
+    }
+
+    fun onPrefetchError(mediaId: String?, error: Throwable) {
+        prefetchErrorCount.incrementAndGet()
+        val sanitizedMsg = sanitizeForDiagnostics("${error.javaClass.simpleName}: ${error.message ?: "unknown"}")
+        lastPrefetchError = sanitizedMsg
+        recordEvent(
+            type = "PREFETCH_ERROR",
+            stallDurationMs = null,
+            detail = "media=${sanitizeForDiagnostics(mediaId ?: "none")} error=$sanitizedMsg",
+        )
+    }
+
     fun onNetworkTransition(transportName: String, connected: Boolean) {
         networkTransitionCount.incrementAndGet()
         recordEvent(
@@ -429,7 +457,8 @@ object PlaybackDiagnosticTracker {
             rebuffers >= 2 || totalStall >= 2_000L ||
                 (activeBufferReason == BufferReason.MID_TRACK_REBUFFER_STALL && activeStall >= 2_000L) ->
                 PlaybackStabilityVerdict.UNSTABLE_AUDIBLE_STALLS
-            rebuffers == 1 || errors > 0 -> PlaybackStabilityVerdict.DEGRADED_MINOR_REBUFFER
+            rebuffers == 1 -> PlaybackStabilityVerdict.DEGRADED_MINOR_REBUFFER
+            errors > 0 -> PlaybackStabilityVerdict.PLAYBACK_ERROR
             else -> PlaybackStabilityVerdict.STABLE_AUDIBLE_STREAM
         }
 
@@ -460,6 +489,8 @@ object PlaybackDiagnosticTracker {
             httpErrorCount = errors,
             lastHttpStatusCode = lastHttpStatusCode,
             lastSanitizedError = lastSanitizedError,
+            artworkErrorCount = artworkErrorCount.get(),
+            prefetchErrorCount = prefetchErrorCount.get(),
             networkTransitionCount = networkTransitionCount.get(),
             cachedBytesRead = cachedBytes,
             upstreamBytesRead = upstreamBytes,
@@ -490,6 +521,9 @@ object PlaybackDiagnosticTracker {
         sb.appendLine("Normal Seek Buffers:    ${s.seekBufferCount} (last=${s.lastSeekBufferMs} ms)")
         sb.appendLine("Real Rebuffer Stalls:   ${s.realRebufferCount} (total=${s.totalRealRebufferMs} ms, max=${s.maxRealRebufferMs} ms, last=${s.lastRealRebufferMs} ms)")
         sb.appendLine("HTTP / Stream Errors:   ${s.httpErrorCount} (lastCode=${s.lastHttpStatusCode ?: "None"}, lastErr=${s.lastSanitizedError ?: "None"})")
+        if (s.artworkErrorCount > 0 || s.prefetchErrorCount > 0) {
+            sb.appendLine("Auxiliary Errors:       ${s.artworkErrorCount} artwork errors, ${s.prefetchErrorCount} prefetch warnings (non-fatal, audio stream unaffected)")
+        }
         sb.appendLine("Network Transitions:    ${s.networkTransitionCount}")
         sb.appendLine("Stream Cache Target:    ${s.activeCacheTarget} (fallback=${s.lastCacheFallbackReason})")
         sb.appendLine("Stream Cache Cap/Used:  ${s.activeCacheCapBytes / (1024 * 1024)} MiB cap / ${s.currentCacheSpaceBytes / (1024 * 1024)} MiB used")
@@ -544,6 +578,10 @@ object PlaybackDiagnosticTracker {
         httpErrorCount.set(0)
         lastHttpStatusCode = null
         lastSanitizedError = null
+        artworkErrorCount.set(0)
+        lastArtworkError = null
+        prefetchErrorCount.set(0)
+        lastPrefetchError = null
         networkTransitionCount.set(0)
         events.clear()
     }
