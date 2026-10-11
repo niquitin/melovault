@@ -117,17 +117,23 @@ object StreamCacheManager {
 
     private fun internalBase(ctx: Context): File = ctx.externalCacheDir ?: ctx.cacheDir
 
-    fun repairStreamCacheDir(dir: File) {
+    fun repairStreamCacheDir(dir: File): Boolean {
         if (dir.name != CACHE_DIR_NAME) {
             Log.e(TAG, "Refusing to clean non-stream cache directory: ${dir.name}")
-            return
+            return false
         }
-        runCatching {
+        if (isCacheInUse()) {
+            Log.w(TAG, "Refusing to repair stream cache directory while cache is actively in use")
+            return false
+        }
+        return runCatching {
             dir.listFiles()?.forEach { file ->
                 file.deleteRecursively()
             }
-        }
+            true
+        }.getOrDefault(false)
     }
+
 
     @Synchronized
     fun getCache(ctx: Context): SimpleCache {

@@ -91,7 +91,8 @@ class StreamCacheManagerTest {
             protectedFile.writeText("important audio data")
 
             // Should refuse to delete contents of non-stream cache directory
-            StreamCacheManager.repairStreamCacheDir(protectedDir)
+            val nonStreamResult = StreamCacheManager.repairStreamCacheDir(protectedDir)
+            org.junit.Assert.assertFalse("Must return false for non-stream directory", nonStreamResult)
             org.junit.Assert.assertTrue("Protected file must not be deleted", protectedFile.exists())
 
             // Now test stream cache directory
@@ -100,11 +101,28 @@ class StreamCacheManagerTest {
             val corruptedFile = java.io.File(streamDir, "corrupted_span.cache")
             corruptedFile.writeText("bad data")
 
-            StreamCacheManager.repairStreamCacheDir(streamDir)
+            // Should refuse to delete while cache is actively in use (playback active)
+            StreamCacheManager.onPlaybackStateChanged(true)
+            val busyPlaybackResult = StreamCacheManager.repairStreamCacheDir(streamDir)
+            org.junit.Assert.assertFalse("Must refuse repair during active playback", busyPlaybackResult)
+            org.junit.Assert.assertTrue("File must remain untouched while playing", corruptedFile.exists())
+            StreamCacheManager.onPlaybackStateChanged(false)
+
+            // Should refuse to delete while prefetch is running
+            StreamCacheManager.onPrefetchStarted()
+            val busyPrefetchResult = StreamCacheManager.repairStreamCacheDir(streamDir)
+            org.junit.Assert.assertFalse("Must refuse repair during active prefetch", busyPrefetchResult)
+            org.junit.Assert.assertTrue("File must remain untouched while prefetching", corruptedFile.exists())
+            StreamCacheManager.onPrefetchFinished()
+
+            // When idle, repair succeeds and only cleans corrupted stream files
+            val idleResult = StreamCacheManager.repairStreamCacheDir(streamDir)
+            org.junit.Assert.assertTrue("Repair should succeed when idle", idleResult)
             org.junit.Assert.assertFalse("Corrupted file inside stream cache should be deleted", corruptedFile.exists())
             org.junit.Assert.assertTrue("Directory itself must remain", streamDir.exists())
         } finally {
             tempDir.deleteRecursively()
+            StreamCacheManager.releaseForTesting()
         }
     }
 
