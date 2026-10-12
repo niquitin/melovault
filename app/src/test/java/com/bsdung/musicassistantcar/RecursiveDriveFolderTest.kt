@@ -63,7 +63,7 @@ class RecursiveDriveFolderTest {
             trackCount = 684,
             folderCount = 23,
         )
-        assertEquals("23 thư mục • 684 bài", subtitle)
+        assertEquals("23 thư mục · 684 bài", subtitle)
 
         // Real Sony Apple Music case with 928 tracks
         val sonyAppleMusic = MainActivity.formatCollectionSubtitle(
@@ -72,7 +72,16 @@ class RecursiveDriveFolderTest {
             trackCount = 928,
             folderCount = 23,
         )
-        assertEquals("23 thư mục • 928 bài", sonyAppleMusic)
+        assertEquals("23 thư mục · 928 bài", sonyAppleMusic)
+
+        // Large 11,188 track folder with Vietnamese thousands separator
+        val largeFolder = MainActivity.formatCollectionSubtitle(
+            parentId = parentId,
+            total = 2,
+            trackCount = 11188,
+            folderCount = 2,
+        )
+        assertEquals("2 thư mục · 11.188 bài", largeFolder)
     }
 
     // 4. Play All consumes recursive collection result

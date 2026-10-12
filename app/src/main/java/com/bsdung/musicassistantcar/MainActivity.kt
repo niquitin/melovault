@@ -21,6 +21,7 @@ import android.os.SystemClock
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.activity.OnBackPressedCallback
+import java.text.NumberFormat
 import java.util.Locale
 import kotlin.math.roundToInt
 import androidx.appcompat.app.AppCompatActivity
@@ -131,6 +132,10 @@ class MainActivity : AppCompatActivity() {
             else           -> WindowWidthClass.COMPACT
         }
 
+        private fun formatCount(count: Int): String {
+            return NumberFormat.getInstance(Locale("vi", "VN")).format(count)
+        }
+
         fun formatCollectionSubtitle(
             parentId: String,
             total: Int?,
@@ -143,14 +148,14 @@ class MainActivity : AppCompatActivity() {
                 val fCount = folderCount ?: 0
                 val tCount = trackCount ?: 0
                 return when {
-                    fCount > 0 && tCount > 0 -> "$fCount thư mục • $tCount bài"
-                    fCount > 0 && tCount == 0 -> "$fCount thư mục"
-                    fCount == 0 && trackCount != null -> "$trackCount bài"
-                    total != null && total >= 0 -> "$total bài"
+                    fCount > 0 && tCount > 0 -> "${formatCount(fCount)} thư mục · ${formatCount(tCount)} bài"
+                    fCount > 0 && tCount == 0 -> "${formatCount(fCount)} thư mục"
+                    fCount == 0 && trackCount != null -> "${formatCount(trackCount)} bài"
+                    total != null && total >= 0 -> "${formatCount(total)} bài"
                     else -> null
                 }
             }
-            return if (total != null && total >= 0) "$total bài" else null
+            return if (total != null && total >= 0) "${formatCount(total)} bài" else null
         }
     }
 
@@ -2169,7 +2174,7 @@ class MainActivity : AppCompatActivity() {
                 folderCount = folderCount,
             )
             val subtitle = when {
-                !parentPath.isNullOrBlank() && !statsSubtitle.isNullOrBlank() -> "$parentPath • $statsSubtitle"
+                !parentPath.isNullOrBlank() && !statsSubtitle.isNullOrBlank() -> "$parentPath · $statsSubtitle"
                 !parentPath.isNullOrBlank() -> parentPath
                 else -> statsSubtitle
             }
