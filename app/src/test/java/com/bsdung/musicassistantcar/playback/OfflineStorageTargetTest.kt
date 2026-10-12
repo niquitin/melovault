@@ -2,6 +2,7 @@ package com.bsdung.musicassistantcar.playback
 
 import android.content.SharedPreferences
 import android.os.Environment
+import com.bsdung.musicassistantcar.data.CarApiClient
 import com.bsdung.musicassistantcar.data.CarTrack
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -453,7 +454,10 @@ class OfflineStorageTargetTest {
 
         // 3. Playback resolver skips local file and falls back to remote stream
         assertNull("Local playback file must be null while SD unmounted", manager.resolveLocalPlaybackFile(5001L))
-        val fallbackItem = manager.resolvePlaybackMediaItem(trackB)
+        val testApi = object : CarApiClient() {
+            override fun probe(): String = "http://127.0.0.1:8790"
+        }
+        val fallbackItem = manager.resolvePlaybackMediaItem(trackB, apiClient = testApi)
         assertEquals("REMOTE_STREAM", fallbackItem.mediaMetadata.extras?.getString("playback_source"))
         assertEquals("http", fallbackItem.localConfiguration?.uri?.scheme)
 

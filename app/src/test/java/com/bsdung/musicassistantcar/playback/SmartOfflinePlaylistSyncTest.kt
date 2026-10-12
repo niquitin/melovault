@@ -887,7 +887,9 @@ class SmartOfflinePlaylistSyncTest {
         assertEquals(PlaylistSyncState.WAITING_FOR_WIFI, coordinator.getPlaylistSyncStatus(88, "Tailscale Test", tracks).state)
 
         // Verify remote streaming URI is completely unaffected by WIFI_ONLY download state
-        val api = CarApiClient()
+        val api = object : CarApiClient() {
+            override fun probe(): String = "http://127.0.0.1:8790"
+        }
         val streamUri = api.streamUri(801)
         assertTrue(streamUri.toString().contains("/v1/tracks/801/stream"))
 

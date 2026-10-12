@@ -29,4 +29,36 @@ class ArtworkGesturePolicyTest {
         assertEquals(ArtworkGestureAction.IGNORE, ArtworkGesturePolicy.classify(-63f, 0f, 64f, 8f))
         assertEquals(ArtworkGestureAction.NEXT_TRACK, ArtworkGesturePolicy.classify(-65f, 0f, 64f, 8f))
     }
+
+    @Test fun horizontalSwipeLeftShowsLyricsWhenPreferringLyricsSwitch() {
+        assertEquals(
+            ArtworkGestureAction.SHOW_LYRICS,
+            ArtworkGesturePolicy.classify(-120f, 10f, 64f, 8f, preferLyricsSwitch = true),
+        )
+    }
+
+    @Test fun horizontalSwipeRightShowsCoverWhenPreferringLyricsSwitch() {
+        assertEquals(
+            ArtworkGestureAction.SHOW_COVER,
+            ArtworkGesturePolicy.classify(110f, 12f, 64f, 8f, preferLyricsSwitch = true),
+        )
+    }
+
+    @Test fun tapOpensQueueEvenWhenPreferringLyricsSwitch() {
+        assertEquals(
+            ArtworkGestureAction.OPEN_QUEUE,
+            ArtworkGesturePolicy.classify(4f, 3f, 64f, 8f, preferLyricsSwitch = true),
+        )
+    }
+
+    @Test fun tinyOrDiagonalSwipeIgnoredWhenPreferringLyricsSwitch() {
+        assertEquals(
+            ArtworkGestureAction.IGNORE,
+            ArtworkGesturePolicy.classify(24f, 12f, 64f, 8f, preferLyricsSwitch = true),
+        )
+        assertEquals(
+            ArtworkGestureAction.IGNORE,
+            ArtworkGesturePolicy.classify(95f, 90f, 64f, 8f, preferLyricsSwitch = true),
+        )
+    }
 }

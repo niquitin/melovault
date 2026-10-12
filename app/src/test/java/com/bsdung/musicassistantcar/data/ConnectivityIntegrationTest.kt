@@ -82,8 +82,12 @@ class ConnectivityIntegrationTest {
         fakeApiClient.probeResult = "http://100.82.19.36:8790"
         stateManager.probeBackend(quiet = false)
 
-        Thread.sleep(50) // wait for executor task
-        val snap = stateManager.snapshot()
+        var snap = stateManager.snapshot()
+        val deadline = System.currentTimeMillis() + 1000L
+        while (snap.uiStatus != ConnectionStateManager.UiConnectionStatus.ONLINE && System.currentTimeMillis() < deadline) {
+            Thread.sleep(20)
+            snap = stateManager.snapshot()
+        }
 
         assertEquals(ConnectionStateManager.UiConnectionStatus.ONLINE, snap.uiStatus)
         assertEquals(ConnectionStateManager.BackendHealth.REACHABLE, snap.backendHealth)

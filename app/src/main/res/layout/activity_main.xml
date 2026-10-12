@@ -102,15 +102,132 @@
                 android:orientation="vertical"
                 android:gravity="center_horizontal">
 
-            <!-- Artwork — size driven by WindowWidthClass from code -->
-            <ImageView
-                android:id="@+id/coverView"
-                android:layout_width="@dimen/artwork_size_compact_idle"
-                android:layout_height="@dimen/artwork_size_compact_idle"
-                android:scaleType="centerCrop"
-                android:src="@drawable/ic_album_placeholder"
-                android:contentDescription="@string/cover_gesture_action"
-                android:layout_marginBottom="4dp" />
+            <!-- Artwork & In-place YouTube Music-style Lyrics Container -->
+            <FrameLayout
+                android:id="@+id/nowPlayingMediaFrame"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="4dp">
+
+                <ImageView
+                    android:id="@+id/coverView"
+                    android:layout_width="@dimen/artwork_size_compact_idle"
+                    android:layout_height="@dimen/artwork_size_compact_idle"
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/ic_album_placeholder"
+                    android:contentDescription="@string/cover_gesture_action" />
+
+                <!-- In-place Lyrics Frame: YouTube Music style -->
+                <FrameLayout
+                    android:id="@+id/nowPlayingLyricsFrame"
+                    android:layout_width="@dimen/artwork_size_compact_idle"
+                    android:layout_height="@dimen/artwork_size_compact_idle"
+                    android:background="@drawable/bg_lyrics_card"
+                    android:clipToOutline="true"
+                    android:visibility="gone">
+
+                    <!-- Synced & Plain Lyrics RecyclerView -->
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/nowPlayingLyricsList"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:paddingTop="12dp"
+                        android:paddingBottom="12dp"
+                        android:clipToPadding="false"
+                        android:scrollbars="none" />
+
+                    <!-- Empty / No lyrics placeholder view -->
+                    <LinearLayout
+                        android:id="@+id/nowPlayingLyricsEmptyView"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:orientation="vertical"
+                        android:gravity="center"
+                        android:padding="16dp"
+                        android:visibility="gone">
+
+                        <ImageView
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:src="@drawable/ic_music_note"
+                            android:tint="@color/text_tertiary"
+                            android:contentDescription="No lyrics" />
+
+                        <TextView
+                            android:id="@+id/nowPlayingLyricsEmptyText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="8dp"
+                            android:gravity="center"
+                            android:text="Chưa có lời bài hát"
+                            android:textColor="@color/text_secondary"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:gravity="center"
+                            android:text="Vuốt sang phải để về Ảnh bìa"
+                            android:textColor="@color/text_tertiary"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <!-- Loading view -->
+                    <ProgressBar
+                        android:id="@+id/nowPlayingLyricsLoading"
+                        android:layout_width="32dp"
+                        android:layout_height="32dp"
+                        android:layout_gravity="center"
+                        android:visibility="gone" />
+                </FrameLayout>
+            </FrameLayout>
+
+            <!-- Mode Indicator: Bìa | Lời -->
+            <LinearLayout
+                android:id="@+id/nowPlayingMediaIndicator"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:layout_marginBottom="2dp">
+
+                <TextView
+                    android:id="@+id/indicatorCoverTab"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Bìa"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/accent_primary"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="2dp"
+                    android:paddingBottom="2dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="·"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_tertiary" />
+
+                <TextView
+                    android:id="@+id/indicatorLyricsTab"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Lời"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_tertiary"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:paddingTop="2dp"
+                    android:paddingBottom="2dp" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/coverGestureHint"

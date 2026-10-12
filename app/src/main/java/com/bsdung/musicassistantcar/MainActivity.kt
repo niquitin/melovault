@@ -12,6 +12,7 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
 import android.view.View
+import android.view.MotionEvent
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
@@ -68,6 +69,7 @@ import com.bsdung.musicassistantcar.ui.adapter.YouTubePlaylistItemsAdapter
 import com.bsdung.musicassistantcar.ui.adapter.LyricsCandidateAdapter
 import com.bsdung.musicassistantcar.ui.adapter.SyncedLyricsAdapter
 import com.bsdung.musicassistantcar.lyrics.LrcParser
+import com.bsdung.musicassistantcar.lyrics.LyricsLine
 import com.bsdung.musicassistantcar.lyrics.LyricsCache
 import com.bsdung.musicassistantcar.lyrics.LyricsCandidate
 import com.bsdung.musicassistantcar.lyrics.LyricsCandidatePickerState
@@ -161,12 +163,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var queueAdapter: QueueAdapter
     private lateinit var syncedLyricsAdapter: SyncedLyricsAdapter
     private lateinit var fullscreenSyncedLyricsAdapter: SyncedLyricsAdapter
+    private lateinit var nowPlayingLyricsAdapter: SyncedLyricsAdapter
     private lateinit var lyricsCandidateAdapter: LyricsCandidateAdapter
     private lateinit var fullscreenLyricsCandidateAdapter: LyricsCandidateAdapter
     private lateinit var enrichmentController: ProgressiveEnrichmentController
     private var isQueueVisible: Boolean = false
     private var isLyricsVisible: Boolean = false
     private var isFullscreenLyricsVisible: Boolean = false
+    private var isNowPlayingLyricsActive: Boolean = false
     private var isCandidatePickerOpen: Boolean = false
     private var currentCandidatePickerState: LyricsCandidatePickerState = LyricsCandidatePickerState.Closed
     private var isActivityInForeground: Boolean = false
@@ -176,6 +180,7 @@ class MainActivity : AppCompatActivity() {
     private var currentLyricsSourceSummary: String = "Nguồn: LRCLIB · Tự động"
     private var isEditMode: Boolean = false
     private var userOpenedFullPlayer: Boolean = false
+    private var queueOpenedFromFullPlayer: Boolean = false
     private var isLandscapeArtworkExpanded: Boolean = false
     private var currentLoadedArtworkUri: String? = null
     private var libraryItemTouchHelper: ItemTouchHelper? = null
@@ -327,7 +332,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun isAnyLyricsVisible(): Boolean = isLyricsVisible || isFullscreenLyricsVisible
+    private fun isAnyLyricsVisible(): Boolean = isLyricsVisible || isFullscreenLyricsVisible || isNowPlayingLyricsActive
 
     private val playerListener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
@@ -509,8 +514,12 @@ class MainActivity : AppCompatActivity() {
                         hideLyrics()
                         return
                     }
+                    if (isNowPlayingLyricsActive) {
+                        hideNowPlayingLyrics()
+                        return
+                    }
                     if (isQueueVisible) {
-                        hideQueue()
+                        hideQueue(restoreFullPlayer = queueOpenedFromFullPlayer)
                         return
                     }
                     val cfg = resources.configuration
@@ -857,6 +866,24 @@ class MainActivity : AppCompatActivity() {
                 }
             })
         }
+        nowPlayingLyricsAdapter = SyncedLyricsAdapter(
+            fullscreenMode = false,
+            onLineClick = handleLyricLineTapped,
+        )
+        binding.nowPlayingLyricsList?.apply {
+            layoutManager = LinearLayoutManager(this@MainActivity)
+            adapter = nowPlayingLyricsAdapter
+            itemAnimator = null
+            addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                    if (newState == RecyclerView.SCROLL_STATE_DRAGGING && isLyricsAutoFollow) {
+                        Log.i(TAG, "LYRICS_MANUAL_SCROLL: autoFollow=false nowPlaying=true")
+                        isLyricsAutoFollow = false
+                        updateLyricsAutoFollowButtonUi()
+                    }
+                }
+            })
+        }
 
         val handleCandidateSelected: (LyricsCandidate) -> Unit = { candidate ->
             selectManualLyricsCandidate(candidate)
@@ -906,7 +933,7 @@ class MainActivity : AppCompatActivity() {
 
         // Album art: tap expands/collapses cover only in wide landscape.
         // Portrait preserves its existing tap-to-Queue action; horizontal swipes
-        // retain their Next/Previous behavior on every window size.
+        // switch between Cover and Lyrics on portrait phone, or Next/Previous track on landscape.
         binding.coverView.setOnClickListener {
             val cfg = resources.configuration
             if (MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(
@@ -917,7 +944,8 @@ class MainActivity : AppCompatActivity() {
                 applyLandscapeArtworkNavigation()
                 if (browser != null) updateNowPlaying()
             } else {
-                toggleQueue()
+                queueOpenedFromFullPlayer = true
+                showQueue()
             }
         }
         val artworkSlop = android.view.ViewConfiguration.get(this).scaledTouchSlop.toFloat()
@@ -926,13 +954,13 @@ class MainActivity : AppCompatActivity() {
         var artworkDownY = 0f
         binding.coverView.setOnTouchListener { view, event ->
             when (event.actionMasked) {
-                android.view.MotionEvent.ACTION_DOWN -> {
+                MotionEvent.ACTION_DOWN -> {
                     artworkDownX = event.x
                     artworkDownY = event.y
                     view.parent?.requestDisallowInterceptTouchEvent(true)
                     true
                 }
-                android.view.MotionEvent.ACTION_MOVE -> {
+                MotionEvent.ACTION_MOVE -> {
                     val dx = event.x - artworkDownX
                     val dy = event.y - artworkDownY
                     if (kotlin.math.abs(dy) > artworkSlop &&
@@ -942,27 +970,88 @@ class MainActivity : AppCompatActivity() {
                     }
                     true
                 }
-                android.view.MotionEvent.ACTION_UP -> {
+                MotionEvent.ACTION_UP -> {
                     view.parent?.requestDisallowInterceptTouchEvent(false)
+                    val cfg = resources.configuration
+                    val preferLyrics = MobilePlayerLayoutPolicy.isPortraitPhone(cfg.screenWidthDp, cfg.screenHeightDp)
                     when (ArtworkGesturePolicy.classify(
                         event.x - artworkDownX,
                         event.y - artworkDownY,
                         artworkSwipeThreshold,
                         artworkSlop,
+                        preferLyricsSwitch = preferLyrics,
                     )) {
                         ArtworkGestureAction.OPEN_QUEUE -> view.performClick()
+                        ArtworkGestureAction.SHOW_LYRICS -> showNowPlayingLyrics()
+                        ArtworkGestureAction.SHOW_COVER -> hideNowPlayingLyrics()
                         ArtworkGestureAction.NEXT_TRACK -> browser?.seekToNextMediaItem()
                         ArtworkGestureAction.PREVIOUS_TRACK -> browser?.seekToPreviousMediaItem()
                         ArtworkGestureAction.IGNORE -> Unit
                     }
                     true
                 }
-                android.view.MotionEvent.ACTION_CANCEL -> {
+                MotionEvent.ACTION_CANCEL -> {
                     view.parent?.requestDisallowInterceptTouchEvent(false)
                     true
                 }
                 else -> false
             }
+        }
+
+        binding.nowPlayingLyricsList?.addOnItemTouchListener(object : RecyclerView.SimpleOnItemTouchListener() {
+            private var startX = 0f
+            private var startY = 0f
+            private var isSwipingToCover = false
+
+            override fun onInterceptTouchEvent(rv: RecyclerView, e: MotionEvent): Boolean {
+                when (e.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        startX = e.x
+                        startY = e.y
+                        isSwipingToCover = false
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val dx = e.x - startX
+                        val dy = e.y - startY
+                        if (!isSwipingToCover && dx > artworkSwipeThreshold && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.5f) {
+                            isSwipingToCover = true
+                            hideNowPlayingLyrics()
+                            return true
+                        }
+                    }
+                }
+                return false
+            }
+        })
+
+        var lyricsEmptyDownX = 0f
+        var lyricsEmptyDownY = 0f
+        binding.nowPlayingLyricsEmptyView?.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    lyricsEmptyDownX = event.x
+                    lyricsEmptyDownY = event.y
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    val dx = event.x - lyricsEmptyDownX
+                    val dy = event.y - lyricsEmptyDownY
+                    if (dx > artworkSwipeThreshold && kotlin.math.abs(dx) > kotlin.math.abs(dy)) {
+                        hideNowPlayingLyrics()
+                    } else if (kotlin.math.abs(dx) < artworkSlop && kotlin.math.abs(dy) < artworkSlop) {
+                        hideNowPlayingLyrics()
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+
+        binding.indicatorCoverTab?.setOnClickListener {
+            hideNowPlayingLyrics()
+        }
+        binding.indicatorLyricsTab?.setOnClickListener {
+            showNowPlayingLyrics()
         }
 
         binding.previousButton.setOnClickListener {
@@ -1061,20 +1150,27 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Mini player bar tap/expand and play/pause
-        binding.miniPlayerBar?.setOnClickListener {
-            userOpenedFullPlayer = true
-            applyMobilePlayerVisibility(isBrowsing = false)
+        val onMiniPlayerExpand: () -> Unit = {
+            if (isQueueVisible) {
+                hideQueue(restoreFullPlayer = true)
+            } else if (isLyricsVisible) {
+                hideLyrics()
+                userOpenedFullPlayer = true
+                applyMobilePlayerVisibility(isBrowsing = false)
+            } else {
+                userOpenedFullPlayer = true
+                applyMobilePlayerVisibility(isBrowsing = false)
+            }
         }
-        binding.miniExpandButton?.setOnClickListener {
-            userOpenedFullPlayer = true
-            applyMobilePlayerVisibility(isBrowsing = false)
-        }
+        binding.miniCoverView?.setOnClickListener { onMiniPlayerExpand() }
+        binding.miniPlayerBar?.setOnClickListener { onMiniPlayerExpand() }
+        binding.miniExpandButton?.setOnClickListener { onMiniPlayerExpand() }
         binding.miniPlayPauseButton?.setOnClickListener {
             handlePlayPauseToggle()
         }
 
         binding.queueBackButton.setOnClickListener {
-            hideQueue()
+            hideQueue(restoreFullPlayer = queueOpenedFromFullPlayer)
         }
 
         binding.queueClearButton.setOnClickListener {
@@ -1086,7 +1182,12 @@ class MainActivity : AppCompatActivity() {
 
         // Lyrics Button & Panel Controls (Inline + Fullscreen Car UX)
         binding.lyricsButton?.setOnClickListener {
-            toggleLyrics()
+            val cfg = resources.configuration
+            if (MobilePlayerLayoutPolicy.isPortraitPhone(cfg.screenWidthDp, cfg.screenHeightDp)) {
+                toggleNowPlayingLyrics()
+            } else {
+                toggleLyrics()
+            }
         }
         binding.lyricsButton?.setOnLongClickListener {
             showFullscreenLyrics()
@@ -2837,11 +2938,11 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    private fun hideQueue() {
+    private fun hideQueue(restoreFullPlayer: Boolean = queueOpenedFromFullPlayer) {
         isQueueVisible = false
         Log.i(
             TAG,
-            "QUEUE_CLOSE: currentParent=${navManager.currentParentId} restorePos=${navManager.currentFirstVisiblePosition} restoreOffset=${navManager.currentTopOffsetPx}",
+            "QUEUE_CLOSE: currentParent=${navManager.currentParentId} restorePos=${navManager.currentFirstVisiblePosition} restoreOffset=${navManager.currentTopOffsetPx} restoreFull=$restoreFullPlayer",
         )
         binding.queueButton.setColorFilter(ContextCompat.getColor(this, R.color.text_primary))
         binding.queueButton.setBackgroundResource(R.drawable.bg_button_control)
@@ -2864,7 +2965,13 @@ class MainActivity : AppCompatActivity() {
             binding.emptyView.visibility = View.VISIBLE
         }
         binding.pageBar.visibility = if (!navManager.isAtRoot) View.VISIBLE else View.GONE
-        applyMobilePlayerVisibility()
+        if (restoreFullPlayer) {
+            queueOpenedFromFullPlayer = false
+            userOpenedFullPlayer = true
+            applyMobilePlayerVisibility(isBrowsing = false)
+        } else {
+            applyMobilePlayerVisibility()
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -2873,7 +2980,7 @@ class MainActivity : AppCompatActivity() {
 
     private val lyricsSyncRunnable = object : Runnable {
         override fun run() {
-            if (!isLyricsVisible && !isFullscreenLyricsVisible) {
+            if (!isLyricsVisible && !isFullscreenLyricsVisible && !isNowPlayingLyricsActive) {
                 return
             }
             val player = browser
@@ -2893,6 +3000,7 @@ class MainActivity : AppCompatActivity() {
     private fun startLyricsPositionLoop() {
         mainHandler.removeCallbacks(lyricsSyncRunnable)
         val shouldRun = (isLyricsVisible && currentLyricsUiState is LyricsUiState.Synced) ||
+            (isNowPlayingLyricsActive && currentLyricsUiState is LyricsUiState.Synced) ||
             isFullscreenLyricsVisible
         if (shouldRun && browser?.isPlaying == true) {
             mainHandler.post(lyricsSyncRunnable)
@@ -2973,6 +3081,132 @@ class MainActivity : AppCompatActivity() {
         }
         binding.pageBar.visibility = if (!navManager.isAtRoot) View.VISIBLE else View.GONE
         applyMobilePlayerVisibility()
+    }
+
+    private fun showNowPlayingLyrics() {
+        isNowPlayingLyricsActive = true
+        updateNowPlayingLyricsVisibility()
+        if (isCurrentTrackLyricsAlreadyLoaded()) {
+            renderNowPlayingLyricsUiState(currentLyricsUiState)
+        } else {
+            loadLyricsForCurrentTrack(forceRefresh = false)
+        }
+    }
+
+    private fun hideNowPlayingLyrics() {
+        isNowPlayingLyricsActive = false
+        updateNowPlayingLyricsVisibility()
+    }
+
+    private fun toggleNowPlayingLyrics() {
+        if (isNowPlayingLyricsActive) {
+            hideNowPlayingLyrics()
+        } else {
+            showNowPlayingLyrics()
+        }
+    }
+
+    private fun updateNowPlayingLyricsVisibility() {
+        val cfg = resources.configuration
+        val isPortraitPhone = MobilePlayerLayoutPolicy.isPortraitPhone(cfg.screenWidthDp, cfg.screenHeightDp)
+
+        if (!isPortraitPhone) {
+            binding.nowPlayingMediaIndicator?.visibility = View.GONE
+            binding.nowPlayingLyricsFrame?.visibility = View.GONE
+            binding.coverView.visibility = View.VISIBLE
+            return
+        }
+
+        binding.nowPlayingMediaIndicator?.visibility = View.VISIBLE
+        if (isNowPlayingLyricsActive) {
+            binding.coverView.visibility = View.GONE
+            binding.nowPlayingLyricsFrame?.visibility = View.VISIBLE
+            binding.indicatorCoverTab?.setTextColor(ContextCompat.getColor(this, R.color.text_tertiary))
+            binding.indicatorLyricsTab?.setTextColor(ContextCompat.getColor(this, R.color.accent_primary))
+            binding.lyricsButton?.setTextColor(ContextCompat.getColor(this, R.color.accent_primary))
+            binding.lyricsButton?.setBackgroundResource(R.drawable.bg_quality_chip_active)
+            binding.coverGestureHint.text = "Vuốt sang phải để về Bìa · Chạm dòng lời để phát"
+            if (currentLyricsUiState is LyricsUiState.Synced) {
+                syncActiveLyricsLineWithPlayer(forceScroll = true)
+                if (browser?.isPlaying == true) {
+                    startLyricsPositionLoop()
+                }
+            }
+        } else {
+            binding.nowPlayingLyricsFrame?.visibility = View.GONE
+            binding.coverView.visibility = View.VISIBLE
+            binding.indicatorCoverTab?.setTextColor(ContextCompat.getColor(this, R.color.accent_primary))
+            binding.indicatorLyricsTab?.setTextColor(ContextCompat.getColor(this, R.color.text_tertiary))
+            binding.lyricsButton?.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+            binding.lyricsButton?.setBackgroundResource(R.drawable.bg_quality_chip_inactive)
+            binding.coverGestureHint.text = "Vuốt trái để xem Lời · Chạm để mở Tiếp theo"
+            if (!isLyricsVisible && !isFullscreenLyricsVisible) {
+                stopLyricsPositionLoop()
+            }
+        }
+    }
+
+    private fun renderNowPlayingLyricsUiState(state: LyricsUiState) {
+        val cfg = resources.configuration
+        if (!MobilePlayerLayoutPolicy.isPortraitPhone(cfg.screenWidthDp, cfg.screenHeightDp)) {
+            return
+        }
+
+        when (state) {
+            is LyricsUiState.Idle,
+            is LyricsUiState.Loading -> {
+                binding.nowPlayingLyricsLoading?.visibility = View.VISIBLE
+                binding.nowPlayingLyricsEmptyView?.visibility = View.GONE
+                binding.nowPlayingLyricsList?.visibility = View.GONE
+            }
+            is LyricsUiState.Synced -> {
+                binding.nowPlayingLyricsLoading?.visibility = View.GONE
+                binding.nowPlayingLyricsEmptyView?.visibility = View.GONE
+                binding.nowPlayingLyricsList?.visibility = View.VISIBLE
+                val posMs = browser?.currentPosition?.coerceAtLeast(0L) ?: 0L
+                val activeIdx = LrcParser.findActiveLineIndex(state.lines, posMs)
+                nowPlayingLyricsAdapter.submitLines(state.lines, activeIdx)
+                if (activeIdx >= 0 && isLyricsAutoFollow) {
+                    binding.nowPlayingLyricsList?.post {
+                        scrollToActiveLyricLine(activeIdx, smooth = false)
+                    }
+                }
+                if (isNowPlayingLyricsActive && browser?.isPlaying == true) {
+                    startLyricsPositionLoop()
+                }
+            }
+            is LyricsUiState.Plain -> {
+                binding.nowPlayingLyricsLoading?.visibility = View.GONE
+                binding.nowPlayingLyricsEmptyView?.visibility = View.GONE
+                binding.nowPlayingLyricsList?.visibility = View.VISIBLE
+                val lines = state.text.lines().map { LyricsLine(startMs = -1L, text = it) }
+                nowPlayingLyricsAdapter.submitLines(lines, -1)
+            }
+            is LyricsUiState.Instrumental -> {
+                binding.nowPlayingLyricsLoading?.visibility = View.GONE
+                binding.nowPlayingLyricsList?.visibility = View.GONE
+                binding.nowPlayingLyricsEmptyText?.text = "Bản nhạc không lời (Instrumental)"
+                binding.nowPlayingLyricsEmptyView?.visibility = View.VISIBLE
+            }
+            is LyricsUiState.NotFound -> {
+                binding.nowPlayingLyricsLoading?.visibility = View.GONE
+                binding.nowPlayingLyricsList?.visibility = View.GONE
+                binding.nowPlayingLyricsEmptyText?.text = "Chưa có lời bài hát"
+                binding.nowPlayingLyricsEmptyView?.visibility = View.VISIBLE
+            }
+            is LyricsUiState.TemporaryError -> {
+                binding.nowPlayingLyricsLoading?.visibility = View.GONE
+                binding.nowPlayingLyricsList?.visibility = View.GONE
+                binding.nowPlayingLyricsEmptyText?.text = "Chưa có lời bài hát"
+                binding.nowPlayingLyricsEmptyView?.visibility = View.VISIBLE
+            }
+            is LyricsUiState.Ambiguous -> {
+                binding.nowPlayingLyricsLoading?.visibility = View.GONE
+                binding.nowPlayingLyricsList?.visibility = View.GONE
+                binding.nowPlayingLyricsEmptyText?.text = "Nhiều bản lời bài hát khả dụng"
+                binding.nowPlayingLyricsEmptyView?.visibility = View.VISIBLE
+            }
+        }
     }
 
     private fun showFullscreenLyrics() {
@@ -3105,7 +3339,7 @@ class MainActivity : AppCompatActivity() {
             currentLyricsSignature = null
             currentLyricsUiState = LyricsUiState.Idle
             updateFullscreenLyricsPlayerChrome()
-            if (isLyricsVisible || isFullscreenLyricsVisible) {
+            if (isAnyLyricsVisible()) {
                 renderLyricsUiState(LyricsUiState.NotFound())
             }
             return
@@ -3116,7 +3350,7 @@ class MainActivity : AppCompatActivity() {
         currentLyricsSignature = token.signature
         updateFullscreenLyricsPlayerChrome()
 
-        if (isLyricsVisible || isFullscreenLyricsVisible) {
+        if (isAnyLyricsVisible()) {
             loadLyricsForCurrentTrack(
                 forceRefresh = false,
                 preAllocatedToken = token,
@@ -3141,7 +3375,7 @@ class MainActivity : AppCompatActivity() {
             currentCandidatePickerState = LyricsCandidatePickerState.Closed
             currentLyricsSignature = null
             currentLyricsUiState = LyricsUiState.NotFound()
-            if (isLyricsVisible || isFullscreenLyricsVisible) {
+            if (isAnyLyricsVisible()) {
                 renderLyricsUiState(currentLyricsUiState)
             }
             return
@@ -3166,7 +3400,7 @@ class MainActivity : AppCompatActivity() {
             title = trackMeta.title,
             artist = trackMeta.artist,
         )
-        if (isLyricsVisible || isFullscreenLyricsVisible) {
+        if (isAnyLyricsVisible()) {
             renderLyricsUiState(currentLyricsUiState)
         }
 
@@ -3196,7 +3430,7 @@ class MainActivity : AppCompatActivity() {
                     autoFollow = isLyricsAutoFollow,
                 )
                 currentLyricsUiState = uiState
-                if (isLyricsVisible || isFullscreenLyricsVisible) {
+                if (isAnyLyricsVisible()) {
                     renderLyricsUiState(uiState)
                 }
             }
@@ -3213,7 +3447,7 @@ class MainActivity : AppCompatActivity() {
             title = trackMeta.title,
             artist = trackMeta.artist,
         )
-        if (isLyricsVisible || isFullscreenLyricsVisible) {
+        if (isAnyLyricsVisible()) {
             renderLyricsUiState(currentLyricsUiState)
         }
 
@@ -3258,7 +3492,7 @@ class MainActivity : AppCompatActivity() {
                         )
                     }
                 }
-                if (isLyricsVisible || isFullscreenLyricsVisible) {
+                if (isAnyLyricsVisible()) {
                     renderLyricsUiState(currentLyricsUiState)
                 }
             }
@@ -3269,7 +3503,7 @@ class MainActivity : AppCompatActivity() {
         if (!isCandidatePickerOpen) return
         isCandidatePickerOpen = false
         currentCandidatePickerState = LyricsCandidatePickerState.Closed
-        if (isLyricsVisible || isFullscreenLyricsVisible) {
+        if (isAnyLyricsVisible()) {
             renderLyricsUiState(currentLyricsUiState)
         }
     }
@@ -3295,7 +3529,7 @@ class MainActivity : AppCompatActivity() {
             title = trackMeta.title,
             artist = trackMeta.artist,
         )
-        if (isLyricsVisible || isFullscreenLyricsVisible) {
+        if (isAnyLyricsVisible()) {
             renderLyricsUiState(currentLyricsUiState)
         }
 
@@ -3321,7 +3555,7 @@ class MainActivity : AppCompatActivity() {
                     autoFollow = isLyricsAutoFollow,
                 )
                 currentLyricsUiState = uiState
-                if (isLyricsVisible || isFullscreenLyricsVisible) {
+                if (isAnyLyricsVisible()) {
                     renderLyricsUiState(uiState)
                 }
             }
@@ -3349,7 +3583,7 @@ class MainActivity : AppCompatActivity() {
             title = trackMeta.title,
             artist = trackMeta.artist,
         )
-        if (isLyricsVisible || isFullscreenLyricsVisible) {
+        if (isAnyLyricsVisible()) {
             renderLyricsUiState(currentLyricsUiState)
         }
 
@@ -3372,7 +3606,7 @@ class MainActivity : AppCompatActivity() {
                     autoFollow = isLyricsAutoFollow,
                 )
                 currentLyricsUiState = uiState
-                if (isLyricsVisible || isFullscreenLyricsVisible) {
+                if (isAnyLyricsVisible()) {
                     renderLyricsUiState(uiState)
                 }
             }
@@ -3406,6 +3640,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun renderLyricsUiState(state: LyricsUiState) {
         stopLyricsPositionLoop()
+        renderNowPlayingLyricsUiState(state)
         // Inline containers
         binding.lyricsLoadingView?.visibility = View.GONE
         binding.lyricsPlainBadgeView?.visibility = View.GONE
@@ -3696,7 +3931,8 @@ class MainActivity : AppCompatActivity() {
         val newIndex = LrcParser.findActiveLineIndex(state.lines, posMs)
         val inlineChanged = syncedLyricsAdapter.updateActiveLineIndex(newIndex)
         val fullscreenChanged = fullscreenSyncedLyricsAdapter.updateActiveLineIndex(newIndex)
-        val changed = inlineChanged || fullscreenChanged
+        val nowPlayingChanged = nowPlayingLyricsAdapter.updateActiveLineIndex(newIndex)
+        val changed = inlineChanged || fullscreenChanged || nowPlayingChanged
         if (changed) {
             val lineStartMs = if (newIndex in state.lines.indices) state.lines[newIndex].startMs else -1L
             Log.i(TAG, "LYRICS_ACTIVE_LINE: index=$newIndex startMs=$lineStartMs posMs=$posMs autoFollow=$isLyricsAutoFollow")
@@ -3707,6 +3943,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun scrollToActiveLyricLine(index: Int, smooth: Boolean = true) {
+        if (isNowPlayingLyricsActive) {
+            val rv = binding.nowPlayingLyricsList
+            val lm = rv?.layoutManager as? LinearLayoutManager
+            if (rv != null && lm != null) {
+                val rvHeight = rv.height
+                if (rvHeight > 0) {
+                    lm.scrollToPositionWithOffset(index, (rvHeight / 3).coerceAtLeast(40))
+                } else {
+                    rv.scrollToPosition(index)
+                }
+            }
+        }
         if (isLyricsVisible) {
             val rv = binding.lyricsSyncedRecyclerView
             val lm = rv?.layoutManager as? LinearLayoutManager
@@ -4847,6 +5095,12 @@ class MainActivity : AppCompatActivity() {
                 lp.height = idleSize
                 binding.coverView.layoutParams = lp
             }
+            val lyricsLp = binding.nowPlayingLyricsFrame?.layoutParams
+            if (lyricsLp != null && (lyricsLp.width != idleSize || lyricsLp.height != idleSize)) {
+                lyricsLp.width = idleSize
+                lyricsLp.height = idleSize
+                binding.nowPlayingLyricsFrame?.layoutParams = lyricsLp
+            }
 
             binding.playPauseButton.setImageResource(R.drawable.ic_play_arrow)
 
@@ -4883,6 +5137,7 @@ class MainActivity : AppCompatActivity() {
 
             libraryAdapter.updateNowPlaying(null, false)
             updateFullscreenLyricsPlayerChrome()
+            updateNowPlayingLyricsVisibility()
             return
         }
 
@@ -4967,6 +5222,12 @@ class MainActivity : AppCompatActivity() {
             lp.width = activeSize
             lp.height = activeSize
             binding.coverView.layoutParams = lp
+        }
+        val lyricsLp = binding.nowPlayingLyricsFrame?.layoutParams
+        if (lyricsLp != null && (lyricsLp.width != activeSize || lyricsLp.height != activeSize)) {
+            lyricsLp.width = activeSize
+            lyricsLp.height = activeSize
+            binding.nowPlayingLyricsFrame?.layoutParams = lyricsLp
         }
 
         val artworkUriStr = metadata.artworkUri?.toString()
@@ -5087,6 +5348,7 @@ class MainActivity : AppCompatActivity() {
         progressController.syncWithPlayer()
         libraryAdapter.updateNowPlaying(currentItem.mediaId, player.isPlaying)
         updateFullscreenLyricsPlayerChrome()
+        updateNowPlayingLyricsVisibility()
         applyMobilePlayerVisibility()
     }
 
@@ -5586,10 +5848,10 @@ class MainActivity : AppCompatActivity() {
             refreshBackendStatus()
             // Reconcile Now Playing after returning from background or launcher.
             updateNowPlaying()
-            if ((isLyricsVisible || isFullscreenLyricsVisible) && currentLyricsUiState is LyricsUiState.Synced) {
+            if (isAnyLyricsVisible() && currentLyricsUiState is LyricsUiState.Synced) {
                 syncActiveLyricsLineWithPlayer(forceScroll = isLyricsAutoFollow)
             }
-            if (isLyricsVisible || isFullscreenLyricsVisible) {
+            if (isAnyLyricsVisible()) {
                 startLyricsPositionLoop()
             }
         }
