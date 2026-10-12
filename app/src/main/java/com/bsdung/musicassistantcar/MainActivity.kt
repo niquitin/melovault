@@ -2147,23 +2147,32 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateHeaderAndBreadcrumbs() {
-        val baseTitle = if (!navManager.isAtRoot || currentWidthClass() == WindowWidthClass.EXPANDED) {
+        val baseTitle = if (currentWidthClass() == WindowWidthClass.EXPANDED) {
             navManager.breadcrumbTrail()
         } else {
             navManager.displayTitle()
         }
         binding.libraryTitleView.text = baseTitle
 
+        val parentPath = if (currentWidthClass() != WindowWidthClass.EXPANDED && !navManager.isAtRoot) {
+            navManager.parentTrail().ifBlank { null }
+        } else null
+
         if (isCollectionContext(navManager.currentParentId)) {
             val total = navManager.currentCollectionTotal
             val trackCount = navManager.currentCollectionTrackCount
             val folderCount = navManager.currentCollectionFolderCount
-            val subtitle = formatCollectionSubtitle(
+            val statsSubtitle = formatCollectionSubtitle(
                 parentId = navManager.currentParentId,
                 total = total,
                 trackCount = trackCount,
                 folderCount = folderCount,
             )
+            val subtitle = when {
+                !parentPath.isNullOrBlank() && !statsSubtitle.isNullOrBlank() -> "$parentPath • $statsSubtitle"
+                !parentPath.isNullOrBlank() -> parentPath
+                else -> statsSubtitle
+            }
             if (!subtitle.isNullOrBlank()) {
                 binding.librarySubtitleView.visibility = View.VISIBLE
                 binding.librarySubtitleView.text = subtitle
@@ -2171,7 +2180,12 @@ class MainActivity : AppCompatActivity() {
                 binding.librarySubtitleView.visibility = View.GONE
             }
         } else {
-            binding.librarySubtitleView.visibility = View.GONE
+            if (!parentPath.isNullOrBlank()) {
+                binding.librarySubtitleView.visibility = View.VISIBLE
+                binding.librarySubtitleView.text = parentPath
+            } else {
+                binding.librarySubtitleView.visibility = View.GONE
+            }
         }
 
         binding.backButton.visibility = if (navManager.isAtRoot) View.GONE else View.VISIBLE

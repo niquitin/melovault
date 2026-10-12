@@ -321,6 +321,13 @@ class NavigationManager {
         return allLabels.joinToString(" › ")
     }
 
+    fun parentTrail(): String {
+        val path = stack
+            .filter { it.parentId != "root" && it.parentId != "search" }
+            .map { cleanEmoji(it.label) }
+        return path.joinToString(" › ")
+    }
+
     fun displayTitle(): String {
         return if (searchQuery.isNotBlank()) {
             "Tìm kiếm: $searchQuery"

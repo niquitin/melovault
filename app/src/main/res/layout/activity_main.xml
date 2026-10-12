@@ -101,9 +101,9 @@
             android:background="@drawable/bg_surface_card"
             android:paddingStart="10dp"
             android:paddingEnd="10dp"
-            android:paddingTop="10dp"
-            android:paddingBottom="10dp"
-            android:layout_marginBottom="8dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:layout_marginBottom="4dp"
             android:visibility="gone">
             <!-- ═══ FULL NOW-PLAYING CONTAINER ═══
                  Contains full-size artwork, title, seekbar, controls, and secondary actions.
@@ -123,7 +123,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_horizontal"
-                android:layout_marginBottom="4dp">
+                android:layout_marginBottom="2dp">
 
                 <ImageView
                     android:id="@+id/coverView"
@@ -339,8 +339,8 @@
 
                 <ImageView
                     android:id="@+id/favoriteButton"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
                     android:padding="10dp"
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:src="@drawable/ic_heart_outline"
@@ -358,7 +358,7 @@
                 android:progress="0"
                 android:progressDrawable="@drawable/bg_seekbar_track"
                 android:thumb="@drawable/bg_seekbar_thumb"
-                android:layout_marginTop="6dp"
+                android:layout_marginTop="3dp"
                 android:paddingStart="4dp"
                 android:paddingEnd="4dp" />
 
@@ -397,7 +397,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center"
-                android:layout_marginTop="4dp">
+                android:layout_marginTop="2dp">
 
                 <!-- Shuffle -->
                 <ImageView
@@ -470,12 +470,12 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center"
-                android:layout_marginTop="6dp">
+                android:layout_marginTop="4dp">
 
                 <TextView
                     android:id="@+id/qualityChip"
                     android:layout_width="wrap_content"
-                    android:layout_height="38dp"
+                    android:layout_height="44dp"
                     android:minHeight="44dp"
                     android:gravity="center"
                     android:paddingStart="12dp"
@@ -522,7 +522,7 @@
                 <TextView
                     android:id="@+id/lyricsButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="38dp"
+                    android:layout_height="44dp"
                     android:minHeight="44dp"
                     android:minWidth="44dp"
                     android:gravity="center"
@@ -1165,8 +1165,9 @@
                     <TextView
                         android:id="@+id/filterDriveChip"
                         android:layout_width="wrap_content"
-                        android:layout_height="36dp"
+                        android:layout_height="44dp"
                         android:minHeight="44dp"
+                        android:minWidth="44dp"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:gravity="center"
@@ -1180,8 +1181,9 @@
                     <TextView
                         android:id="@+id/filterDeviceChip"
                         android:layout_width="wrap_content"
-                        android:layout_height="36dp"
+                        android:layout_height="44dp"
                         android:minHeight="44dp"
+                        android:minWidth="44dp"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:gravity="center"
@@ -1195,8 +1197,9 @@
                     <TextView
                         android:id="@+id/filterDownloadedChip"
                         android:layout_width="wrap_content"
-                        android:layout_height="36dp"
+                        android:layout_height="44dp"
                         android:minHeight="44dp"
+                        android:minWidth="44dp"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:gravity="center"
@@ -1210,8 +1213,9 @@
                     <TextView
                         android:id="@+id/filterPlaylistsChip"
                         android:layout_width="wrap_content"
-                        android:layout_height="36dp"
+                        android:layout_height="44dp"
                         android:minHeight="44dp"
+                        android:minWidth="44dp"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:gravity="center"
@@ -1225,8 +1229,9 @@
                     <TextView
                         android:id="@+id/filterRootChip"
                         android:layout_width="wrap_content"
-                        android:layout_height="36dp"
+                        android:layout_height="44dp"
                         android:minHeight="44dp"
+                        android:minWidth="44dp"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:gravity="center"
@@ -1240,8 +1245,9 @@
                     <TextView
                         android:id="@+id/filterAllChip"
                         android:layout_width="wrap_content"
-                        android:layout_height="36dp"
+                        android:layout_height="44dp"
                         android:minHeight="44dp"
+                        android:minWidth="44dp"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:gravity="center"
@@ -1289,7 +1295,7 @@
                         android:textStyle="bold"
                         android:textColor="@color/text_primary"
                         android:maxLines="1"
-                        android:ellipsize="start" />
+                        android:ellipsize="end" />
 
                     <TextView
                         android:id="@+id/librarySubtitleView"
@@ -1307,8 +1313,8 @@
                 <Button
                     android:id="@+id/collectionSortButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:minHeight="0dp"
+                    android:layout_height="44dp"
+                    android:minHeight="44dp"
                     android:minWidth="0dp"
                     android:paddingStart="10dp"
                     android:paddingEnd="10dp"
@@ -1494,7 +1500,7 @@
                     <Button
                         android:id="@+id/collectionAddAllButton"
                         android:layout_width="0dp"
-                        android:layout_height="40dp"
+                        android:layout_height="44dp"
                         android:layout_weight="1"
                         android:minHeight="44dp"
                         android:minWidth="0dp"
@@ -1511,7 +1517,7 @@
                     <Button
                         android:id="@+id/collectionDownloadAllButton"
                         android:layout_width="0dp"
-                        android:layout_height="40dp"
+                        android:layout_height="44dp"
                         android:layout_weight="1"
                         android:minHeight="44dp"
                         android:minWidth="0dp"
@@ -1527,7 +1533,7 @@
                     <Button
                         android:id="@+id/collectionDeleteOfflineButton"
                         android:layout_width="wrap_content"
-                        android:layout_height="40dp"
+                        android:layout_height="44dp"
                         android:minHeight="44dp"
                         android:minWidth="0dp"
                         android:paddingStart="6dp"
