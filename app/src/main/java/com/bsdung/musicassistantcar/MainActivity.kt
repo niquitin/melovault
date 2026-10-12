@@ -234,6 +234,12 @@ class MainActivity : AppCompatActivity() {
     private var dragInitialTrackIds: List<String>? = null
     private var currentCollectionRequestId: Long = 0L
     private val collectionFetchExecutor = Executors.newSingleThreadExecutor()
+    private val windowedQueueManager = com.bsdung.musicassistantcar.playback.WindowedQueueManager()
+    @Volatile
+    private var isCollectionPlaybackPreparing: Boolean = false
+    private var lastCollectionTapTime: Long = 0L
+    @Volatile
+    private var lastShuffleRequestMonotonicMs: Long = 0L
     @Volatile
     private var hasRunStartupPlaylistSync: Boolean = false
     private val cachedPlaylistTracks = java.util.concurrent.ConcurrentHashMap<Int, List<com.bsdung.musicassistantcar.data.CarTrack>>()
@@ -365,6 +371,11 @@ class MainActivity : AppCompatActivity() {
 
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_READY) {
+                if (lastShuffleRequestMonotonicMs > 0L) {
+                    val tAudio = SystemClock.elapsedRealtime()
+                    Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=FIRST_AUDIO timestamp_monotonic_ms=$tAudio (delta=${tAudio - lastShuffleRequestMonotonicMs}ms, total_from_tap=${tAudio - lastShuffleRequestMonotonicMs}ms)")
+                    lastShuffleRequestMonotonicMs = 0L
+                }
                 requestTechnicalInfoForCurrentItem()
                 requestSignalPathForCurrentItem()
                 val currentItem = browser?.currentMediaItem
@@ -408,6 +419,7 @@ class MainActivity : AppCompatActivity() {
             renderSignalPathInDialog()
 
             val player = browser ?: return
+            windowedQueueManager.onMediaItemTransition(player, uiCatalog)
             if (player.mediaItemCount > 0) {
                 val currentIndex = player.currentMediaItemIndex
                 if (currentIndex in 0 until player.mediaItemCount) {
@@ -4071,42 +4083,196 @@ class MainActivity : AppCompatActivity() {
      *                       Used by folder long-press dialog to play a folder that isn't navigated into yet.
      */
     private fun triggerCollectionPlayback(shuffle: Boolean, explicitParams: CollectionParams? = null) {
+        val tTap = SystemClock.elapsedRealtime()
+        Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=TAP timestamp_monotonic_ms=$tTap shuffle=$shuffle")
+
         val params = explicitParams ?: buildCollectionParams(navManager.currentParentId) ?: return
+
+        val now = SystemClock.elapsedRealtime()
+        if (isCollectionPlaybackPreparing) {
+            Log.w(TAG, "[SHUFFLE_BENCHMARK] Tap debounced: collection playback already preparing")
+            return
+        }
+        if (now - lastCollectionTapTime < 350L) {
+            Log.w(TAG, "[SHUFFLE_BENCHMARK] Tap debounced: rapid tap within 350ms")
+            return
+        }
+        lastCollectionTapTime = now
+        isCollectionPlaybackPreparing = true
+
         val requestId = ++currentCollectionRequestId
         val effectiveSort = if (params.kind == "playlist") "" else navManager.currentSort
+
+        val originalShuffleText = binding.collectionShuffleButton.text.toString()
+        val originalPlayAllText = binding.collectionPlayAllButton.text.toString()
         binding.collectionPlayAllButton.isEnabled = false
         binding.collectionShuffleButton.isEnabled = false
+        if (shuffle) {
+            binding.collectionShuffleButton.text = "⏳ Đang chuẩn bị..."
+        } else {
+            binding.collectionPlayAllButton.text = "⏳ Đang chuẩn bị..."
+        }
+
         collectionFetchExecutor.submit {
-            val result = runCatching {
-                uiCatalog.fetchCollectionPlayback(
-                    kind = params.kind,
-                    artist = params.artist,
-                    album = params.album,
-                    root = params.root,
-                    path = params.path,
-                    playlistId = params.playlistId,
-                    sort = effectiveSort,
-                )
-            }
-            runOnUiThread {
-                binding.collectionPlayAllButton.isEnabled = true
-                binding.collectionShuffleButton.isEnabled = true
-                // Stale-guard: discard if user has navigated away
-                if (requestId != currentCollectionRequestId) return@runOnUiThread
-                result.onSuccess { res ->
-                    if (res.items.isEmpty()) {
-                        Toast.makeText(this, "Không có bài hát có thể phát", Toast.LENGTH_SHORT).show()
-                        return@onSuccess
+            val tCallback = SystemClock.elapsedRealtime()
+            Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=CALLBACK timestamp_monotonic_ms=$tCallback (delta=${tCallback - tTap}ms)")
+
+            try {
+                // Check DriveFolderIndexCache first for drive folders
+                var cachedTracks: List<com.bsdung.musicassistantcar.data.CompactIndexTrack>? = null
+                if (params.kind == "drive_folder" && params.root != null) {
+                    cachedTracks = com.bsdung.musicassistantcar.data.DriveFolderIndexCache.loadIndex(
+                        this@MainActivity,
+                        params.root,
+                        params.path ?: ""
+                    )
+                }
+
+                if (cachedTracks != null && cachedTracks.isNotEmpty()) {
+                    val tCatalogRead = SystemClock.elapsedRealtime()
+                    Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=READ_CATALOG timestamp_monotonic_ms=$tCatalogRead (delta=${tCatalogRead - tCallback}ms, items=${cachedTracks.size})")
+
+                    val initialMediaItems = windowedQueueManager.setupQueue(
+                        tracks = cachedTracks,
+                        shuffle = shuffle,
+                        uiCatalog = uiCatalog,
+                        sessionId = tTap,
+                    )
+                    val tShuffled = SystemClock.elapsedRealtime()
+                    Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=SHUFFLE_PERMUTATION timestamp_monotonic_ms=$tShuffled (delta=${tShuffled - tCatalogRead}ms)")
+
+                    val tQueueCreated = SystemClock.elapsedRealtime()
+                    Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=CREATE_WINDOWED_QUEUE timestamp_monotonic_ms=$tQueueCreated (delta=${tQueueCreated - tShuffled}ms, window_size=${initialMediaItems.size})")
+
+                    runOnUiThread {
+                        isCollectionPlaybackPreparing = false
+                        binding.collectionPlayAllButton.isEnabled = true
+                        binding.collectionShuffleButton.isEnabled = true
+                        binding.collectionShuffleButton.text = originalShuffleText
+                        binding.collectionPlayAllButton.text = originalPlayAllText
+                        if (requestId != currentCollectionRequestId) return@runOnUiThread
+
+                        val tPrepare = SystemClock.elapsedRealtime()
+                        Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=MEDIA3_PREPARE timestamp_monotonic_ms=$tPrepare (delta=${tPrepare - tQueueCreated}ms)")
+                        lastShuffleRequestMonotonicMs = tTap
+                        playQueue(initialMediaItems, 0, isWindowedQueue = true)
                     }
-                    if (res.skipped > 0) {
-                        Toast.makeText(this, "Đã bỏ qua ${res.skipped} bài không thể phát", Toast.LENGTH_SHORT).show()
+                    return@submit
+                }
+
+                // If drive folder and no cache, attempt background crawl
+                if (params.kind == "drive_folder" && params.root != null) {
+                    Log.i(TAG, "Cache MISS for root=${params.root}, path='${params.path}'. Crawling hierarchy...")
+                    var firstBatchHandled = false
+                    val crawledTracks = com.bsdung.musicassistantcar.data.DriveFolderIndexCache.crawlAndIndex(
+                        api = uiCatalog.api,
+                        root = params.root,
+                        startPath = params.path ?: "",
+                        onFirstBatchReady = { firstBatch ->
+                            if (!firstBatchHandled) {
+                                firstBatchHandled = true
+                                val initialMediaItems = windowedQueueManager.setupQueue(
+                                    tracks = firstBatch,
+                                    shuffle = shuffle,
+                                    uiCatalog = uiCatalog,
+                                    sessionId = tTap,
+                                )
+                                runOnUiThread {
+                                    isCollectionPlaybackPreparing = false
+                                    binding.collectionPlayAllButton.isEnabled = true
+                                    binding.collectionShuffleButton.isEnabled = true
+                                    binding.collectionShuffleButton.text = originalShuffleText
+                                    binding.collectionPlayAllButton.text = originalPlayAllText
+                                    if (requestId != currentCollectionRequestId) return@runOnUiThread
+                                    lastShuffleRequestMonotonicMs = tTap
+                                    playQueue(initialMediaItems, 0, isWindowedQueue = true)
+                                }
+                            }
+                        }
+                    )
+                    if (crawledTracks.isNotEmpty()) {
+                        com.bsdung.musicassistantcar.data.DriveFolderIndexCache.saveIndexAsync(
+                            this@MainActivity,
+                            params.root,
+                            params.path ?: "",
+                            crawledTracks
+                        )
+                        if (!firstBatchHandled) {
+                            val initialMediaItems = windowedQueueManager.setupQueue(
+                                tracks = crawledTracks,
+                                shuffle = shuffle,
+                                uiCatalog = uiCatalog,
+                                sessionId = tTap,
+                            )
+                            runOnUiThread {
+                                isCollectionPlaybackPreparing = false
+                                binding.collectionPlayAllButton.isEnabled = true
+                                binding.collectionShuffleButton.isEnabled = true
+                                binding.collectionShuffleButton.text = originalShuffleText
+                                binding.collectionPlayAllButton.text = originalPlayAllText
+                                if (requestId != currentCollectionRequestId) return@runOnUiThread
+                                lastShuffleRequestMonotonicMs = tTap
+                                playQueue(initialMediaItems, 0, isWindowedQueue = true)
+                            }
+                        }
+                    } else if (!firstBatchHandled) {
+                        runOnUiThread {
+                            isCollectionPlaybackPreparing = false
+                            binding.collectionPlayAllButton.isEnabled = true
+                            binding.collectionShuffleButton.isEnabled = true
+                            binding.collectionShuffleButton.text = originalShuffleText
+                            binding.collectionPlayAllButton.text = originalPlayAllText
+                            Toast.makeText(this@MainActivity, "Không tìm thấy bài hát trong thư mục", Toast.LENGTH_SHORT).show()
+                        }
                     }
-                    val mediaItems = res.items.map { uiCatalog.trackItem(it) }
-                        .map { uiCatalog.withCurrentQuality(it) }
-                    val ordered = if (shuffle) mediaItems.shuffled() else mediaItems
-                    playQueue(ordered, 0)
-                }.onFailure {
-                    Toast.makeText(this, "Không thể tải danh sách phát", Toast.LENGTH_SHORT).show()
+                    return@submit
+                }
+
+                // Standard fetch for artist, album, playlist
+                val result = runCatching {
+                    uiCatalog.fetchCollectionPlayback(
+                        kind = params.kind,
+                        artist = params.artist,
+                        album = params.album,
+                        root = params.root,
+                        path = params.path,
+                        playlistId = params.playlistId,
+                        sort = effectiveSort,
+                    )
+                }
+                runOnUiThread {
+                    isCollectionPlaybackPreparing = false
+                    binding.collectionPlayAllButton.isEnabled = true
+                    binding.collectionShuffleButton.isEnabled = true
+                    binding.collectionShuffleButton.text = originalShuffleText
+                    binding.collectionPlayAllButton.text = originalPlayAllText
+                    if (requestId != currentCollectionRequestId) return@runOnUiThread
+                    result.onSuccess { res ->
+                        if (res.items.isEmpty()) {
+                            Toast.makeText(this@MainActivity, "Không có bài hát có thể phát", Toast.LENGTH_SHORT).show()
+                            return@onSuccess
+                        }
+                        if (res.skipped > 0) {
+                            Toast.makeText(this@MainActivity, "Đã bỏ qua ${res.skipped} bài không thể phát", Toast.LENGTH_SHORT).show()
+                        }
+                        val mediaItems = res.items.map { uiCatalog.trackItem(it) }
+                            .map { uiCatalog.withCurrentQuality(it) }
+                        val ordered = if (shuffle) mediaItems.shuffled() else mediaItems
+                        lastShuffleRequestMonotonicMs = tTap
+                        playQueue(ordered, 0)
+                    }.onFailure {
+                        Toast.makeText(this@MainActivity, "Không thể tải danh sách phát. Đang giữ hàng đợi hiện tại.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (t: Throwable) {
+                Log.e(TAG, "[SHUFFLE_BENCHMARK] Error during collection playback preparation: ${t.message}", t)
+                runOnUiThread {
+                    isCollectionPlaybackPreparing = false
+                    binding.collectionPlayAllButton.isEnabled = true
+                    binding.collectionShuffleButton.isEnabled = true
+                    binding.collectionShuffleButton.text = originalShuffleText
+                    binding.collectionPlayAllButton.text = originalPlayAllText
+                    Toast.makeText(this@MainActivity, "Không thể tải danh sách phát. Đang giữ hàng đợi hiện tại.", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -5007,7 +5173,10 @@ class MainActivity : AppCompatActivity() {
         playQueue(listOf(seededFirst) + items.drop(1), selectedIndex)
     }
 
-    private fun playQueue(items: List<MediaItem>, selectedIndex: Int) {
+    private fun playQueue(items: List<MediaItem>, selectedIndex: Int, isWindowedQueue: Boolean = false) {
+        if (!isWindowedQueue) {
+            windowedQueueManager.reset()
+        }
         val mediaBrowser = browser ?: return
         if (items.isEmpty()) return
 
