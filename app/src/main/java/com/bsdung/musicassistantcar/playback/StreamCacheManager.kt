@@ -486,14 +486,14 @@ object StreamCacheManager {
         }
 
         override fun open(dataSpec: DataSpec): Long {
-            openTimeMs = SystemClock.uptimeMillis()
+            openTimeMs = SystemClock.elapsedRealtime()
             hasLoggedFirstByte = false
             if (!isPrefetch) {
                 Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=HTTP_CONNECT_START timestamp_monotonic_ms=$openTimeMs uri=${dataSpec.uri}")
             }
             return try {
                 val res = delegate.open(dataSpec)
-                val connectedTimeMs = SystemClock.uptimeMillis()
+                val connectedTimeMs = SystemClock.elapsedRealtime()
                 if (!isPrefetch) {
                     val latency = connectedTimeMs - openTimeMs
                     Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=HTTP_CONNECTED timestamp_monotonic_ms=$connectedTimeMs (latency=${latency}ms, contentLength=$res)")
@@ -532,7 +532,7 @@ object StreamCacheManager {
                 upstreamBytesReadTotal.addAndGet(n.toLong())
                 if (!isPrefetch && !hasLoggedFirstByte && openTimeMs > 0L) {
                     hasLoggedFirstByte = true
-                    val t = SystemClock.uptimeMillis()
+                    val t = SystemClock.elapsedRealtime()
                     Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=FIRST_BYTE timestamp_monotonic_ms=$t (delta_from_open=${t - openTimeMs}ms, bytes=$n)")
                 }
             }
@@ -563,7 +563,7 @@ object StreamCacheManager {
                     if (cachedBytesRead > 0L) {
                         cachedBytesReadTotal.addAndGet(cachedBytesRead)
                         if (!isPrefetch) {
-                            Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=CACHE_HIT timestamp_monotonic_ms=${SystemClock.uptimeMillis()} (cachedBytesRead=$cachedBytesRead, totalCached=$cacheSizeBytes)")
+                            Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=CACHE_HIT timestamp_monotonic_ms=${SystemClock.elapsedRealtime()} (cachedBytesRead=$cachedBytesRead, totalCached=$cacheSizeBytes)")
                         }
                     }
                 }
@@ -571,7 +571,7 @@ object StreamCacheManager {
                 override fun onCacheIgnored(reason: Int) {
                     cacheIgnoredTotal.incrementAndGet()
                     if (!isPrefetch) {
-                        Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=CACHE_MISS timestamp_monotonic_ms=${SystemClock.uptimeMillis()} (reason=$reason)")
+                        Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=CACHE_MISS timestamp_monotonic_ms=${SystemClock.elapsedRealtime()} (reason=$reason)")
                     }
                 }
             })

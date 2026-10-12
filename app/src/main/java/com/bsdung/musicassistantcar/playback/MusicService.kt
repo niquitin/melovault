@@ -313,7 +313,7 @@ class MusicService : MediaLibraryService() {
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean,
             ): AudioSink {
-                Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=DAC_INIT timestamp_monotonic_ms=${SystemClock.uptimeMillis()} (enableFloatOutput=$enableFloatOutput)")
+                Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=DAC_INIT timestamp_monotonic_ms=${SystemClock.elapsedRealtime()} (enableFloatOutput=$enableFloatOutput)")
                 return DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
@@ -382,7 +382,7 @@ class MusicService : MediaLibraryService() {
                                 audioTrackSelected = true
                                 Log.i(
                                     TAG,
-                                    "[SHUFFLE_BENCHMARK] stage=DECODER_INIT timestamp_monotonic_ms=${SystemClock.uptimeMillis()} " +
+                                    "[SHUFFLE_BENCHMARK] stage=DECODER_INIT timestamp_monotonic_ms=${SystemClock.elapsedRealtime()} " +
                                         "(sampleMime=${format.sampleMimeType}, containerMime=${format.containerMimeType}, " +
                                         "sampleRate=${format.sampleRate}, channels=${format.channelCount})",
                                 )
