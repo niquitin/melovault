@@ -1569,7 +1569,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.collectionDeleteOfflineButton.setOnClickListener {
-            triggerPlaylistDeleteOffline()
+            showPlaylistOptionsMenu()
         }
 
         binding.btnPlaylistSyncToggle.setOnClickListener {
@@ -4512,6 +4512,21 @@ class MainActivity : AppCompatActivity() {
             }
             onTracksReady(tracks)
         }
+    }
+
+    private fun showPlaylistOptionsMenu() {
+        val parentId = navManager.currentParentId
+        if (!parentId.startsWith(RemoteCatalog.PLAYLIST_PREFIX)) return
+        val options = arrayOf("🗑 Xóa bản offline của playlist...")
+        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            .setTitle("Tùy chọn playlist")
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> triggerPlaylistDeleteOffline()
+                }
+            }
+            .setNegativeButton("Đóng", null)
+            .show()
     }
 
     private fun triggerPlaylistDeleteOffline() {

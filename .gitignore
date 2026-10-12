@@ -27,6 +27,8 @@ dist/
 /*.tmp
 /*.part
 /*.xml
+/*.png
+/scratch/
 _count_tests.py
 _direct_smoke_*.txt
 _media_session_*.txt

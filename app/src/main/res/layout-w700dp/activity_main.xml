@@ -395,7 +395,8 @@
                 android:textSize="12sp"
                 android:textStyle="bold"
                 android:textColor="@color/text_primary"
-                android:contentDescription="Tài khoản nhạc" />
+                android:contentDescription="Tài khoản nhạc"
+                android:visibility="gone" />
         </LinearLayout>
             <!-- One-touch navigation: redundant in dual-panel car layout as Library is already adjacent -->
             <LinearLayout
@@ -1375,20 +1376,21 @@
                     android:textColor="@color/text_primary"
                     android:background="@drawable/bg_button_control" />
 
-                <!-- Delete Playlist Offline (shown only when playlist has offline tracks) -->
+                <!-- Secondary Playlist Options (shown only when playlist has offline tracks) -->
                 <Button
                     android:id="@+id/collectionDeleteOfflineButton"
                     android:layout_width="wrap_content"
                     android:layout_height="40dp"
                     android:minHeight="40dp"
                     android:minWidth="0dp"
-                    android:paddingStart="6dp"
-                    android:paddingEnd="6dp"
-                    android:text="🗑 Xóa offline"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:text="⋮ Thêm"
                     android:textAllCaps="false"
                     android:textSize="12sp"
-                    android:textColor="@color/status_offline"
+                    android:textColor="@color/text_secondary"
                     android:background="@drawable/bg_button_control"
+                    android:contentDescription="Tùy chọn playlist"
                     android:visibility="gone"
                     android:layout_marginStart="6dp" />
             </LinearLayout>
