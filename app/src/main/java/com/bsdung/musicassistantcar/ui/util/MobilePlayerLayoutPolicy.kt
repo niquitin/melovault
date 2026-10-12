@@ -43,37 +43,41 @@ internal object MobilePlayerLayoutPolicy {
             val target = if (heightDp > widthDp) {
                 (widthDp * 0.60f).roundToInt()
             } else {
-                (heightDp * 0.70f).roundToInt()
+                // Dual-panel car layout: Now Playing card is ~40% width.
+                // Album cover comfortably fits within available vertical budget (~45-50% height).
+                val cardWidth = (widthDp * 0.40f).roundToInt() - 32
+                val cardHeight = (heightDp * 0.48f).roundToInt()
+                minOf(cardWidth, cardHeight, 240)
             }
             minOf(target, maxAllowedWidth, maxAllowedHeight, 320).coerceAtLeast(0)
         }
     }
 
     /**
-     * Short car-landscape panels have little vertical space once seek, transport
-     * and navigation controls are laid out. Preserve a *complete* small square
-     * album cover rather than letting a 200dp cover be clipped to a thin banner.
-     * Keep portrait phone and taller tablet artwork behavior unchanged.
+     * Shallow car-landscape windows (e.g. FYT 7870 in 2/3 split or full screen with system bars)
+     * previously squeezed the album art to 46dp due to a redundant quick navigation row.
+     * With navigation cleaned up, artwork expands to a comfortable ~170–195dp square
+     * leaving ample space for transport and secondary controls.
      */
     fun shortExpandedArtworkSizeDp(widthDp: Int, heightDp: Int): Int? =
-        if (widthDp >= 700 && heightDp in 340..430) 46 else null
+        if (widthDp >= 500 && widthDp > heightDp && heightDp in 340..430) {
+            minOf(200, (heightDp * 0.45f).roundToInt()).coerceAtLeast(140)
+        } else null
 
     /**
-     * Only the wide landscape player can use tap-to-expand artwork. The portrait
-     * phone retains its original tap-to-open-Queue interaction.
+     * Landscape player can use tap-to-expand artwork on wide car windows.
+     * Portrait phone retains its tap-to-open-Queue interaction.
      */
     fun supportsLandscapeArtworkExpansion(widthDp: Int, heightDp: Int): Boolean =
-        widthDp >= 700 && heightDp > 0 && widthDp > heightDp
+        widthDp >= 500 && heightDp > 0 && widthDp > heightDp
 
     /**
-     * Increase the artwork by about 2x on FYT-class shallow landscape windows.
-     * Hiding the quick navigation row recovers the necessary vertical space;
-     * larger landscape screens can support a larger artwork size.
+     * Generous artwork expansion on landscape car windows when requested by user.
      */
     fun expandedLandscapeArtworkSizeDp(widthDp: Int, heightDp: Int): Int? {
         if (!supportsLandscapeArtworkExpansion(widthDp, heightDp)) return null
         return if (heightDp <= 430) {
-            minOf(96, (heightDp * 0.26f).roundToInt()).coerceAtLeast(1)
+            minOf(220, (heightDp * 0.55f).roundToInt()).coerceAtLeast(160)
         } else {
             minOf(260, (heightDp * 0.47f).roundToInt())
         }

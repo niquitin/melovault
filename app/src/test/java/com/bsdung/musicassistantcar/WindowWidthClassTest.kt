@@ -78,6 +78,15 @@ class WindowWidthClassTest {
     fun `widthDp at FYT two-thirds pane resolves to EXPANDED`() {
         // FYT 1152x720 @ 160dpi: 1152dp * 2/3 = 768dp → EXPANDED
         assertEquals(WindowWidthClass.EXPANDED, MainActivity.widthClassFor(768))
+        // FYT 1152x720 @ 213dpi (tvdpi): ~577dp → MEDIUM
+        assertEquals(WindowWidthClass.MEDIUM, MainActivity.widthClassFor(577))
+        // FYT 1152x720 @ 240dpi (hdpi): 512dp → MEDIUM
+        assertEquals(WindowWidthClass.MEDIUM, MainActivity.widthClassFor(512))
+    }
+
+    @Test
+    fun `Shanling M3 Ultra portrait widthDp 384 resolves to COMPACT`() {
+        assertEquals(WindowWidthClass.COMPACT, MainActivity.widthClassFor(384))
     }
 
     @Test

@@ -18,6 +18,7 @@ class WindowedQueueManagerTest {
 
     private val fakeApi = object : CarApiClient() {
         override fun hasValidConfiguration(): Boolean = true
+        override fun probe(): String = "http://fake.local:8095"
     }
 
     private val uiCatalog = RemoteCatalog(

@@ -61,15 +61,17 @@ class MobilePlayerLayoutPolicyTest {
 
     @Test
     fun shortExpandedArtwork_710x377_staysFullyVisibleInCarPanel() {
-        assertEquals(46, MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(710, 377))
-        assertEquals(46, MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(912, 381))
+        assertEquals(170, MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(710, 377))
+        assertEquals(171, MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(912, 381))
+        assertEquals(180, MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(768, 400))
     }
 
     @Test
     fun shortExpandedArtwork_preservesPortraitAndTallerScreens() {
         assertNull(MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(411, 881))
         assertNull(MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(710, 600))
-        assertNull(MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(699, 377))
+        assertNull(MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(384, 640))
+        assertNull(MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(480, 377))
         assertNull(MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(710, 0))
         assertNull(MobilePlayerLayoutPolicy.shortExpandedArtworkSizeDp(-1, 377))
     }
@@ -78,19 +80,21 @@ class MobilePlayerLayoutPolicyTest {
     fun landscapeArtworkExpand_onlyWideLandscape() {
         assertTrue(MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(710, 377))
         assertTrue(MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(912, 381))
+        assertTrue(MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(768, 400))
+        assertTrue(MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(512, 380))
         assertFalse(MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(411, 881))
-        assertFalse(MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(699, 377))
+        assertFalse(MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(384, 640))
         assertFalse(MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(710, 710))
         assertFalse(MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(710, 0))
     }
 
     @Test
     fun landscapeArtworkExpandedSize_biggerThanE4OnShortFyt() {
-        assertEquals(96, MobilePlayerLayoutPolicy.expandedLandscapeArtworkSizeDp(710, 377))
-        assertEquals(96, MobilePlayerLayoutPolicy.expandedLandscapeArtworkSizeDp(912, 381))
+        assertEquals(207, MobilePlayerLayoutPolicy.expandedLandscapeArtworkSizeDp(710, 377))
+        assertEquals(210, MobilePlayerLayoutPolicy.expandedLandscapeArtworkSizeDp(912, 381))
         assertEquals(226, MobilePlayerLayoutPolicy.expandedLandscapeArtworkSizeDp(900, 480))
         assertNull(MobilePlayerLayoutPolicy.expandedLandscapeArtworkSizeDp(411, 881))
-        assertNull(MobilePlayerLayoutPolicy.expandedLandscapeArtworkSizeDp(699, 377))
+        assertNull(MobilePlayerLayoutPolicy.expandedLandscapeArtworkSizeDp(384, 640))
     }
 
     @Test

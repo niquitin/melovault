@@ -583,8 +583,8 @@ class MainActivity : AppCompatActivity() {
             cfg.screenWidthDp, cfg.screenHeightDp
         )
         if (!supported) isLandscapeArtworkExpanded = false
-        binding.quickNavigationRow?.visibility =
-            if (supported && isLandscapeArtworkExpanded) View.GONE else View.VISIBLE
+        // In car dual-panel layout, quickNavigationRow is permanently hidden because Library is adjacent
+        binding.quickNavigationRow?.visibility = View.GONE
     }
 
     /**
@@ -2152,14 +2152,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateHeaderAndBreadcrumbs() {
-        val baseTitle = if (currentWidthClass() == WindowWidthClass.EXPANDED) {
-            navManager.breadcrumbTrail()
-        } else {
-            navManager.displayTitle()
-        }
+        val baseTitle = navManager.displayTitle()
         binding.libraryTitleView.text = baseTitle
 
-        val parentPath = if (currentWidthClass() != WindowWidthClass.EXPANDED && !navManager.isAtRoot) {
+        val parentPath = if (!navManager.isAtRoot) {
             navManager.parentTrail().ifBlank { null }
         } else null
 

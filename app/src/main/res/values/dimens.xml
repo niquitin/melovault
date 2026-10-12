@@ -35,8 +35,8 @@
     <dimen name="artwork_size_medium">120dp</dimen>
     <dimen name="artwork_size_medium_idle">90dp</dimen>
     <!-- expanded artwork defined in layout-w700dp/dimens.xml override -->
-    <dimen name="artwork_size_expanded">168dp</dimen>
-    <dimen name="artwork_size_expanded_idle">96dp</dimen>
+    <dimen name="artwork_size_expanded">180dp</dimen>
+    <dimen name="artwork_size_expanded_idle">140dp</dimen>
 
     <!-- Portrait phone adaptive sizes (COMPACT class, portrait orientation).
          Used by updateArtworkSizeForPortraitPhone() which calculates actual

@@ -19,12 +19,12 @@
     android:orientation="horizontal"
     android:padding="10dp">
 
-    <!-- ═══ LEFT PANEL: NOW PLAYING (37% width) ═══ -->
+    <!-- ═══ LEFT PANEL: NOW PLAYING (40% width) ═══ -->
     <LinearLayout
         android:id="@+id/nowPlayingCard"
         android:layout_width="0dp"
         android:layout_height="match_parent"
-        android:layout_weight="37"
+        android:layout_weight="40"
         android:orientation="vertical"
         android:background="@drawable/bg_surface_card"
         android:padding="12dp"
@@ -397,14 +397,15 @@
                 android:textColor="@color/text_primary"
                 android:contentDescription="Tài khoản nhạc" />
         </LinearLayout>
-            <!-- One-touch navigation, original MeloVault implementation. -->
+            <!-- One-touch navigation: redundant in dual-panel car layout as Library is already adjacent -->
             <LinearLayout
                 android:id="@+id/quickNavigationRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center"
-                android:layout_marginTop="8dp">
+                android:layout_marginTop="8dp"
+                android:visibility="gone">
 
                 <TextView
                     android:id="@+id/quickLibraryButton"
@@ -480,12 +481,12 @@
             </LinearLayout>
     </LinearLayout>
 
-    <!-- ═══ RIGHT PANEL: LIBRARY & BROWSER (63% width) ═══ -->
+    <!-- ═══ RIGHT PANEL: LIBRARY & BROWSER (60% width) ═══ -->
     <LinearLayout
         android:id="@+id/libraryCard"
         android:layout_width="0dp"
         android:layout_height="match_parent"
-        android:layout_weight="63"
+        android:layout_weight="60"
         android:orientation="vertical"
         android:background="@drawable/bg_surface_card"
         android:padding="12dp"
@@ -1141,7 +1142,7 @@
                     android:fontFamily="sans-serif-medium"
                     android:textColor="@color/text_primary"
                     android:maxLines="1"
-                    android:ellipsize="start" />
+                    android:ellipsize="end" />
 
                 <TextView
                     android:id="@+id/librarySubtitleView"
@@ -1286,96 +1287,111 @@
             android:id="@+id/collectionActionBar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
+            android:orientation="vertical"
             android:paddingBottom="8dp"
             android:visibility="gone">
 
-            <!-- Play All -->
-            <Button
-                android:id="@+id/collectionPlayAllButton"
-                android:layout_width="0dp"
-                android:layout_height="36dp"
-                android:layout_weight="1"
-                android:minHeight="0dp"
-                android:minWidth="0dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:text="▶ Phát tất cả"
-                android:textAllCaps="false"
-                android:textSize="12sp"
-                android:textStyle="bold"
-                android:textColor="@color/text_primary"
-                android:background="@drawable/bg_button_control"
-                android:layout_marginEnd="6dp" />
+            <!-- Row 1: Prominent Play & Shuffle -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
 
-            <!-- Shuffle -->
-            <Button
-                android:id="@+id/collectionShuffleButton"
-                android:layout_width="0dp"
-                android:layout_height="36dp"
-                android:layout_weight="1"
-                android:minHeight="0dp"
-                android:minWidth="0dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:text="🔀 Xáo trộn"
-                android:textAllCaps="false"
-                android:textSize="12sp"
-                android:textColor="@color/text_primary"
-                android:background="@drawable/bg_button_control"
-                android:layout_marginEnd="6dp" />
+                <!-- Play All -->
+                <Button
+                    android:id="@+id/collectionPlayAllButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:minHeight="44dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:text="▶ Phát"
+                    android:textAllCaps="false"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:background="@drawable/bg_button_control"
+                    android:layout_marginEnd="6dp" />
 
-            <!-- Add All to Queue -->
-            <Button
-                android:id="@+id/collectionAddAllButton"
-                android:layout_width="0dp"
-                android:layout_height="36dp"
-                android:layout_weight="1"
-                android:minHeight="0dp"
-                android:minWidth="0dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="4dp"
-                android:text="+ Hàng đợi"
-                android:textAllCaps="false"
-                android:textSize="11sp"
-                android:textColor="@color/text_secondary"
-                android:background="@drawable/bg_button_control"
-                android:layout_marginEnd="4dp" />
+                <!-- Shuffle -->
+                <Button
+                    android:id="@+id/collectionShuffleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:minHeight="44dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:text="🔀 Xáo trộn"
+                    android:textAllCaps="false"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:background="@drawable/bg_button_control" />
+            </LinearLayout>
 
-            <!-- Download All -->
-            <Button
-                android:id="@+id/collectionDownloadAllButton"
-                android:layout_width="0dp"
-                android:layout_height="36dp"
-                android:layout_weight="1.2"
-                android:minHeight="0dp"
-                android:minWidth="0dp"
-                android:paddingStart="4dp"
-                android:paddingEnd="4dp"
-                android:text="↓ Tải tất cả"
-                android:textAllCaps="false"
-                android:textSize="11sp"
-                android:textColor="@color/text_primary"
-                android:background="@drawable/bg_button_control" />
+            <!-- Row 2: Secondary collection actions -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
 
-            <!-- Delete Playlist Offline (shown only when playlist has offline tracks) -->
-            <Button
-                android:id="@+id/collectionDeleteOfflineButton"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:minHeight="0dp"
-                android:minWidth="0dp"
-                android:paddingStart="6dp"
-                android:paddingEnd="6dp"
-                android:text="🗑 Xóa offline"
-                android:textAllCaps="false"
-                android:textSize="11sp"
-                android:textColor="@color/status_offline"
-                android:background="@drawable/bg_button_control"
-                android:visibility="gone"
-                android:layout_marginStart="4dp" />
+                <!-- Add All to Queue -->
+                <Button
+                    android:id="@+id/collectionAddAllButton"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:minHeight="40dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"
+                    android:text="+ Hàng đợi"
+                    android:textAllCaps="false"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary"
+                    android:background="@drawable/bg_button_control"
+                    android:layout_marginEnd="6dp" />
 
+                <!-- Download All -->
+                <Button
+                    android:id="@+id/collectionDownloadAllButton"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:minHeight="40dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"
+                    android:text="↓ Tải tất cả"
+                    android:textAllCaps="false"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_primary"
+                    android:background="@drawable/bg_button_control" />
+
+                <!-- Delete Playlist Offline (shown only when playlist has offline tracks) -->
+                <Button
+                    android:id="@+id/collectionDeleteOfflineButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:minHeight="40dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:text="🗑 Xóa offline"
+                    android:textAllCaps="false"
+                    android:textSize="12sp"
+                    android:textColor="@color/status_offline"
+                    android:background="@drawable/bg_button_control"
+                    android:visibility="gone"
+                    android:layout_marginStart="6dp" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- Smart Offline Playlist Sync Bar — shown only when browsing playlist:<id> -->

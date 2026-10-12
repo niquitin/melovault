@@ -1,0 +1,2384 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  EXPANDED dual-panel layout  —  window width >= 700 dp
+  Used by: FYT full/near-full screen, large pane (~2/3+), landscape phone at sufficient width.
+  LEFT: Now Playing (37% weight). RIGHT: Search + Library (63% weight).
+  All view IDs are IDENTICAL to layout/activity_main.xml.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_base">
+
+<LinearLayout
+    android:id="@+id/mainContentContainer"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg_base"
+    android:orientation="horizontal"
+    android:padding="10dp">
+
+    <!-- ═══ LEFT PANEL: NOW PLAYING (40% width) ═══ -->
+    <LinearLayout
+        android:id="@+id/nowPlayingCard"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="40"
+        android:orientation="vertical"
+        android:background="@drawable/bg_surface_card"
+        android:padding="12dp"
+        android:layout_marginEnd="8dp">
+
+        <!-- Top Status Row -->
+        <LinearLayout
+            android:id="@+id/topAppBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingBottom="6dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/app_name"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <!-- Connection Status Pill -->
+            <LinearLayout
+                android:id="@+id/connectionContainer"
+                android:layout_width="wrap_content"
+                android:layout_height="24dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/bg_button_control"
+                android:paddingStart="7dp"
+                android:paddingEnd="9dp">
+
+                <ImageView
+                    android:id="@+id/statusDot"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:src="@drawable/bg_status_dot_connecting"
+                    android:contentDescription="Status" />
+
+                <TextView
+                    android:id="@+id/statusText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Connecting"
+                    android:textSize="10sp"
+                    android:textColor="@color/text_secondary"
+                    android:maxLines="1"
+                    android:layout_marginStart="5dp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Artwork Hero Container — expands to fill remaining space -->
+        <FrameLayout
+            android:id="@+id/artworkContainer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <ImageView
+                android:id="@+id/coverView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_gravity="center"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_album_placeholder"
+                android:contentDescription="@string/cover_gesture_action" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/coverGestureHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:maxLines="2"
+            android:text="@string/cover_gesture_hint"
+            android:textSize="10sp"
+            android:textColor="@color/text_tertiary"
+            android:layout_marginBottom="3dp"
+                android:visibility="gone" />
+
+        <!-- Track Metadata -->
+        <LinearLayout
+            android:id="@+id/metadataContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="4dp">
+
+            <View
+                android:layout_width="40dp"
+                android:layout_height="40dp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:id="@+id/titleView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Chọn một bài để bắt đầu"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+
+                <TextView
+                    android:id="@+id/artistView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="11sp"
+                    android:textColor="@color/text_secondary"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:visibility="gone"
+                    android:layout_marginTop="2dp" />
+
+                <TextView
+                    android:id="@+id/albumView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="10sp"
+                    android:textColor="@color/text_tertiary"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:visibility="gone"
+                    android:layout_marginTop="1dp" />
+
+                <TextView
+                    android:id="@+id/technicalInfoView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="9.5sp"
+                    android:textColor="@color/text_tertiary"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:visibility="gone"
+                    android:layout_marginTop="1dp" />
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/favoriteButton"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="10dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_heart_outline"
+                android:tint="@color/text_tertiary"
+                android:contentDescription="Favorite"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Progress Bar -->
+        <SeekBar
+            android:id="@+id/seekBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="1000"
+            android:progress="0"
+            android:progressDrawable="@drawable/bg_seekbar_track"
+            android:thumb="@drawable/bg_seekbar_thumb"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp" />
+
+        <!-- Time row -->
+        <LinearLayout
+            android:id="@+id/timeRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:paddingBottom="4dp">
+
+            <TextView
+                android:id="@+id/currentTimeView"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="00:00"
+                android:textSize="10sp"
+                android:textColor="@color/text_tertiary" />
+
+            <TextView
+                android:id="@+id/totalTimeView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="00:00"
+                android:textSize="10sp"
+                android:textColor="@color/text_tertiary" />
+        </LinearLayout>
+
+        <!-- Controls Row -->
+        <LinearLayout
+            android:id="@+id/controlsRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginTop="2dp">
+
+            <!-- Shuffle -->
+            <ImageView
+                android:id="@+id/shuffleButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:padding="10dp"
+                android:background="@drawable/bg_button_tertiary"
+                android:src="@drawable/ic_shuffle"
+                android:tint="@color/text_tertiary"
+                android:contentDescription="Shuffle" />
+
+            <View android:layout_width="6dp" android:layout_height="1dp" />
+
+            <!-- Previous -->
+            <ImageView
+                android:id="@+id/previousButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:padding="12dp"
+                android:background="@drawable/bg_button_control"
+                android:src="@drawable/ic_skip_previous"
+                android:tint="@color/text_primary"
+                android:contentDescription="Previous" />
+
+            <View android:layout_width="8dp" android:layout_height="1dp" />
+
+            <!-- Hero Play/Pause -->
+            <ImageView
+                android:id="@+id/playPauseButton"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:padding="14dp"
+                android:background="@drawable/bg_button_hero"
+                android:src="@drawable/ic_play_arrow"
+                android:tint="#FFFFFFFF"
+                android:contentDescription="Play/Pause" />
+
+            <View android:layout_width="8dp" android:layout_height="1dp" />
+
+            <!-- Next -->
+            <ImageView
+                android:id="@+id/nextButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:padding="12dp"
+                android:background="@drawable/bg_button_control"
+                android:src="@drawable/ic_skip_next"
+                android:tint="@color/text_primary"
+                android:contentDescription="Next" />
+
+            <View android:layout_width="6dp" android:layout_height="1dp" />
+
+            <!-- Repeat -->
+            <ImageView
+                android:id="@+id/repeatButton"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:padding="10dp"
+                android:background="@drawable/bg_button_tertiary"
+                android:src="@drawable/ic_repeat"
+                android:tint="@color/text_tertiary"
+                android:contentDescription="Repeat" />
+        </LinearLayout>
+
+        <!-- Secondary Actions: Quality Chip & Up Next Button -->
+        <LinearLayout
+            android:id="@+id/secondaryActionsRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginTop="4dp">
+
+            <TextView
+                android:id="@+id/qualityChip"
+                android:layout_width="wrap_content"
+                android:layout_height="24dp"
+                android:gravity="center"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:background="@drawable/bg_quality_chip_original"
+                android:text="Original"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:textColor="@color/quality_original_text" />
+
+            <View
+                android:layout_width="12dp"
+                android:layout_height="1dp" />
+
+            <ImageView
+                android:id="@+id/signalPathButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:padding="12dp"
+                android:background="@drawable/bg_button_control"
+                android:src="@drawable/ic_signal_path"
+                android:tint="@color/text_primary"
+                android:contentDescription="Signal Path" />
+
+            <View
+                android:layout_width="12dp"
+                android:layout_height="1dp" />
+
+            <ImageView
+                android:id="@+id/queueButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:padding="12dp"
+                android:background="@drawable/bg_button_control"
+                android:src="@drawable/ic_queue_music"
+                android:tint="@color/text_primary"
+                android:contentDescription="Up Next" />
+
+            <View
+                android:layout_width="10dp"
+                android:layout_height="1dp" />
+
+            <TextView
+                android:id="@+id/lyricsButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:minWidth="48dp"
+                android:gravity="center"
+                android:paddingStart="6dp"
+                android:paddingEnd="6dp"
+                android:background="@drawable/bg_quality_chip_inactive"
+                android:text="Lời"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:contentDescription="Lời bài hát"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <View
+                android:layout_width="10dp"
+                android:layout_height="1dp" />
+
+            <TextView
+                android:id="@+id/accountsButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:minWidth="48dp"
+                android:gravity="center"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:background="@drawable/bg_button_control"
+                android:text="Tài khoản"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:contentDescription="Tài khoản nhạc" />
+        </LinearLayout>
+            <!-- One-touch navigation: redundant in dual-panel car layout as Library is already adjacent -->
+            <LinearLayout
+                android:id="@+id/quickNavigationRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:layout_marginTop="8dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/quickLibraryButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:background="@drawable/bg_button_tertiary_active"
+                    android:text="Thư viện"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:contentDescription="Đi đến Thư viện nhạc"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+                <View
+                    android:layout_width="6dp"
+                    android:layout_height="1dp" />
+
+                <TextView
+                    android:id="@+id/quickPlaylistsButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:background="@drawable/bg_button_control"
+                    android:text="Playlist"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:contentDescription="Mở danh sách Playlist của tôi"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+                <View
+                    android:layout_width="6dp"
+                    android:layout_height="1dp" />
+
+                <TextView
+                    android:id="@+id/quickQueueButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:background="@drawable/bg_button_control"
+                    android:text="Tiếp"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:contentDescription="Mở danh sách bài tiếp theo"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+                <View
+                    android:layout_width="6dp"
+                    android:layout_height="1dp" />
+
+                <TextView
+                    android:id="@+id/quickSourcesButton"
+                    android:layout_width="0dp"
+                    android:layout_height="48dp"
+                    android:layout_weight="1"
+                    android:gravity="center"
+                    android:background="@drawable/bg_button_control"
+                    android:text="Nguồn"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:contentDescription="Mở các nguồn Telegram và Google Drive"
+                android:maxLines="1"
+                android:ellipsize="end" />
+            </LinearLayout>
+    </LinearLayout>
+
+    <!-- ═══ RIGHT PANEL: LIBRARY & BROWSER (60% width) ═══ -->
+    <LinearLayout
+        android:id="@+id/libraryCard"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="60"
+        android:orientation="vertical"
+        android:background="@drawable/bg_surface_card"
+        android:padding="12dp"
+        android:layout_marginStart="8dp">
+
+        <!-- ═══ QUEUE / UP NEXT CONTAINER ═══ -->
+        <LinearLayout
+            android:id="@+id/queueContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <!-- Header: Back button | "Tiếp theo" | Clear upcoming -->
+            <LinearLayout
+                android:id="@+id/queueHeaderBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingBottom="6dp">
+
+                <ImageView
+                    android:id="@+id/queueBackButton"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:padding="12dp"
+                    android:background="@drawable/bg_button_control"
+                    android:src="@drawable/ic_arrow_back"
+                    android:tint="@color/text_primary"
+                    android:contentDescription="Quay lại"
+                    android:layout_marginEnd="8dp" />
+
+                <TextView
+                    android:id="@+id/queueTitleView"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Hàng đợi"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary" />
+
+                <TextView
+                    android:id="@+id/queueClearButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="44dp"
+                    android:minHeight="44dp"
+                    android:gravity="center"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:background="@drawable/bg_button_control"
+                    android:text="Xóa tiếp theo"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <!-- Primary queue-to-playlist action, with a touch-sized car target. -->
+            <TextView
+                android:id="@+id/queueSavePlaylistButton"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:gravity="center"
+                android:background="@drawable/bg_button_control"
+                android:text="+ Lưu hàng đợi thành Playlist"
+                android:textStyle="bold"
+                android:textAllCaps="false"
+                android:textSize="13sp"
+                android:textColor="@color/text_primary"
+                android:layout_marginBottom="8dp"
+                android:visibility="gone"
+                android:contentDescription="Lưu các bài hiện có trong hàng đợi thành Playlist mới" />
+
+            <TextView
+                android:id="@+id/queueSummaryView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:textSize="11sp"
+                android:maxLines="2"
+                android:textColor="@color/text_secondary"
+                android:text="Mở Thư viện để chọn bài" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/border_subtle"
+                android:layout_marginBottom="6dp" />
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/queueRecyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scrollbars="vertical"
+                android:clipToPadding="false" />
+        </LinearLayout>
+
+        <!-- ═══ LYRICS CONTAINER ═══ -->
+        <LinearLayout
+            android:id="@+id/lyricsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:id="@+id/lyricsHeaderBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingBottom="6dp">
+
+                <ImageView
+                    android:id="@+id/lyricsBackButton"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:padding="12dp"
+                    android:background="@drawable/bg_button_control"
+                    android:src="@drawable/ic_arrow_back"
+                    android:tint="@color/text_primary"
+                    android:contentDescription="Quay lại"
+                    android:layout_marginEnd="8dp" />
+
+                <LinearLayout
+                    android:id="@+id/lyricsHeaderTitleContainer"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:layout_weight="1"
+                    android:gravity="center_vertical"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/lyricsHeaderTitleView"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Lời bài hát"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary"
+                        android:maxLines="1"
+                        android:ellipsize="end" />
+
+                    <TextView
+                        android:id="@+id/lyricsSourceBadgeView"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Nguồn: LRCLIB"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_secondary"
+                        android:maxLines="1"
+                        android:ellipsize="end"
+                        android:layout_marginTop="1dp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/lyricsAutoFollowButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minWidth="48dp"
+                    android:gravity="center"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:background="@drawable/bg_quality_chip_active"
+                    android:text="Theo nhạc"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/accent_primary"
+                    android:layout_marginEnd="6dp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/lyricsExpandFullscreenButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minWidth="48dp"
+                    android:gravity="center"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:background="@drawable/bg_quality_chip_active"
+                    android:text="Toàn màn hình"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/accent_primary"
+                    android:contentDescription="Toàn màn hình"
+                    android:layout_marginEnd="6dp" />
+
+                <TextView
+                    android:id="@+id/lyricsRefreshButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minWidth="48dp"
+                    android:gravity="center"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:background="@drawable/bg_quality_chip_inactive"
+                    android:text="Tìm lại lời"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_primary" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/lyricsManualActionRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="end|center_vertical"
+                android:layout_marginBottom="6dp">
+
+                <TextView
+                    android:id="@+id/lyricsAutoResetButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minWidth="48dp"
+                    android:gravity="center"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:background="@drawable/bg_quality_chip_inactive"
+                    android:text="Tìm lại tự động"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/accent_primary"
+                    android:contentDescription="Tìm lại tự động"
+                    android:layout_marginEnd="6dp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/lyricsChooseOtherButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minWidth="48dp"
+                    android:gravity="center"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    android:background="@drawable/bg_quality_chip_inactive"
+                    android:text="Chọn lời khác"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:contentDescription="Chọn lời khác" />
+            </LinearLayout>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="@color/border_subtle"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Loading -->
+            <LinearLayout
+                android:id="@+id/lyricsLoadingView"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:visibility="gone">
+
+                <ProgressBar
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
+                    android:indeterminate="true" />
+
+                <TextView
+                    android:id="@+id/lyricsLoadingTextView"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Đang tìm lời bài hát…"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_secondary"
+                    android:layout_marginTop="10dp" />
+            </LinearLayout>
+
+            <!-- Synced Lyrics RecyclerView -->
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/lyricsSyncedRecyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:scrollbars="vertical"
+                android:clipToPadding="false"
+                android:paddingBottom="24dp"
+                android:visibility="gone" />
+
+            <!-- Plain Lyrics Container -->
+            <LinearLayout
+                android:id="@+id/lyricsPlainContainer"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/lyricsPlainBadgeView"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_quality_chip_mobile"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:paddingTop="4dp"
+                    android:paddingBottom="4dp"
+                    android:text="Lời chưa đồng bộ thời gian"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/quality_mobile_text"
+                    android:layout_marginBottom="8dp" />
+
+                <androidx.core.widget.NestedScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:scrollbars="vertical">
+
+                    <TextView
+                        android:id="@+id/lyricsPlainTextView"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15.5sp"
+                        android:lineSpacingExtra="6dp"
+                        android:padding="8dp" />
+                </androidx.core.widget.NestedScrollView>
+            </LinearLayout>
+
+            <!-- Candidate Picker / Ambiguous Candidates Container -->
+            <LinearLayout
+                android:id="@+id/lyricsAmbiguousContainer"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/lyricsAmbiguousTitleView"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Chọn bản lời bài hát phù hợp"
+                            android:textSize="14sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/text_primary" />
+
+                        <TextView
+                            android:id="@+id/lyricsAmbiguousSubtitleView"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Chọn bản khớp với bài đang phát (tối đa 5 kết quả):"
+                            android:textSize="12sp"
+                            android:textColor="@color/text_secondary"
+                            android:layout_marginTop="2dp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/lyricsCandidatesCloseButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:minWidth="48dp"
+                        android:gravity="center"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_quality_chip_inactive"
+                        android:text="Đóng"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary"
+                        android:contentDescription="Đóng danh sách lời" />
+                </LinearLayout>
+
+                <androidx.recyclerview.widget.RecyclerView
+                    android:id="@+id/lyricsCandidatesRecyclerView"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:scrollbars="vertical" />
+            </LinearLayout>
+
+            <!-- Status / Not Found / Instrumental / Error Container -->
+            <LinearLayout
+                android:id="@+id/lyricsStatusContainer"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/lyricsStatusTitleView"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Không tìm thấy lời bài hát"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:gravity="center" />
+
+                <TextView
+                    android:id="@+id/lyricsStatusSubtitleView"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary"
+                    android:gravity="center"
+                    android:layout_marginTop="4dp"
+                    android:visibility="gone" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:layout_marginTop="12dp">
+
+                    <Button
+                        android:id="@+id/lyricsStatusActionButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:minHeight="48dp"
+                        android:minWidth="0dp"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:background="@drawable/bg_button_control"
+                        android:text="Tìm lại lời"
+                        android:textAllCaps="false"
+                        android:textSize="13sp"
+                        android:textColor="@color/text_primary" />
+
+                    <Button
+                        android:id="@+id/lyricsStatusSecondaryButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:minHeight="48dp"
+                        android:minWidth="0dp"
+                        android:paddingStart="16dp"
+                        android:paddingEnd="16dp"
+                        android:layout_marginStart="10dp"
+                        android:background="@drawable/bg_button_control"
+                        android:text="Chọn lời khác"
+                        android:textAllCaps="false"
+                        android:textSize="13sp"
+                        android:textColor="@color/text_primary"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Search Bar -->
+        <LinearLayout
+            android:id="@+id/searchContainer"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:minHeight="48dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/bg_search_input"
+            android:paddingStart="12dp"
+            android:paddingEnd="8dp"
+            android:layout_marginBottom="8dp">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:src="@drawable/ic_search"
+                android:tint="@color/text_secondary"
+                android:contentDescription="Search icon" />
+
+            <EditText
+                android:id="@+id/searchInput"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@null"
+                android:hint="Tìm bài hát, nghệ sĩ hoặc thư mục…"
+                android:textColorHint="@color/text_tertiary"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp"
+                android:imeOptions="actionSearch"
+                android:inputType="text"
+                android:maxLines="1"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp" />
+
+            <ImageView
+                android:id="@+id/searchClearButton"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:padding="10dp"
+                android:src="@drawable/ic_close"
+                android:tint="@color/text_secondary"
+                android:visibility="gone"
+                android:contentDescription="Clear search" />
+        </LinearLayout>
+
+        <!-- Car-safe Quick Source / Category Filter Bar -->
+        <HorizontalScrollView
+            android:id="@+id/quickFilterScroll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="none"
+            android:layout_marginBottom="8dp">
+
+            <LinearLayout
+                android:id="@+id/quickFilterBar"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/filterRootChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minHeight="48dp"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:gravity="center"
+                    android:layout_marginEnd="6dp"
+                    android:background="@drawable/bg_quality_chip_inactive"
+                    android:text="Thư viện"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary" />
+
+                <TextView
+                    android:id="@+id/filterAllChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minHeight="48dp"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:gravity="center"
+                    android:layout_marginEnd="6dp"
+                    android:background="@drawable/bg_quality_chip_inactive"
+                    android:text="Tất cả"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary" />
+
+                <TextView
+                    android:id="@+id/filterDownloadedChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minHeight="48dp"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:gravity="center"
+                    android:layout_marginEnd="6dp"
+                    android:background="@drawable/bg_quality_chip_inactive"
+                    android:text="Đã tải"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary" />
+
+                <TextView
+                    android:id="@+id/filterDeviceChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minHeight="48dp"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:gravity="center"
+                    android:layout_marginEnd="6dp"
+                    android:background="@drawable/bg_quality_chip_inactive"
+                    android:text="Thiết bị"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary" />
+
+                <TextView
+                    android:id="@+id/filterDriveChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minHeight="48dp"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:gravity="center"
+                    android:layout_marginEnd="6dp"
+                    android:background="@drawable/bg_quality_chip_inactive"
+                    android:text="Drive"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary" />
+
+                <TextView
+                    android:id="@+id/filterPlaylistsChip"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minHeight="48dp"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:gravity="center"
+                    android:background="@drawable/bg_quality_chip_inactive"
+                    android:text="Playlist"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary" />
+            </LinearLayout>
+        </HorizontalScrollView>
+
+        <!-- Breadcrumbs Header -->
+        <LinearLayout
+            android:id="@+id/breadcrumbBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:paddingBottom="6dp">
+
+            <ImageView
+                android:id="@+id/backButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:padding="12dp"
+                android:background="@drawable/bg_button_control"
+                android:src="@drawable/ic_arrow_back"
+                android:tint="@color/text_primary"
+                android:visibility="gone"
+                android:contentDescription="Go back"
+                android:layout_marginEnd="8dp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/libraryTitleView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Thư viện"
+                    android:textSize="14sp"
+                    android:fontFamily="sans-serif-medium"
+                    android:textColor="@color/text_primary"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+
+                <TextView
+                    android:id="@+id/librarySubtitleView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:visibility="gone"
+                    android:layout_marginTop="1dp" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/collectionSortButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:text="⇅ Sắp xếp"
+                android:textAllCaps="false"
+                android:textSize="12sp"
+                android:textColor="@color/text_primary"
+                android:background="@drawable/bg_button_control"
+                android:visibility="gone"
+                android:layout_marginStart="8dp" />
+
+            <Button
+                android:id="@+id/playlistEditButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:text="Sửa"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:background="@drawable/bg_button_control"
+                android:visibility="gone"
+                android:layout_marginStart="8dp" />
+        </LinearLayout>
+
+        <!-- Edit Mode Action Bar -->
+        <LinearLayout
+            android:id="@+id/editModeBar"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/bg_surface_card"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:layout_marginBottom="6dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/editSelectedCountView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0 đã chọn"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="@color/accent_primary"
+                android:layout_marginEnd="12dp" />
+
+            <Button
+                android:id="@+id/editSelectAllButton"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                android:text="Tất cả"
+                android:textSize="12sp"
+                android:textColor="@color/text_primary"
+                android:background="@drawable/bg_button_control"
+                android:layout_marginEnd="8dp" />
+
+            <View
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <Button
+                android:id="@+id/editAddToPlaylistButton"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:text="Thêm vào DS"
+                android:textSize="12sp"
+                android:textColor="@color/text_primary"
+                android:background="@drawable/bg_button_control"
+                android:layout_marginEnd="8dp"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/editRemoveButton"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:text="Xóa"
+                android:textSize="12sp"
+                android:textColor="@color/status_offline"
+                android:background="@drawable/bg_button_control"
+                android:layout_marginEnd="8dp" />
+
+            <Button
+                android:id="@+id/editDoneButton"
+                android:layout_width="wrap_content"
+                android:layout_height="32dp"
+                android:minHeight="0dp"
+                android:minWidth="0dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:text="Xong"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:background="@drawable/bg_button_control" />
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/border_subtle"
+            android:layout_marginBottom="6dp" />
+
+        <!-- Collection Action Bar — shown when browsing Album / Artist / Drive Folder / Playlist -->
+        <LinearLayout
+            android:id="@+id/collectionActionBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="8dp"
+            android:visibility="gone">
+
+            <!-- Row 1: Prominent Play & Shuffle -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
+
+                <!-- Play All -->
+                <Button
+                    android:id="@+id/collectionPlayAllButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:minHeight="44dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:text="▶ Phát"
+                    android:textAllCaps="false"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:background="@drawable/bg_button_control"
+                    android:layout_marginEnd="6dp" />
+
+                <!-- Shuffle -->
+                <Button
+                    android:id="@+id/collectionShuffleButton"
+                    android:layout_width="0dp"
+                    android:layout_height="44dp"
+                    android:layout_weight="1"
+                    android:minHeight="44dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:text="🔀 Xáo trộn"
+                    android:textAllCaps="false"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:background="@drawable/bg_button_control" />
+            </LinearLayout>
+
+            <!-- Row 2: Secondary collection actions -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <!-- Add All to Queue -->
+                <Button
+                    android:id="@+id/collectionAddAllButton"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:minHeight="40dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"
+                    android:text="+ Hàng đợi"
+                    android:textAllCaps="false"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary"
+                    android:background="@drawable/bg_button_control"
+                    android:layout_marginEnd="6dp" />
+
+                <!-- Download All -->
+                <Button
+                    android:id="@+id/collectionDownloadAllButton"
+                    android:layout_width="0dp"
+                    android:layout_height="40dp"
+                    android:layout_weight="1"
+                    android:minHeight="40dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="4dp"
+                    android:paddingEnd="4dp"
+                    android:text="↓ Tải tất cả"
+                    android:textAllCaps="false"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_primary"
+                    android:background="@drawable/bg_button_control" />
+
+                <!-- Delete Playlist Offline (shown only when playlist has offline tracks) -->
+                <Button
+                    android:id="@+id/collectionDeleteOfflineButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:minHeight="40dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:text="🗑 Xóa offline"
+                    android:textAllCaps="false"
+                    android:textSize="12sp"
+                    android:textColor="@color/status_offline"
+                    android:background="@drawable/bg_button_control"
+                    android:visibility="gone"
+                    android:layout_marginStart="6dp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Smart Offline Playlist Sync Bar — shown only when browsing playlist:<id> -->
+        <LinearLayout
+            android:id="@+id/playlistSyncBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_surface_card"
+            android:padding="10dp"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <Button
+                    android:id="@+id/btnPlaylistSyncToggle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:text="Luôn giữ offline: Tắt"
+                    android:textAllCaps="false"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:background="@drawable/bg_button_control" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <Button
+                    android:id="@+id/btnPlaylistSyncNow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:text="Đồng bộ ngay"
+                    android:textAllCaps="false"
+                    android:textSize="11sp"
+                    android:textColor="@color/accent_primary"
+                    android:background="@drawable/bg_button_control"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/txtPlaylistSyncStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Luôn giữ offline: Tắt"
+                android:textSize="11sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginTop="4dp"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Download Queue Header — shown when browsing category:downloading -->
+        <LinearLayout
+            android:id="@+id/downloadQueueHeader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_surface_card"
+            android:padding="12dp"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <TextView
+                    android:id="@+id/queueBatchTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Hàng đợi tải offline"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+
+                <TextView
+                    android:id="@+id/queueTrackCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0 bài"
+                    android:textSize="12sp"
+                    android:textColor="@color/accent_primary" />
+            </LinearLayout>
+
+            <ProgressBar
+                android:id="@+id/queueProgressBar"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="4dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="6dp"
+                android:max="100"
+                android:progressTint="@color/accent_primary" />
+
+            <TextView
+                android:id="@+id/queueCurrentTrackText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Đang chờ..."
+                android:textSize="11sp"
+                android:textColor="@color/text_secondary"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="8dp"
+                android:gravity="end">
+
+                <Button
+                    android:id="@+id/btnCancelPendingQueue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:text="Hủy hàng đợi"
+                    android:textAllCaps="false"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_primary"
+                    android:background="@drawable/bg_button_control"
+                    android:layout_marginEnd="8dp" />
+
+                <Button
+                    android:id="@+id/btnCancelAllDownloads"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:text="Hủy tất cả"
+                    android:textAllCaps="false"
+                    android:textSize="11sp"
+                    android:textColor="@color/status_offline"
+                    android:background="@drawable/bg_button_control" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Offline Storage Dashboard Header — shown when browsing category:downloaded -->
+        <LinearLayout
+            android:id="@+id/offlineStorageHeader"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="@drawable/bg_surface_card"
+            android:padding="12dp"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1.15"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Nhạc offline"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_secondary" />
+
+                    <TextView
+                        android:id="@+id/txtOfflineStorageUsed"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0 MB · 0 bài"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary"
+                        android:layout_marginTop="2dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.95"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Bộ nhớ trống"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_secondary" />
+
+                    <TextView
+                        android:id="@+id/txtOfflineStorageFree"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="0 GB"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary"
+                        android:layout_marginTop="2dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Giới hạn MeloVault"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_secondary" />
+
+                    <TextView
+                        android:id="@+id/txtOfflineStorageCap"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Không giới hạn"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/accent_primary"
+                        android:layout_marginTop="2dp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.95"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Mạng tải xuống"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_secondary" />
+
+                    <TextView
+                        android:id="@+id/txtOfflineNetworkPolicy"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Mọi mạng"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/accent_primary"
+                        android:layout_marginTop="2dp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/offlineStorageTargetRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginTop="8dp"
+                android:paddingTop="6dp"
+                android:paddingBottom="2dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Nơi lưu nhạc offline: "
+                        android:textSize="11sp"
+                        android:textColor="@color/text_secondary" />
+
+                    <TextView
+                        android:id="@+id/txtOfflineStorageTarget"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Bộ nhớ trong"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/accent_primary" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/txtOfflineVolumeDetails"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="● Bộ nhớ trong · ○ Thẻ nhớ SD — Không khả dụng"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_secondary" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical">
+
+                <Button
+                    android:id="@+id/btnOfflineStorageTarget"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:text="Nơi lưu"
+                    android:textAllCaps="false"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_primary"
+                    android:background="@drawable/bg_button_control"
+                    android:layout_marginEnd="6dp" />
+
+                <Button
+                    android:id="@+id/btnOfflineStorageCap"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:text="Giới hạn"
+                    android:textAllCaps="false"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_primary"
+                    android:background="@drawable/bg_button_control"
+                    android:layout_marginEnd="6dp" />
+
+                <Button
+                    android:id="@+id/btnOfflineNetworkPolicy"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:text="Mạng tải"
+                    android:textAllCaps="false"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_primary"
+                    android:background="@drawable/bg_button_control"
+                    android:layout_marginEnd="6dp" />
+
+                <Button
+                    android:id="@+id/btnStreamCache"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:text="Cache online"
+                    android:textAllCaps="false"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_primary"
+                    android:background="@drawable/bg_button_control"
+                    android:layout_marginEnd="6dp" />
+
+                <Button
+                    android:id="@+id/btnOfflineMultiSelect"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:text="Chọn xóa"
+                    android:textAllCaps="false"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_primary"
+                    android:background="@drawable/bg_button_control"
+                    android:layout_marginEnd="6dp" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <Button
+                    android:id="@+id/btnDeleteAllOffline"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minHeight="0dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="10dp"
+                    android:paddingEnd="10dp"
+                    android:text="Xóa tất cả bản offline"
+                    android:textAllCaps="false"
+                    android:textSize="11sp"
+                    android:textColor="@color/status_offline"
+                    android:background="@drawable/bg_button_control" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Scrollable RecyclerView fills remaining height -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/recyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scrollbars="vertical"
+                tools:listitem="@layout/item_library_track" />
+
+            <!-- Loading State -->
+            <ProgressBar
+                android:id="@+id/loadingView"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_gravity="center"
+                android:indeterminateTint="@color/accent_primary"
+                android:visibility="gone" />
+
+            <!-- Empty State -->
+            <LinearLayout
+                android:id="@+id/emptyView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="20dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:src="@drawable/ic_music_note"
+                    android:tint="@color/text_tertiary"
+                    android:contentDescription="Empty" />
+
+                <TextView
+                    android:id="@+id/emptyText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Chưa có bài hát trong thư mục này"
+                    android:textSize="13sp"
+                    android:textColor="@color/text_secondary"
+                    android:layout_marginTop="6dp" />
+            </LinearLayout>
+
+            <!-- Error State -->
+            <LinearLayout
+                android:id="@+id/errorView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:padding="20dp"
+                android:visibility="gone">
+
+                <ImageView
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:src="@drawable/ic_cloud_off"
+                    android:tint="@color/text_tertiary"
+                    android:contentDescription="Error" />
+
+                <TextView
+                    android:id="@+id/errorTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Không tải được thư viện"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:gravity="center"
+                    android:layout_marginTop="8dp" />
+
+                <TextView
+                    android:id="@+id/errorSubtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Kiểm tra kết nối rồi thử lại."
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary"
+                    android:gravity="center"
+                    android:layout_marginTop="4dp" />
+
+                <Button
+                    android:id="@+id/retryButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="40dp"
+                    android:minWidth="100dp"
+                    android:text="Thử lại"
+                    android:textAllCaps="false"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:backgroundTint="@color/accent_primary"
+                    android:layout_marginTop="10dp" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- Pagination Bar -->
+        <LinearLayout
+            android:id="@+id/pageBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:layout_marginTop="6dp"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/previousPageButton"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:text="◀ Trang trước"
+                android:textAllCaps="false"
+                android:textColor="@color/text_primary"
+                android:backgroundTint="@color/bg_surface_elevated"
+                android:layout_marginEnd="6dp" />
+
+            <Button
+                android:id="@+id/nextPageButton"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:text="Trang sau ▶"
+                android:textAllCaps="false"
+                android:textColor="@color/text_primary"
+                android:backgroundTint="@color/bg_surface_elevated"
+                android:layout_marginStart="6dp" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>
+
+<!-- ═══ FULLSCREEN CAR LYRICS OVERLAY (v0.6.30 — EXPANDED CAR HEAD UNIT) ═══ -->
+<LinearLayout
+    android:id="@+id/fullscreenLyricsOverlay"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_base"
+    android:paddingStart="28dp"
+    android:paddingEnd="28dp"
+    android:paddingTop="14dp"
+    android:paddingBottom="14dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:visibility="gone">
+
+    <!-- TOP: Back/Close + Track Title + Artist/Status + Refresh -->
+    <LinearLayout
+        android:id="@+id/fullscreenLyricsTopBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <ImageView
+            android:id="@+id/fullscreenLyricsBackButton"
+            android:layout_width="52dp"
+            android:layout_height="52dp"
+            android:padding="13dp"
+            android:background="@drawable/bg_button_control"
+            android:src="@drawable/ic_arrow_back"
+            android:tint="@color/text_primary"
+            android:contentDescription="Đóng lời toàn màn hình" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="14dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/fullscreenLyricsTrackTitleView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Lời bài hát"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <TextView
+                android:id="@+id/fullscreenLyricsTrackSubtitleView"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Nguồn: LRCLIB"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:layout_marginTop="2dp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/fullscreenLyricsAutoResetButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:minWidth="48dp"
+            android:gravity="center"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/bg_quality_chip_inactive"
+            android:text="Tìm lại tự động"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="@color/accent_primary"
+            android:contentDescription="Tìm lại tự động"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/fullscreenLyricsChooseOtherButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:minWidth="48dp"
+            android:gravity="center"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/bg_quality_chip_inactive"
+            android:text="Chọn lời khác"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary"
+            android:contentDescription="Chọn lời khác" />
+
+        <TextView
+            android:id="@+id/fullscreenLyricsRefreshButton"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:minWidth="48dp"
+            android:gravity="center"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:background="@drawable/bg_quality_chip_inactive"
+            android:text="Tìm lại lời"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_primary"
+            android:contentDescription="Tìm lại lời" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/border_subtle"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="8dp" />
+
+    <!-- CENTER: Dominant Fullscreen Lyrics Viewport -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- Loading -->
+        <LinearLayout
+            android:id="@+id/fullscreenLyricsLoadingView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:visibility="gone">
+
+            <ProgressBar
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:indeterminate="true"
+                android:indeterminateTint="@color/accent_primary" />
+
+            <TextView
+                android:id="@+id/fullscreenLyricsLoadingTextView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Đang tìm lời bài hát…"
+                android:textSize="19sp"
+                android:textColor="@color/text_secondary"
+                android:layout_marginTop="14dp" />
+        </LinearLayout>
+
+        <!-- Synced Lyrics RecyclerView -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/fullscreenLyricsSyncedRecyclerView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scrollbars="vertical"
+            android:clipToPadding="false"
+            android:paddingTop="140dp"
+            android:paddingBottom="140dp"
+            android:visibility="gone" />
+
+        <!-- Plain Lyrics Container -->
+        <LinearLayout
+            android:id="@+id/fullscreenLyricsPlainContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/fullscreenLyricsPlainBadgeView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:background="@drawable/bg_quality_chip_mobile"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:paddingTop="5dp"
+                android:paddingBottom="5dp"
+                android:text="Lời chưa đồng bộ thời gian"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:textColor="@color/quality_mobile_text"
+                android:layout_marginBottom="8dp" />
+
+            <androidx.core.widget.NestedScrollView
+                android:id="@+id/fullscreenLyricsPlainScrollView"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:scrollbars="vertical"
+                android:fillViewport="true">
+
+                <TextView
+                    android:id="@+id/fullscreenLyricsPlainTextView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/text_primary"
+                    android:textSize="23sp"
+                    android:lineSpacingExtra="10dp"
+                    android:gravity="center_horizontal"
+                    android:padding="18dp" />
+            </androidx.core.widget.NestedScrollView>
+        </LinearLayout>
+
+        <!-- Candidate Picker / Ambiguous Candidates Container -->
+        <LinearLayout
+            android:id="@+id/fullscreenLyricsAmbiguousContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="10dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/fullscreenLyricsAmbiguousTitleView"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Chọn bản lời bài hát phù hợp"
+                        android:textSize="19sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:id="@+id/fullscreenLyricsAmbiguousSubtitleView"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Chọn bản khớp với bài đang phát (tối đa 5 kết quả):"
+                        android:textSize="15sp"
+                        android:textColor="@color/text_secondary"
+                        android:layout_marginTop="4dp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/fullscreenLyricsCandidatesCloseButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minWidth="48dp"
+                    android:gravity="center"
+                    android:paddingStart="14dp"
+                    android:paddingEnd="14dp"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/bg_quality_chip_inactive"
+                    android:text="Đóng danh sách"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:contentDescription="Đóng danh sách lời" />
+            </LinearLayout>
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/fullscreenLyricsCandidatesRecyclerView"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:scrollbars="vertical" />
+        </LinearLayout>
+
+        <!-- Status / Not Found / Instrumental / Error Container -->
+        <LinearLayout
+            android:id="@+id/fullscreenLyricsStatusContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:padding="24dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/fullscreenLyricsStatusTitleView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Không tìm thấy lời bài hát"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary"
+                android:gravity="center" />
+
+            <TextView
+                android:id="@+id/fullscreenLyricsStatusSubtitleView"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textSize="16sp"
+                android:textColor="@color/text_secondary"
+                android:gravity="center"
+                android:layout_marginTop="8dp"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:layout_marginTop="18dp">
+
+                <Button
+                    android:id="@+id/fullscreenLyricsStatusActionButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minWidth="148dp"
+                    android:paddingStart="22dp"
+                    android:paddingEnd="22dp"
+                    android:background="@drawable/bg_quality_chip_active"
+                    android:text="Tìm lại lời"
+                    android:textAllCaps="false"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary" />
+
+                <Button
+                    android:id="@+id/fullscreenLyricsStatusSecondaryButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:minWidth="148dp"
+                    android:paddingStart="22dp"
+                    android:paddingEnd="22dp"
+                    android:layout_marginStart="12dp"
+                    android:background="@drawable/bg_quality_chip_inactive"
+                    android:text="Chọn lời khác"
+                    android:textAllCaps="false"
+                    android:textSize="15sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="@color/border_subtle"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="10dp" />
+
+    <!-- BOTTOM: Large Car-Grade Transport & Follow Controls -->
+    <LinearLayout
+        android:id="@+id/fullscreenLyricsBottomBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/fullscreenLyricsTimeView"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="96dp"
+            android:text="00:00 / 00:00"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="@color/text_secondary" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/fullscreenLyricsPreviousButton"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:padding="14dp"
+                android:background="@drawable/bg_button_control"
+                android:src="@drawable/ic_skip_previous"
+                android:tint="@color/text_primary"
+                android:contentDescription="Bài trước" />
+
+            <View
+                android:layout_width="28dp"
+                android:layout_height="1dp" />
+
+            <ImageView
+                android:id="@+id/fullscreenLyricsPlayPauseButton"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:padding="16dp"
+                android:background="@drawable/bg_button_hero"
+                android:src="@drawable/ic_play_arrow"
+                android:tint="@color/text_primary"
+                android:contentDescription="Phát hoặc tạm dừng" />
+
+            <View
+                android:layout_width="28dp"
+                android:layout_height="1dp" />
+
+            <ImageView
+                android:id="@+id/fullscreenLyricsNextButton"
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:padding="14dp"
+                android:background="@drawable/bg_button_control"
+                android:src="@drawable/ic_skip_next"
+                android:tint="@color/text_primary"
+                android:contentDescription="Bài tiếp theo" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/fullscreenLyricsFollowButton"
+            android:layout_width="wrap_content"
+            android:layout_height="52dp"
+            android:minWidth="128dp"
+            android:gravity="center"
+            android:paddingStart="18dp"
+            android:paddingEnd="18dp"
+            android:background="@drawable/bg_quality_chip_active"
+            android:text="Theo nhạc"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textColor="@color/accent_primary"
+            android:contentDescription="Theo nhạc" />
+    </LinearLayout>
+</LinearLayout>
+</FrameLayout>
+
