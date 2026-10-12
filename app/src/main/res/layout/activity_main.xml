@@ -36,6 +36,19 @@
             android:gravity="center_vertical"
             android:paddingBottom="4dp">
 
+            <!-- Back / Collapse button when Full Player is open on portrait phone -->
+            <ImageView
+                android:id="@+id/topBarBackButton"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:padding="8dp"
+                android:background="@drawable/bg_button_control"
+                android:src="@drawable/ic_arrow_back"
+                android:tint="@color/text_primary"
+                android:visibility="gone"
+                android:contentDescription="Quay lại danh sách"
+                android:layout_marginEnd="8dp" />
+
             <TextView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -81,7 +94,8 @@
         <LinearLayout
             android:id="@+id/nowPlayingCard"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="0dp"
+            android:layout_weight="1"
             android:orientation="vertical"
             android:gravity="center_horizontal"
             android:background="@drawable/bg_surface_card"
@@ -89,7 +103,8 @@
             android:paddingEnd="10dp"
             android:paddingTop="10dp"
             android:paddingBottom="10dp"
-            android:layout_marginBottom="8dp">
+            android:layout_marginBottom="8dp"
+            android:visibility="gone">
             <!-- ═══ FULL NOW-PLAYING CONTAINER ═══
                  Contains full-size artwork, title, seekbar, controls, and secondary actions.
                  On portrait phones, this container collapses when browsing library/playlists
@@ -112,8 +127,8 @@
 
                 <ImageView
                     android:id="@+id/coverView"
-                    android:layout_width="@dimen/artwork_size_compact_idle"
-                    android:layout_height="@dimen/artwork_size_compact_idle"
+                    android:layout_width="@dimen/artwork_size_compact_portrait"
+                    android:layout_height="@dimen/artwork_size_compact_portrait"
                     android:scaleType="centerCrop"
                     android:src="@drawable/ic_album_placeholder"
                     android:contentDescription="@string/cover_gesture_action" />
@@ -121,8 +136,8 @@
                 <!-- In-place Lyrics Frame: YouTube Music style -->
                 <FrameLayout
                     android:id="@+id/nowPlayingLyricsFrame"
-                    android:layout_width="@dimen/artwork_size_compact_idle"
-                    android:layout_height="@dimen/artwork_size_compact_idle"
+                    android:layout_width="@dimen/artwork_size_compact_portrait"
+                    android:layout_height="@dimen/artwork_size_compact_portrait"
                     android:background="@drawable/bg_lyrics_card"
                     android:clipToOutline="true"
                     android:visibility="gone">
@@ -238,6 +253,7 @@
                 android:text="@string/cover_gesture_hint"
                 android:textSize="10sp"
                 android:textColor="@color/text_tertiary"
+                android:visibility="gone"
                 android:layout_marginBottom="4dp" />
 
             <!-- Title / Artist / Album / Tech info + Favorite row -->
@@ -491,7 +507,7 @@
                     android:id="@+id/queueButton"
                     android:layout_width="36dp"
                     android:layout_height="36dp"
-                    android:visibility="gone"
+                    android:visibility="visible"
                     android:padding="8dp"
                     android:background="@drawable/bg_button_control"
                     android:src="@drawable/ic_queue_music"
@@ -546,6 +562,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center"
+                android:visibility="gone"
                 android:layout_marginTop="8dp">
 
                 <TextView
@@ -611,89 +628,6 @@
                     android:textStyle="bold"
                     android:textColor="@color/text_primary"
                     android:contentDescription="Mở các nguồn Telegram và Google Drive" />
-            </LinearLayout>
-
-            <!-- ═══ MINI NOW-PLAYING BAR ═══
-                 Shown only during BROWSING (library / search visible).
-                 Allows the user to see current track and control play/pause
-                 without the full player card blocking viewport.
-                 Tap anywhere → expands back to full player (code handles this).
-                 Play/Pause button works independently.
-                 Does NOT alter cover-swipe or cover-tap→Queue semantics.
-            -->
-            <LinearLayout
-                android:id="@+id/miniPlayerBar"
-                android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
-                android:background="@drawable/bg_button_control"
-                android:paddingStart="12dp"
-                android:paddingEnd="4dp"
-                android:layout_marginTop="8dp"
-                android:visibility="gone"
-                android:clickable="true"
-                android:focusable="true"
-                android:contentDescription="Mở trình phát">
-
-                <ImageView
-                    android:id="@+id/miniCoverView"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:scaleType="centerCrop"
-                    android:src="@drawable/ic_album_placeholder"
-                    android:contentDescription="Album art mini"
-                    android:layout_marginEnd="10dp" />
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:id="@+id/miniTitleView"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text=""
-                        android:textSize="13sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/text_primary"
-                        android:maxLines="1"
-                        android:ellipsize="end" />
-
-                    <TextView
-                        android:id="@+id/miniArtistView"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text=""
-                        android:textSize="11sp"
-                        android:textColor="@color/text_secondary"
-                        android:maxLines="1"
-                        android:ellipsize="end"
-                        android:layout_marginTop="1dp" />
-                </LinearLayout>
-
-                <ImageView
-                    android:id="@+id/miniPlayPauseButton"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:padding="12dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:src="@drawable/ic_play_arrow"
-                    android:tint="@color/text_primary"
-                    android:contentDescription="Play/Pause mini" />
-
-                <TextView
-                    android:id="@+id/miniExpandButton"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:gravity="center"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:text="▲"
-                    android:textSize="14sp"
-                    android:textColor="@color/text_secondary"
-                    android:contentDescription="Mở trình phát đầy đủ" />
             </LinearLayout>
         </LinearLayout>
 
@@ -1227,91 +1161,91 @@
                     android:gravity="center_vertical">
 
                     <TextView
-                        android:id="@+id/filterRootChip"
+                        android:id="@+id/filterDriveChip"
                         android:layout_width="wrap_content"
-                        android:layout_height="48dp"
-                        android:minHeight="48dp"
-                        android:paddingStart="14dp"
-                        android:paddingEnd="14dp"
+                        android:layout_height="36dp"
+                        android:minHeight="36dp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
                         android:gravity="center"
                         android:layout_marginEnd="6dp"
                         android:background="@drawable/bg_quality_chip_inactive"
-                        android:text="Thư viện"
-                        android:textSize="13sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/text_primary" />
-
-                    <TextView
-                        android:id="@+id/filterAllChip"
-                        android:layout_width="wrap_content"
-                        android:layout_height="48dp"
-                        android:minHeight="48dp"
-                        android:paddingStart="14dp"
-                        android:paddingEnd="14dp"
-                        android:gravity="center"
-                        android:layout_marginEnd="6dp"
-                        android:background="@drawable/bg_quality_chip_inactive"
-                        android:text="Tất cả"
-                        android:textSize="13sp"
-                        android:textStyle="bold"
-                        android:textColor="@color/text_primary" />
-
-                    <TextView
-                        android:id="@+id/filterDownloadedChip"
-                        android:layout_width="wrap_content"
-                        android:layout_height="48dp"
-                        android:minHeight="48dp"
-                        android:paddingStart="14dp"
-                        android:paddingEnd="14dp"
-                        android:gravity="center"
-                        android:layout_marginEnd="6dp"
-                        android:background="@drawable/bg_quality_chip_inactive"
-                        android:text="Đã tải"
-                        android:textSize="13sp"
+                        android:text="Google Drive"
+                        android:textSize="12sp"
                         android:textStyle="bold"
                         android:textColor="@color/text_primary" />
 
                     <TextView
                         android:id="@+id/filterDeviceChip"
                         android:layout_width="wrap_content"
-                        android:layout_height="48dp"
-                        android:minHeight="48dp"
-                        android:paddingStart="14dp"
-                        android:paddingEnd="14dp"
+                        android:layout_height="36dp"
+                        android:minHeight="36dp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
                         android:gravity="center"
                         android:layout_marginEnd="6dp"
                         android:background="@drawable/bg_quality_chip_inactive"
                         android:text="Thiết bị"
-                        android:textSize="13sp"
+                        android:textSize="12sp"
                         android:textStyle="bold"
                         android:textColor="@color/text_primary" />
 
                     <TextView
-                        android:id="@+id/filterDriveChip"
+                        android:id="@+id/filterDownloadedChip"
                         android:layout_width="wrap_content"
-                        android:layout_height="48dp"
-                        android:minHeight="48dp"
-                        android:paddingStart="14dp"
-                        android:paddingEnd="14dp"
+                        android:layout_height="36dp"
+                        android:minHeight="36dp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
                         android:gravity="center"
                         android:layout_marginEnd="6dp"
                         android:background="@drawable/bg_quality_chip_inactive"
-                        android:text="Drive"
-                        android:textSize="13sp"
+                        android:text="Đã tải"
+                        android:textSize="12sp"
                         android:textStyle="bold"
                         android:textColor="@color/text_primary" />
 
                     <TextView
                         android:id="@+id/filterPlaylistsChip"
                         android:layout_width="wrap_content"
-                        android:layout_height="48dp"
-                        android:minHeight="48dp"
-                        android:paddingStart="14dp"
-                        android:paddingEnd="14dp"
+                        android:layout_height="36dp"
+                        android:minHeight="36dp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
                         android:gravity="center"
+                        android:layout_marginEnd="6dp"
                         android:background="@drawable/bg_quality_chip_inactive"
                         android:text="Playlist"
-                        android:textSize="13sp"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:id="@+id/filterRootChip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:minHeight="36dp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:gravity="center"
+                        android:layout_marginEnd="6dp"
+                        android:background="@drawable/bg_quality_chip_inactive"
+                        android:text="Thư viện"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary" />
+
+                    <TextView
+                        android:id="@+id/filterAllChip"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:minHeight="36dp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:gravity="center"
+                        android:background="@drawable/bg_quality_chip_inactive"
+                        android:text="Tất cả"
+                        android:textSize="12sp"
                         android:textStyle="bold"
                         android:textColor="@color/text_primary" />
                 </LinearLayout>
@@ -1494,100 +1428,116 @@
                 android:layout_marginBottom="6dp" />
 
             <!-- Collection Action Bar — shown when browsing Album / Artist / Drive Folder / Playlist -->
+            <!-- Collection Action Bar — shown when browsing Album / Artist / Drive Folder / Playlist -->
             <LinearLayout
                 android:id="@+id/collectionActionBar"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical"
+                android:orientation="vertical"
                 android:paddingBottom="8dp"
                 android:visibility="gone">
 
-                <!-- Play All -->
-                <Button
-                    android:id="@+id/collectionPlayAllButton"
-                    android:layout_width="0dp"
-                    android:layout_height="36dp"
-                    android:layout_weight="1"
-                    android:minHeight="0dp"
-                    android:minWidth="0dp"
-                    android:paddingStart="4dp"
-                    android:paddingEnd="4dp"
-                    android:text="▶ Phát"
-                    android:textAllCaps="false"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:textColor="@color/text_primary"
-                    android:background="@drawable/bg_button_control"
-                    android:layout_marginEnd="4dp" />
+                <!-- Row 1: Prominent Play & Shuffle -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="6dp">
 
-                <!-- Shuffle -->
-                <Button
-                    android:id="@+id/collectionShuffleButton"
-                    android:layout_width="0dp"
-                    android:layout_height="36dp"
-                    android:layout_weight="1"
-                    android:minHeight="0dp"
-                    android:minWidth="0dp"
-                    android:paddingStart="4dp"
-                    android:paddingEnd="4dp"
-                    android:text="🔀 Xáo trộn"
-                    android:textAllCaps="false"
-                    android:textSize="11sp"
-                    android:textColor="@color/text_primary"
-                    android:background="@drawable/bg_button_control"
-                    android:layout_marginEnd="4dp" />
+                    <!-- Play All -->
+                    <Button
+                        android:id="@+id/collectionPlayAllButton"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:minHeight="0dp"
+                        android:minWidth="0dp"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:text="▶ Phát"
+                        android:textAllCaps="false"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary"
+                        android:background="@drawable/bg_button_control"
+                        android:layout_marginEnd="6dp" />
 
-                <!-- Add All to Queue -->
-                <Button
-                    android:id="@+id/collectionAddAllButton"
-                    android:layout_width="0dp"
-                    android:layout_height="36dp"
-                    android:layout_weight="1"
-                    android:minHeight="0dp"
-                    android:minWidth="0dp"
-                    android:paddingStart="4dp"
-                    android:paddingEnd="4dp"
-                    android:text="+ Hàng đợi"
-                    android:textAllCaps="false"
-                    android:textSize="11sp"
-                    android:textColor="@color/text_secondary"
-                    android:background="@drawable/bg_button_control"
-                    android:layout_marginEnd="4dp" />
+                    <!-- Shuffle -->
+                    <Button
+                        android:id="@+id/collectionShuffleButton"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:minHeight="0dp"
+                        android:minWidth="0dp"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:text="🔀 Xáo trộn"
+                        android:textAllCaps="false"
+                        android:textSize="13sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary"
+                        android:background="@drawable/bg_button_control" />
+                </LinearLayout>
 
-                <!-- Download All -->
-                <Button
-                    android:id="@+id/collectionDownloadAllButton"
-                    android:layout_width="0dp"
-                    android:layout_height="36dp"
-                    android:layout_weight="1.2"
-                    android:minHeight="0dp"
-                    android:minWidth="0dp"
-                    android:paddingStart="4dp"
-                    android:paddingEnd="4dp"
-                    android:text="↓ Tải tất cả"
-                    android:textAllCaps="false"
-                    android:textSize="11sp"
-                    android:textColor="@color/text_primary"
-                    android:background="@drawable/bg_button_control" />
+                <!-- Row 2: Secondary collection actions -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
 
-                <!-- Delete Playlist Offline (shown only when playlist has offline tracks) -->
-                <Button
-                    android:id="@+id/collectionDeleteOfflineButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:minHeight="0dp"
-                    android:minWidth="0dp"
-                    android:paddingStart="6dp"
-                    android:paddingEnd="6dp"
-                    android:text="🗑 Xóa offline"
-                    android:textAllCaps="false"
-                    android:textSize="11sp"
-                    android:textColor="@color/status_offline"
-                    android:background="@drawable/bg_button_control"
-                    android:visibility="gone"
-                    android:layout_marginStart="4dp" />
+                    <!-- Add All to Queue -->
+                    <Button
+                        android:id="@+id/collectionAddAllButton"
+                        android:layout_width="0dp"
+                        android:layout_height="32dp"
+                        android:layout_weight="1"
+                        android:minHeight="0dp"
+                        android:minWidth="0dp"
+                        android:paddingStart="4dp"
+                        android:paddingEnd="4dp"
+                        android:text="+ Hàng đợi"
+                        android:textAllCaps="false"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_secondary"
+                        android:background="@drawable/bg_button_control"
+                        android:layout_marginEnd="6dp" />
 
+                    <!-- Download All -->
+                    <Button
+                        android:id="@+id/collectionDownloadAllButton"
+                        android:layout_width="0dp"
+                        android:layout_height="32dp"
+                        android:layout_weight="1"
+                        android:minHeight="0dp"
+                        android:minWidth="0dp"
+                        android:paddingStart="4dp"
+                        android:paddingEnd="4dp"
+                        android:text="↓ Tải tất cả"
+                        android:textAllCaps="false"
+                        android:textSize="11sp"
+                        android:textColor="@color/text_primary"
+                        android:background="@drawable/bg_button_control" />
+
+                    <!-- Delete Playlist Offline (shown only when playlist has offline tracks) -->
+                    <Button
+                        android:id="@+id/collectionDeleteOfflineButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:minHeight="0dp"
+                        android:minWidth="0dp"
+                        android:paddingStart="6dp"
+                        android:paddingEnd="6dp"
+                        android:text="🗑 Xóa offline"
+                        android:textAllCaps="false"
+                        android:textSize="11sp"
+                        android:textColor="@color/status_offline"
+                        android:background="@drawable/bg_button_control"
+                        android:visibility="gone"
+                        android:layout_marginStart="6dp" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- Smart Offline Playlist Sync Bar — shown only when browsing playlist:<id> -->
@@ -2160,6 +2110,85 @@
                     android:backgroundTint="@color/bg_surface_elevated"
                     android:layout_marginStart="6dp" />
             </LinearLayout>
+        </LinearLayout>
+
+        <!-- ═══ MINI NOW-PLAYING BAR ═══
+             Docked fixed at the bottom of the screen during BROWSING and QUEUE views.
+             Height 56dp, thumb 40dp, clean Play/Pause and expand chevron.
+        -->
+        <LinearLayout
+            android:id="@+id/miniPlayerBar"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/bg_button_control"
+            android:paddingStart="12dp"
+            android:paddingEnd="6dp"
+            android:layout_marginTop="6dp"
+            android:visibility="gone"
+            android:clickable="true"
+            android:focusable="true"
+            android:contentDescription="Mở trình phát">
+
+            <ImageView
+                android:id="@+id/miniCoverView"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:scaleType="centerCrop"
+                android:src="@drawable/ic_album_placeholder"
+                android:contentDescription="Album art mini"
+                android:layout_marginEnd="10dp" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/miniTitleView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:maxLines="1"
+                    android:ellipsize="end" />
+
+                <TextView
+                    android:id="@+id/miniArtistView"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="11sp"
+                    android:textColor="@color/text_secondary"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:layout_marginTop="1dp" />
+            </LinearLayout>
+
+            <ImageView
+                android:id="@+id/miniPlayPauseButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:padding="12dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_play_arrow"
+                android:tint="@color/text_primary"
+                android:contentDescription="Play/Pause mini" />
+
+            <TextView
+                android:id="@+id/miniExpandButton"
+                android:layout_width="44dp"
+                android:layout_height="48dp"
+                android:gravity="center"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:text="▲"
+                android:textSize="14sp"
+                android:textColor="@color/text_secondary"
+                android:contentDescription="Mở trình phát đầy đủ" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

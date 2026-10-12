@@ -30,10 +30,11 @@ internal object MobilePlayerLayoutPolicy {
 
         return if (isPortraitPhone(widthDp, heightDp)) {
             val targetWidth = (widthDp * 0.80f).roundToInt()
-            val maxVerticalFraction = if (heightDp <= 700) 0.34f else 0.45f
+            val maxVerticalFraction = if (heightDp <= 700) 0.40f else 0.45f
             val verticalBound = (heightDp * maxVerticalFraction).roundToInt()
             val maxWidth = widthDp - 32
-            val bounded = minOf(targetWidth, verticalBound, maxWidth, 320)
+            val maxCap = if (heightDp <= 700) 230 else 320
+            val bounded = minOf(targetWidth, verticalBound, maxWidth, maxCap)
             val regularPhoneSize = if (widthDp >= 320) bounded.coerceAtLeast(140) else bounded
             regularPhoneSize.coerceIn(0, maxWidth)
         } else {

@@ -569,11 +569,16 @@ class MainActivity : AppCompatActivity() {
      */
     private fun applyLandscapeArtworkNavigation() {
         val cfg = resources.configuration
+        val isPortraitPhone = MobilePlayerLayoutPolicy.isPortraitPhone(cfg.screenWidthDp, cfg.screenHeightDp)
+        if (isPortraitPhone) {
+            binding.quickNavigationRow?.visibility = View.GONE
+            return
+        }
         val supported = MobilePlayerLayoutPolicy.supportsLandscapeArtworkExpansion(
             cfg.screenWidthDp, cfg.screenHeightDp
         )
         if (!supported) isLandscapeArtworkExpanded = false
-        binding.quickNavigationRow.visibility =
+        binding.quickNavigationRow?.visibility =
             if (supported && isLandscapeArtworkExpanded) View.GONE else View.VISIBLE
     }
 
@@ -1179,6 +1184,14 @@ class MainActivity : AppCompatActivity() {
         binding.miniExpandButton?.setOnClickListener { onMiniPlayerExpand() }
         binding.miniPlayPauseButton?.setOnClickListener {
             handlePlayPauseToggle()
+        }
+
+        binding.topBarBackButton?.setOnClickListener {
+            if (isNowPlayingLyricsActive) {
+                hideNowPlayingLyrics()
+            }
+            userOpenedFullPlayer = false
+            applyMobilePlayerVisibility(isBrowsing = true)
         }
 
         binding.queueBackButton.setOnClickListener {
@@ -5232,6 +5245,8 @@ class MainActivity : AppCompatActivity() {
             )?.let { (it * resources.displayMetrics.density).roundToInt() }
         } else null
 
+        val isPortraitPhone = MobilePlayerLayoutPolicy.isPortraitPhone(cfg.screenWidthDp, cfg.screenHeightDp)
+
         if (currentItem == null) {
             // Idle / Welcome state
             currentLoadedArtworkUri = null
@@ -5283,7 +5298,7 @@ class MainActivity : AppCompatActivity() {
                 binding.qualityChip.visibility = View.VISIBLE
                 binding.signalPathButton?.visibility = View.VISIBLE
                 binding.lyricsButton?.visibility = View.VISIBLE
-                binding.queueButton.visibility = if (isCompactPlayerLayout()) View.GONE else View.VISIBLE
+                binding.queueButton.visibility = if (isCompactPlayerLayout() && !isPortraitPhone) View.GONE else View.VISIBLE
                 binding.shuffleButton.visibility = View.VISIBLE
                 binding.repeatButton.visibility = View.VISIBLE
             } else {
@@ -5292,7 +5307,7 @@ class MainActivity : AppCompatActivity() {
                 binding.qualityChip.visibility = View.GONE
                 binding.signalPathButton?.visibility = View.GONE
                 binding.lyricsButton?.visibility = View.GONE
-                binding.queueButton.visibility = if (isCompactPlayerLayout()) View.GONE else View.VISIBLE
+                binding.queueButton.visibility = if (isCompactPlayerLayout() && !isPortraitPhone) View.GONE else View.VISIBLE
                 binding.shuffleButton.visibility = View.INVISIBLE
                 binding.repeatButton.visibility = View.INVISIBLE
             }
@@ -5362,7 +5377,7 @@ class MainActivity : AppCompatActivity() {
             sampleRate = sampleRate,
             channels = channels,
         )
-        if (!technicalInfo.isNullOrBlank()) {
+        if (!technicalInfo.isNullOrBlank() && !isPortraitPhone) {
             binding.technicalInfoView.text = "Nguồn: $technicalInfo"
             binding.technicalInfoView.visibility = View.VISIBLE
         } else {
@@ -5380,7 +5395,7 @@ class MainActivity : AppCompatActivity() {
             expandedArtworkPx
         } else if (shortExpandedArtworkPx != null) {
             shortExpandedArtworkPx
-        } else if (MobilePlayerLayoutPolicy.isPortraitPhone(cfg.screenWidthDp, cfg.screenHeightDp)) {
+        } else if (isPortraitPhone) {
             val sizeDp = MobilePlayerLayoutPolicy.artworkSizeDp(cfg.screenWidthDp, cfg.screenHeightDp)
             (sizeDp * resources.displayMetrics.density).roundToInt()
         } else {
@@ -5435,7 +5450,7 @@ class MainActivity : AppCompatActivity() {
         binding.qualityChip.visibility = View.VISIBLE
         binding.signalPathButton?.visibility = View.VISIBLE
         binding.lyricsButton?.visibility = View.VISIBLE
-        binding.queueButton.visibility = if (isCompactPlayerLayout()) View.GONE else View.VISIBLE
+        binding.queueButton.visibility = if (isCompactPlayerLayout() && !isPortraitPhone) View.GONE else View.VISIBLE
         binding.shuffleButton.visibility = View.VISIBLE
         binding.repeatButton.visibility = View.VISIBLE
 
@@ -5525,8 +5540,10 @@ class MainActivity : AppCompatActivity() {
         val cfg = resources.configuration
         val isPortraitPhone = MobilePlayerLayoutPolicy.isPortraitPhone(cfg.screenWidthDp, cfg.screenHeightDp)
         if (!isPortraitPhone) {
+            binding.nowPlayingCard?.visibility = View.VISIBLE
             binding.fullPlayerContainer?.visibility = View.VISIBLE
             binding.miniPlayerBar?.visibility = View.GONE
+            binding.topBarBackButton?.visibility = View.GONE
             // Car queue and inline lyrics live inside the library panel.
             binding.libraryCard.visibility = View.VISIBLE
             binding.searchContainer.visibility = if (isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
@@ -5535,11 +5552,14 @@ class MainActivity : AppCompatActivity() {
 
         val hasCurrentItem = browser?.currentMediaItem != null
         if (!hasCurrentItem) {
-            val showingPanel = isQueueVisible || isLyricsVisible
-            binding.fullPlayerContainer?.visibility = if (showingPanel) View.GONE else View.VISIBLE
-            binding.miniPlayerBar?.visibility = if (showingPanel) View.VISIBLE else View.GONE
-            binding.libraryCard.visibility = View.VISIBLE
-            binding.searchContainer.visibility = if (isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
+            val showingFull = userOpenedFullPlayer && !isQueueVisible && !isLyricsVisible
+            binding.nowPlayingCard?.visibility = if (showingFull) View.VISIBLE else View.GONE
+            binding.fullPlayerContainer?.visibility = if (showingFull) View.VISIBLE else View.GONE
+            binding.miniPlayerBar?.visibility = View.GONE
+            binding.topBarBackButton?.visibility = if (showingFull) View.VISIBLE else View.GONE
+            binding.libraryCard.visibility = if (showingFull) View.GONE else View.VISIBLE
+            binding.searchContainer.visibility = if (showingFull || isQueueVisible || isLyricsVisible) View.GONE else View.VISIBLE
+            binding.quickNavigationRow?.visibility = View.GONE
             return
         }
 
@@ -5552,8 +5572,11 @@ class MainActivity : AppCompatActivity() {
             isLyricsVisible = isLyricsVisible,
         )
 
+        binding.nowPlayingCard?.visibility = if (showMini) View.GONE else View.VISIBLE
         binding.fullPlayerContainer?.visibility = if (showMini) View.GONE else View.VISIBLE
         binding.miniPlayerBar?.visibility = if (showMini) View.VISIBLE else View.GONE
+        binding.topBarBackButton?.visibility = if (!showMini) View.VISIBLE else View.GONE
+        binding.quickNavigationRow?.visibility = View.GONE
 
         if (showMini) {
             // The queue/lyrics panel lives inside libraryCard, including in portrait.

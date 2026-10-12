@@ -44,11 +44,12 @@
          the runtime calculation in MainActivity aims for 72-85% content width
          capped so controls remain visible. Short phones (heightDp < 560) use
          the _short variant. -->
-    <dimen name="artwork_size_compact_portrait">240dp</dimen>
+    <dimen name="artwork_size_compact_portrait">230dp</dimen>
     <dimen name="artwork_size_compact_portrait_idle">80dp</dimen>
     <dimen name="artwork_size_compact_portrait_short">180dp</dimen>
 
     <dimen name="track_thumbnail_size">52dp</dimen>
+    <dimen name="queue_thumbnail_size">40dp</dimen>
 
     <!-- Corner Radius -->
     <dimen name="radius_small">8dp</dimen>

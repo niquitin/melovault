@@ -54,7 +54,7 @@ class MobilePlayerLayoutPolicyTest {
     @Test
     fun artworkSizeDp_shanlingM3Ultra_384x640_isBoundedForCompactHeight() {
         val size = MobilePlayerLayoutPolicy.artworkSizeDp(384, 640)
-        assertEquals(218, size)
+        assertEquals(230, size)
         assertTrue("Artwork size should be <= width - 32", size <= 384 - 32)
         assertTrue("Artwork size leaves enough room for controls", size < 250)
     }
