@@ -297,11 +297,12 @@ class MusicService : MediaLibraryService() {
 
         val loadControl = DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                10_000,
+                5_000,
                 30_000,
+                400,
                 1_000,
-                2_000,
             )
+            .setPrioritizeTimeOverSizeThresholds(true)
             .build()
 
         AlacCapabilities.logDeviceCapabilities()
@@ -312,6 +313,7 @@ class MusicService : MediaLibraryService() {
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean,
             ): AudioSink {
+                Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=DAC_INIT timestamp_monotonic_ms=${SystemClock.uptimeMillis()} (enableFloatOutput=$enableFloatOutput)")
                 return DefaultAudioSink.Builder(context)
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
@@ -378,6 +380,12 @@ class MusicService : MediaLibraryService() {
                             hasAudioTrack = true
                             if (isTrackSelected) {
                                 audioTrackSelected = true
+                                Log.i(
+                                    TAG,
+                                    "[SHUFFLE_BENCHMARK] stage=DECODER_INIT timestamp_monotonic_ms=${SystemClock.uptimeMillis()} " +
+                                        "(sampleMime=${format.sampleMimeType}, containerMime=${format.containerMimeType}, " +
+                                        "sampleRate=${format.sampleRate}, channels=${format.channelCount})",
+                                )
                                 if (format.sampleMimeType == MimeTypes.AUDIO_ALAC) {
                                     val platformSupported = AlacCapabilities.supportsPlatformDecoder(MimeTypes.AUDIO_ALAC)
                                     AlacCapabilities.logSelectedRenderer(platformSupported)

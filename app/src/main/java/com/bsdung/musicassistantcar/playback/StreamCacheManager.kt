@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.SystemClock
 import android.util.Log
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DataSource
@@ -477,13 +478,27 @@ object StreamCacheManager {
         private val delegate: DataSource,
         private val isPrefetch: Boolean = false,
     ) : DataSource {
+        private var openTimeMs: Long = 0L
+        private var hasLoggedFirstByte: Boolean = false
+
         override fun addTransferListener(transferListener: androidx.media3.datasource.TransferListener) {
             delegate.addTransferListener(transferListener)
         }
 
         override fun open(dataSpec: DataSpec): Long {
+            openTimeMs = SystemClock.uptimeMillis()
+            hasLoggedFirstByte = false
+            if (!isPrefetch) {
+                Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=HTTP_CONNECT_START timestamp_monotonic_ms=$openTimeMs uri=${dataSpec.uri}")
+            }
             return try {
-                delegate.open(dataSpec)
+                val res = delegate.open(dataSpec)
+                val connectedTimeMs = SystemClock.uptimeMillis()
+                if (!isPrefetch) {
+                    val latency = connectedTimeMs - openTimeMs
+                    Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=HTTP_CONNECTED timestamp_monotonic_ms=$connectedTimeMs (latency=${latency}ms, contentLength=$res)")
+                }
+                res
             } catch (e: Exception) {
                 val key = buildCacheKey(dataSpec.uri)
                 if (isPrefetch) {
@@ -515,6 +530,11 @@ object StreamCacheManager {
             }
             if (n > 0) {
                 upstreamBytesReadTotal.addAndGet(n.toLong())
+                if (!isPrefetch && !hasLoggedFirstByte && openTimeMs > 0L) {
+                    hasLoggedFirstByte = true
+                    val t = SystemClock.uptimeMillis()
+                    Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=FIRST_BYTE timestamp_monotonic_ms=$t (delta_from_open=${t - openTimeMs}ms, bytes=$n)")
+                }
             }
             return n
         }
@@ -542,11 +562,17 @@ object StreamCacheManager {
                 override fun onCachedBytesRead(cacheSizeBytes: Long, cachedBytesRead: Long) {
                     if (cachedBytesRead > 0L) {
                         cachedBytesReadTotal.addAndGet(cachedBytesRead)
+                        if (!isPrefetch) {
+                            Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=CACHE_HIT timestamp_monotonic_ms=${SystemClock.uptimeMillis()} (cachedBytesRead=$cachedBytesRead, totalCached=$cacheSizeBytes)")
+                        }
                     }
                 }
 
                 override fun onCacheIgnored(reason: Int) {
                     cacheIgnoredTotal.incrementAndGet()
+                    if (!isPrefetch) {
+                        Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=CACHE_MISS timestamp_monotonic_ms=${SystemClock.uptimeMillis()} (reason=$reason)")
+                    }
                 }
             })
     }
