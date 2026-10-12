@@ -39,9 +39,9 @@
             <!-- Back / Collapse button when Full Player is open on portrait phone -->
             <ImageView
                 android:id="@+id/topBarBackButton"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:padding="8dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:padding="10dp"
                 android:background="@drawable/bg_button_control"
                 android:src="@drawable/ic_arrow_back"
                 android:tint="@color/text_primary"
@@ -475,7 +475,8 @@
                 <TextView
                     android:id="@+id/qualityChip"
                     android:layout_width="wrap_content"
-                    android:layout_height="32dp"
+                    android:layout_height="38dp"
+                    android:minHeight="44dp"
                     android:gravity="center"
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp"
@@ -486,43 +487,44 @@
                     android:textColor="@color/quality_original_text" />
 
                 <View
-                    android:layout_width="10dp"
+                    android:layout_width="8dp"
                     android:layout_height="1dp" />
 
                 <ImageView
                     android:id="@+id/signalPathButton"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
-                    android:padding="8dp"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:padding="10dp"
                     android:background="@drawable/bg_button_control"
                     android:src="@drawable/ic_signal_path"
                     android:tint="@color/text_primary"
                     android:contentDescription="Signal Path" />
 
                 <View
-                    android:layout_width="10dp"
+                    android:layout_width="8dp"
                     android:layout_height="1dp" />
 
                 <ImageView
                     android:id="@+id/queueButton"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
                     android:visibility="visible"
-                    android:padding="8dp"
+                    android:padding="10dp"
                     android:background="@drawable/bg_button_control"
                     android:src="@drawable/ic_queue_music"
                     android:tint="@color/text_primary"
                     android:contentDescription="Up Next" />
 
                 <View
-                    android:layout_width="10dp"
+                    android:layout_width="8dp"
                     android:layout_height="1dp" />
 
                 <TextView
                     android:id="@+id/lyricsButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="32dp"
-                    android:minWidth="40dp"
+                    android:layout_height="38dp"
+                    android:minHeight="44dp"
+                    android:minWidth="44dp"
                     android:gravity="center"
                     android:paddingStart="12dp"
                     android:paddingEnd="12dp"
@@ -1164,7 +1166,7 @@
                         android:id="@+id/filterDriveChip"
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
-                        android:minHeight="36dp"
+                        android:minHeight="44dp"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:gravity="center"
@@ -1179,7 +1181,7 @@
                         android:id="@+id/filterDeviceChip"
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
-                        android:minHeight="36dp"
+                        android:minHeight="44dp"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:gravity="center"
@@ -1194,7 +1196,7 @@
                         android:id="@+id/filterDownloadedChip"
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
-                        android:minHeight="36dp"
+                        android:minHeight="44dp"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:gravity="center"
@@ -1209,7 +1211,7 @@
                         android:id="@+id/filterPlaylistsChip"
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
-                        android:minHeight="36dp"
+                        android:minHeight="44dp"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:gravity="center"
@@ -1224,7 +1226,7 @@
                         android:id="@+id/filterRootChip"
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
-                        android:minHeight="36dp"
+                        android:minHeight="44dp"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:gravity="center"
@@ -1239,7 +1241,7 @@
                         android:id="@+id/filterAllChip"
                         android:layout_width="wrap_content"
                         android:layout_height="36dp"
-                        android:minHeight="36dp"
+                        android:minHeight="44dp"
                         android:paddingStart="12dp"
                         android:paddingEnd="12dp"
                         android:gravity="center"
@@ -1449,9 +1451,9 @@
                     <Button
                         android:id="@+id/collectionPlayAllButton"
                         android:layout_width="0dp"
-                        android:layout_height="40dp"
+                        android:layout_height="44dp"
                         android:layout_weight="1"
-                        android:minHeight="0dp"
+                        android:minHeight="44dp"
                         android:minWidth="0dp"
                         android:paddingStart="8dp"
                         android:paddingEnd="8dp"
@@ -1467,9 +1469,9 @@
                     <Button
                         android:id="@+id/collectionShuffleButton"
                         android:layout_width="0dp"
-                        android:layout_height="40dp"
+                        android:layout_height="44dp"
                         android:layout_weight="1"
-                        android:minHeight="0dp"
+                        android:minHeight="44dp"
                         android:minWidth="0dp"
                         android:paddingStart="8dp"
                         android:paddingEnd="8dp"
@@ -1492,15 +1494,15 @@
                     <Button
                         android:id="@+id/collectionAddAllButton"
                         android:layout_width="0dp"
-                        android:layout_height="32dp"
+                        android:layout_height="40dp"
                         android:layout_weight="1"
-                        android:minHeight="0dp"
+                        android:minHeight="44dp"
                         android:minWidth="0dp"
                         android:paddingStart="4dp"
                         android:paddingEnd="4dp"
                         android:text="+ Hàng đợi"
                         android:textAllCaps="false"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
                         android:textColor="@color/text_secondary"
                         android:background="@drawable/bg_button_control"
                         android:layout_marginEnd="6dp" />
@@ -1509,15 +1511,15 @@
                     <Button
                         android:id="@+id/collectionDownloadAllButton"
                         android:layout_width="0dp"
-                        android:layout_height="32dp"
+                        android:layout_height="40dp"
                         android:layout_weight="1"
-                        android:minHeight="0dp"
+                        android:minHeight="44dp"
                         android:minWidth="0dp"
                         android:paddingStart="4dp"
                         android:paddingEnd="4dp"
                         android:text="↓ Tải tất cả"
                         android:textAllCaps="false"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
                         android:textColor="@color/text_primary"
                         android:background="@drawable/bg_button_control" />
 
@@ -1525,14 +1527,14 @@
                     <Button
                         android:id="@+id/collectionDeleteOfflineButton"
                         android:layout_width="wrap_content"
-                        android:layout_height="32dp"
-                        android:minHeight="0dp"
+                        android:layout_height="40dp"
+                        android:minHeight="44dp"
                         android:minWidth="0dp"
                         android:paddingStart="6dp"
                         android:paddingEnd="6dp"
                         android:text="🗑 Xóa offline"
                         android:textAllCaps="false"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
                         android:textColor="@color/status_offline"
                         android:background="@drawable/bg_button_control"
                         android:visibility="gone"
