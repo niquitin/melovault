@@ -230,4 +230,43 @@ class FytRealHardwareLayoutTest {
             MobilePlayerLayoutPolicy.expandedLandscapeArtworkSizeDp(m3WidthDp, m3HeightDp)
         )
     }
+
+    @Test
+    fun testCarLayoutXmlDefines44DpTouchTargetsForBothTiersAndMoreButton() {
+        val layoutFiles = listOf(
+            java.io.File("src/main/res/layout-w700dp/activity_main.xml"),
+            java.io.File("src/main/res/layout-land/activity_main.xml"),
+        ).map { file ->
+            if (file.exists()) file else java.io.File("app/${file.path}")
+        }
+
+        val required44DpButtons = listOf(
+            "collectionPlayAllButton",
+            "collectionShuffleButton",
+            "collectionAddAllButton",
+            "collectionDownloadAllButton",
+            "collectionDeleteOfflineButton",
+        )
+
+        for (file in layoutFiles) {
+            assertTrue("Car layout file must exist: ${file.path}", file.exists())
+            val content = file.readText()
+            assertTrue("Car layout ${file.name} must contain '⋮ Thêm' button", content.contains("android:text=\"⋮ Thêm\""))
+            for (buttonId in required44DpButtons) {
+                val idMarker = "android:id=\"@+id/$buttonId\""
+                val idx = content.indexOf(idMarker)
+                assertTrue("Button $buttonId must exist in ${file.path}", idx >= 0)
+                val endTagIdx = content.indexOf("/>", idx)
+                val block = content.substring(idx, endTagIdx)
+                assertTrue(
+                    "Button $buttonId in ${file.path} must have layout_height=\"44dp\"",
+                    block.contains("android:layout_height=\"44dp\"")
+                )
+                assertTrue(
+                    "Button $buttonId in ${file.path} must have minHeight=\"44dp\"",
+                    block.contains("android:minHeight=\"44dp\"")
+                )
+            }
+        }
+    }
 }
