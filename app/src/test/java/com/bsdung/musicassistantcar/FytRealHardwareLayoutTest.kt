@@ -269,4 +269,43 @@ class FytRealHardwareLayoutTest {
             }
         }
     }
+
+    @Test
+    fun testAlertDialogThemeEnforcesHighContrastListItemTextOnDarkSurface() {
+        val themesFile = java.io.File("src/main/res/values/themes.xml").let {
+            if (it.exists()) it else java.io.File("app/src/main/res/values/themes.xml")
+        }
+        assertTrue("themes.xml must exist", themesFile.exists())
+        val content = themesFile.readText()
+
+        assertTrue(
+            "Theme.MusicAssistantCar.Dialog must inherit from dark Theme.MaterialComponents.Dialog.Alert",
+            content.contains("name=\"Theme.MusicAssistantCar.Dialog\" parent=\"Theme.MaterialComponents.Dialog.Alert\"")
+        )
+        assertTrue(
+            "Theme.MusicAssistantCar.Dialog must set textColorAlertDialogListItem to @color/text_primary",
+            content.contains("<item name=\"textColorAlertDialogListItem\">@color/text_primary</item>")
+        )
+        assertTrue(
+            "Theme.MusicAssistantCar.Dialog must set android:textColorAlertDialogListItem to @color/text_primary",
+            content.contains("<item name=\"android:textColorAlertDialogListItem\">@color/text_primary</item>")
+        )
+
+        // Verify WCAG 2.1 contrast ratio between @color/text_primary (#F8FAFC) and @color/bg_surface_elevated (#1E222D) >= 4.5:1
+        fun relativeLuminance(r8: Int, g8: Int, b8: Int): Double {
+            fun channel(c: Int): Double {
+                val s = c / 255.0
+                return if (s <= 0.03928) s / 12.92 else Math.pow((s + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * channel(r8) + 0.7152 * channel(g8) + 0.0722 * channel(b8)
+        }
+        val lText = relativeLuminance(0xF8, 0xFA, 0xFC) // #F8FAFC
+        val lBg = relativeLuminance(0x1E, 0x22, 0x2D)   // #1E222D
+        val contrastRatio = (Math.max(lText, lBg) + 0.05) / (Math.min(lText, lBg) + 0.05)
+        assertTrue(
+            "Dialog list item contrast ratio ($contrastRatio) must be >= 4.5:1",
+            contrastRatio >= 4.5
+        )
+    }
 }
+

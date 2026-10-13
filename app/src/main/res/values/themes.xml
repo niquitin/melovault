@@ -19,10 +19,14 @@
         <item name="android:navigationBarColor">@color/bg_base</item>
     </style>
 
-    <style name="Theme.MusicAssistantCar.Dialog" parent="Theme.MaterialComponents.DayNight.Dialog.Alert">
+    <style name="Theme.MusicAssistantCar.Dialog" parent="Theme.MaterialComponents.Dialog.Alert">
         <item name="android:background">@color/bg_surface_elevated</item>
         <item name="colorSurface">@color/bg_surface_elevated</item>
+        <item name="colorOnSurface">@color/text_primary</item>
         <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="textColorAlertDialogListItem">@color/text_primary</item>
+        <item name="android:textColorAlertDialogListItem">@color/text_primary</item>
         <item name="colorPrimary">@color/accent_primary</item>
         <item name="colorAccent">@color/accent_primary</item>
     </style>
