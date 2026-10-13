@@ -1345,22 +1345,26 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Connection Dot & Secure Token Provisioning
+        var lastPillClickTime = 0L
         binding.connectionContainer.setOnClickListener {
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (now - lastPillClickTime < 700L || !CarApiClient.isTokenConfigured()) {
+                lastPillClickTime = 0L
+                showTokenProvisioningDialog()
+                return@setOnClickListener
+            }
+            lastPillClickTime = now
             val snap = connectionManager.snapshot()
-            val message = if (!CarApiClient.isTokenConfigured()) {
-                "Chưa cấu hình API Token (chế độ Offline).\nNhấn giữ nút này để nhập Token kết nối máy chủ."
-            } else {
-                when (snap.uiStatus) {
-                    ConnectionStateManager.UiConnectionStatus.ONLINE ->
-                        "Đã kết nối máy chủ:\n${snap.activeEndpoint}\nĐộ trễ: ${if (snap.lastProbeLatencyMs >= 0) "${snap.lastProbeLatencyMs} ms" else "N/A"} · Mạng: ${snap.networkTransport.name}\n(Nhấn giữ để cấu hình Token / chẩn đoán)"
-                    ConnectionStateManager.UiConnectionStatus.CONNECTING ->
-                        "Đang kết nối tới máy chủ...\nKiểm tra Tailscale hoặc Wi‑Fi nội bộ."
-                    ConnectionStateManager.UiConnectionStatus.AUTH_ERROR ->
-                        "Lỗi xác thực API (401 Unauthorized).\nNhấn giữ nút này để cấu hình lại Token."
-                    ConnectionStateManager.UiConnectionStatus.OFFLINE -> {
-                        connectionManager.retryConnectionExplicitly()
-                        "Chưa kết nối máy chủ.\nLỗi: ${snap.lastErrorMessage ?: "Không phản hồi"}\nĐang thử kết nối lại... (Nhấn giữ để cấu hình Token)"
-                    }
+            val message = when (snap.uiStatus) {
+                ConnectionStateManager.UiConnectionStatus.ONLINE ->
+                    "Đã kết nối máy chủ:\n${snap.activeEndpoint}\nĐộ trễ: ${if (snap.lastProbeLatencyMs >= 0) "${snap.lastProbeLatencyMs} ms" else "N/A"} · Mạng: ${snap.networkTransport.name}\n(Nhấn giữ hoặc chạm 2 lần để cấu hình Token)"
+                ConnectionStateManager.UiConnectionStatus.CONNECTING ->
+                    "Đang kết nối tới máy chủ...\nKiểm tra Tailscale hoặc Wi‑Fi nội bộ."
+                ConnectionStateManager.UiConnectionStatus.AUTH_ERROR ->
+                    "Lỗi xác thực API (401 Unauthorized).\nNhấn giữ hoặc chạm 2 lần để cấu hình lại Token."
+                ConnectionStateManager.UiConnectionStatus.OFFLINE -> {
+                    connectionManager.retryConnectionExplicitly()
+                    "Chưa kết nối máy chủ.\nLỗi: ${snap.lastErrorMessage ?: "Không phản hồi"}\nĐang thử kết nối lại... (Nhấn giữ để cấu hình Token)"
                 }
             }
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
@@ -6485,6 +6489,7 @@ class MainActivity : AppCompatActivity() {
         updateFullscreenKeepScreenOn()
         logWindowMetrics("onResume")
         updateOfflineStorageDashboard()
+        handleStartupIntents(intent)
         if (browser != null) {
             refreshBackendStatus()
             // Reconcile Now Playing after returning from background or launcher.
@@ -6495,6 +6500,23 @@ class MainActivity : AppCompatActivity() {
             if (isAnyLyricsVisible()) {
                 startLyricsPositionLoop()
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleStartupIntents(intent)
+    }
+
+    private fun handleStartupIntents(inIntent: Intent?) {
+        val target = inIntent ?: return
+        if (target.getBooleanExtra("open_telegram_pairing", false)) {
+            target.removeExtra("open_telegram_pairing")
+            showTelegramDevicePairingDialog()
+        } else if (target.getBooleanExtra("open_token_dialog", false)) {
+            target.removeExtra("open_token_dialog")
+            showTokenProvisioningDialog()
         }
     }
 
