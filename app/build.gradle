@@ -29,8 +29,7 @@ android {
         versionCode 59
         versionName '0.6.39'
 
-        buildConfigField 'String', 'CAR_API_TOKEN',
-            '"' + carApiToken.replace('\\', '\\\\').replace('"', '\\"') + '"'
+        buildConfigField 'String', 'CAR_API_TOKEN', '""'
         buildConfigField 'String', 'CAR_API_PRIMARY',
             '"' + carApiPrimary + '"'
         buildConfigField 'String', 'CAR_API_SECONDARY',
@@ -40,7 +39,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField 'String', 'CAR_API_TOKEN',
+                '"' + carApiToken.replace('\\', '\\\\').replace('"', '\\"') + '"'
+        }
         release {
+            buildConfigField 'String', 'CAR_API_TOKEN', '""'
             minifyEnabled false
             proguardFiles getDefaultProguardFile(
                 'proguard-android-optimize.txt'

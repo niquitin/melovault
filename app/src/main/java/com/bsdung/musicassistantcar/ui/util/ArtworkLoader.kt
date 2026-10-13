@@ -12,8 +12,12 @@ import com.bsdung.musicassistantcar.R
 import com.bsdung.musicassistantcar.data.RemoteCatalog
 
 object ArtworkLoader {
-    private val headers = RemoteCatalog().authorizationHeaders()
     private var customImageLoader: ImageLoader? = null
+
+    private fun currentHeaders(context: Context): Map<String, String> {
+        com.bsdung.musicassistantcar.data.SecureTokenStore.init(context)
+        return com.bsdung.musicassistantcar.data.CarApiClient.currentAuthorizationHeaders()
+    }
 
     private fun getImageLoader(context: Context): ImageLoader {
         return customImageLoader ?: synchronized(this) {
@@ -40,6 +44,7 @@ object ArtworkLoader {
         val uriStr = uri.toString()
         if (uriStr.isBlank()) return
         val loader = getImageLoader(context)
+        val headers = currentHeaders(context)
         val request = ImageRequest.Builder(context.applicationContext)
             .data(uri)
             .apply {
@@ -65,6 +70,7 @@ object ArtworkLoader {
         val density = imageView.resources.displayMetrics.density
         val radiusPx = cornerRadiusDp * density
         val loader = getImageLoader(imageView.context)
+        val headers = currentHeaders(imageView.context)
 
         imageView.load(uri, loader) {
             crossfade(200)

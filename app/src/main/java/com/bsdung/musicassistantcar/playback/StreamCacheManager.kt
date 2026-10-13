@@ -488,6 +488,14 @@ object StreamCacheManager {
         override fun open(dataSpec: DataSpec): Long {
             openTimeMs = SystemClock.elapsedRealtime()
             hasLoggedFirstByte = false
+            (delegate as? androidx.media3.datasource.HttpDataSource)?.let { httpDs ->
+                val token = com.bsdung.musicassistantcar.data.CarApiClient.activeApiToken()
+                if (token.isNotBlank()) {
+                    httpDs.setRequestProperty("Authorization", "Bearer $token")
+                } else {
+                    httpDs.clearRequestProperty("Authorization")
+                }
+            }
             if (!isPrefetch) {
                 Log.i(TAG, "[SHUFFLE_BENCHMARK] stage=HTTP_CONNECT_START timestamp_monotonic_ms=$openTimeMs uri=${dataSpec.uri}")
             }

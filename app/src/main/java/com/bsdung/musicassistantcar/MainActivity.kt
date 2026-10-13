@@ -555,6 +555,7 @@ class MainActivity : AppCompatActivity() {
             },
         )
 
+        com.bsdung.musicassistantcar.data.SecureTokenStore.init(applicationContext)
         connectionManager.addListener(connectionListener)
         connectBrowser()
     }
@@ -1343,29 +1344,30 @@ class MainActivity : AppCompatActivity() {
             browser?.seekToNextMediaItem()
         }
 
-        // Connection Dot & Diagnostics
+        // Connection Dot & Secure Token Provisioning
         binding.connectionContainer.setOnClickListener {
             val snap = connectionManager.snapshot()
-            val message = when (snap.uiStatus) {
-                ConnectionStateManager.UiConnectionStatus.ONLINE ->
-                    "Đã kết nối máy chủ:\n${snap.activeEndpoint}\nĐộ trễ: ${if (snap.lastProbeLatencyMs >= 0) "${snap.lastProbeLatencyMs} ms" else "N/A"} · Mạng: ${snap.networkTransport.name}\n(Nhấn giữ để xuất chẩn đoán kết nối)"
-                ConnectionStateManager.UiConnectionStatus.CONNECTING ->
-                    "Đang kết nối tới máy chủ...\nKiểm tra Tailscale hoặc Wi‑Fi nội bộ."
-                ConnectionStateManager.UiConnectionStatus.AUTH_ERROR ->
-                    "Lỗi xác thực API (401 Unauthorized).\nKiểm tra token cấu hình trong BuildConfig."
-                ConnectionStateManager.UiConnectionStatus.OFFLINE -> {
-                    connectionManager.retryConnectionExplicitly()
-                    "Chưa kết nối máy chủ.\nLỗi: ${snap.lastErrorMessage ?: "Không phản hồi"}\nĐang thử kết nối lại... (Nhấn giữ để xuất chẩn đoán)"
+            val message = if (!CarApiClient.isTokenConfigured()) {
+                "Chưa cấu hình API Token (chế độ Offline).\nNhấn giữ nút này để nhập Token kết nối máy chủ."
+            } else {
+                when (snap.uiStatus) {
+                    ConnectionStateManager.UiConnectionStatus.ONLINE ->
+                        "Đã kết nối máy chủ:\n${snap.activeEndpoint}\nĐộ trễ: ${if (snap.lastProbeLatencyMs >= 0) "${snap.lastProbeLatencyMs} ms" else "N/A"} · Mạng: ${snap.networkTransport.name}\n(Nhấn giữ để cấu hình Token / chẩn đoán)"
+                    ConnectionStateManager.UiConnectionStatus.CONNECTING ->
+                        "Đang kết nối tới máy chủ...\nKiểm tra Tailscale hoặc Wi‑Fi nội bộ."
+                    ConnectionStateManager.UiConnectionStatus.AUTH_ERROR ->
+                        "Lỗi xác thực API (401 Unauthorized).\nNhấn giữ nút này để cấu hình lại Token."
+                    ConnectionStateManager.UiConnectionStatus.OFFLINE -> {
+                        connectionManager.retryConnectionExplicitly()
+                        "Chưa kết nối máy chủ.\nLỗi: ${snap.lastErrorMessage ?: "Không phản hồi"}\nĐang thử kết nối lại... (Nhấn giữ để cấu hình Token)"
+                    }
                 }
             }
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
 
         binding.connectionContainer.setOnLongClickListener {
-            val report = connectionManager.exportDiagnosticsReport()
-            val file = java.io.File(getExternalFilesDir(null) ?: cacheDir, "connectivity_diagnostics.txt")
-            file.writeText(report)
-            Toast.makeText(this, "Đã xuất chẩn đoán kết nối:\n${file.absolutePath}", Toast.LENGTH_LONG).show()
+            showTokenProvisioningDialog()
             true
         }
 
@@ -4639,6 +4641,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun triggerStartupPlaylistSyncOnce() {
+        if (!CarApiClient.isTokenConfigured()) return
         if (hasRunStartupPlaylistSync) return
         hasRunStartupPlaylistSync = true
         val coordinator = com.bsdung.musicassistantcar.playback.OfflinePlaylistSyncCoordinator.getDefault(this)
@@ -5722,6 +5725,12 @@ class MainActivity : AppCompatActivity() {
         uiStatus: ConnectionStateManager.UiConnectionStatus,
         snapshot: ConnectionStateManager.StateSnapshot,
     ) {
+        if (!CarApiClient.isTokenConfigured()) {
+            activeBackendUrl = null
+            binding.statusDot.setImageResource(R.drawable.bg_status_dot_offline)
+            binding.statusText.text = "Cần Token"
+            return
+        }
         when (uiStatus) {
             ConnectionStateManager.UiConnectionStatus.ONLINE -> {
                 if (activeBackendUrl != null && activeBackendUrl != snapshot.activeEndpoint) {
@@ -5746,6 +5755,151 @@ class MainActivity : AppCompatActivity() {
                 binding.statusText.text = "Lỗi Token"
             }
         }
+    }
+
+    private fun showTokenProvisioningDialog() {
+        val density = resources.displayMetrics.density
+        val padH = (20 * density).roundToInt()
+        val padV = (12 * density).roundToInt()
+
+        val container = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(padH, padV, padH, padV / 2)
+        }
+
+        val hasRuntime = CarApiClient.hasRuntimeToken()
+        val isConfigured = CarApiClient.isTokenConfigured()
+
+        val statusSummary = when {
+            hasRuntime ->
+                "Trạng thái: Đã cấu hình Token mã hóa (AES-GCM Keystore).\nNhập Token mới bên dưới nếu muốn thay thế, hoặc chọn Xóa Token."
+            isConfigured ->
+                "Trạng thái: Đang dùng cấu hình phát triển.\nNhập Token mới bên dưới để lưu mã hóa AES-GCM."
+            else ->
+                "Trạng thái: Chưa cấu hình Token (Chế độ Offline).\nNhập API Token một lần để kết nối máy chủ MeloVault. Dữ liệu đệm và nhạc offline luôn được giữ nguyên."
+        }
+
+        val statusView = android.widget.TextView(this).apply {
+            id = View.generateViewId()
+            text = statusSummary
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_secondary))
+            textSize = 13f
+            setPadding(0, 0, 0, (10 * density).roundToInt())
+        }
+        container.addView(statusView)
+
+        val tokenInput = object : androidx.appcompat.widget.AppCompatEditText(this) {
+            override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo?) {
+                super.onInitializeAccessibilityNodeInfo(info)
+                if (!text.isNullOrEmpty()) {
+                    info?.text = "••••••••"
+                }
+                info?.isPassword = true
+            }
+        }.apply {
+            hint = "Nhập Bearer API Token..."
+            isSingleLine = true
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+            transformationMethod = android.text.method.PasswordTransformationMethod.getInstance()
+            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
+            setHintTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_secondary))
+        }
+        container.addView(tokenInput)
+
+        val builder = AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            .setTitle("Cấu hình bảo mật API Token")
+            .setView(container)
+            .setPositiveButton("Lưu & Kết nối") { _, _ ->
+                val rawInput = tokenInput.text?.toString()?.trim().orEmpty()
+                tokenInput.text?.clear()
+                if (rawInput.isBlank()) {
+                    Toast.makeText(this, "Vui lòng nhập API Token hợp lệ", Toast.LENGTH_SHORT).show()
+                } else if (hasRuntime) {
+                    showConfirmReplaceTokenDialog(rawInput)
+                } else {
+                    applyNewRuntimeToken(rawInput)
+                }
+            }
+            .setNegativeButton("Đóng") { _, _ ->
+                tokenInput.text?.clear()
+            }
+
+        if (hasRuntime || isConfigured) {
+            builder.setNeutralButton("Xóa Token") { _, _ ->
+                tokenInput.text?.clear()
+                showConfirmClearTokenDialog()
+            }
+        } else {
+            builder.setNeutralButton("Chẩn đoán") { _, _ ->
+                tokenInput.text?.clear()
+                exportDiagnosticsToFile()
+            }
+        }
+
+        val dialog = builder.create()
+        dialog.show()
+        tokenInput.requestFocus()
+    }
+
+    private fun showConfirmReplaceTokenDialog(newToken: String) {
+        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            .setTitle("Xác nhận thay thế Token")
+            .setMessage("Thiết bị đã có API Token được lưu mã hóa. Bạn có chắc chắn muốn thay thế bằng Token mới không?")
+            .setPositiveButton("Thay thế") { _, _ ->
+                applyNewRuntimeToken(newToken)
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
+    }
+
+    private fun showConfirmClearTokenDialog() {
+        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            .setTitle("Xác nhận xóa Token")
+            .setMessage("Bạn có chắc chắn muốn xóa API Token khỏi thiết bị?\nỨng dụng sẽ chuyển sang chế độ Offline (dữ liệu đệm và nhạc đã tải offline vẫn được giữ nguyên).")
+            .setPositiveButton("Xóa Token") { _, _ ->
+                com.bsdung.musicassistantcar.data.SecureTokenStore.clearRuntimeToken()
+                val snap = connectionManager.snapshot()
+                updateConnectionUi(snap.uiStatus, snap)
+                if (navManager.searchQuery.isNotBlank()) {
+                    runSearch(navManager.searchQuery, navManager.currentPage)
+                } else {
+                    loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
+                }
+                Toast.makeText(this, "Đã xóa API Token. Đang ở chế độ Offline.", Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
+    }
+
+    private fun applyNewRuntimeToken(newToken: String) {
+        val saved = com.bsdung.musicassistantcar.data.SecureTokenStore.saveRuntimeToken(newToken)
+        if (!saved) {
+            Toast.makeText(this, "Không thể mã hóa và lưu Token vào Keystore", Toast.LENGTH_LONG).show()
+            return
+        }
+        // Clear clipboard if the user pasted the token
+        runCatching {
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                clipboard?.clearPrimaryClip()
+            }
+        }
+        Toast.makeText(this, "Đã lưu Token mã hóa (AES-GCM) và đang kết nối lại...", Toast.LENGTH_SHORT).show()
+        connectionManager.retryConnectionExplicitly()
+        if (navManager.searchQuery.isNotBlank()) {
+            runSearch(navManager.searchQuery, navManager.currentPage)
+        } else {
+            loadChildren(navManager.currentParentId, navManager.currentPage, navManager.currentLabel)
+        }
+        triggerStartupPlaylistSyncOnce()
+    }
+
+    private fun exportDiagnosticsToFile() {
+        val report = connectionManager.exportDiagnosticsReport()
+        val file = java.io.File(getExternalFilesDir(null) ?: cacheDir, "connectivity_diagnostics.txt")
+        file.writeText(report)
+        Toast.makeText(this, "Đã xuất chẩn đoán kết nối:\n${file.absolutePath}", Toast.LENGTH_LONG).show()
     }
 
     private fun requestNotificationPermission() {

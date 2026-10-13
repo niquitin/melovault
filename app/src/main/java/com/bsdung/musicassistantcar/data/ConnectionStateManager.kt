@@ -176,6 +176,7 @@ class ConnectionStateManager(
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     init {
+        SecureTokenStore.init(context)
         registerNetworkCallback()
     }
 

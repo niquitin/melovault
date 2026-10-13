@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="melovault_secure_token.enc" />
+        <exclude domain="file" path="melovault_token_cleared.flag" />
+        <exclude domain="sharedpref" path="melovault_secure_auth.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="melovault_secure_token.enc" />
+        <exclude domain="file" path="melovault_token_cleared.flag" />
+        <exclude domain="sharedpref" path="melovault_secure_auth.xml" />
+    </device-transfer>
+</data-extraction-rules>

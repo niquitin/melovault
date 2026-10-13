@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <exclude domain="file" path="melovault_secure_token.enc" />
+    <exclude domain="file" path="melovault_token_cleared.flag" />
+    <exclude domain="sharedpref" path="melovault_secure_auth.xml" />
+</full-backup-content>

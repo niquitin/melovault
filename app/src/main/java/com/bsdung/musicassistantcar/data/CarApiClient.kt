@@ -176,6 +176,23 @@ data class SignalPathInfo(
 )
 
 open class CarApiClient {
+    companion object {
+        fun activeApiToken(): String = SecureTokenStore.resolveActiveToken()
+
+        fun isTokenConfigured(): Boolean = activeApiToken().isNotBlank()
+
+        fun hasRuntimeToken(): Boolean = SecureTokenStore.hasRuntimeToken()
+
+        fun currentAuthorizationHeaders(): Map<String, String> {
+            val token = activeApiToken()
+            return if (token.isNotBlank()) {
+                mapOf("Authorization" to "Bearer $token")
+            } else {
+                emptyMap()
+            }
+        }
+    }
+
     private fun cleanString(
         item: JSONObject,
         key: String,
@@ -579,7 +596,7 @@ open class CarApiClient {
     fun authorizationHeaders(): Map<String, String> =
         mapOf(
             "Authorization" to
-                "Bearer ${BuildConfig.CAR_API_TOKEN}"
+                "Bearer ${activeApiToken()}"
         )
 
     fun prewarm(
@@ -1133,6 +1150,11 @@ open class CarApiClient {
         connectTimeoutMs: Int = 6_000,
         readTimeoutMs: Int = 15_000,
     ): JSONObject {
+        val token = activeApiToken()
+        if (token.isBlank()) {
+            connectionStateManager?.reportApiCall(path, activeBaseUrl, success = false, httpCode = 401)
+            throw IOException("Chưa cấu hình API Token (401 Unauthorized)")
+        }
         var lastError: Exception? = null
         val bodyBytes = bodyJson?.toString()?.toByteArray(Charsets.UTF_8)
         for (base in orderedEndpoints()) {
@@ -1143,7 +1165,7 @@ open class CarApiClient {
                 connection.connectTimeout = connectTimeoutMs
                 connection.readTimeout = readTimeoutMs
                 connection.setRequestProperty("Accept", "application/json")
-                connection.setRequestProperty("Authorization", "Bearer ${BuildConfig.CAR_API_TOKEN}")
+                connection.setRequestProperty("Authorization", "Bearer $token")
                 if (bodyBytes != null) {
                     connection.doOutput = true
                     connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
@@ -1470,6 +1492,10 @@ open class CarApiClient {
     }
 
     private fun getJson(path: String): JSONObject {
+        if (activeApiToken().isBlank()) {
+            connectionStateManager?.reportApiCall(path, activeBaseUrl, success = false, httpCode = 401)
+            throw IOException("Chưa cấu hình API Token (401 Unauthorized)")
+        }
         var lastError: Exception? = null
         for (base in orderedEndpoints()) {
             val reqStart = System.currentTimeMillis()
@@ -1529,7 +1555,7 @@ open class CarApiClient {
         if (authenticated) {
             connection.setRequestProperty(
                 "Authorization",
-                "Bearer ${BuildConfig.CAR_API_TOKEN}",
+                "Bearer ${activeApiToken()}",
             )
         }
         return connection
