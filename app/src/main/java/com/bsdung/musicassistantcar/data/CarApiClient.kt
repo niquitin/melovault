@@ -175,6 +175,23 @@ data class SignalPathInfo(
     val compatibilityTo: String? = null,
 )
 
+data class PairStartResult(
+    val status: String,
+    val sessionId: String,
+    val pairCode: String,
+    val devicePollToken: String,
+    val expiresInSec: Int,
+    val deviceId: String,
+    val deviceName: String,
+)
+
+data class PairPollResult(
+    val status: String,
+    val deviceToken: String? = null,
+    val expiresInSec: Int? = null,
+    val error: String? = null,
+)
+
 open class CarApiClient {
     companion object {
         fun activeApiToken(): String = SecureTokenStore.resolveActiveToken()
@@ -1197,6 +1214,107 @@ open class CarApiClient {
         throw IOException(
             "Không kết nối được MeloVault backend cho $method $path",
             lastError,
+        )
+    }
+
+    fun requestJsonUnauthenticated(
+        method: String,
+        path: String,
+        bodyJson: JSONObject? = null,
+        extraHeaders: Map<String, String> = emptyMap(),
+        connectTimeoutMs: Int = 6_000,
+        readTimeoutMs: Int = 15_000,
+    ): JSONObject {
+        var lastError: Exception? = null
+        val bodyBytes = bodyJson?.toString()?.toByteArray(Charsets.UTF_8)
+        for (base in orderedEndpoints()) {
+            val reqStart = System.currentTimeMillis()
+            try {
+                val connection = URL("$base$path").openConnection() as HttpURLConnection
+                connection.requestMethod = method
+                connection.connectTimeout = connectTimeoutMs
+                connection.readTimeout = readTimeoutMs
+                connection.setRequestProperty("Accept", "application/json")
+                for ((k, v) in extraHeaders) {
+                    connection.setRequestProperty(k, v)
+                }
+                if (bodyBytes != null) {
+                    connection.doOutput = true
+                    connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                    connection.outputStream.use { it.write(bodyBytes) }
+                }
+                val result = connection.useResponse { code, body ->
+                    val latency = System.currentTimeMillis() - reqStart
+                    if (code !in 200..299) {
+                        connectionStateManager?.reportApiCall(path, base, success = false, httpCode = code, latencyMs = latency)
+                        throw IOException("Backend $code at $base: $body")
+                    }
+                    connectionStateManager?.reportApiCall(path, base, success = true, httpCode = code, latencyMs = latency)
+                    if (body.isBlank()) JSONObject() else JSONObject(body)
+                }
+                activeBaseUrl = base
+                endpointFailures[base] = 0
+                return result
+            } catch (exc: Exception) {
+                lastError = exc
+                val latency = System.currentTimeMillis() - reqStart
+                val currentFails = (endpointFailures[base] ?: 0) + 1
+                endpointFailures[base] = currentFails
+                connectionStateManager?.reportApiCall(path, base, success = false, latencyMs = latency, error = exc)
+                if (activeBaseUrl == base && currentFails >= 2) {
+                    activeBaseUrl = null
+                }
+            }
+        }
+        throw IOException(
+            "Không kết nối được MeloVault backend cho $method $path",
+            lastError,
+        )
+    }
+
+    open fun pairStart(
+        deviceId: String,
+        deviceName: String,
+        deviceSecret: String,
+    ): PairStartResult {
+        val payload = JSONObject().apply {
+            put("device_id", deviceId)
+            put("device_name", deviceName)
+            put("device_secret", deviceSecret)
+        }
+        val json = requestJsonUnauthenticated("POST", "/v1/device/pair/start", payload)
+        return PairStartResult(
+            status = json.getString("status"),
+            sessionId = json.getString("session_id"),
+            pairCode = json.getString("pair_code"),
+            devicePollToken = json.getString("device_poll_token"),
+            expiresInSec = json.optInt("expires_in_sec", 300),
+            deviceId = json.getString("device_id"),
+            deviceName = json.getString("device_name"),
+        )
+    }
+
+    open fun pairPollStatus(
+        sessionId: String,
+        pollToken: String,
+        deviceSecret: String,
+    ): PairPollResult {
+        val encodedSession = Uri.encode(sessionId)
+        val path = "/v1/device/pair/status?session_id=$encodedSession"
+        val customHeaders = mapOf(
+            "X-Poll-Token" to pollToken,
+            "X-Device-Secret" to deviceSecret,
+        )
+        val json = requestJsonUnauthenticated(
+            method = "GET",
+            path = path,
+            extraHeaders = customHeaders,
+        )
+        return PairPollResult(
+            status = json.optString("status", "unknown"),
+            deviceToken = if (json.has("device_token")) json.optString("device_token") else null,
+            expiresInSec = if (json.has("expires_in_sec")) json.optInt("expires_in_sec") else null,
+            error = if (json.has("error")) json.optString("error") else null,
         )
     }
 

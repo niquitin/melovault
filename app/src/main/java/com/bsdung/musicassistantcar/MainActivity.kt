@@ -5788,6 +5788,28 @@ class MainActivity : AppCompatActivity() {
         }
         container.addView(statusView)
 
+        val tgPairButton = com.google.android.material.button.MaterialButton(this).apply {
+            id = View.generateViewId()
+            text = "🚀 Đăng nhập bằng Telegram (Khuyên dùng)"
+            textSize = 13.5f
+            isAllCaps = false
+            cornerRadius = (8 * density).roundToInt()
+            setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.accent_primary))
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_primary))
+            setPadding((12 * density).roundToInt(), (10 * density).roundToInt(), (12 * density).roundToInt(), (10 * density).roundToInt())
+        }
+        container.addView(tgPairButton)
+
+        val dividerLabel = android.widget.TextView(this).apply {
+            id = View.generateViewId()
+            text = "— Hoặc nhập API Token thủ công —"
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_tertiary))
+            textSize = 12f
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, (10 * density).roundToInt(), 0, (6 * density).roundToInt())
+        }
+        container.addView(dividerLabel)
+
         val tokenInput = object : androidx.appcompat.widget.AppCompatEditText(this) {
             override fun onInitializeAccessibilityNodeInfo(info: android.view.accessibility.AccessibilityNodeInfo?) {
                 super.onInitializeAccessibilityNodeInfo(info)
@@ -5838,8 +5860,251 @@ class MainActivity : AppCompatActivity() {
         }
 
         val dialog = builder.create()
+        tgPairButton.setOnClickListener {
+            tokenInput.text?.clear()
+            dialog.dismiss()
+            showTelegramDevicePairingDialog()
+        }
         dialog.show()
         tokenInput.requestFocus()
+    }
+
+    private fun showTelegramDevicePairingDialog() {
+        val density = resources.displayMetrics.density
+        val padH = (20 * density).roundToInt()
+        val padV = (16 * density).roundToInt()
+
+        val container = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding(padH, padV, padH, (8 * density).roundToInt())
+        }
+
+        val descText = android.widget.TextView(this).apply {
+            id = View.generateViewId()
+            text = "Khởi tạo mã xác thực một lần để kết nối an toàn với máy chủ MeloVault qua bot Telegram."
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_secondary))
+            textSize = 13f
+            setPadding(0, 0, 0, (12 * density).roundToInt())
+        }
+        container.addView(descText)
+
+        // Card box for large 6-digit code
+        val cardBox = android.widget.LinearLayout(this).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setBackgroundColor(ContextCompat.getColor(this@MainActivity, R.color.bg_surface_elevated))
+            setPadding((16 * density).roundToInt(), (12 * density).roundToInt(), (16 * density).roundToInt(), (12 * density).roundToInt())
+            gravity = android.view.Gravity.CENTER
+        }
+
+        val codeLabel = android.widget.TextView(this).apply {
+            id = View.generateViewId()
+            text = "MÃ GHÉP NỐI"
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_tertiary))
+            gravity = android.view.Gravity.CENTER
+        }
+        cardBox.addView(codeLabel)
+
+        val codeValueText = android.widget.TextView(this).apply {
+            id = View.generateViewId()
+            text = "••• •••"
+            textSize = 34f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.accent_primary))
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, (4 * density).roundToInt(), 0, (4 * density).roundToInt())
+        }
+        cardBox.addView(codeValueText)
+
+        val commandSnippetText = android.widget.TextView(this).apply {
+            id = View.generateViewId()
+            text = "Đang tạo mã ghép nối..."
+            textSize = 13f
+            typeface = android.graphics.Typeface.MONOSPACE
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.status_online))
+            gravity = android.view.Gravity.CENTER
+        }
+        cardBox.addView(commandSnippetText)
+        container.addView(cardBox)
+
+        val timerText = android.widget.TextView(this).apply {
+            id = View.generateViewId()
+            text = "⏳ Thời hạn: 05:00"
+            textSize = 13f
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.status_connecting))
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, (12 * density).roundToInt(), 0, (4 * density).roundToInt())
+        }
+        container.addView(timerText)
+
+        val instructionsText = android.widget.TextView(this).apply {
+            id = View.generateViewId()
+            text = "Mở Telegram, bấm nút [Cho phép] trong tin nhắn bot vừa gửi hoặc gõ lệnh /pair <mã>. MeloVault sẽ tự động đăng nhập ngay khi bạn xác nhận."
+            textSize = 12.5f
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_secondary))
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, (4 * density).roundToInt(), 0, (8 * density).roundToInt())
+        }
+        container.addView(instructionsText)
+
+        val progressBar = android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            id = View.generateViewId()
+            isIndeterminate = true
+            visibility = View.VISIBLE
+        }
+        container.addView(progressBar)
+
+        val statusIndicatorText = android.widget.TextView(this).apply {
+            id = View.generateViewId()
+            text = "Đang kết nối máy chủ..."
+            textSize = 12f
+            setTextColor(ContextCompat.getColor(this@MainActivity, R.color.text_tertiary))
+            gravity = android.view.Gravity.CENTER
+            setPadding(0, (4 * density).roundToInt(), 0, (4 * density).roundToInt())
+        }
+        container.addView(statusIndicatorText)
+
+        var isPairingCancelled = false
+        var countDownTimer: android.os.CountDownTimer? = null
+
+        val dialog = AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            .setTitle("Ghép nối thiết bị qua Telegram")
+            .setView(container)
+            .setNegativeButton("Hủy") { d, _ ->
+                isPairingCancelled = true
+                countDownTimer?.cancel()
+                d.dismiss()
+            }
+            .create()
+
+        dialog.setOnDismissListener {
+            isPairingCancelled = true
+            countDownTimer?.cancel()
+        }
+        dialog.show()
+
+        // Generate client-side secret
+        val deviceSecret = java.util.UUID.randomUUID().toString().replace("-", "") +
+                java.util.UUID.randomUUID().toString().replace("-", "")
+        val androidId = runCatching {
+            android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID)
+        }.getOrNull().orEmpty().ifBlank { "dev_" + java.util.UUID.randomUUID().toString().take(8) }
+        val deviceModel = android.os.Build.MODEL.replace(" ", "_").lowercase()
+        val deviceId = "melo_${deviceModel}_$androidId"
+        val deviceName = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim()
+
+        uiExecutor.submit {
+            val client = CarApiClient()
+            val startOutcome = runCatching {
+                client.pairStart(
+                    deviceId = deviceId,
+                    deviceName = deviceName,
+                    deviceSecret = deviceSecret,
+                )
+            }
+
+            runOnUiThread {
+                if (isPairingCancelled || isFinishing) return@runOnUiThread
+
+                if (startOutcome.isFailure) {
+                    val errorMsg = startOutcome.exceptionOrNull()?.message ?: "Lỗi kết nối máy chủ"
+                    statusIndicatorText.text = "❌ $errorMsg"
+                    progressBar.visibility = View.GONE
+                    commandSnippetText.text = "Không thể tạo mã"
+                    commandSnippetText.setTextColor(ContextCompat.getColor(this@MainActivity, R.color.status_offline))
+                    return@runOnUiThread
+                }
+
+                val session = startOutcome.getOrThrow()
+                val pairCode = session.pairCode
+                val formattedCode = if (pairCode.length == 6) {
+                    "${pairCode.take(3)} ${pairCode.drop(3)}"
+                } else {
+                    pairCode
+                }
+
+                codeValueText.text = formattedCode
+                commandSnippetText.text = "/pair $pairCode"
+                statusIndicatorText.text = "Đang chờ bạn phê duyệt trên Telegram..."
+
+                val totalDurationMs = (session.expiresInSec * 1000L).coerceAtLeast(10_000L)
+                countDownTimer = object : android.os.CountDownTimer(totalDurationMs, 1000L) {
+                    override fun onTick(millisUntilFinished: Long) {
+                        val secLeft = millisUntilFinished / 1000L
+                        val min = secLeft / 60L
+                        val sec = secLeft % 60L
+                        timerText.text = "⏳ Thời hạn: %02d:%02d".format(min, sec)
+                    }
+
+                    override fun onFinish() {
+                        timerText.text = "⏳ Mã ghép nối đã hết hạn"
+                        statusIndicatorText.text = "Hết thời gian chờ. Vui lòng bấm Hủy và thử lại."
+                        progressBar.visibility = View.GONE
+                        isPairingCancelled = true
+                    }
+                }.start()
+
+                // Start polling thread
+                uiExecutor.submit {
+                    val sessionId = session.sessionId
+                    val pollToken = session.devicePollToken
+
+                    while (!isPairingCancelled && !isFinishing) {
+                        Thread.sleep(2000L)
+                        if (isPairingCancelled || isFinishing) break
+
+                        val pollOutcome = runCatching {
+                            client.pairPollStatus(
+                                sessionId = sessionId,
+                                pollToken = pollToken,
+                                deviceSecret = deviceSecret,
+                            )
+                        }
+
+                        if (pollOutcome.isSuccess) {
+                            val pollRes = pollOutcome.getOrThrow()
+                            when (pollRes.status) {
+                                "approved" -> {
+                                    val issuedToken = pollRes.deviceToken
+                                    if (!issuedToken.isNullOrBlank()) {
+                                        runOnUiThread {
+                                            countDownTimer?.cancel()
+                                            dialog.dismiss()
+                                            applyNewRuntimeToken(issuedToken)
+                                            Toast.makeText(
+                                                this@MainActivity,
+                                                "✅ Ghép nối thành công! Đã kết nối với MeloVault.",
+                                                Toast.LENGTH_LONG,
+                                            ).show()
+                                        }
+                                        return@submit
+                                    }
+                                }
+                                "rejected" -> {
+                                    runOnUiThread {
+                                        countDownTimer?.cancel()
+                                        statusIndicatorText.text = "❌ Yêu cầu ghép nối đã bị từ chối trên Telegram."
+                                        progressBar.visibility = View.GONE
+                                    }
+                                    return@submit
+                                }
+                                "expired" -> {
+                                    runOnUiThread {
+                                        countDownTimer?.cancel()
+                                        statusIndicatorText.text = "⏳ Mã ghép nối đã hết hạn."
+                                        progressBar.visibility = View.GONE
+                                    }
+                                    return@submit
+                                }
+                                "pending" -> {
+                                    // continue polling
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun showConfirmReplaceTokenDialog(newToken: String) {
