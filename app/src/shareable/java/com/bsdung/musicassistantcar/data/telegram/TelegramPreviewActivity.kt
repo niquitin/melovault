@@ -1,7 +1,10 @@
 package com.bsdung.musicassistantcar.data.telegram
 
+import android.app.Activity
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.text.InputType
 import android.util.Base64
 import android.view.View
@@ -11,8 +14,11 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import com.bsdung.musicassistantcar.BuildConfig
 import com.bsdung.musicassistantcar.R
@@ -30,7 +36,8 @@ import org.json.JSONObject
 
 /**
  * Internal preview, intentionally limited to audio in the user's own
- * Telegram Saved Messages. No personal/backend fallbacks, no Google Drive.
+ * Telegram Saved Messages plus user-selected SAF documents (including Drive
+ * when the device provides it). No direct Drive OAuth or private backend.
  * User must authenticate on-device; app-level developer API config is not
  * a Telegram user session.
  */
@@ -49,6 +56,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var submit: Button
     private lateinit var qrLogin: Button
     private lateinit var refresh: Button
+    private lateinit var openDocument: Button
     private lateinit var logout: Button
     private lateinit var tracks: ListView
     private lateinit var adapter: ArrayAdapter<String>
@@ -70,10 +78,49 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var currentTask = ""
     private var mutedMessages = false
 
+    // Android's system picker grants access only to the selected document.
+    // Deliberately do not persist or log provider URIs or account tokens.
+    private val openDocumentResult = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK || !auth.isReady()) {
+            return@registerForActivityResult
+        }
+        val uri = result.data?.data ?: return@registerForActivityResult
+        val fileName = runCatching {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME),
+                null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        }.getOrNull()?.take(96) ?: "Tệp âm thanh"
+        val mime = runCatching { contentResolver.getType(uri).orEmpty() }
+            .getOrDefault("")
+        val allowed = listOf(".mp3", ".flac", ".wav", ".m4a", ".ogg", ".opus")
+            .any { fileName.endsWith(it, ignoreCase = true) } || mime.startsWith("audio/")
+        if (!allowed) {
+            showMessage("Chỉ hỗ trợ chọn tệp âm thanh.")
+            return@registerForActivityResult
+        }
+        // File remains under the selected account/provider's control. No copy
+        // into TDLib's isolated cache, and no persistent URI permission.
+        downloadWaiting = null
+        player.stop()
+        player.setMediaItem(MediaItem.fromUri(uri))
+        player.prepare()
+        player.play()
+        showMessage("Đang mở tệp: $fileName")
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setTheme(R.style.Theme_MusicAssistantCar)
         player = ExoPlayer.Builder(this).build()
+        player.addListener(object : Player.Listener {
+            override fun onPlayerError(error: PlaybackException) {
+                // Do not surface provider URLs, filenames or exception details.
+                showMessage("Không phát được tệp âm thanh (Media3 mã ${error.errorCode}).")
+            }
+        })
         buildUi()
         if (BuildConfig.TELEGRAM_APP_API_ID <= 0 ||
             BuildConfig.TELEGRAM_APP_API_HASH.length != 32) {
@@ -95,7 +142,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             root.addView(this)
         }
         note = TextView(this).apply {
-            text = "Thử nghiệm: nhạc từ Saved Messages của tài khoản Telegram đang đăng nhập. Chưa hỗ trợ Google Drive, playlist hay phát nền."
+            text = "Thử nghiệm: Saved Messages Telegram và tệp âm thanh do người dùng chọn qua Android (có thể từ Google Drive). Chưa có Google Drive OAuth, playlist hoặc phát nền."
             textSize = 13f
             root.addView(this)
         }
@@ -127,6 +174,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
             text = "Tải danh sách nhạc Saved Messages"
             isEnabled = false
             setOnClickListener { loadSavedMessages() }
+            root.addView(this)
+        }
+        openDocument = Button(this).apply {
+            text = "Chọn nhạc từ Google Drive / thiết bị"
+            isEnabled = false
+            setOnClickListener { openAudioDocument() }
             root.addView(this)
         }
         logout = Button(this).apply {
@@ -318,6 +371,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     showMessage("Đã đăng nhập Telegram. Tải nhạc trong Saved Messages.")
                     runOnUiThread {
                         refresh.isEnabled = true
+                        openDocument.isEnabled = true
                         logout.isEnabled = true
                         submit.isEnabled = false
                         input.visibility = View.GONE
@@ -488,6 +542,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     songs.clear()
                     adapter.clear()
                     refresh.isEnabled = false
+                    openDocument.isEnabled = false
                     logout.isEnabled = false
                     submit.isEnabled = false
                 }
@@ -541,6 +596,17 @@ class TelegramPreviewActivity : AppCompatActivity() {
             input.text?.clear()
             showMessage("Không gửi được yêu cầu. Kiểm tra mạng và thử lại.")
         }
+    }
+
+    private fun openAudioDocument() {
+        if (!auth.isReady()) return
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*" // Some Drive providers label FLAC as octet-stream.
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        runCatching { openDocumentResult.launch(intent) }
+            .onFailure { showMessage("Không mở được trình chọn tệp trên thiết bị.") }
     }
 
     private fun loadSavedMessages() {
@@ -622,6 +688,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         adapter.clear()
         downloadWaiting = null
         refresh.isEnabled = false
+        openDocument.isEnabled = false
         logout.isEnabled = false
         submit.isEnabled = false
         showMessage("Đang đăng xuất; đợi Telegram đóng phiên.")
