@@ -81,6 +81,9 @@ class BackgroundOfflinePlaylistSyncTest {
 
     @Before
     fun setup() {
+        // This suite checks the owner's server-backed playlist sync, absent from Shareable.
+        // Shareable's account-owned Telegram sync requires its own tests when implemented.
+        org.junit.Assume.assumeTrue(com.bsdung.musicassistantcar.BuildConfig.PERSONAL_BACKEND_ENABLED)
         storeDir = tempFolder.newFolder("bg_playlist_sync_test")
         store = OfflineMetadataStore(storeDir)
     }

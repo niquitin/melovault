@@ -1,6 +1,7 @@
 package com.bsdung.musicassistantcar.data
 
 import android.net.Uri
+import com.bsdung.musicassistantcar.BuildConfig
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 
@@ -183,7 +184,13 @@ class RemoteCatalog(
             "Playlists",
             "Danh sách phát",
         ),
-    )
+    ).filter { item ->
+        // E9 Shareable preview must never offer private-backend categories.
+        // Telegram personal access will be implemented as a separate account-owned source.
+        BuildConfig.PERSONAL_BACKEND_ENABLED ||
+            item.mediaId == DEVICE_LOCAL_ID ||
+            item.mediaId == DOWNLOADED_ID
+    }
 
     fun children(
         parentId: String,

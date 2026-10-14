@@ -353,6 +353,8 @@ class SmartOfflinePlaylistSyncTest {
      */
     @Test
     fun test45_deletedPlaylistCleanupVsTransientError() {
+        // Authoritative deletion is defined by Personal's private server, not Shareable.
+        org.junit.Assume.assumeTrue(com.bsdung.musicassistantcar.BuildConfig.PERSONAL_BACKEND_ENABLED)
         seedOfflineReadyTrack(501L)
         val manager = PinnedDownloadManager(store = store, executor = Executors.newSingleThreadExecutor())
         val coordinator = OfflinePlaylistSyncCoordinator(downloadManager = manager)

@@ -360,7 +360,7 @@ class LocalMediaRepositoryTest {
 
         // Root items open with 0 network calls
         val rootChildren = catalog.rootChildren()
-        assertEquals(7, rootChildren.size)
+        assertEquals(if (com.bsdung.musicassistantcar.BuildConfig.PERSONAL_BACKEND_ENABLED) 7 else 2, rootChildren.size)
         assertTrue(rootChildren.any { it.mediaId == RemoteCatalog.DEVICE_LOCAL_ID })
 
         // Device local category opens

@@ -8,7 +8,6 @@ def localPropsFile = rootProject.file('local.properties')
 if (localPropsFile.exists()) {
     localPropsFile.withInputStream { localProps.load(it) }
 }
-def carApiToken = localProps.getProperty('car.api.token', '')
 def carApiPrimary = localProps.getProperty(
     'car.api.primary',
     'http://100.82.19.36:8790'
@@ -30,18 +29,32 @@ android {
         versionName '0.6.39'
 
         buildConfigField 'String', 'CAR_API_TOKEN', '""'
-        buildConfigField 'String', 'CAR_API_PRIMARY',
-            '"' + carApiPrimary + '"'
-        buildConfigField 'String', 'CAR_API_SECONDARY',
-            '"' + carApiSecondary + '"'
 
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
+    flavorDimensions 'distribution'
+    productFlavors {
+        personal {
+            dimension 'distribution'
+            buildConfigField 'boolean', 'PERSONAL_BACKEND_ENABLED', 'true'
+            buildConfigField 'String', 'CAR_API_PRIMARY', '"' + carApiPrimary + '"'
+            buildConfigField 'String', 'CAR_API_SECONDARY', '"' + carApiSecondary + '"'
+        }
+        shareable {
+            dimension 'distribution'
+            applicationId 'app.melovault.player'
+            versionNameSuffix '-preview'
+            buildConfigField 'boolean', 'PERSONAL_BACKEND_ENABLED', 'false'
+            buildConfigField 'String', 'CAR_API_PRIMARY', '""'
+            buildConfigField 'String', 'CAR_API_SECONDARY', '""'
+        }
+    }
+
     buildTypes {
         debug {
-            buildConfigField 'String', 'CAR_API_TOKEN',
-                '"' + carApiToken.replace('\\', '\\\\').replace('"', '\\"') + '"'
+            // Never embed owner/admin credentials in any installable variant.
+            buildConfigField 'String', 'CAR_API_TOKEN', '""'
         }
         release {
             buildConfigField 'String', 'CAR_API_TOKEN', '""'

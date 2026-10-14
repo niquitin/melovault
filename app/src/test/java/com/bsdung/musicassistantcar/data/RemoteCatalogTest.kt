@@ -49,19 +49,12 @@ class RemoteCatalogTest {
         root.forEach { item ->
             println("ITEM: id=${item.mediaId}, title=${item.mediaMetadata.title}, browsable=${item.mediaMetadata.isBrowsable}")
         }
-        assertEquals(7, root.size)
-        assertEquals(
-            listOf(
-                "category:device_local",
-                "category:downloaded",
-                "category:recent",
-                "source:all",
-                "source:drive",
-                "source:telegram",
-                "category:playlists",
-            ),
-            root.map { it.mediaId },
-        )
+        val personal = com.bsdung.musicassistantcar.BuildConfig.PERSONAL_BACKEND_ENABLED
+        val expected = if (personal) listOf(
+            "category:device_local", "category:downloaded", "category:recent",
+            "source:all", "source:drive", "source:telegram", "category:playlists",
+        ) else listOf("category:device_local", "category:downloaded")
+        assertEquals(expected, root.map { it.mediaId })
     }
 
     @Test

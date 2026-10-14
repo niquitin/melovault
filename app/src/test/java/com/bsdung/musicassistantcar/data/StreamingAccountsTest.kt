@@ -96,8 +96,8 @@ class StreamingAccountsTest {
     fun testExternalAccountsDoNotPolluteRootCatalog() {
         val catalog = RemoteCatalog()
         val rootItems = catalog.rootChildren()
-        // Must maintain exactly 7 standard categories
-        assertEquals(7, rootItems.size)
+        // Personal preserves 7 categories; Shareable shows only device-local sources.
+        assertEquals(if (com.bsdung.musicassistantcar.BuildConfig.PERSONAL_BACKEND_ENABLED) 7 else 2, rootItems.size)
         val ids = rootItems.map { it.mediaId }
         assertFalse(ids.contains("apple_music"))
         assertFalse(ids.contains("youtube"))
