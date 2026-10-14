@@ -16,6 +16,16 @@ def carApiSecondary = localProps.getProperty(
     'car.api.secondary',
     'http://192.168.68.66:8790'
 )
+// Only the Shareable preview receives this app-wide Telegram developer ID/hash.
+// Values come from untracked local.properties decrypted locally on Lenovo.
+// NEVER add owner Telegram sessions, bot tokens, or private backend credentials.
+def telegramApiId = localProps.getProperty('telegram.api.id', '0').trim()
+def telegramApiHash = localProps.getProperty('telegram.api.hash', '').trim()
+if (!(telegramApiId ==~ /[0-9]{1,10}/) || !(telegramApiHash ==~ /[a-fA-F0-9]{32}/)) {
+    // Gradle can still build Personal/preview stub but login remains disabled.
+    telegramApiId = '0'
+    telegramApiHash = ''
+}
 
 android {
     namespace 'com.bsdung.musicassistantcar'
@@ -49,6 +59,8 @@ android {
             buildConfigField 'boolean', 'PERSONAL_BACKEND_ENABLED', 'false'
             buildConfigField 'String', 'CAR_API_PRIMARY', '""'
             buildConfigField 'String', 'CAR_API_SECONDARY', '""'
+            buildConfigField 'int', 'TELEGRAM_APP_API_ID', telegramApiId
+            buildConfigField 'String', 'TELEGRAM_APP_API_HASH', '"' + telegramApiHash + '"'
         }
     }
 

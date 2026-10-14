@@ -36,6 +36,10 @@ _v062_android_test.txt
 backup/
 debug/
 
+# Never stage generated Python bytecode or local developer credential exports.
+__pycache__/
+*.pyc
+
 # Python bridge runtime, secrets, and caches (preserving bridge source code)
 bridge/.venv/
 bridge/.env
