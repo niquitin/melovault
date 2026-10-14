@@ -2,6 +2,9 @@ package com.bsdung.musicassistantcar.data.telegram
 
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.view.Gravity
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -52,6 +55,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private val auth = TelegramAuthorizationFlow(library)
     private lateinit var status: TextView
     private lateinit var note: TextView
+    private lateinit var authControls: LinearLayout
+    private lateinit var nowPlayingTitle: TextView
+    private lateinit var playPause: Button
+    private var currentSongIndex = -1
     private lateinit var input: EditText
     private lateinit var submit: Button
     private lateinit var qrLogin: Button
@@ -104,6 +111,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // File remains under the selected account/provider's control. No copy
         // into TDLib's isolated cache, and no persistent URI permission.
         downloadWaiting = null
+        currentSongIndex = -1
+        nowPlayingTitle.text = fileName
         player.stop()
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
@@ -120,6 +129,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 // Do not surface provider URLs, filenames or exception details.
                 showMessage("Không phát được tệp âm thanh (Media3 mã ${error.errorCode}).")
             }
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                if (::playPause.isInitialized) playPause.text = if (isPlaying) "Ⅱ" else "▶"
+            }
         })
         buildUi()
         if (BuildConfig.TELEGRAM_APP_API_ID <= 0 ||
@@ -130,74 +142,220 @@ class TelegramPreviewActivity : AppCompatActivity() {
         initNative()
     }
 
+    private fun dp(value: Int): Int =
+        (value * resources.displayMetrics.density + 0.5f).toInt()
+
+    private val ink get() = Color.rgb(233, 241, 250)
+    private val subtle get() = Color.rgb(158, 176, 195)
+    private val accent get() = Color.rgb(67, 212, 174)
+    private val midnight get() = Color.rgb(12, 19, 31)
+    private val panel get() = Color.rgb(25, 37, 53)
+
+    private fun rounded(color: Int, radius: Int = 14): GradientDrawable =
+        GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(radius).toFloat()
+            setColor(color)
+        }
+
+    private fun uiButton(label: String, primary: Boolean = false): Button =
+        Button(this).apply {
+            text = label
+            isAllCaps = false
+            textSize = 13f
+            setTextColor(if (primary) midnight else ink)
+            background = rounded(if (primary) accent else panel, 12)
+            minHeight = dp(45)
+            minimumHeight = dp(45)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+        }
+
     private fun buildUi() {
+        window.statusBarColor = midnight
+        window.navigationBarColor = midnight
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility = 0
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(28, 26, 28, 18)
+            setBackgroundColor(midnight)
+            setPadding(dp(16), dp(12), dp(16), dp(10))
         }
         TextView(this).apply {
-            text = "MeloVault • Telegram Preview"
-            textSize = 21f
-            setTextColor(0xff132943.toInt())
+            text = "MeloVault"
+            textSize = 27f
+            setTextColor(ink)
+            setTypeface(null, android.graphics.Typeface.BOLD)
             root.addView(this)
         }
         note = TextView(this).apply {
-            text = "Thử nghiệm: Saved Messages Telegram và tệp âm thanh do người dùng chọn qua Android (có thể từ Google Drive). Chưa có Google Drive OAuth, playlist hoặc phát nền."
-            textSize = 13f
+            text = "TELEGRAM  ·  NHẠC CÁ NHÂN  ·  PREVIEW"
+            textSize = 10f
+            letterSpacing = 0.12f
+            setTextColor(accent)
+            setPadding(0, 0, 0, dp(10))
             root.addView(this)
         }
         status = TextView(this).apply {
-            text = "Đang khởi tạo TDLib…"
-            textSize = 15f
-            setPadding(0, 18, 0, 12)
-            root.addView(this)
+            text = "Đang khởi tạo Telegram…"
+            textSize = 13f
+            setTextColor(ink)
+            background = rounded(panel)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            root.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(10)
+            })
+        }
+        authControls = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            root.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(8)
+            })
         }
         input = EditText(this).apply {
             hint = "Số điện thoại Telegram (+84...)"
             setSingleLine(true)
             inputType = InputType.TYPE_CLASS_PHONE
+            setTextColor(ink)
+            setHintTextColor(subtle)
+            textSize = 15f
             importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
-            root.addView(this)
+            background = rounded(panel)
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            authControls.addView(this, LinearLayout.LayoutParams(-1, dp(48)))
         }
-        submit = Button(this).apply {
-            text = "Tiếp tục"
+        submit = uiButton("Tiếp tục", primary = true).apply {
             setOnClickListener { submitAuthentication() }
-            root.addView(this)
+            authControls.addView(this, LinearLayout.LayoutParams(-1, dp(46)).apply {
+                topMargin = dp(6)
+            })
         }
-        qrLogin = Button(this).apply {
-            text = "Đăng nhập bằng QR (quét trên máy khác)"
+        qrLogin = uiButton("Đăng nhập bằng QR").apply {
             isEnabled = false
             setOnClickListener { requestQrLogin() }
-            root.addView(this)
+            authControls.addView(this, LinearLayout.LayoutParams(-1, dp(46)).apply {
+                topMargin = dp(6)
+            })
         }
-        refresh = Button(this).apply {
-            text = "Tải danh sách nhạc Saved Messages"
+        val sourceRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            root.addView(this, LinearLayout.LayoutParams(-1, dp(47)).apply {
+                bottomMargin = dp(10)
+            })
+        }
+        refresh = uiButton("↻  Telegram", primary = true).apply {
             isEnabled = false
             setOnClickListener { loadSavedMessages() }
-            root.addView(this)
+            sourceRow.addView(this, LinearLayout.LayoutParams(0, -1, 1f).apply {
+                rightMargin = dp(4)
+            })
         }
-        openDocument = Button(this).apply {
-            text = "Chọn nhạc từ Google Drive / thiết bị"
+        openDocument = uiButton("♫  Chọn tệp nhạc").apply {
             isEnabled = false
             setOnClickListener { openAudioDocument() }
-            root.addView(this)
+            sourceRow.addView(this, LinearLayout.LayoutParams(0, -1, 1f).apply {
+                leftMargin = dp(4)
+            })
         }
-        logout = Button(this).apply {
-            text = "Đăng xuất Telegram"
-            isEnabled = false
-            setOnClickListener { logoutUser() }
-            root.addView(this)
+        TextView(this).apply {
+            text = "THƯ VIỆN NHẠC  ·  SAVED MESSAGES"
+            textSize = 12f
+            setTextColor(subtle)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            root.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(6)
+            })
         }
-        tracks = ListView(this)
-        adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf<String>())
+        tracks = ListView(this).apply {
+            setBackgroundColor(midnight)
+            divider = null
+            dividerHeight = dp(6)
+            cacheColorHint = Color.TRANSPARENT
+            setSelector(android.R.color.transparent)
+        }
+        adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_list_item_1,
+            mutableListOf()) {
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                val item = super.getView(position, convertView, parent) as TextView
+                item.textSize = 14f
+                item.setTextColor(ink)
+                item.maxLines = 2
+                item.ellipsize = android.text.TextUtils.TruncateAt.END
+                item.background = rounded(panel, 11)
+                item.setPadding(dp(14), dp(12), dp(14), dp(12))
+                item.minHeight = dp(62)
+                return item
+            }
+        }
         tracks.adapter = adapter
         tracks.onItemClickListener = android.widget.AdapterView.OnItemClickListener {
                 _, _, position, _ ->
             songs.getOrNull(position)?.let { downloadAndPlay(it) }
         }
-        root.addView(tracks, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(tracks, LinearLayout.LayoutParams(-1, 0, 1f))
+        val playerBar = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = rounded(panel)
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            root.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = dp(8)
+            })
+        }
+        TextView(this).apply {
+            text = "NOW PLAYING"
+            textSize = 10f
+            letterSpacing = 0.12f
+            setTextColor(accent)
+            playerBar.addView(this)
+        }
+        nowPlayingTitle = TextView(this).apply {
+            text = "Chọn một bài hát để bắt đầu"
+            textSize = 15f
+            setTextColor(ink)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(0, dp(4), 0, dp(8))
+            playerBar.addView(this)
+        }
+        val controls = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            playerBar.addView(this, LinearLayout.LayoutParams(-1, dp(43)))
+        }
+        fun control(symbol: String, action: () -> Unit): Button =
+            uiButton(symbol).apply {
+                textSize = 20f
+                setOnClickListener { action() }
+                controls.addView(this, LinearLayout.LayoutParams(0, -1, 1f).apply {
+                    leftMargin = dp(4)
+                    rightMargin = dp(4)
+                })
+            }
+        control("⏮") { playAdjacent(-1) }
+        playPause = control("▶") {
+            if (player.currentMediaItem != null) {
+                if (player.isPlaying) player.pause() else player.play()
+            }
+        }
+        playPause.background = rounded(accent)
+        playPause.setTextColor(midnight)
+        control("⏭") { playAdjacent(1) }
+        logout = uiButton("Đăng xuất Telegram").apply {
+            textSize = 11f
+            isEnabled = false
+            setTextColor(subtle)
+            setOnClickListener { logoutUser() }
+            root.addView(this, LinearLayout.LayoutParams(-1, dp(35)).apply {
+                topMargin = dp(6)
+            })
+        }
+        authControls.visibility = View.GONE
         setContentView(root)
+    }
+
+    private fun playAdjacent(delta: Int) {
+        if (!auth.isReady() || currentSongIndex < 0) return
+        val target = songs.getOrNull(currentSongIndex + delta) ?: return
+        downloadAndPlay(target)
     }
 
     private fun qrBridgeFile(): File = File(noBackupFilesDir, "e91_pending_qr_login.txt")
@@ -375,6 +533,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         logout.isEnabled = true
                         submit.isEnabled = false
                         input.visibility = View.GONE
+                        authControls.visibility = View.GONE
                     }
                     loadSavedMessages()
                 }
@@ -545,6 +704,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     openDocument.isEnabled = false
                     logout.isEnabled = false
                     submit.isEnabled = false
+                    currentSongIndex = -1
+                    nowPlayingTitle.text = "Chọn một bài hát để bắt đầu"
                 }
                 showMessage("Đã đóng phiên Telegram. Mở lại ứng dụng để đăng nhập lại.")
             }
@@ -556,6 +717,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         runOnUiThread {
             input.text?.clear()
             input.inputType = type
+            authControls.visibility = View.VISIBLE
             input.visibility = View.VISIBLE
             submit.isEnabled = true
             status.text = help
@@ -642,6 +804,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun downloadAndPlay(song: Song) {
         if (!auth.isReady()) return
+        currentSongIndex = songs.indexOfFirst { it.messageId == song.messageId }
+        nowPlayingTitle.text = song.title
         downloadWaiting = song.fileId
         showMessage("Đang tải bài: ${song.title}")
         try {
@@ -687,6 +851,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         songs.clear()
         adapter.clear()
         downloadWaiting = null
+        currentSongIndex = -1
+        nowPlayingTitle.text = "Chọn một bài hát để bắt đầu"
         refresh.isEnabled = false
         openDocument.isEnabled = false
         logout.isEnabled = false
