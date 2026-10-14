@@ -12,7 +12,8 @@ Status: **TOOLCHAIN_READY / OPENSSL_ARM64_BUILD_RUNNING / JSONJAVA_BRIDGE_COMPIL
 - Reproducible ARM64-only trial command:
   `C:\tools\msys64\usr\bin\bash.exe /c/Bots/MeloVault-E91-Shareable/tools/e91_build_tdlib_arm64_msys2.sh`
 - Script pins TDLib commit, builds OpenSSL static `arm64-v8a` only using an isolated copy of upstream script with the ABI loop narrowed. Then invokes official TDLib `build-tdlib.sh` in JSONJava mode for Android API 23 / arm64-v8a, using C++ static runtime.
-- Native build logs remain local ignored `scratch/e91_tdlib_native_arm64_build.log`; may not have completed yet.
+- Initial native build completed OpenSSL ARM64 but TDLib host code-generation failed because Windows CMake defaulted to unavailable NMake. Updated script to export `CMAKE_GENERATOR=Ninja` using installed UCRT64 GCC/G++, moved the failed CMake cache into an isolated diagnostic directory and restarted without rebuilding OpenSSL.
+- Native build logs (ignored, local): `scratch/e91_tdlib_native_arm64_build.log` (first attempt) and `scratch/e91_tdlib_native_arm64_retry_ninja.log` (retry). Second run passed CMake configure/generation with pinned TDLib commit; native codegen compilation underway; do not mark .so as complete yet.
 - No raw signing key, Telegram app API hash, phone, session secret, OTP or personal Music Assistant API URL is passed to compiler scripts.
 
 ## Android source boundary

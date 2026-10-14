@@ -7,6 +7,9 @@ set -euo pipefail
 export PATH="/c/Program Files/Eclipse Adoptium/jdk-17.0.17.10-hotspot/bin:/c/tools/php85:/c/Android/Sdk/cmake/3.22.1/bin:/ucrt64/bin:/usr/bin:$PATH"
 export MSYSTEM=UCRT64
 export OSTYPE=msys
+# Windows CMake defaults to unavailable NMake. Use installed UCRT64 Ninja
+# for native host code-generation and Android NDK cross-builds.
+export CMAKE_GENERATOR=Ninja
 
 TDLIB_SRC="/c/Bots/_deps/tdlib-e91-src"
 SDK="/c/Android/Sdk"
