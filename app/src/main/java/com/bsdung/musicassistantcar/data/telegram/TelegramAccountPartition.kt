@@ -25,6 +25,22 @@ object TelegramAccountStoragePolicy {
         return "tg-" + bytes.joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 
+    /**
+     * A fresh TDLib client needs its database directory before user identity
+     * exists. Allocate a cryptographically unpredictable slot and bind it to
+     * getMe()-verified TelegramUserId only after authorization is complete.
+     * Persist the binding only in encrypted app-private storage.
+     */
+    fun newSessionSlotId(): String = java.util.UUID.randomUUID().toString()
+
+    fun sessionSlotDirectory(noBackupFiles: File, slotId: String): File {
+        require(slotId.matches(
+            Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+        )) { "Invalid Telegram session slot" }
+        return File(File(noBackupFiles, "telegram_session_slots"), "slot-$slotId")
+    }
+
+    /** Only for already verified, account-bound sessions; not initial login. */
     fun sessionDirectory(noBackupFiles: File, userId: TelegramUserId): File =
         File(File(noBackupFiles, "telegram_sessions"), directoryName(userId))
 

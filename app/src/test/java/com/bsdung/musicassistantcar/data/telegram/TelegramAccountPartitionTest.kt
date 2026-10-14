@@ -66,6 +66,19 @@ class TelegramAccountPartitionTest {
         )
     }
 
+    @Test fun preAuthorizationSessionSlotsAreUnpredictableAndPathSafe() {
+        val idA = TelegramAccountStoragePolicy.newSessionSlotId()
+        val idB = TelegramAccountStoragePolicy.newSessionSlotId()
+        assertNotEquals(idA, idB)
+        val a = TelegramAccountStoragePolicy.sessionSlotDirectory(temp.root, idA)
+        val b = TelegramAccountStoragePolicy.sessionSlotDirectory(temp.root, idB)
+        assertNotEquals(a, b)
+        assertTrue(a.path.contains("telegram_session_slots"))
+        assertThrows(IllegalArgumentException::class.java) {
+            TelegramAccountStoragePolicy.sessionSlotDirectory(temp.root, "../other-account")
+        }
+    }
+
     @Test fun downloadedFileMustBelongToAuthenticatedUserOnly() {
         val appFiles = temp.newFolder("private_app_files")
         val aRoot = TelegramAccountStoragePolicy.downloadDirectory(appFiles, userA)
