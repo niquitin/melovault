@@ -60,6 +60,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
     @Volatile private var running = false
     @Volatile private var exiting = false
     private var savedChatId: Long = 0L
+    private var historyCursorId: Long = 0L
+    private var historyPages: Int = 0
+    private var historyLoading = false
+    private val seenSongMessageIds = mutableSetOf<Long>()
+    private val maxHistoryPages = 24
     private var downloadWaiting: Int? = null
     private lateinit var filesRoot: File
     private var currentTask = ""
@@ -267,6 +272,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val kind = result.optString("@type")
         val tag = result.optString("@extra")
         if (kind == "error") {
+            if (tag == "savedHistory") {
+                historyLoading = false
+                runOnUiThread { refresh.isEnabled = true }
+            }
             // Initial parameter errors need a useful diagnosis. Raw auth errors
             // must never reveal an OTP, phone number or 2FA content in the UI.
             val safeStage = tag.takeIf { it in setOf("parameters", "state", "identity") }
@@ -326,7 +335,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             return
         }
         if (tag == "savedHistory" && kind == "messages") {
-            val items = result.optJSONArray("messages") ?: return
+            val items = result.optJSONArray("messages") ?: org.json.JSONArray()
             val extracted = mutableListOf<Song>()
             for (i in 0 until items.length()) {
                 val msg = items.optJSONObject(i) ?: continue
@@ -347,19 +356,41 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     name.lowercase().endsWith(".mp3") ||
                     name.lowercase().endsWith(".m4a") ||
                     name.lowercase().endsWith(".wav")
-                if (looksAudio && file.optInt("id") > 0) {
-                    extracted.add(Song(file.optInt("id"), title, name, msg.optLong("id")))
+                val messageId = msg.optLong("id")
+                if (looksAudio && messageId > 0L && file.optInt("id") > 0 &&
+                    seenSongMessageIds.add(messageId)) {
+                    extracted.add(Song(file.optInt("id"), title, name, messageId))
                 }
             }
+            val pageCount = ++historyPages
+            val oldestId = items.optJSONObject(items.length() - 1)?.optLong("id") ?: 0L
+            // getChatHistory includes from_message_id; skip it if TDLib returns only
+            // that boundary message. Never loop without moving backward.
+            val nextCursor = if (historyCursorId > 0L && oldestId >= historyCursorId) {
+                historyCursorId - 1L
+            } else oldestId
+            val hasMore = items.length() > 0 && nextCursor > 0L &&
+                nextCursor != historyCursorId && pageCount < maxHistoryPages
             runOnUiThread {
-                songs.clear()
+                if (pageCount == 1) {
+                    songs.clear()
+                    adapter.clear()
+                }
                 songs.addAll(extracted)
-                adapter.clear()
-                adapter.addAll(extracted.map {
-                    "${it.title} • ${it.filename}"
-                })
+                adapter.addAll(extracted.map { "${it.title} • ${it.filename}" })
                 adapter.notifyDataSetChanged()
-                status.text = "Đã tìm thấy ${songs.size} bài nhạc trong 60 tin nhắn gần nhất."
+                if (hasMore) {
+                    status.text = "Đang đọc lịch sử Telegram: ${songs.size} bài / ${pageCount} lượt."
+                } else {
+                    status.text = "Đã tìm thấy ${songs.size} bài nhạc trong ${pageCount} lượt lịch sử."
+                    refresh.isEnabled = true
+                }
+            }
+            if (hasMore) {
+                historyCursorId = nextCursor
+                requestHistoryPage()
+            } else {
+                historyLoading = false
             }
             return
         }
@@ -524,10 +555,19 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun requestHistory() {
-        if (savedChatId == 0L || !auth.isReady()) return
+        if (savedChatId == 0L || !auth.isReady() || historyLoading) return
+        historyCursorId = 0L
+        historyPages = 0
+        seenSongMessageIds.clear()
+        historyLoading = true
+        runOnUiThread { refresh.isEnabled = false }
+        requestHistoryPage()
+    }
+
+    private fun requestHistoryPage() {
         send("getChatHistory", "savedHistory") {
             it.put("chat_id", savedChatId)
-            it.put("from_message_id", 0)
+            it.put("from_message_id", historyCursorId)
             it.put("offset", 0)
             it.put("limit", 60)
             it.put("only_local", false)
