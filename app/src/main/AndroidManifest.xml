@@ -14,6 +14,7 @@
         android:maxSdkVersion="32" />
 
     <application
+        android:name=".MeloVaultApplication"
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
         android:dataExtractionRules="@xml/data_extraction_rules"

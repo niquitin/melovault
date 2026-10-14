@@ -23,5 +23,15 @@ Keep existing MeloVault Personal service and users intact while preparing a sepa
 9. Tag, checksum, release notes, install/rollback instructions; distribute only verified signed outputs.
 10. Google Drive personal login can be a later scope, separate from private and Telegram Shareable.
 
+## E9.1 Private hardening checkpoint (staged, not released)
+- `CarApiClient` will reject HTTP LAN and only select HTTPS or tailnet HTTP endpoints when the **active VPN** has a verified route covering the requested host. URL redirect following disabled for credential-bearing JSON requests.
+- Personal flavor network-security config rejects cleartext by default, with a host-scoped tailnet exception; Shareable continues to disallow cleartext.
+- `TrustedEndpointPolicyTest` checks LAN denied even with VPN, HTTP tailnet denied without a verified VPN route, HTTPS allowed.
+- Local backup via SQLite read-only source snapshot: validated, with restrictive Windows ACL. Full restore has not been exercised.
+- Signature inventory: existing Android Debug Key cert matches old M3 stable, E8 RC, and physically installed Sony APK. A **debug-key-signed QA candidate** with that cert exists only under ignored local `dist/qa`, explicitly marked DO-NOT-INSTALL.
+- After final staged network-security changes: Personal 798 tests, 0 failed, 1 skipped; Shareable 798 tests, 0 failed, 21 skipped; Build SUCCESSFUL.
+- Static Shareable APK guard: PASS for known owner identifiers. Account-to-account leak test still required.
+- Route-policy runtime compatibility, credential-free token distribution, and in-place upgrade still need physical QA.
+
 ## Status
-E9_INITIAL_SCAFFOLD / DO_NOT_DISTRIBUTE
+E9_PRIVATE_TRANSPORT_STAGED_TESTS_PASS / DO_NOT_DISTRIBUTE

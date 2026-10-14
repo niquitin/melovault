@@ -238,10 +238,21 @@ open class CarApiClient {
     var connectionStateManager: ConnectionStateManager? = null
     private val endpointFailures = java.util.concurrent.ConcurrentHashMap<String, Int>()
 
+    /**
+     * Never downgrade authenticated traffic or device-pairing secrets onto LAN HTTP.
+     * HTTPS is accepted; Tailnet HTTP is accepted only while Android confirms
+     * that the ACTIVE VPN carries a route to that exact 100.64.0.0/10 host.
+     */
+    private fun isTrustedEndpoint(endpoint: String): Boolean {
+        val host = runCatching { URL(endpoint).host }.getOrNull().orEmpty()
+        val hasVerifiedVpnRoute = AndroidVpnRouteVerifier.hasVerifiedRoute(host)
+        return TrustedEndpointPolicy.isApproved(endpoint, hasVerifiedVpnRoute)
+    }
+
     private fun orderedEndpoints(): List<String> = buildList {
-        activeBaseUrl?.let(::add)
+        activeBaseUrl?.takeIf(::isTrustedEndpoint)?.let(::add)
         endpoints.forEach { endpoint ->
-            if (endpoint != activeBaseUrl) {
+            if (endpoint != activeBaseUrl && isTrustedEndpoint(endpoint)) {
                 add(endpoint)
             }
         }
@@ -1178,6 +1189,7 @@ open class CarApiClient {
             val reqStart = System.currentTimeMillis()
             try {
                 val connection = URL("$base$path").openConnection() as HttpURLConnection
+                connection.instanceFollowRedirects = false
                 connection.requestMethod = method
                 connection.connectTimeout = connectTimeoutMs
                 connection.readTimeout = readTimeoutMs
@@ -1231,6 +1243,7 @@ open class CarApiClient {
             val reqStart = System.currentTimeMillis()
             try {
                 val connection = URL("$base$path").openConnection() as HttpURLConnection
+                connection.instanceFollowRedirects = false
                 connection.requestMethod = method
                 connection.connectTimeout = connectTimeoutMs
                 connection.readTimeout = readTimeoutMs
@@ -1661,8 +1674,12 @@ open class CarApiClient {
         connectTimeoutMs: Int,
         readTimeoutMs: Int,
     ): HttpURLConnection {
-        val connection =
-            URL(url).openConnection() as HttpURLConnection
+        val base = URL(url)
+        if (!isTrustedEndpoint(base.protocol + "://" + base.authority)) {
+            throw IOException("Untrusted Car API transport")
+        }
+        val connection = base.openConnection() as HttpURLConnection
+        connection.instanceFollowRedirects = false
         connection.requestMethod = "GET"
         connection.connectTimeout = connectTimeoutMs
         connection.readTimeout = readTimeoutMs

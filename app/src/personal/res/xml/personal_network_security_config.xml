@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <!-- Tailnet-specific HTTP is additionally guarded by active VPN routing
+         checks in CarApiClient. This exception is NOT safe without Tailscale. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">100.82.19.36</domain>
+    </domain-config>
+</network-security-config>
