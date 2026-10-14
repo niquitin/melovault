@@ -47,6 +47,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var note: TextView
     private lateinit var input: EditText
     private lateinit var submit: Button
+    private lateinit var qrLogin: Button
     private lateinit var refresh: Button
     private lateinit var logout: Button
     private lateinit var tracks: ListView
@@ -111,6 +112,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
             setOnClickListener { submitAuthentication() }
             root.addView(this)
         }
+        qrLogin = Button(this).apply {
+            text = "Đăng nhập bằng QR (quét trên máy khác)"
+            isEnabled = false
+            setOnClickListener { requestQrLogin() }
+            root.addView(this)
+        }
         refresh = Button(this).apply {
             text = "Tải danh sách nhạc Saved Messages"
             isEnabled = false
@@ -133,6 +140,31 @@ class TelegramPreviewActivity : AppCompatActivity() {
         root.addView(tracks, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
+    }
+
+    private fun qrBridgeFile(): File = File(noBackupFilesDir, "e91_pending_qr_login.txt")
+
+    /** Login links are single-purpose short-lived bearer credentials.
+     * Never log them, back them up or store them outside app-private space.
+     * The owner-only debug host can read the file with ADB run-as.
+     */
+    private fun clearPendingQrLink() {
+        runCatching { qrBridgeFile().delete() }
+    }
+
+    private fun requestQrLogin() {
+        if (auth.step != TelegramAuthStep.WAIT_PHONE_NUMBER) return
+        try {
+            qrLogin.isEnabled = false
+            clearPendingQrLink()
+            send("requestQrCodeAuthentication", "qrLogin") {
+                it.put("other_user_ids", org.json.JSONArray())
+            }
+            showMessage("Đang lấy mã QR. Quét trên máy khác khi QR xuất hiện trên Lenovo.")
+        } catch (_: Exception) {
+            qrLogin.isEnabled = true
+            showMessage("Không thể yêu cầu QR. Có thể đăng nhập bằng số điện thoại.")
+        }
     }
 
     private fun showMessage(message: String) {
@@ -365,10 +397,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     it.put("application_version", BuildConfig.VERSION_NAME)
                 }
             }
-            "authorizationStateWaitPhoneNumber" ->
+            "authorizationStateWaitPhoneNumber" -> {
+                clearPendingQrLink()
                 showInput(TelegramAuthStep.WAIT_PHONE_NUMBER,
-                    "Nhập số Telegram (+84...), không gửi mã vào ChatGPT.",
+                    "Có thể đăng nhập bằng QR trên Lenovo hoặc nhập số Telegram.",
                     InputType.TYPE_CLASS_PHONE)
+                runOnUiThread { qrLogin.isEnabled = true }
+            }
             "authorizationStateWaitCode" ->
                 showInput(TelegramAuthStep.WAIT_CODE,
                     "Nhập mã Telegram gửi cho bạn.",
@@ -387,13 +422,26 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     InputType.TYPE_CLASS_NUMBER)
             "authorizationStateWaitOtherDeviceConfirmation" -> {
                 auth.onNativeState(authEpoch, TelegramAuthStep.WAIT_OTHER_DEVICE_CONFIRMATION)
-                showMessage("Mở Telegram trên thiết bị khác để chấp nhận yêu cầu đăng nhập.")
+                val link = state.optString("link")
+                if (link.startsWith("tg://login?token=") && link.length in 32..1024) {
+                    // Write only to private no-backup directory, read locally via ADB.
+                    runCatching { qrBridgeFile().writeText(link, Charsets.UTF_8) }
+                        .onFailure { showMessage("Không lưu được QR cục bộ.") }
+                        .onSuccess {
+                            showMessage("Mã QR đã sẵn sàng trên Lenovo. Quét bằng Telegram đang đăng nhập.")
+                        }
+                } else {
+                    showMessage("TDLib không cung cấp QR hợp lệ. Hãy thử lại.")
+                }
+                runOnUiThread { qrLogin.isEnabled = false }
             }
             "authorizationStateWaitRegistration" -> {
                 auth.onNativeState(authEpoch, TelegramAuthStep.WAIT_REGISTRATION)
                 showMessage("Tài khoản mới cần đăng ký; bản Preview chưa hỗ trợ.")
             }
             "authorizationStateReady" -> {
+                clearPendingQrLink()
+                runOnUiThread { qrLogin.isEnabled = false }
                 if (auth.onNativeState(authEpoch,
                         TelegramAuthStep.AUTHORIZED_AWAITING_GET_ME)) {
                     send("getMe", "identity")
@@ -402,6 +450,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             "authorizationStateLoggingOut", "authorizationStateClosing",
             "authorizationStateClosed" -> {
                 auth.logout()
+                clearPendingQrLink()
                 runOnUiThread {
                     player.stop()
                     tracks.adapter = adapter
@@ -526,6 +575,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun logoutUser() {
         if (!auth.isReady()) return
+        clearPendingQrLink()
         auth.logout()
         player.stop()
         songs.clear()
@@ -539,6 +589,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        clearPendingQrLink()
         running = false
         runCatching {
             if (nativeClientId > 0) TdlibNativeJsonGateway.requestClose(nativeClientId)
