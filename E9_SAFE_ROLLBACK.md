@@ -26,11 +26,13 @@
 - Database recovery is a dedicated disaster-recovery operation, never the default rollback: stop only the impacted service, capture current DB with WAL, prepare a point-in-time migration or merge, rehearse on a copy, and obtain approval before changing production.
 
 ## Rehearsal status
-- E9 SQLite snapshot backup: PASS, source read only. This does **not** demonstrate successful restoration.
-- APK in-place update test: NOT DONE.
-- Signing-key disaster-recovery backup: NOT DONE (requires an owner-held encrypted/offline backup strategy).
-- Production rollback rehearsal: NOT DONE.
-- Transport runtime test on M3/FYT/Sony: NOT DONE.
+- E9 SQLite snapshot backup: PASS, source read only; restrictive Windows ACL applied.
+- Isolated SQLite rollback rehearsal: PASS from snapshot into new throwaway database; simulated mutation/restore and integrity SHA match. **Production restore NOT tested and NOT attempted.**
+- Sony Personal APK in-place upgrade: PASS from build 59 to versionCode 60 with same signer and no data clear. Offline collection remained 14 tracks / 485.2 MB.
+- Signing-key disaster-recovery backup: NOT DONE (requires an owner-held encrypted/offline backup strategy). The current Personal cert is Android Debug Key for legacy compatibility; do not share it with friends.
+- Production backend rollback rehearsal: NOT DONE, production untouched.
+- Sony VPN-on authenticated streaming and VPN-off fail-closed Media3 test: PASS. Sony offline WAV smoke: PASS. Tailscale reconnection occasionally hangs in "Starting" and was previously recovered with a Tailscale process restart.
+- Transport runtime test on M3/FYT: NOT REDONE, field gates provisionally accepted by owner.
 
 ## Stop conditions
 Any signer mismatch, missing/invalid backup, uncertified VPN/HTTPS route, server 401, inaccessible offline tracks, lost playlists, or unexpected traffic toward owner resources from Shareable means **DO NOT RELEASE**.

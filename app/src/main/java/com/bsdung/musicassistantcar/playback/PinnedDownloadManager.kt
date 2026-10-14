@@ -1762,9 +1762,13 @@ open class PinnedDownloadManager(
                 streamOpener.invoke(track, apiClient)
             } else {
                 val streamUrl = apiClient.streamUri(track.id).toString()
+                // Never send bearer tokens to LAN HTTP or after Tailnet VPN loss.
+                com.bsdung.musicassistantcar.data.AuthenticatedTransportGuard
+                    .requireApprovedNow(streamUrl)
                 val headers = apiClient.authorizationHeaders()
                 val url = URL(streamUrl)
                 val conn = url.openConnection() as HttpURLConnection
+                conn.instanceFollowRedirects = false
                 headers.forEach { (k, v) -> conn.setRequestProperty(k, v) }
                 conn.connectTimeout = 20_000
                 conn.readTimeout = 60_000

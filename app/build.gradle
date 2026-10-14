@@ -25,8 +25,9 @@ android {
         applicationId 'com.bsdung.musicassistantcar'
         minSdk 26
         targetSdk 36
-        versionCode 59
-        versionName '0.6.39'
+        // E9 upgrade rehearsal: must increment over all deployed v0.6.39 APKs.
+        versionCode 60
+        versionName '0.6.40-e9-rc1'
 
         buildConfigField 'String', 'CAR_API_TOKEN', '""'
 

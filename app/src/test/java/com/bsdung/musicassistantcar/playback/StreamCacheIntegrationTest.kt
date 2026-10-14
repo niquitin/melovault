@@ -35,6 +35,11 @@ class StreamCacheIntegrationTest {
     private lateinit var tempCacheDir: File
     private lateinit var localServer: LocalAudioServer
     private lateinit var httpFactory: DataSource.Factory
+    // Explicit synthetic-loopback permission; production factory defaults to VPN guard.
+    private val allowTestLoopback: (Uri) -> Unit = { uri ->
+        val host = java.net.URL(uri.toString()).host
+        require(host == "127.0.0.1" || host == "localhost")
+    }
 
     @Before
     fun setUp() {
@@ -63,7 +68,7 @@ class StreamCacheIntegrationTest {
         localServer.registerPayload(trackPath, payload)
 
         val uri = Uri.parse(localServer.baseUrl() + trackPath)
-        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory)
+        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory, verifyProtectedUri = allowTestLoopback)
 
         // Request 1: Cache MISS -> must fetch from local HTTP server
         val source1 = cacheFactory.createDataSource()
@@ -107,7 +112,7 @@ class StreamCacheIntegrationTest {
         localServer.registerPayload(trackPath, payload)
 
         val uri = Uri.parse(localServer.baseUrl() + trackPath)
-        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory)
+        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory, verifyProtectedUri = allowTestLoopback)
 
         // Read slice [1024 .. 4095] (length = 3072 bytes)
         val rangeOffset = 1024L
@@ -146,7 +151,7 @@ class StreamCacheIntegrationTest {
         val originalUri = Uri.parse(localServer.baseUrl() + "$basePath?quality=original")
         val mobileUri = Uri.parse(localServer.baseUrl() + "$basePath?quality=mobile")
 
-        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory)
+        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory, verifyProtectedUri = allowTestLoopback)
 
         // 1. Read Original
         val srcOrig1 = cacheFactory.createDataSource()
@@ -222,7 +227,7 @@ class StreamCacheIntegrationTest {
         val prefetchBudget = 64 * 1024L // 64 KB intro budget
         for (idx in nextIndices) {
             val uri = Uri.parse(localServer.baseUrl() + queueTracks[idx])
-            val prefetchedBytes = StreamCacheManager.prefetchIntroDirect(uri, httpFactory, prefetchBudget)
+            val prefetchedBytes = StreamCacheManager.prefetchIntroDirect(uri, httpFactory, prefetchBudget, verifyProtectedUri = allowTestLoopback)
             assertEquals("Prefetch must fetch intro budget", prefetchBudget, prefetchedBytes)
         }
 
@@ -233,7 +238,7 @@ class StreamCacheIntegrationTest {
 
         // Now simulate user skipping to Track 1: opening intro should hit cache without new HTTP request
         val track1Uri = Uri.parse(localServer.baseUrl() + queueTracks[1])
-        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory)
+        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory, verifyProtectedUri = allowTestLoopback)
         val source = cacheFactory.createDataSource()
         val buf = ByteArray(prefetchBudget.toInt())
         source.open(DataSpec.Builder().setUri(track1Uri).setPosition(0).setLength(prefetchBudget).build())
@@ -263,7 +268,7 @@ class StreamCacheIntegrationTest {
         assertFalse("Cache should be idle before prefetch", StreamCacheManager.isCacheInUse())
 
         val future = executor.submit {
-            StreamCacheManager.prefetchIntroDirect(uri, httpFactory, 5 * 1024 * 1024L)
+            StreamCacheManager.prefetchIntroDirect(uri, httpFactory, 5 * 1024 * 1024L, verifyProtectedUri = allowTestLoopback)
         }
 
         // Wait up to 2 seconds for prefetch loop to actively report in-use
@@ -294,7 +299,7 @@ class StreamCacheIntegrationTest {
         localServer.registerPayload(trackPath, payload)
 
         val uri = Uri.parse(localServer.baseUrl() + trackPath)
-        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory)
+        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory, verifyProtectedUri = allowTestLoopback)
 
         // 1. Initial read populates cache
         val src1 = cacheFactory.createDataSource()

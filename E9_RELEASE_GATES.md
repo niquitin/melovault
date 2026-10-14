@@ -33,5 +33,16 @@ Keep existing MeloVault Personal service and users intact while preparing a sepa
 - Static Shareable APK guard: PASS for known owner identifiers. Account-to-account leak test still required.
 - Route-policy runtime compatibility, credential-free token distribution, and in-place upgrade still need physical QA.
 
+## E9.2 Sony versionCode 60 + full credential-bearing media guard (2026-10-14)
+- Personal QA versionName 0.6.40-e9-rc1, versionCode 60. Successfully installed as an in-place upgrade on Sony via `adb install -r`, same signing certificate; existing offline library retained at 14 tracks / 485.2 MB.
+- `AuthenticatedTransportGuard` now verifies the requested exact origin is configured and its transport is trusted. Applied to Media3 cache upstream connections and prefetch, pinned offline downloading, and artwork requests; HTTP LAN disabled on all credential-bearing paths tested.
+- Existing localhost network/cache tests explicitly inject loopback-only permission; production/default factories ALWAYS use the strict origin/VPN rule.
+- Personal: 800 tests, 0 failed, 1 skipped; Shareable: 800 tests, 0 failed, 21 skipped; Gradle BUILD SUCCESSFUL.
+- Shareable APK static scan still PASS for known owner IPs/bots/paths. Shareable per-account Telegram login remains UNIMPLEMENTED; DO NOT DISTRIBUTE.
+- Sony with Tailscale connected: FLAC stream HTTP 206, Media3 PLAYING, authenticated browse. With Tailscale VPN off: uncached track produced `E9: Protected media transport unavailable`; no authenticated LAN requests observed in backend logs. Wi-Fi off: offline WAV progressed 9 seconds without error.
+- Final Sony state: Wi-Fi ON, Tailscale Connected, MeloVault Online and PAUSED, 14 downloaded tracks.
+- Isolated SQLite rollback recovery: PASS; production DB remains untouched. This is NOT a full production disaster-recovery rehearsal.
+- **Release blockers:** long-lived signing key custody/portable encrypted backup, documented recovery for Tailscale Starting state, final RC regression and versioned release artifact/release notes. Current signed APK is QA only, not final Stable.
+
 ## Status
-E9_PRIVATE_TRANSPORT_STAGED_TESTS_PASS / DO_NOT_DISTRIBUTE
+E9_V60_SONY_INPLACE_SECURITY_QA_PASS / NOT_RELEASED

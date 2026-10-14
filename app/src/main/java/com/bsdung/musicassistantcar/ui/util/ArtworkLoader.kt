@@ -14,7 +14,21 @@ import com.bsdung.musicassistantcar.data.RemoteCatalog
 object ArtworkLoader {
     private var customImageLoader: ImageLoader? = null
 
-    private fun currentHeaders(context: Context): Map<String, String> {
+    private fun allowArtworkResource(uri: Any?): Boolean {
+        val resource = uri?.toString().orEmpty()
+        if (!resource.startsWith("http://", true) && !resource.startsWith("https://", true)) {
+            return true // File/content artwork never needs backend Authorization.
+        }
+        return com.bsdung.musicassistantcar.data.AuthenticatedTransportGuard
+            .isApprovedNow(resource)
+    }
+
+    private fun currentHeaders(context: Context, uri: Any?): Map<String, String> {
+        val resource = uri?.toString().orEmpty()
+        if (!resource.startsWith("http://", true) && !resource.startsWith("https://", true)) {
+            return emptyMap()
+        }
+        if (!allowArtworkResource(uri)) return emptyMap()
         com.bsdung.musicassistantcar.data.SecureTokenStore.init(context)
         return com.bsdung.musicassistantcar.data.CarApiClient.currentAuthorizationHeaders()
     }
@@ -42,9 +56,9 @@ object ArtworkLoader {
     fun prefetchArtwork(context: Context, uri: Any?) {
         if (uri == null) return
         val uriStr = uri.toString()
-        if (uriStr.isBlank()) return
+        if (uriStr.isBlank() || !allowArtworkResource(uri)) return
         val loader = getImageLoader(context)
-        val headers = currentHeaders(context)
+        val headers = currentHeaders(context, uri)
         val request = ImageRequest.Builder(context.applicationContext)
             .data(uri)
             .apply {
@@ -62,7 +76,7 @@ object ArtworkLoader {
         cornerRadiusDp: Float = 14f,
         placeholderResId: Int = R.drawable.ic_album_placeholder,
     ) {
-        if (uri.isNullOrBlank()) {
+        if (uri.isNullOrBlank() || !allowArtworkResource(uri)) {
             imageView.setImageResource(placeholderResId)
             return
         }
@@ -70,7 +84,7 @@ object ArtworkLoader {
         val density = imageView.resources.displayMetrics.density
         val radiusPx = cornerRadiusDp * density
         val loader = getImageLoader(imageView.context)
-        val headers = currentHeaders(imageView.context)
+        val headers = currentHeaders(imageView.context, uri)
 
         imageView.load(uri, loader) {
             crossfade(200)

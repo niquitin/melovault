@@ -43,6 +43,11 @@ class AudioStreamingNetworkRecoveryTest {
     private lateinit var tempCacheDir: File
     private lateinit var audioServer: ResilientAudioServer
     private lateinit var httpFactory: DataSource.Factory
+    // Test-only loopback authority, never supplied by production playback.
+    private val allowTestLoopback: (Uri) -> Unit = { uri ->
+        val host = java.net.URL(uri.toString()).host
+        require(host == "127.0.0.1" || host == "localhost")
+    }
     private lateinit var stateManager: ConnectionStateManager
     private var virtualTimeMs: Long = 1_000_000L
 
@@ -109,7 +114,7 @@ class AudioStreamingNetworkRecoveryTest {
         audioServer.registerPayload(trackPath, flacData)
 
         val uri = Uri.parse(audioServer.baseUrl() + trackPath)
-        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory)
+        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory, verifyProtectedUri = allowTestLoopback)
         val dataSource = cacheFactory.createDataSource()
 
         // Phase 1: Prebuffer initial 64 KB
@@ -160,7 +165,7 @@ class AudioStreamingNetworkRecoveryTest {
         audioServer.forceSocketCloseAfterBytes(trackPath, dropOffset)
 
         val uri = Uri.parse(audioServer.baseUrl() + trackPath)
-        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory)
+        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory, verifyProtectedUri = allowTestLoopback)
 
         // Read stream until socket error is encountered
         val receivedData = ByteArray(payloadSize)
@@ -233,7 +238,7 @@ class AudioStreamingNetworkRecoveryTest {
         audioServer.forceSocketCloseAfterBytes(trackPath, cutoffOffset)
 
         val uri = Uri.parse(audioServer.baseUrl() + trackPath)
-        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory)
+        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory, verifyProtectedUri = allowTestLoopback)
         var source = cacheFactory.createDataSource()
         source.open(DataSpec.Builder().setUri(uri).setPosition(0).setLength(payloadSize.toLong()).build())
 
@@ -289,7 +294,7 @@ class AudioStreamingNetworkRecoveryTest {
         // Read half of the file
         val halfOffset = 128 * 1024
         val uri = Uri.parse(audioServer.baseUrl() + trackPath)
-        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory)
+        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory, verifyProtectedUri = allowTestLoopback)
         var source = cacheFactory.createDataSource()
         source.open(DataSpec.Builder().setUri(uri).setPosition(0).setLength(halfOffset.toLong()).build())
 
@@ -361,7 +366,7 @@ class AudioStreamingNetworkRecoveryTest {
         audioServer.registerPayload(trackPath, flacData)
 
         val uri = Uri.parse(audioServer.baseUrl() + trackPath)
-        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory)
+        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory, verifyProtectedUri = allowTestLoopback)
 
         // Seek directly to 75% into the track (offset 384 KB)
         val seekOffset = 384 * 1024L
@@ -403,7 +408,7 @@ class AudioStreamingNetworkRecoveryTest {
         val currentUri = Uri.parse(audioServer.baseUrl() + currentTrackPath)
         val nextUri = Uri.parse(audioServer.baseUrl() + nextTrackPath)
 
-        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory)
+        val cacheFactory = StreamCacheManager.createCacheDataSourceFactory(httpFactory, verifyProtectedUri = allowTestLoopback)
 
         // 1. Start active playback of current track
         val activeSource = cacheFactory.createDataSource()
@@ -417,7 +422,7 @@ class AudioStreamingNetworkRecoveryTest {
         val prefetchBudget = StreamCachePolicy.PREFETCH_METERED_BYTES
         val prefetchExecutor = Executors.newSingleThreadExecutor()
         val prefetchFuture = prefetchExecutor.submit(Callable {
-            StreamCacheManager.prefetchIntroDirect(nextUri, httpFactory, prefetchBudget)
+            StreamCacheManager.prefetchIntroDirect(nextUri, httpFactory, prefetchBudget, verifyProtectedUri = allowTestLoopback)
         })
 
         val prefetchedBytes = prefetchFuture.get(5, TimeUnit.SECONDS)

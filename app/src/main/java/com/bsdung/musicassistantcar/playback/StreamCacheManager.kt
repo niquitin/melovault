@@ -477,6 +477,7 @@ object StreamCacheManager {
     private class UpstreamCountingDataSource(
         private val delegate: DataSource,
         private val isPrefetch: Boolean = false,
+        private val verifyProtectedUri: (Uri) -> Unit,
     ) : DataSource {
         private var openTimeMs: Long = 0L
         private var hasLoggedFirstByte: Boolean = false
@@ -486,6 +487,12 @@ object StreamCacheManager {
         }
 
         override fun open(dataSpec: DataSpec): Long {
+            // A cached stream URL can outlive its VPN session. Verify again on
+            // EVERY upstream open before adding Authorization or reading bytes.
+            val scheme = dataSpec.uri.scheme?.lowercase()
+            if (scheme == "http" || scheme == "https") {
+                verifyProtectedUri(dataSpec.uri)
+            }
             openTimeMs = SystemClock.elapsedRealtime()
             hasLoggedFirstByte = false
             (delegate as? androidx.media3.datasource.HttpDataSource)?.let { httpDs ->
@@ -556,10 +563,16 @@ object StreamCacheManager {
         }
     }
 
-    fun createCacheDataSourceFactory(http: DataSource.Factory, isPrefetch: Boolean = false): CacheDataSource.Factory {
+    fun createCacheDataSourceFactory(
+        http: DataSource.Factory,
+        isPrefetch: Boolean = false,
+        verifyProtectedUri: (Uri) -> Unit = { uri ->
+            com.bsdung.musicassistantcar.data.AuthenticatedTransportGuard.requireApprovedNow(uri.toString())
+        },
+    ): CacheDataSource.Factory {
         val cache = simpleCache ?: throw IllegalStateException("Cache not initialized")
         val countingUpstreamFactory = DataSource.Factory {
-            UpstreamCountingDataSource(http.createDataSource(), isPrefetch = isPrefetch)
+            UpstreamCountingDataSource(http.createDataSource(), isPrefetch = isPrefetch, verifyProtectedUri = verifyProtectedUri)
         }
         return CacheDataSource.Factory()
             .setCache(cache)
@@ -593,7 +606,12 @@ object StreamCacheManager {
     fun createDataSourceFactory(ctx: Context, http: DataSource.Factory): DataSource.Factory =
         DefaultDataSource.Factory(ctx, cachedFactory(ctx, http))
 
-    fun prefetchIntroDirect(uri: Uri, http: DataSource.Factory, maxBytes: Long): Long {
+    fun prefetchIntroDirect(
+        uri: Uri, http: DataSource.Factory, maxBytes: Long,
+        verifyProtectedUri: (Uri) -> Unit = { protectedUri ->
+            com.bsdung.musicassistantcar.data.AuthenticatedTransportGuard.requireApprovedNow(protectedUri.toString())
+        },
+    ): Long {
         if (uri.scheme !in listOf("https", "http") || maxBytes <= 0) return 0
         if (isPlaybackBuffering) return 0
         val cache = simpleCache ?: return 0
@@ -601,7 +619,7 @@ object StreamCacheManager {
         try {
             val key = buildCacheKey(uri)
             if (cache.getCachedBytes(key, 0, maxBytes) >= maxBytes) return 0
-            val source = createCacheDataSourceFactory(http, isPrefetch = true).createDataSource()
+            val source = createCacheDataSourceFactory(http, isPrefetch = true, verifyProtectedUri = verifyProtectedUri).createDataSource()
             var bytes = 0L
             try {
                 source.open(DataSpec.Builder().setUri(uri).setPosition(0).setLength(maxBytes).build())
