@@ -3,6 +3,11 @@ package com.bsdung.musicassistantcar.data.telegram
 import android.app.Activity
 import android.app.Dialog
 import android.graphics.Color
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
@@ -44,6 +49,10 @@ internal class NowPlayingFullScreenDialog(
     private var title: TextView? = null
     private var category: TextView? = null
     private var formatLabel: TextView? = null
+    private var albumImage: ImageView? = null
+    private var albumPlaceholder: TextView? = null
+    private var coverItemId = ""
+    private var coverRequestId = 0L
     private var playButton: Button? = null
     private var shuffleButton: Button? = null
     private var repeatButton: Button? = null
@@ -123,10 +132,70 @@ internal class NowPlayingFullScreenDialog(
         return "Đang đọc định dạng âm thanh…"
     }
 
+    private fun decodeArtwork(bytes: ByteArray?): Bitmap? {
+        if (bytes == null || bytes.isEmpty() || bytes.size > 8_000_000) return null
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (bounds.outWidth / sample > 900 || bounds.outHeight / sample > 900) {
+            sample *= 2
+        }
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size,
+            BitmapFactory.Options().apply { inSampleSize = sample })
+    }
+
+    private fun updateAlbumArt(player: MediaController?) {
+        val item = player?.currentMediaItem
+        val key = item?.mediaId.orEmpty()
+        if (key == coverItemId) return
+        coverItemId = key
+        val requestId = ++coverRequestId
+        albumImage?.setImageDrawable(null)
+        albumPlaceholder?.visibility = View.VISIBLE
+        if (item == null) return
+        val embedded = item.mediaMetadata.artworkData
+        val uri = item.localConfiguration?.uri
+        // Read embedded cover art only from the audio URI already authorized
+        // for playback. Never request an unauthenticated remote image URL.
+        Thread {
+            val picture = embedded ?: runCatching {
+                if (uri == null || uri.scheme !in setOf("file", "content")) {
+                    null
+                } else {
+                    MediaMetadataRetriever().let { extractor ->
+                        try {
+                            extractor.setDataSource(activity, uri)
+                            extractor.embeddedPicture
+                        } finally {
+                            extractor.release()
+                        }
+                    }
+                }
+            }.getOrNull()
+            val bitmap = runCatching { decodeArtwork(picture) }.getOrNull()
+            activity.runOnUiThread {
+                if (requestId != coverRequestId || dialog?.isShowing != true) {
+                    bitmap?.recycle()
+                    return@runOnUiThread
+                }
+                if (bitmap != null) {
+                    albumImage?.setImageBitmap(bitmap)
+                    albumPlaceholder?.visibility = View.GONE
+                }
+            }
+        }.apply {
+            name = "MeloVault-EmbeddedCover"
+            isDaemon = true
+            start()
+        }
+    }
+
     private val update = object : Runnable {
         override fun run() {
             if (dialog?.isShowing != true) return
             val player = media()
+            updateAlbumArt(player)
             title?.text = player?.currentMediaItem?.mediaMetadata?.title
                 ?.toString()?.ifBlank { "Chọn bài hát" } ?: "Chọn bài hát"
             category?.text = source()
@@ -185,11 +254,17 @@ internal class NowPlayingFullScreenDialog(
 
         // Album-art placeholder. Actual cover art will be used only when
         // provided by the selected account's Media3 item in a future release.
-        val art = LinearLayout(activity).apply {
-            gravity = Gravity.CENTER
+        val art = FrameLayout(activity).apply {
             background = bubble(surface, 26)
-            addView(label("♫", 100f, mint))
+            clipToOutline = true
         }
+        albumImage = ImageView(activity).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            contentDescription = "Ảnh bìa của bài đang phát"
+        }
+        art.addView(albumImage, FrameLayout.LayoutParams(-1, -1))
+        albumPlaceholder = label("♫", 100f, mint)
+        art.addView(albumPlaceholder, FrameLayout.LayoutParams(-1, -1))
         root.addView(art, LinearLayout.LayoutParams(-1, 0, 1f).apply {
             topMargin = dp(20)
             bottomMargin = dp(22)
@@ -330,6 +405,11 @@ internal class NowPlayingFullScreenDialog(
             title = null
             category = null
             formatLabel = null
+            coverRequestId++
+            coverItemId = ""
+            albumImage?.setImageDrawable(null)
+            albumImage = null
+            albumPlaceholder = null
             playButton = null
             shuffleButton = null
             repeatButton = null
