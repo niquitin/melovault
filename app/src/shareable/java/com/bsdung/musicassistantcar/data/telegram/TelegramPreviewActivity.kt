@@ -142,6 +142,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var historyCursorId: Long = 0L
     private var historyPages: Int = 0
     private var historyLoading = false
+    private val autoRecoveryPolicy = TelegramAutoRecoveryPolicy()
     private val seenSongMessageIds = mutableSetOf<Long>()
     private val maxHistoryPages = 24
     private var allChatsMode = false
@@ -268,6 +269,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
             return
         }
         initNative()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (auth.isReady()) {
+            checkAutoRecovery()
+        }
     }
 
     private val playbackListener = object : Player.Listener {
@@ -531,7 +539,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
             playlistMode = false
             browseSources = false
             selectedChatId = null
-            if (!allChatsMode) scanAllTelegramAudio(browseAfter = false)
+            val shouldScan = autoRecoveryPolicy.shouldTabTriggerScan(
+                auth.isReady(), allChatsMode, globalScanLoading, songs.size,
+                library.authorizedUser()?.value
+            )
+            if (shouldScan) scanAllTelegramAudio(browseAfter = false)
             else { songFilter.text?.clear(); refreshSongRows() }
         }
         tab("Nguồn Telegram", "Xem nhóm và kênh Telegram") {
@@ -539,7 +551,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
             playlistMode = false
             browseSources = true
             selectedChatId = null
-            if (!allChatsMode) scanAllTelegramAudio()
+            val shouldScan = autoRecoveryPolicy.shouldTabTriggerScan(
+                auth.isReady(), allChatsMode, globalScanLoading, songs.size,
+                library.authorizedUser()?.value
+            )
+            if (shouldScan) scanAllTelegramAudio()
             else { songFilter.text?.clear(); refreshSongRows() }
         }
         tab("Playlist", "Playlist các bài yêu thích") {
@@ -626,7 +642,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         globalSearch = uiButton("♫  Tìm nhạc mọi chat Telegram").apply {
             isEnabled = false
-            setOnClickListener { scanAllTelegramAudio() }
+            setOnClickListener {
+                autoRecoveryPolicy.onManualScanRequested()
+                scanAllTelegramAudio()
+            }
             sourceAllRow.addView(this, LinearLayout.LayoutParams(-1, -1))
         }
         libraryTitle = TextView(this).apply {
@@ -929,10 +948,17 @@ class TelegramPreviewActivity : AppCompatActivity() {
         menu.setOnMenuItemClickListener {
             when (it.itemId) {
                 1 -> if (auth.isReady()) loadSavedMessages()
-                2, 5 -> if (auth.isReady()) scanAllTelegramAudio()
+                2, 5 -> if (auth.isReady()) {
+                    autoRecoveryPolicy.onManualScanRequested()
+                    scanAllTelegramAudio()
+                }
                 3 -> if (auth.isReady()) openAudioDocument()
                 4 -> if (auth.isReady()) {
-                    if (!allChatsMode) scanAllTelegramAudio()
+                    val shouldScan = autoRecoveryPolicy.shouldTabTriggerScan(
+                        auth.isReady(), allChatsMode, globalScanLoading, songs.size,
+                        library.authorizedUser()?.value
+                    )
+                    if (shouldScan) scanAllTelegramAudio()
                     browseSources = true
                     selectedChatId = null
                     playlistMode = false
@@ -1711,10 +1737,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 if (auth.onNativeState(authEpoch,
                         TelegramAuthStep.AUTHORIZED_AWAITING_GET_ME)) {
                     send("getMe", "identity")
+                } else if (auth.isReady()) {
+                    checkAutoRecovery()
                 }
             }
             "authorizationStateLoggingOut", "authorizationStateClosing",
             "authorizationStateClosed" -> {
+                autoRecoveryPolicy.reset()
                 globalScanGeneration++
                 globalScanLoading = false
                 ShareableTdlibOwner.revokeAuthorization()
@@ -1924,8 +1953,21 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
     }
 
+    private fun checkAutoRecovery() {
+        val userId = library.authorizedUser()?.value ?: return
+        if (autoRecoveryPolicy.shouldAutoRecover(
+                auth.isReady(), allChatsMode, globalScanLoading, songs.size, userId
+            )) {
+            scanAllTelegramAudio(browseAfter = browseSources)
+        }
+    }
+
     private fun scanAllTelegramAudio(browseAfter: Boolean = true) {
-        if (!auth.isReady()) return
+        if (!auth.isReady() || globalScanLoading) return
+        val user = library.authorizedUser()?.value ?: 0L
+        if (user > 0L) {
+            autoRecoveryPolicy.recordScanDispatched(user)
+        }
         setNavigationCollapsed(false)
         resetSource(true)
         browseSources = browseAfter
@@ -1964,10 +2006,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
             requestGlobalPage()
         } else {
             globalScanLoading = false
+            autoRecoveryPolicy.recordScanCompleted(songs.size)
             runOnUiThread {
                 globalSearch.isEnabled = true
-                status.text = "Tìm thấy ${songs.size} bài từ các chat Telegram " +
-                    "(quét giới hạn mỗi loại 15 trang)."
+                status.text = if (songs.isEmpty()) {
+                    "Không tìm thấy tệp âm thanh trong các chat Telegram."
+                } else {
+                    "Tìm thấy ${songs.size} bài từ các chat Telegram " +
+                        "(quét giới hạn mỗi loại 15 trang)."
+                }
             }
         }
     }
@@ -2153,6 +2200,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun logoutUser() {
         if (!auth.isReady()) return
+        autoRecoveryPolicy.reset()
         setNavigationCollapsed(false)
         clearPendingQrLink()
         auth.logout()
