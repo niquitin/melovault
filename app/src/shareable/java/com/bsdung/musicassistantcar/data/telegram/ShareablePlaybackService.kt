@@ -10,6 +10,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import org.json.JSONObject
@@ -64,6 +65,8 @@ class ShareablePlaybackService : MediaSessionService() {
         super.onCreate()
         serviceRef = WeakReference(this)
         val player = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(
+                DefaultMediaSourceFactory(TelegramOwnerAudioDataSource.Factory(this)))
             .setAudioAttributes(AudioAttributes.DEFAULT, true)
             .setHandleAudioBecomingNoisy(true)
             .build()
@@ -88,6 +91,11 @@ class ShareablePlaybackService : MediaSessionService() {
             // Native receive thread may not touch the Media3 player directly.
             val tag = event.optString("@extra")
             val kind = event.optString("@type")
+            if (kind == "updateFile") {
+                event.optJSONObject("file")?.let(TelegramProgressiveCache::observe)
+            } else if (kind == "file") {
+                TelegramProgressiveCache.observe(event)
+            }
             if (kind == "updateAuthorizationState") {
                 val state = event.optJSONObject("authorization_state")
                     ?.optString("@type").orEmpty()
@@ -96,6 +104,7 @@ class ShareablePlaybackService : MediaSessionService() {
                     main.post {
                         ShareableTdlibOwner.revokeAuthorization()
                         clearQueue()
+                        TelegramProgressiveCache.clear()
                         exoPlayer?.stop()
                         exoPlayer?.clearMediaItems()
                     }
@@ -280,6 +289,7 @@ class ShareablePlaybackService : MediaSessionService() {
         mediaSession
 
     override fun onDestroy() {
+        TelegramProgressiveCache.clear()
         clearQueue()
         main.removeCallbacksAndMessages(null)
         ShareableTdlibOwner.unbindPlayback()

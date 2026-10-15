@@ -33,6 +33,7 @@ internal class NowPlayingFullScreenDialog(
     private val activity: Activity,
     private val media: () -> MediaController?,
     private val source: () -> String,
+    private val downloadProgress: () -> String?,
     private val previous: () -> Unit,
     private val next: () -> Unit,
     private val isFavorite: () -> Boolean,
@@ -49,6 +50,8 @@ internal class NowPlayingFullScreenDialog(
     private var title: TextView? = null
     private var category: TextView? = null
     private var formatLabel: TextView? = null
+    private var downloadLabel: TextView? = null
+    private var lastCoverAttemptMs: Long = 0L
     private var albumImage: ImageView? = null
     private var albumPlaceholder: TextView? = null
     private var coverItemId = ""
@@ -148,14 +151,24 @@ internal class NowPlayingFullScreenDialog(
     private fun updateAlbumArt(player: MediaController?) {
         val item = player?.currentMediaItem
         val key = item?.mediaId.orEmpty()
-        if (key == coverItemId) return
+        val now = android.os.SystemClock.uptimeMillis()
+        if (key == coverItemId) {
+            if (albumPlaceholder?.visibility != View.VISIBLE ||
+                now - lastCoverAttemptMs < 5_000L) return
+        }
+        lastCoverAttemptMs = now
         coverItemId = key
         val requestId = ++coverRequestId
         albumImage?.setImageDrawable(null)
         albumPlaceholder?.visibility = View.VISIBLE
         if (item == null) return
         val embedded = item.mediaMetadata.artworkData
-        val uri = item.localConfiguration?.uri
+        val originalUri = item.localConfiguration?.uri
+        val uri = if (originalUri != null &&
+            originalUri.scheme == TelegramProgressiveCache.SCHEME) {
+            TelegramProgressiveCache.fileId(originalUri)
+                ?.let(TelegramProgressiveCache::coverCandidate)
+        } else originalUri
         // Read embedded cover art only from the audio URI already authorized
         // for playback. Never request an unauthenticated remote image URL.
         Thread {
@@ -200,6 +213,9 @@ internal class NowPlayingFullScreenDialog(
                 ?.toString()?.ifBlank { "Chọn bài hát" } ?: "Chọn bài hát"
             category?.text = source()
             formatLabel?.text = audioFormatText(player)
+            downloadLabel?.text = downloadProgress().orEmpty()
+            downloadLabel?.visibility = if (downloadLabel?.text.isNullOrEmpty())
+                View.GONE else View.VISIBLE
             playButton?.text = if (player?.isPlaying == true) "Ⅱ" else "▶"
             val shuffle = player?.shuffleModeEnabled == true
             shuffleButton?.text = if (shuffle) "⇄ Đảo: Bật" else "⇄ Đảo: Tắt"
@@ -279,6 +295,8 @@ internal class NowPlayingFullScreenDialog(
         root.addView(category, LinearLayout.LayoutParams(-1, dp(30)))
         formatLabel = label("Đang đọc định dạng âm thanh…", 12f, secondary)
         root.addView(formatLabel, LinearLayout.LayoutParams(-1, dp(28)))
+        downloadLabel = label("", 12f, mint)
+        root.addView(downloadLabel, LinearLayout.LayoutParams(-1, dp(27)))
 
         seek = SeekBar(activity).apply {
             max = 1000
@@ -405,6 +423,7 @@ internal class NowPlayingFullScreenDialog(
             title = null
             category = null
             formatLabel = null
+            downloadLabel = null
             coverRequestId++
             coverItemId = ""
             albumImage?.setImageDrawable(null)
