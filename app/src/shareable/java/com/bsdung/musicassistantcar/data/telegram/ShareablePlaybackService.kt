@@ -27,7 +27,10 @@ class ShareablePlaybackService : MediaSessionService() {
         val messageId: Long,
         val fileId: Int,
         val title: String,
-        val cachedPath: String?
+        val cachedPath: String?,
+        val filename: String = "",
+        val chatId: Long = 0L,
+        val expectedSize: Long = -1L
     )
 
     companion object {
@@ -42,6 +45,16 @@ class ShareablePlaybackService : MediaSessionService() {
 
         internal fun clearTelegramQueue() {
             serviceRef?.get()?.clearQueue()
+        }
+
+        /** Main-thread, authorized snapshot; never exposes another account's queue. */
+        internal fun currentTelegramQueue(accountId: Long): List<QueueTrack> {
+            if (accountId <= 0L ||
+                ShareableTdlibOwner.authorizedAccount() != accountId ||
+                Looper.myLooper() != Looper.getMainLooper()) return emptyList()
+            val service = serviceRef?.get() ?: return emptyList()
+            if (service.expectedAccount != accountId) return emptyList()
+            return service.queueTracks.toList()
         }
 
         internal fun onPreviewDetached() {

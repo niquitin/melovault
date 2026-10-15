@@ -3,6 +3,7 @@ package com.bsdung.musicassistantcar.data.telegram
 import android.app.Activity
 import android.content.ComponentName
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
@@ -171,6 +172,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
         showMessage("Đang mở tệp: $fileName")
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Multi-window car head units change the playback pane size often.
+        // Keep TDLib and the MediaSession alive; rebuild only the dialog chrome.
+        val fullWasShowing = fullPlayer?.isShowing() == true
+        fullPlayer?.dismiss()
+        fullPlayer = null
+        if (fullWasShowing) showFullPlayer()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setTheme(R.style.Theme_MusicAssistantCar)
@@ -227,6 +238,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             override fun onSuccess(controller: MediaController?) {
                 if (controller == null || controllerReleased) return
                 player = controller
+                library.authorizedUser()?.value?.let { restorePlayingQueueIfAny(it) }
                 controller.addListener(playbackListener)
                 playbackListener.onIsPlayingChanged(controller.isPlaying)
                 updatePlaylistButtons()
@@ -259,13 +271,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
         cachedSongPaths[song.messageId] = target.canonicalPath
         // Playback queue follows only the selected source (and visible title
         // filter), never silently jumps into a different Telegram channel.
-        queueSongOrder = shownSongs.toList().ifEmpty { listOf(song) }
+        queueSongOrder = TelegramQueueRetentionPolicy.forSelected(
+            shownSongs, queueSongOrder, song.messageId
+        ) { it.messageId }.ifEmpty { listOf(song) }
         library.authorizedUser()?.let { owner ->
             ShareablePlaybackService.configureTelegramQueue(
                 owner.value, filesRoot, queueSongOrder.map { entry ->
                     ShareablePlaybackService.QueueTrack(
                         entry.messageId, entry.fileId, entry.title,
-                        cachedSongPaths[entry.messageId]
+                        cachedSongPaths[entry.messageId], entry.filename,
+                        entry.chatId, entry.expectedSize
                     )
                 }
             )
@@ -308,13 +323,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // This is a growing private TDLib file, not a public Telegram URL.
         // The Media3 source waits only for missing bytes; do not wait for the
         // full mix or silently pretend the file is fully cached.
-        queueSongOrder = shownSongs.toList().ifEmpty { listOf(song) }
+        queueSongOrder = TelegramQueueRetentionPolicy.forSelected(
+            shownSongs, queueSongOrder, song.messageId
+        ) { it.messageId }.ifEmpty { listOf(song) }
         library.authorizedUser()?.let { owner ->
             ShareablePlaybackService.configureTelegramQueue(
                 owner.value, filesRoot, queueSongOrder.map { entry ->
                     ShareablePlaybackService.QueueTrack(
                         entry.messageId, entry.fileId, entry.title,
-                        cachedSongPaths[entry.messageId]
+                        cachedSongPaths[entry.messageId], entry.filename,
+                        entry.chatId, entry.expectedSize
                     )
                 }
             )
@@ -795,15 +813,60 @@ class TelegramPreviewActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    private fun restorePlayingQueueIfAny(accountId: Long) {
+        if (!auth.isReady() || accountId <= 0L) return
+        val restored = ShareablePlaybackService.currentTelegramQueue(accountId)
+        if (restored.isEmpty()) return
+        queueSongOrder = restored.map { track ->
+            Song(track.fileId, track.title, track.filename.ifBlank { track.title },
+                track.messageId, track.chatId, track.expectedSize)
+        }
+        restored.forEach { track ->
+            val path = track.cachedPath ?: return@forEach
+            val local = File(path)
+            if (local.isFile && TelegramAccountStoragePolicy.isOwnedFile(filesRoot, local)) {
+                cachedSongPaths[track.messageId] = local.canonicalPath
+            }
+        }
+    }
+
     private fun showUpcomingQueue() {
         if (!auth.isReady()) return
+        library.authorizedUser()?.value?.let { restorePlayingQueueIfAny(it) }
         val list = queueSongOrder
         if (list.isEmpty()) {
-            AlertDialog.Builder(this)
-                .setTitle("Hàng đợi hiện tại")
-                .setMessage("Chưa có hàng đợi Telegram.")
-                .setPositiveButton("Đóng", null)
-                .show()
+            val popup = android.app.Dialog(this, android.R.style.Theme_Material_NoActionBar)
+            val wrapper = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(18), dp(18), dp(18), dp(18))
+                setBackgroundColor(midnight)
+                addView(TextView(this@TelegramPreviewActivity).apply {
+                    text = "HÀNG ĐỢI MELOVAULT"
+                    textSize = 18f
+                    setTextColor(ink)
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                })
+                addView(TextView(this@TelegramPreviewActivity).apply {
+                    val playing = player?.currentMediaItem?.mediaMetadata?.title
+                    text = if (playing != null) {
+                        "Đang phát: $playing\nDanh sách nguồn đang được khôi phục. " +
+                            "Hãy đợi Telegram đồng bộ hoặc mở lại nhóm."
+                    } else "Chưa chọn bài nào. Mở một nhóm nhạc để tạo hàng đợi."
+                    textSize = 14f
+                    setTextColor(subtle)
+                    setPadding(0, dp(24), 0, dp(22))
+                })
+                addView(uiButton("Đóng").apply { setOnClickListener { popup.dismiss() } })
+            }
+            popup.setContentView(wrapper)
+            popup.show()
+            popup.window?.apply {
+                setLayout(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+                navigationBarColor = midnight
+            }
             return
         }
         val selected = currentTelegramMessageId()
@@ -974,7 +1037,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val account = library.authorizedUser() ?: return
         if (!auth.isReady()) return
         val target = currentTelegramMessageId() ?: return
-        if (songs.none { it.messageId == target }) return
+        if (songs.none { it.messageId == target } &&
+            queueSongOrder.none { it.messageId == target }) return
         val next = TelegramPlaylistPolicy.toggle(favoriteIds, target)
         val result = runCatching { playlistStore.save(account, next) }
         if (result.isFailure) {
@@ -1191,6 +1255,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         submit.isEnabled = false
                         input.visibility = View.GONE
                         authControls.visibility = View.GONE
+                        restorePlayingQueueIfAny(verified.value)
                     }
                     scanAllTelegramAudio()
                 }
@@ -1516,10 +1581,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
         seenSongMessageIds.clear()
         songs.clear()
         shownSongs = emptyList()
-        queueSongOrder = emptyList()
-        cachedSongPaths.clear()
+        // The MediaSession owns the playing queue through window resizing,
+        // source browsing and Activity recreation. Never destroy it here.
+        // It is cleared only on explicit logout/clearPlaybackSession.
+        if (currentTelegramMessageId() == null) queueSongOrder = emptyList()
         playlistMode = false
-        ShareablePlaybackService.clearTelegramQueue()
         runOnUiThread {
             adapter.clear()
             songFilter.text?.clear()

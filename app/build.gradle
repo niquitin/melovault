@@ -59,8 +59,8 @@ android {
             // Replace with a managed release key before any public distribution.
             signingConfig signingConfigs.debug
             // Beta-only bump; never alter the existing Personal Stable artifact.
-            versionCode 67
-            versionName '0.6.46'
+            versionCode 68
+            versionName '0.6.47'
             versionNameSuffix '-beta'
             buildConfigField 'boolean', 'PERSONAL_BACKEND_ENABLED', 'false'
             buildConfigField 'String', 'CAR_API_PRIMARY', '""'

@@ -22,6 +22,7 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.SeekBar
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.media3.common.C
 import androidx.media3.common.Player
@@ -246,15 +247,31 @@ internal class NowPlayingFullScreenDialog(
         }
     }
 
+    fun isShowing(): Boolean = dialog?.isShowing == true
+
     fun show() {
         if (dialog?.isShowing == true) return
         val popup = Dialog(activity, android.R.style.Theme_Material_NoActionBar)
         dialog = popup
+        // Multi-window on car head units can be <400dp wide and ~600dp tall.
+        // Always recompute using the CURRENT window, never the phone display.
+        val windowBounds = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            activity.windowManager.currentWindowMetrics.bounds
+        } else null
+        val density = activity.resources.displayMetrics.density
+        val widthDp = ((windowBounds?.width()
+            ?: activity.resources.displayMetrics.widthPixels) / density).toInt()
+        val heightDp = ((windowBounds?.height()
+            ?: activity.resources.displayMetrics.heightPixels) / density).toInt()
+        val compact = CarPaneLayoutPolicy.compactFor(widthDp, heightDp)
         val root = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setBackgroundColor(this@NowPlayingFullScreenDialog.background)
-            setPadding(dp(22), dp(20), dp(22), dp(20))
+            setPadding(dp(if (compact) 10 else 22),
+                dp(if (compact) 7 else 20),
+                dp(if (compact) 10 else 22),
+                dp(if (compact) 7 else 20))
         }
         val top = LinearLayout(activity).apply {
             gravity = Gravity.CENTER_VERTICAL
@@ -263,10 +280,12 @@ internal class NowPlayingFullScreenDialog(
         val close = button("⌄", surface, foreground, 27f).apply {
             setOnClickListener { popup.dismiss() }
         }
-        top.addView(close, LinearLayout.LayoutParams(dp(62), dp(56)))
-        top.addView(label("MELOVAULT  ·  NOW PLAYING", 12f, mint, true),
-            LinearLayout.LayoutParams(0, dp(56), 1f))
-        root.addView(top, LinearLayout.LayoutParams(-1, dp(60)))
+        top.addView(close, LinearLayout.LayoutParams(
+            dp(if (compact) 38 else 62), dp(if (compact) 36 else 56)))
+        top.addView(label("MELOVAULT  ·  NOW PLAYING",
+            if (compact) 10f else 12f, mint, true),
+            LinearLayout.LayoutParams(0, dp(if (compact) 36 else 56), 1f))
+        root.addView(top, LinearLayout.LayoutParams(-1, dp(if (compact) 38 else 60)))
 
         // Album-art placeholder. Actual cover art will be used only when
         // provided by the selected account's Media3 item in a future release.
@@ -281,22 +300,30 @@ internal class NowPlayingFullScreenDialog(
         art.addView(albumImage, FrameLayout.LayoutParams(-1, -1))
         albumPlaceholder = label("♫", 100f, mint)
         art.addView(albumPlaceholder, FrameLayout.LayoutParams(-1, -1))
-        root.addView(art, LinearLayout.LayoutParams(-1, 0, 1f).apply {
-            topMargin = dp(20)
-            bottomMargin = dp(22)
-        })
+        root.addView(art,
+            if (compact) LinearLayout.LayoutParams(-1, dp(98)).apply {
+                topMargin = dp(5)
+                bottomMargin = dp(8)
+            } else LinearLayout.LayoutParams(-1, 0, 1f).apply {
+                topMargin = dp(20)
+                bottomMargin = dp(22)
+            })
 
-        title = label("Chọn bài hát", 23f, foreground, true).apply {
-            maxLines = 3
+        title = label("Chọn bài hát",
+            if (compact) 17f else 23f, foreground, true).apply {
+            maxLines = if (compact) 2 else 3
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
         root.addView(title, LinearLayout.LayoutParams(-1, -2))
         category = label("", 13f, secondary)
-        root.addView(category, LinearLayout.LayoutParams(-1, dp(30)))
+        root.addView(category, LinearLayout.LayoutParams(
+            -1, dp(if (compact) 21 else 30)))
         formatLabel = label("Đang đọc định dạng âm thanh…", 12f, secondary)
-        root.addView(formatLabel, LinearLayout.LayoutParams(-1, dp(28)))
+        root.addView(formatLabel, LinearLayout.LayoutParams(
+            -1, dp(if (compact) 20 else 28)))
         downloadLabel = label("", 12f, mint)
-        root.addView(downloadLabel, LinearLayout.LayoutParams(-1, dp(27)))
+        root.addView(downloadLabel, LinearLayout.LayoutParams(
+            -1, dp(if (compact) 20 else 27)))
 
         seek = SeekBar(activity).apply {
             max = 1000
@@ -325,7 +352,8 @@ internal class NowPlayingFullScreenDialog(
                 }
             })
         }
-        root.addView(seek, LinearLayout.LayoutParams(-1, dp(45)))
+        root.addView(seek, LinearLayout.LayoutParams(
+            -1, dp(if (compact) 30 else 45)))
         val times = LinearLayout(activity).apply {
             gravity = Gravity.CENTER_VERTICAL
             orientation = LinearLayout.HORIZONTAL
@@ -335,7 +363,7 @@ internal class NowPlayingFullScreenDialog(
         times.addView(positionLabel)
         times.addView(View(activity), LinearLayout.LayoutParams(0, 1, 1f))
         times.addView(durationLabel)
-        root.addView(times, LinearLayout.LayoutParams(-1, dp(25)))
+        root.addView(times, LinearLayout.LayoutParams(-1, dp(if (compact) 21 else 25)))
 
         val controls = LinearLayout(activity).apply {
             gravity = Gravity.CENTER
@@ -357,14 +385,16 @@ internal class NowPlayingFullScreenDialog(
             setOnClickListener { next() }
         }
         for (b in listOf(back, playButton!!, forward)) {
-            controls.addView(b, LinearLayout.LayoutParams(0, dp(72), 1f).apply {
+            controls.addView(b, LinearLayout.LayoutParams(
+                0, dp(if (compact) 47 else 72), 1f).apply {
                 leftMargin = dp(4)
                 rightMargin = dp(4)
             })
         }
-        root.addView(controls, LinearLayout.LayoutParams(-1, dp(80)).apply {
-            topMargin = dp(8)
-            bottomMargin = dp(9)
+        root.addView(controls, LinearLayout.LayoutParams(
+            -1, dp(if (compact) 51 else 80)).apply {
+            topMargin = dp(if (compact) 2 else 8)
+            bottomMargin = dp(if (compact) 3 else 9)
         })
         val modes = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -389,12 +419,14 @@ internal class NowPlayingFullScreenDialog(
             }
         }
         for (b in listOf(shuffleButton!!, repeatButton!!)) {
-            modes.addView(b, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+            modes.addView(b, LinearLayout.LayoutParams(
+                0, dp(if (compact) 38 else 48), 1f).apply {
                 leftMargin = dp(4)
                 rightMargin = dp(4)
             })
         }
-        root.addView(modes, LinearLayout.LayoutParams(-1, dp(52)))
+        root.addView(modes, LinearLayout.LayoutParams(
+            -1, dp(if (compact) 40 else 52)))
         val extras = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -406,16 +438,29 @@ internal class NowPlayingFullScreenDialog(
             setOnClickListener { openQueue() }
         }
         for (b in listOf(favoriteButton!!, queue)) {
-            extras.addView(b, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+            extras.addView(b, LinearLayout.LayoutParams(
+                0, dp(if (compact) 38 else 48), 1f).apply {
                 leftMargin = dp(4)
                 rightMargin = dp(4)
             })
         }
-        root.addView(extras, LinearLayout.LayoutParams(-1, dp(55)))
-        root.addView(label("Ngẫu nhiên: bài đã tải • Phát nền Media3", 11f, secondary),
+        root.addView(extras, LinearLayout.LayoutParams(
+            -1, dp(if (compact) 41 else 55)))
+        if (!compact) root.addView(
+            label("Ngẫu nhiên: bài đã tải • Phát nền Media3", 11f, secondary),
             LinearLayout.LayoutParams(-1, dp(30)))
-
-        popup.setContentView(root)
+        if (compact) {
+            val scroll = ScrollView(activity).apply {
+                isFillViewport = true
+                setBackgroundColor(this@NowPlayingFullScreenDialog.background)
+                addView(root, ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT))
+            }
+            popup.setContentView(scroll)
+        } else {
+            popup.setContentView(root)
+        }
         popup.setOnDismissListener {
             main.removeCallbacks(update)
             dialog = null
