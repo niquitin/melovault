@@ -105,6 +105,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var filesRoot: File
     private var currentTask = ""
     private var mutedMessages = false
+    private var nativeReceiver: ((JSONObject) -> Unit)? = null
 
     // Android's system picker grants access only to the selected document.
     // Deliberately do not persist or log provider URIs or account tokens.
@@ -209,6 +210,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun enqueueTelegramPlayback(song: Song, target: File) {
         cachedSongPaths[song.messageId] = target.canonicalPath
         queueSongOrder = if (playlistMode) shownSongs.toList() else songs.toList()
+        library.authorizedUser()?.let { owner ->
+            ShareablePlaybackService.configureTelegramQueue(
+                owner.value, filesRoot, queueSongOrder.map { entry ->
+                    ShareablePlaybackService.QueueTrack(
+                        entry.messageId, entry.fileId, entry.title,
+                        cachedSongPaths[entry.messageId]
+                    )
+                }
+            )
+        }
         val playable = queueSongOrder.mapNotNull { item ->
             val path = cachedSongPaths[item.messageId] ?: return@mapNotNull null
             val file = File(path)
@@ -243,6 +254,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun clearPlaybackSession() {
+        ShareablePlaybackService.clearTelegramQueue()
         cachedSongPaths.clear()
         queueSongOrder = emptyList()
         pendingPlayback = null
@@ -647,24 +659,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val sessionDb = File(slot, "database").apply { check(mkdirs() || isDirectory) }
             val encryptedKey = tdlibDatabaseKey()
             authEpoch = auth.startClient()
-            nativeClientId = TdlibNativeJsonGateway.newClientId()
+            val listener: (JSONObject) -> Unit = { event ->
+                onNativeEvent(event, sessionDb, encryptedKey)
+            }
+            nativeReceiver = listener
+            nativeClientId = ShareableTdlibOwner.attachUi(slot, listener)
             running = true
-            Thread({
-                while (running) {
-                    try {
-                        val event = TdlibNativeJsonGateway.receiveOne(0.4) ?: continue
-                        val obj = JSONObject(event)
-                        if (obj.optInt("@client_id") != nativeClientId) continue
-                        onNativeEvent(obj, sessionDb, encryptedKey)
-                    } catch (e: Exception) {
-                        if (running) {
-                            running = false
-                            showMessage("Lỗi kết nối TDLib: " +
-                                (e.message ?: e.javaClass.simpleName).take(150))
-                        }
-                    }
-                }
-            }, "MeloVault-TDLib-Preview").start()
             send("getAuthorizationState", "state")
         } catch (e: Exception) {
             showMessage("Không thể khởi tạo Telegram: " +
@@ -673,10 +673,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun send(type: String, tag: String? = null, configure: ((JSONObject) -> Unit)? = null) {
-        val obj = JSONObject().put("@type", type)
-        if (tag != null) obj.put("@extra", tag)
-        configure?.invoke(obj)
-        TdlibNativeJsonGateway.send(nativeClientId, obj.toString())
+        ShareableTdlibOwner.send(type, tag, configure)
     }
 
     private fun onNativeEvent(result: JSONObject, sessionDb: File, secret: String) {
@@ -730,6 +727,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             try {
                 val verified = TelegramUserId(userId)
                 if (auth.onGetMe(authEpoch, verified)) {
+                    ShareableTdlibOwner.markGetMeVerified(verified.value)
                     showMessage("Đã đăng nhập Telegram. Tải nhạc trong Saved Messages.")
                     favoriteIds = runCatching { playlistStore.load(verified) }
                         .getOrDefault(emptyList())
@@ -917,6 +915,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
             "authorizationStateLoggingOut", "authorizationStateClosing",
             "authorizationStateClosed" -> {
+                ShareableTdlibOwner.revokeAuthorization()
                 auth.logout()
                 clearPendingQrLink()
                 runOnUiThread {
@@ -1145,6 +1144,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         if (!auth.isReady()) return
         clearPendingQrLink()
         auth.logout()
+        ShareableTdlibOwner.revokeAuthorization()
         clearPlaybackSession()
         songs.clear()
         adapter.clear()
@@ -1167,9 +1167,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
     override fun onDestroy() {
         clearPendingQrLink()
         running = false
-        runCatching {
-            if (nativeClientId > 0) TdlibNativeJsonGateway.requestClose(nativeClientId)
-        }
+        nativeReceiver?.let { ShareableTdlibOwner.detachUi(it) }
+        nativeReceiver = null
+        // Service may now resolve a missing queued neighbor with TDLib.
+        ShareablePlaybackService.onPreviewDetached()
         controllerReleased = true
         player?.removeListener(playbackListener)
         controllerFuture?.let { MediaController.releaseFuture(it) }
