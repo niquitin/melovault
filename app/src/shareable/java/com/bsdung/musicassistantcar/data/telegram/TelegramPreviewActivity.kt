@@ -72,6 +72,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var qrLogin: Button
     private lateinit var refresh: Button
     private lateinit var openDocument: Button
+    private lateinit var favoriteButton: Button
+    private lateinit var playlistButton: Button
     private lateinit var logout: Button
     private lateinit var tracks: ListView
     private lateinit var adapter: ArrayAdapter<String>
@@ -82,6 +84,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var pendingPlayback: PendingPlayback? = null
     private val cachedSongPaths = java.util.concurrent.ConcurrentHashMap<Long, String>()
     private val songs = mutableListOf<Song>()
+    private var shownSongs: List<Song> = emptyList()
+    private var queueSongOrder: List<Song> = emptyList()
+    private val playlistStore by lazy { TelegramSavedPlaylistStore(noBackupFilesDir) }
+    private var favoriteIds: List<Long> = emptyList()
+    private var playlistMode = false
     private var authEpoch: Long = 0L
     private var tdlibParametersSent = false
     @Volatile private var nativeClientId = 0
@@ -94,6 +101,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private val seenSongMessageIds = mutableSetOf<Long>()
     private val maxHistoryPages = 24
     private var downloadWaiting: Int? = null
+    private var prefetchWaiting: Int? = null
     private lateinit var filesRoot: File
     private var currentTask = ""
     private var mutedMessages = false
@@ -155,6 +163,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
             currentSongIndex = if (mediaItem?.mediaId?.startsWith("telegram:") == true) {
                 songs.indexOfFirst { it.messageId == id }
             } else -1
+            updatePlaylistButtons()
+            if (currentSongIndex >= 0 && auth.isReady()) {
+                prefetchNextCachedNeighbor()
+            }
         }
     }
 
@@ -168,6 +180,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 player = controller
                 controller.addListener(playbackListener)
                 playbackListener.onIsPlayingChanged(controller.isPlaying)
+                updatePlaylistButtons()
                 nowPlayingTitle.text = controller.currentMediaItem?.mediaMetadata?.title
                     ?: "Chọn một bài hát để bắt đầu"
                 pendingPlayback?.let { pending ->
@@ -195,7 +208,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun enqueueTelegramPlayback(song: Song, target: File) {
         cachedSongPaths[song.messageId] = target.canonicalPath
-        val playable = songs.mapNotNull { item ->
+        queueSongOrder = if (playlistMode) shownSongs.toList() else songs.toList()
+        val playable = queueSongOrder.mapNotNull { item ->
             val path = cachedSongPaths[item.messageId] ?: return@mapNotNull null
             val file = File(path)
             if (!file.isFile || !TelegramAccountStoragePolicy.isOwnedFile(filesRoot, file)) {
@@ -230,11 +244,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun clearPlaybackSession() {
         cachedSongPaths.clear()
+        queueSongOrder = emptyList()
         pendingPlayback = null
         player?.let { controller ->
             controller.stop()
             controller.clearMediaItems()
         }
+        prefetchWaiting = null
         // A background session must never retain a logged-out account's music.
         stopService(Intent(this, ShareablePlaybackService::class.java))
     }
@@ -362,6 +378,34 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 bottomMargin = dp(6)
             })
         }
+        val playlistRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            root.addView(this, LinearLayout.LayoutParams(-1, dp(43)).apply {
+                bottomMargin = dp(9)
+            })
+        }
+        favoriteButton = uiButton("☆ Lưu bài").apply {
+            isEnabled = false
+            setOnClickListener { toggleCurrentFavorite() }
+            playlistRow.addView(this, LinearLayout.LayoutParams(0, -1, 1f).apply {
+                rightMargin = dp(4)
+            })
+        }
+        playlistButton = uiButton("☷ Playlist").apply {
+            isEnabled = false
+            setOnClickListener {
+                if (!auth.isReady()) return@setOnClickListener
+                playlistMode = !playlistMode
+                updatePlaylistButtons()
+                refreshSongRows()
+                if (playlistMode && shownSongs.isEmpty()) {
+                    showMessage("Playlist chưa có bài trong thư viện hiện tại.")
+                }
+            }
+            playlistRow.addView(this, LinearLayout.LayoutParams(0, -1, 1f).apply {
+                leftMargin = dp(4)
+            })
+        }
         tracks = ListView(this).apply {
             setBackgroundColor(midnight)
             divider = null
@@ -386,7 +430,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         tracks.adapter = adapter
         tracks.onItemClickListener = android.widget.AdapterView.OnItemClickListener {
                 _, _, position, _ ->
-            songs.getOrNull(position)?.let { downloadAndPlay(it) }
+            shownSongs.getOrNull(position)?.let { downloadAndPlay(it) }
         }
         root.addView(tracks, LinearLayout.LayoutParams(-1, 0, 1f))
         val playerBar = LinearLayout(this).apply {
@@ -451,6 +495,49 @@ class TelegramPreviewActivity : AppCompatActivity() {
         setContentView(root)
     }
 
+    private fun currentTelegramMessageId(): Long? {
+        val mediaId = player?.currentMediaItem?.mediaId.orEmpty()
+        if (!mediaId.startsWith("telegram:")) return null
+        return mediaId.removePrefix("telegram:").toLongOrNull()?.takeIf { it > 0 }
+    }
+
+    private fun updatePlaylistButtons() {
+        if (!::favoriteButton.isInitialized || !::playlistButton.isInitialized) return
+        val currentId = currentTelegramMessageId()
+        favoriteButton.isEnabled = auth.isReady() && currentId != null
+        favoriteButton.text = if (currentId != null && currentId in favoriteIds) {
+            "★ Đã lưu bài"
+        } else "☆ Lưu bài"
+        playlistButton.isEnabled = auth.isReady()
+        playlistButton.text = if (playlistMode) "☷ Tất cả bài" else "☷ Playlist"
+    }
+
+    private fun refreshSongRows() {
+        shownSongs = if (playlistMode) {
+            favoriteIds.mapNotNull { id -> songs.firstOrNull { it.messageId == id } }
+        } else songs.toList()
+        adapter.clear()
+        adapter.addAll(shownSongs.map { "${it.title} • ${it.filename}" })
+        adapter.notifyDataSetChanged()
+    }
+
+    private fun toggleCurrentFavorite() {
+        val account = library.authorizedUser() ?: return
+        if (!auth.isReady()) return
+        val target = currentTelegramMessageId() ?: return
+        if (songs.none { it.messageId == target }) return
+        val next = TelegramPlaylistPolicy.toggle(favoriteIds, target)
+        val result = runCatching { playlistStore.save(account, next) }
+        if (result.isFailure) {
+            showMessage("Không lưu được playlist an toàn trên thiết bị.")
+            return
+        }
+        favoriteIds = next
+        updatePlaylistButtons()
+        refreshSongRows()
+        showMessage("Playlist cá nhân: ${favoriteIds.size} bài đã lưu.")
+    }
+
     private fun playAdjacent(delta: Int) {
         if (!auth.isReady()) return
         val controller = player
@@ -464,8 +551,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 return
             }
         }
-        if (currentSongIndex < 0) return
-        val target = songs.getOrNull(currentSongIndex + delta) ?: return
+        val currentId = currentTelegramMessageId() ?: return
+        val index = queueSongOrder.indexOfFirst { it.messageId == currentId }
+        if (index < 0) return
+        val target = queueSongOrder.getOrNull(index + delta) ?: return
         downloadAndPlay(target)
     }
 
@@ -598,6 +687,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 historyLoading = false
                 runOnUiThread { refresh.isEnabled = true }
             }
+            if (tag.startsWith("prefetch:")) {
+                prefetchWaiting = null
+                return // A prefetched-neighbor miss must not interrupt current audio.
+            }
             // Initial parameter errors need a useful diagnosis. Raw auth errors
             // must never reveal an OTP, phone number or 2FA content in the UI.
             val safeStage = tag.takeIf { it in setOf("parameters", "state", "identity") }
@@ -638,7 +731,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 val verified = TelegramUserId(userId)
                 if (auth.onGetMe(authEpoch, verified)) {
                     showMessage("Đã đăng nhập Telegram. Tải nhạc trong Saved Messages.")
+                    favoriteIds = runCatching { playlistStore.load(verified) }
+                        .getOrDefault(emptyList())
+                    playlistMode = false
                     runOnUiThread {
+                        updatePlaylistButtons()
                         refresh.isEnabled = true
                         openDocument.isEnabled = true
                         logout.isEnabled = true
@@ -708,16 +805,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
             runOnUiThread {
                 if (pageCount == 1) {
                     songs.clear()
-                    adapter.clear()
                 }
                 songs.addAll(extracted)
-                adapter.addAll(extracted.map { "${it.title} • ${it.filename}" })
-                adapter.notifyDataSetChanged()
+                refreshSongRows()
+                updatePlaylistButtons()
                 if (hasMore) {
                     status.text = "Đang đọc lịch sử Telegram: ${songs.size} bài / ${pageCount} lượt."
                 } else {
                     status.text = "Đã tìm thấy ${songs.size} bài nhạc trong ${pageCount} lượt lịch sử."
                     refresh.isEnabled = true
+                    if (currentSongIndex >= 0) prefetchNextCachedNeighbor()
                 }
             }
             if (hasMore) {
@@ -731,8 +828,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
         if (kind == "file" && tag.startsWith("download:")) {
             playIfDownloaded(result)
         }
+        if (kind == "file" && tag.startsWith("prefetch:")) {
+            observePrefetch(result)
+        }
         if (kind == "updateFile") {
-            result.optJSONObject("file")?.let { playIfDownloaded(it) }
+            result.optJSONObject("file")?.let {
+                playIfDownloaded(it)
+                observePrefetch(it)
+            }
         }
     }
 
@@ -821,6 +924,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     tracks.adapter = adapter
                     songs.clear()
                     adapter.clear()
+                    favoriteIds = emptyList()
+                    playlistMode = false
+                    shownSongs = emptyList()
+                    updatePlaylistButtons()
                     refresh.isEnabled = false
                     openDocument.isEnabled = false
                     logout.isEnabled = false
@@ -923,6 +1030,76 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Bounded look-ahead: at most one TDLib download for the immediate next
+     * discovered Saved Messages track, started only while this authenticated
+     * Activity is alive. Media3 may then advance in the background.
+     * Never prefetch from arbitrary channels, providers or foreign cache roots.
+     */
+    private fun prefetchNextCachedNeighbor() {
+        if (!auth.isReady() || !running || currentSongIndex < 0 ||
+            prefetchWaiting != null || downloadWaiting != null) return
+        val currentId = currentTelegramMessageId() ?: return
+        val idx = queueSongOrder.indexOfFirst { it.messageId == currentId }
+        val next = queueSongOrder.getOrNull(idx + 1) ?: return
+        val path = cachedSongPaths[next.messageId]
+        if (path != null) {
+            val target = File(path)
+            if (target.isFile && TelegramAccountStoragePolicy.isOwnedFile(filesRoot, target)) {
+                insertCachedNeighborIfRelevant(next, target)
+                return
+            }
+            cachedSongPaths.remove(next.messageId)
+        }
+        prefetchWaiting = next.fileId
+        runCatching {
+            send("downloadFile", "prefetch:${next.fileId}") {
+                it.put("file_id", next.fileId)
+                it.put("priority", 4)
+                it.put("offset", 0)
+                it.put("limit", 0)
+                it.put("synchronous", false)
+            }
+        }.onFailure { prefetchWaiting = null }
+    }
+
+    private fun observePrefetch(file: JSONObject) {
+        if (!auth.isReady() || file.optInt("id") != prefetchWaiting) return
+        val local = file.optJSONObject("local") ?: return
+        if (!local.optBoolean("is_downloading_completed")) return
+        prefetchWaiting = null
+        val path = local.optString("path")
+        val target = File(path)
+        if (!target.isFile || !TelegramAccountStoragePolicy.isOwnedFile(filesRoot, target)) return
+        val song = songs.firstOrNull { it.fileId == file.optInt("id") } ?: return
+        cachedSongPaths[song.messageId] = target.canonicalPath
+        runOnUiThread {
+            if (!auth.isReady()) return@runOnUiThread
+            insertCachedNeighborIfRelevant(song, target)
+            prefetchNextCachedNeighbor()
+        }
+    }
+
+    private fun insertCachedNeighborIfRelevant(song: Song, target: File) {
+        val controller = player ?: return
+        val currentId = controller.currentMediaItem?.mediaId.orEmpty()
+        if (!currentId.startsWith("telegram:")) return
+        val currentIdLong = currentId.removePrefix("telegram:").toLongOrNull() ?: return
+        val position = queueSongOrder.indexOfFirst { it.messageId == currentIdLong }
+        if (position < 0 ||
+            queueSongOrder.getOrNull(position + 1)?.messageId != song.messageId) return
+        val mediaId = "telegram:${song.messageId}"
+        for (index in 0 until controller.mediaItemCount) {
+            if (controller.getMediaItemAt(index).mediaId == mediaId) return
+        }
+        if (target.isFile && TelegramAccountStoragePolicy.isOwnedFile(filesRoot, target)) {
+            controller.addMediaItem(
+                (controller.currentMediaItemIndex + 1).coerceAtMost(controller.mediaItemCount),
+                mediaItem(Uri.fromFile(target), song.title, mediaId)
+            )
+        }
+    }
+
     private fun downloadAndPlay(song: Song) {
         if (!auth.isReady()) return
         currentSongIndex = songs.indexOfFirst { it.messageId == song.messageId }
@@ -969,6 +1146,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
         clearPlaybackSession()
         songs.clear()
         adapter.clear()
+        queueSongOrder = emptyList()
+        favoriteIds = emptyList()
+        playlistMode = false
+        shownSongs = emptyList()
+        updatePlaylistButtons()
         downloadWaiting = null
         currentSongIndex = -1
         nowPlayingTitle.text = "Chọn một bài hát để bắt đầu"
