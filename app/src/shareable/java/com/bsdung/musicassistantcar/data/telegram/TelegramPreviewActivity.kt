@@ -20,6 +20,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.common.MediaItem
@@ -60,6 +61,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val title: String,
         val filename: String,
         val messageId: Long,
+        val chatId: Long,
     )
     private val library = TelegramAccountLibrary()
     private val auth = TelegramAuthorizationFlow(library)
@@ -75,6 +77,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var refresh: Button
     private lateinit var globalSearch: Button
     private lateinit var libraryTitle: TextView
+    private lateinit var sourcesButton: Button
     private lateinit var songFilter: EditText
     private lateinit var openDocument: Button
     private lateinit var favoriteButton: Button
@@ -82,6 +85,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var logout: Button
     private lateinit var tracks: ListView
     private lateinit var adapter: ArrayAdapter<String>
+    private lateinit var sourcesAdapter: ArrayAdapter<String>
+    private var visibleSourceIds: List<Long> = emptyList()
+    private var browseSources = false
+    private var selectedChatId: Long? = null
+    private val sourceNames = java.util.concurrent.ConcurrentHashMap<Long, String>()
+    private val requestedSourceNames =
+        java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
     private var player: MediaController? = null
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var controllerReleased = false
@@ -154,6 +164,21 @@ class TelegramPreviewActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setTheme(R.style.Theme_MusicAssistantCar)
         buildUi()
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (allChatsMode && (!browseSources || playlistMode)) {
+                    playlistMode = false
+                    browseSources = true
+                    selectedChatId = null
+                    songFilter.text?.clear()
+                    updatePlaylistButtons()
+                    refreshSongRows()
+                } else {
+                    isEnabled = false
+                    onBackPressedDispatcher.onBackPressed()
+                }
+            }
+        })
         connectPlaybackService()
         if (BuildConfig.TELEGRAM_APP_API_ID <= 0 ||
             BuildConfig.TELEGRAM_APP_API_HASH.length != 32) {
@@ -221,7 +246,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun enqueueTelegramPlayback(song: Song, target: File) {
         cachedSongPaths[song.messageId] = target.canonicalPath
-        queueSongOrder = if (playlistMode) shownSongs.toList() else songs.toList()
+        // Playback queue follows only the selected source (and visible title
+        // filter), never silently jumps into a different Telegram channel.
+        queueSongOrder = shownSongs.toList().ifEmpty { listOf(song) }
         library.authorizedUser()?.let { owner ->
             ShareablePlaybackService.configureTelegramQueue(
                 owner.value, filesRoot, queueSongOrder.map { entry ->
@@ -413,8 +440,23 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 bottomMargin = dp(6)
             })
         }
+        sourcesButton = uiButton("☷  Nhóm / kênh / bot", primary = true).apply {
+            isEnabled = false
+            setOnClickListener {
+                if (!auth.isReady() || !allChatsMode) return@setOnClickListener
+                browseSources = true
+                selectedChatId = null
+                playlistMode = false
+                songFilter.text?.clear()
+                refreshSongRows()
+                updatePlaylistButtons()
+            }
+            root.addView(this, LinearLayout.LayoutParams(-1, dp(43)).apply {
+                bottomMargin = dp(8)
+            })
+        }
         songFilter = EditText(this).apply {
-            hint = "Tìm bài hát theo tên…"
+            hint = "Tìm nhóm, kênh hoặc bot…"
             setSingleLine(true)
             textSize = 14f
             setTextColor(ink)
@@ -452,6 +494,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
             setOnClickListener {
                 if (!auth.isReady()) return@setOnClickListener
                 playlistMode = !playlistMode
+                if (playlistMode) {
+                    browseSources = false
+                    selectedChatId = null
+                } else if (allChatsMode) {
+                    browseSources = true
+                }
+                songFilter.text?.clear()
                 updatePlaylistButtons()
                 refreshSongRows()
                 if (playlistMode && shownSongs.isEmpty()) {
@@ -483,10 +532,33 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 return item
             }
         }
+        sourcesAdapter = object : ArrayAdapter<String>(this,
+            android.R.layout.simple_list_item_1, mutableListOf()) {
+            override fun getView(
+                position: Int, convertView: View?, parent: android.view.ViewGroup
+            ): View {
+                val item = super.getView(position, convertView, parent) as TextView
+                item.textSize = 14f
+                item.setTextColor(ink)
+                item.maxLines = 2
+                item.ellipsize = android.text.TextUtils.TruncateAt.END
+                item.background = rounded(panel, 11)
+                item.setPadding(dp(14), dp(12), dp(14), dp(12))
+                item.minHeight = dp(62)
+                return item
+            }
+        }
         tracks.adapter = adapter
         tracks.onItemClickListener = android.widget.AdapterView.OnItemClickListener {
                 _, _, position, _ ->
-            shownSongs.getOrNull(position)?.let { downloadAndPlay(it) }
+            if (allChatsMode && browseSources && !playlistMode) {
+                visibleSourceIds.getOrNull(position)?.let { source ->
+                    selectedChatId = source.takeIf { it != 0L }
+                    browseSources = false
+                    songFilter.text?.clear()
+                    refreshSongRows()
+                }
+            } else shownSongs.getOrNull(position)?.let { downloadAndPlay(it) }
         }
         root.addView(tracks, LinearLayout.LayoutParams(-1, 0, 1f))
         val playerBar = LinearLayout(this).apply {
@@ -569,18 +641,55 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun refreshSongRows() {
+        if (!::sourcesAdapter.isInitialized || !::songFilter.isInitialized) return
+        val q = songFilter.text?.toString()?.trim().orEmpty()
+        sourcesButton.isEnabled = auth.isReady() && allChatsMode
+        sourcesButton.visibility = if (allChatsMode) View.VISIBLE else View.GONE
+        val groups = if (allChatsMode) {
+            TelegramSourcePolicy.sortedCounts(songs.map { it.chatId })
+        } else emptyList()
+        if (allChatsMode && browseSources && !playlistMode) {
+            val entries = groups.filter { (chatId, _) ->
+                TelegramSourcePolicy.matchesSource(
+                    sourceNames[chatId] ?: "Nguồn Telegram $chatId", q)
+            }
+            val display = if (q.isBlank()) listOf(0L to songs.size) + entries
+                else entries
+            visibleSourceIds = display.map { it.first }
+            shownSongs = emptyList()
+            if (tracks.adapter !== sourcesAdapter) tracks.adapter = sourcesAdapter
+            sourcesAdapter.clear()
+            sourcesAdapter.addAll(display.map { (chatId, count) ->
+                val label = if (chatId == 0L) "♫ Tất cả nguồn"
+                    else sourceNames[chatId] ?: "Nguồn Telegram $chatId"
+                "$label  ·  $count bài"
+            })
+            libraryTitle.text = "NGUỒN NHẠC TELEGRAM  ·  ${groups.size} nhóm/kênh/chat"
+            sourcesButton.text = "☷  Nhóm / kênh / bot (${groups.size})"
+            songFilter.hint = "Tìm nhóm, kênh hoặc bot…"
+            return
+        }
+        if (tracks.adapter !== adapter) tracks.adapter = adapter
         val all = if (playlistMode) {
             favoriteIds.mapNotNull { id -> songs.firstOrNull { it.messageId == id } }
+        } else if (selectedChatId != null && allChatsMode) {
+            songs.filter { it.chatId == selectedChatId }
         } else songs.toList()
-        val q = if (::songFilter.isInitialized) songFilter.text?.toString()?.trim().orEmpty()
-            else ""
         shownSongs = if (q.isBlank()) all else all.filter {
             it.title.contains(q, ignoreCase = true) ||
                 it.filename.contains(q, ignoreCase = true)
         }
         adapter.clear()
         adapter.addAll(shownSongs.map { "${it.title} • ${it.filename}" })
-        adapter.notifyDataSetChanged()
+        val chatId = selectedChatId
+        libraryTitle.text = when {
+            playlistMode -> "PLAYLIST  ·  BÀI ĐÃ LƯU"
+            !allChatsMode -> "THƯ VIỆN NHẠC  ·  SAVED MESSAGES"
+            chatId != null -> sourceNames[chatId] ?: "Nguồn Telegram $chatId"
+            else -> "THƯ VIỆN NHẠC  ·  TẤT CẢ TELEGRAM"
+        }
+        sourcesButton.text = "‹  Trở về nhóm / kênh (${groups.size})"
+        songFilter.hint = "Tìm bài hát theo tên…"
     }
 
     private fun toggleCurrentFavorite() {
@@ -730,6 +839,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val kind = result.optString("@type")
         val tag = result.optString("@extra")
         if (kind == "error") {
+            if (tag.startsWith("sourceName:")) return
             if (tag.startsWith("all:")) {
                 if (tag == "all:${globalScanGeneration}:${globalScanPhase}" &&
                     allChatsMode) {
@@ -807,6 +917,21 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
             } catch (_: IllegalArgumentException) {
                 showMessage("Không xác minh được tài khoản Telegram.")
+            }
+            return
+        }
+        if (tag.startsWith("sourceName:") && kind == "chat") {
+            val currentGeneration = "sourceName:${globalScanGeneration}:"
+            if (allChatsMode && tag.startsWith(currentGeneration)) {
+                val chatId = result.optLong("id")
+                val title = result.optString("title").trim()
+                if (chatId != 0L && title.isNotBlank() &&
+                    tag == "$currentGeneration$chatId") {
+                    sourceNames[chatId] = title.take(110)
+                    runOnUiThread {
+                        if (allChatsMode) refreshSongRows()
+                    }
+                }
             }
             return
         }
@@ -968,6 +1093,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     updatePlaylistButtons()
                     refresh.isEnabled = false
                     globalSearch.isEnabled = false
+                    sourcesButton.isEnabled = false
+                    sourceNames.clear()
+                    requestedSourceNames.clear()
+                    sourcesAdapter.clear()
+                    tracks.adapter = adapter
                     openDocument.isEnabled = false
                     logout.isEnabled = false
                     submit.isEnabled = false
@@ -1073,7 +1203,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
             }
         }
-        return Song(fileId, title, filename, key)
+        if (allChatsMode && requestedSourceNames.size < 180 &&
+            requestedSourceNames.add(chatId)) {
+            runCatching {
+                send("getChat", "sourceName:${globalScanGeneration}:$chatId") {
+                    it.put("chat_id", chatId)
+                }
+            }
+        }
+        return Song(fileId, title, filename, key, chatId)
     }
 
     private fun resetSource(modeAllChats: Boolean) {
@@ -1081,6 +1219,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
         globalScanLoading = false
         historyLoading = false
         allChatsMode = modeAllChats
+        browseSources = modeAllChats
+        selectedChatId = null
+        sourceNames.clear()
+        requestedSourceNames.clear()
         downloadWaiting = null
         prefetchWaiting = null
         seenSongMessageIds.clear()
@@ -1099,6 +1241,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             refresh.isEnabled = auth.isReady()
             globalSearch.isEnabled = auth.isReady()
             updatePlaylistButtons()
+            refreshSongRows()
         }
     }
 
@@ -1341,6 +1484,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
         nowPlayingTitle.text = "Chọn một bài hát để bắt đầu"
         refresh.isEnabled = false
         globalSearch.isEnabled = false
+        sourcesButton.isEnabled = false
+        sourceNames.clear()
+        requestedSourceNames.clear()
         openDocument.isEnabled = false
         logout.isEnabled = false
         submit.isEnabled = false

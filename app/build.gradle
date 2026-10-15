@@ -56,8 +56,8 @@ android {
             dimension 'distribution'
             applicationId 'app.melovault.player'
             // Beta-only bump; never alter the existing Personal Stable artifact.
-            versionCode 62
-            versionName '0.6.41'
+            versionCode 63
+            versionName '0.6.42'
             versionNameSuffix '-beta'
             buildConfigField 'boolean', 'PERSONAL_BACKEND_ENABLED', 'false'
             buildConfigField 'String', 'CAR_API_PRIMARY', '""'
