@@ -7,6 +7,20 @@
         <!-- Keep the existing demo MainActivity internal; Preview becomes launcher. -->
         <activity android:name=".MainActivity" android:exported="false"
                   tools:node="replace" />
+        <!-- Remove Private backend service from Shareable: exactly one media
+             playback service handles steering/media buttons for this APK. -->
+        <service android:name=".playback.MusicService"
+                 tools:node="remove" />
+        <service android:name=".playback.PinnedDownloadService"
+                 tools:node="remove" />
+        <service android:name=".data.telegram.ShareablePlaybackService"
+                 android:exported="true"
+                 android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </service>
         <activity android:name=".data.telegram.TelegramPreviewActivity"
                   android:exported="true"
                   android:theme="@style/Theme.MusicAssistantCar">

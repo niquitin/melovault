@@ -1,6 +1,7 @@
 package com.bsdung.musicassistantcar.data.telegram
 
 import android.app.Activity
+import android.content.ComponentName
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -20,9 +21,16 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
+import androidx.core.content.ContextCompat
+import com.google.common.util.concurrent.FutureCallback
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
 import com.bsdung.musicassistantcar.BuildConfig
 import com.bsdung.musicassistantcar.R
 import java.io.File
@@ -67,7 +75,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var logout: Button
     private lateinit var tracks: ListView
     private lateinit var adapter: ArrayAdapter<String>
-    private lateinit var player: ExoPlayer
+    private var player: MediaController? = null
+    private var controllerFuture: ListenableFuture<MediaController>? = null
+    private var controllerReleased = false
+    private data class PendingPlayback(val items: List<MediaItem>, val startIndex: Int)
+    private var pendingPlayback: PendingPlayback? = null
+    private val cachedSongPaths = java.util.concurrent.ConcurrentHashMap<Long, String>()
     private val songs = mutableListOf<Song>()
     private var authEpoch: Long = 0L
     private var tdlibParametersSent = false
@@ -112,34 +125,118 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // into TDLib's isolated cache, and no persistent URI permission.
         downloadWaiting = null
         currentSongIndex = -1
-        nowPlayingTitle.text = fileName
-        player.stop()
-        player.setMediaItem(MediaItem.fromUri(uri))
-        player.prepare()
-        player.play()
+        enqueuePlayback(uri, fileName)
         showMessage("Đang mở tệp: $fileName")
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setTheme(R.style.Theme_MusicAssistantCar)
-        player = ExoPlayer.Builder(this).build()
-        player.addListener(object : Player.Listener {
-            override fun onPlayerError(error: PlaybackException) {
-                // Do not surface provider URLs, filenames or exception details.
-                showMessage("Không phát được tệp âm thanh (Media3 mã ${error.errorCode}).")
-            }
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (::playPause.isInitialized) playPause.text = if (isPlaying) "Ⅱ" else "▶"
-            }
-        })
         buildUi()
+        connectPlaybackService()
         if (BuildConfig.TELEGRAM_APP_API_ID <= 0 ||
             BuildConfig.TELEGRAM_APP_API_HASH.length != 32) {
             showMessage("Chưa cấu hình Telegram API cho bản thử nội bộ.")
             return
         }
         initNative()
+    }
+
+    private val playbackListener = object : Player.Listener {
+        override fun onPlayerError(error: PlaybackException) {
+            showMessage("Không phát được tệp âm thanh (Media3 mã ${error.errorCode}).")
+        }
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (::playPause.isInitialized) playPause.text = if (isPlaying) "Ⅱ" else "▶"
+        }
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            nowPlayingTitle.text = mediaItem?.mediaMetadata?.title ?: "Chọn một bài hát để bắt đầu"
+            val id = mediaItem?.mediaId?.removePrefix("telegram:")?.toLongOrNull()
+            currentSongIndex = if (mediaItem?.mediaId?.startsWith("telegram:") == true) {
+                songs.indexOfFirst { it.messageId == id }
+            } else -1
+        }
+    }
+
+    private fun connectPlaybackService() {
+        val token = SessionToken(this, ComponentName(this, ShareablePlaybackService::class.java))
+        val future = MediaController.Builder(this, token).buildAsync()
+        controllerFuture = future
+        Futures.addCallback(future, object : FutureCallback<MediaController> {
+            override fun onSuccess(controller: MediaController?) {
+                if (controller == null || controllerReleased) return
+                player = controller
+                controller.addListener(playbackListener)
+                playbackListener.onIsPlayingChanged(controller.isPlaying)
+                nowPlayingTitle.text = controller.currentMediaItem?.mediaMetadata?.title
+                    ?: "Chọn một bài hát để bắt đầu"
+                pendingPlayback?.let { pending ->
+                    pendingPlayback = null
+                    startPlayback(controller, pending.items, pending.startIndex)
+                }
+            }
+
+            override fun onFailure(t: Throwable) {
+                if (!controllerReleased) showMessage("Không kết nối được trình phát nền.")
+            }
+        }, ContextCompat.getMainExecutor(this))
+    }
+
+    private fun mediaItem(uri: Uri, title: String, mediaId: String): MediaItem =
+        MediaItem.Builder()
+            .setMediaId(mediaId)
+            .setUri(uri)
+            .setMediaMetadata(MediaMetadata.Builder().setTitle(title).build())
+            .build()
+
+    private fun enqueuePlayback(uri: Uri, title: String) {
+        enqueueItems(listOf(mediaItem(uri, title, "picked:audio")), 0)
+    }
+
+    private fun enqueueTelegramPlayback(song: Song, target: File) {
+        cachedSongPaths[song.messageId] = target.canonicalPath
+        val playable = songs.mapNotNull { item ->
+            val path = cachedSongPaths[item.messageId] ?: return@mapNotNull null
+            val file = File(path)
+            if (!file.isFile || !TelegramAccountStoragePolicy.isOwnedFile(filesRoot, file)) {
+                cachedSongPaths.remove(item.messageId)
+                return@mapNotNull null
+            }
+            item to mediaItem(Uri.fromFile(file), item.title, "telegram:${item.messageId}")
+        }
+        val selectedIndex = playable.indexOfFirst { it.first.messageId == song.messageId }
+        if (selectedIndex >= 0) {
+            enqueueItems(playable.map { it.second }, selectedIndex)
+        } else {
+            enqueueItems(listOf(mediaItem(Uri.fromFile(target), song.title,
+                "telegram:${song.messageId}")), 0)
+        }
+    }
+
+    private fun enqueueItems(items: List<MediaItem>, startIndex: Int) {
+        if (items.isEmpty()) return
+        nowPlayingTitle.text = items[startIndex].mediaMetadata.title ?: ""
+        val controller = player
+        if (controller != null) startPlayback(controller, items, startIndex)
+        else pendingPlayback = PendingPlayback(items, startIndex)
+    }
+
+    private fun startPlayback(controller: MediaController, items: List<MediaItem>,
+                              startIndex: Int) {
+        controller.setMediaItems(items, startIndex, C.TIME_UNSET)
+        controller.prepare()
+        controller.play()
+    }
+
+    private fun clearPlaybackSession() {
+        cachedSongPaths.clear()
+        pendingPlayback = null
+        player?.let { controller ->
+            controller.stop()
+            controller.clearMediaItems()
+        }
+        // A background session must never retain a logged-out account's music.
+        stopService(Intent(this, ShareablePlaybackService::class.java))
     }
 
     private fun dp(value: Int): Int =
@@ -332,8 +429,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
         control("⏮") { playAdjacent(-1) }
         playPause = control("▶") {
-            if (player.currentMediaItem != null) {
-                if (player.isPlaying) player.pause() else player.play()
+            player?.let { controller ->
+                if (controller.currentMediaItem != null) {
+                    if (controller.isPlaying) controller.pause() else controller.play()
+                }
             }
         }
         playPause.background = rounded(accent)
@@ -353,7 +452,19 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun playAdjacent(delta: Int) {
-        if (!auth.isReady() || currentSongIndex < 0) return
+        if (!auth.isReady()) return
+        val controller = player
+        if (controller != null) {
+            if (delta > 0 && controller.hasNextMediaItem()) {
+                controller.seekToNextMediaItem()
+                return
+            }
+            if (delta < 0 && controller.hasPreviousMediaItem()) {
+                controller.seekToPreviousMediaItem()
+                return
+            }
+        }
+        if (currentSongIndex < 0) return
         val target = songs.getOrNull(currentSongIndex + delta) ?: return
         downloadAndPlay(target)
     }
@@ -572,6 +683,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 val messageId = msg.optLong("id")
                 if (looksAudio && messageId > 0L && file.optInt("id") > 0 &&
                     seenSongMessageIds.add(messageId)) {
+                    val local = file.optJSONObject("local")
+                    val path = local?.optString("path").orEmpty()
+                    if (local?.optBoolean("is_downloading_completed") == true &&
+                        path.isNotBlank()) {
+                        val cached = File(path)
+                        if (cached.isFile &&
+                            TelegramAccountStoragePolicy.isOwnedFile(filesRoot, cached)) {
+                            cachedSongPaths[messageId] = cached.canonicalPath
+                        }
+                    }
                     extracted.add(Song(file.optInt("id"), title, name, messageId))
                 }
             }
@@ -696,7 +817,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 auth.logout()
                 clearPendingQrLink()
                 runOnUiThread {
-                    player.stop()
+                    clearPlaybackSession()
                     tracks.adapter = adapter
                     songs.clear()
                     adapter.clear()
@@ -836,9 +957,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         downloadWaiting = null
         runOnUiThread {
-            player.setMediaItem(MediaItem.fromUri(Uri.fromFile(target)))
-            player.prepare()
-            player.play()
+            enqueueTelegramPlayback(song, target)
             status.text = "Đang phát: ${song.title}"
         }
     }
@@ -847,7 +966,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         if (!auth.isReady()) return
         clearPendingQrLink()
         auth.logout()
-        player.stop()
+        clearPlaybackSession()
         songs.clear()
         adapter.clear()
         downloadWaiting = null
@@ -867,7 +986,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
         runCatching {
             if (nativeClientId > 0) TdlibNativeJsonGateway.requestClose(nativeClientId)
         }
-        player.release()
+        controllerReleased = true
+        player?.removeListener(playbackListener)
+        controllerFuture?.let { MediaController.releaseFuture(it) }
+        player = null
         super.onDestroy()
     }
 }
