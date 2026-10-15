@@ -10,6 +10,8 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.text.InputType
+import android.text.Editable
+import android.text.TextWatcher
 import android.util.Base64
 import android.view.View
 import android.widget.ArrayAdapter
@@ -46,9 +48,9 @@ import android.security.keystore.KeyProperties
 import org.json.JSONObject
 
 /**
- * Internal preview, intentionally limited to audio in the user's own
- * Telegram Saved Messages plus user-selected SAF documents (including Drive
- * when the device provides it). No direct Drive OAuth or private backend.
+ * Internal preview for the user's Saved Messages and Telegram audio documents
+ * searched in chats available to their authenticated user account, plus
+ * user-selected SAF documents. No direct Drive OAuth or private backend.
  * User must authenticate on-device; app-level developer API config is not
  * a Telegram user session.
  */
@@ -71,6 +73,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var submit: Button
     private lateinit var qrLogin: Button
     private lateinit var refresh: Button
+    private lateinit var globalSearch: Button
+    private lateinit var libraryTitle: TextView
+    private lateinit var songFilter: EditText
     private lateinit var openDocument: Button
     private lateinit var favoriteButton: Button
     private lateinit var playlistButton: Button
@@ -100,6 +105,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var historyLoading = false
     private val seenSongMessageIds = mutableSetOf<Long>()
     private val maxHistoryPages = 24
+    private var allChatsMode = false
+    private var globalScanGeneration = 0
+    private var globalScanPhase = "audio"
+    private var globalScanOffset = ""
+    private var globalScanPages = 0
+    private var globalScanLoading = false
+    private val maxGlobalPagesPerKind = 15
     private var downloadWaiting: Int? = null
     private var prefetchWaiting: Int? = null
     private lateinit var filesRoot: File
@@ -367,7 +379,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 bottomMargin = dp(10)
             })
         }
-        refresh = uiButton("↻  Telegram", primary = true).apply {
+        refresh = uiButton("☆ Tin đã lưu", primary = true).apply {
             isEnabled = false
             setOnClickListener { loadSavedMessages() }
             sourceRow.addView(this, LinearLayout.LayoutParams(0, -1, 1f).apply {
@@ -381,13 +393,45 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 leftMargin = dp(4)
             })
         }
-        TextView(this).apply {
+        val sourceAllRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            root.addView(this, LinearLayout.LayoutParams(-1, dp(43)).apply {
+                bottomMargin = dp(10)
+            })
+        }
+        globalSearch = uiButton("♫  Tìm nhạc mọi chat Telegram").apply {
+            isEnabled = false
+            setOnClickListener { scanAllTelegramAudio() }
+            sourceAllRow.addView(this, LinearLayout.LayoutParams(-1, -1))
+        }
+        libraryTitle = TextView(this).apply {
             text = "THƯ VIỆN NHẠC  ·  SAVED MESSAGES"
             textSize = 12f
             setTextColor(subtle)
             setTypeface(null, android.graphics.Typeface.BOLD)
             root.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
                 bottomMargin = dp(6)
+            })
+        }
+        songFilter = EditText(this).apply {
+            hint = "Tìm bài hát theo tên…"
+            setSingleLine(true)
+            textSize = 14f
+            setTextColor(ink)
+            setHintTextColor(subtle)
+            background = rounded(panel)
+            setPadding(dp(13), dp(9), dp(13), dp(9))
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(
+                    s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+                override fun onTextChanged(
+                    s: CharSequence?, start: Int, before: Int, count: Int) {
+                    refreshSongRows()
+                }
+                override fun afterTextChanged(s: Editable?) = Unit
+            })
+            root.addView(this, LinearLayout.LayoutParams(-1, dp(45)).apply {
+                bottomMargin = dp(8)
             })
         }
         val playlistRow = LinearLayout(this).apply {
@@ -525,9 +569,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun refreshSongRows() {
-        shownSongs = if (playlistMode) {
+        val all = if (playlistMode) {
             favoriteIds.mapNotNull { id -> songs.firstOrNull { it.messageId == id } }
         } else songs.toList()
+        val q = if (::songFilter.isInitialized) songFilter.text?.toString()?.trim().orEmpty()
+            else ""
+        shownSongs = if (q.isBlank()) all else all.filter {
+            it.title.contains(q, ignoreCase = true) ||
+                it.filename.contains(q, ignoreCase = true)
+        }
         adapter.clear()
         adapter.addAll(shownSongs.map { "${it.title} • ${it.filename}" })
         adapter.notifyDataSetChanged()
@@ -680,9 +730,20 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val kind = result.optString("@type")
         val tag = result.optString("@extra")
         if (kind == "error") {
-            if (tag == "savedHistory") {
+            if (tag.startsWith("all:")) {
+                if (tag == "all:${globalScanGeneration}:${globalScanPhase}" &&
+                    allChatsMode) {
+                    runOnUiThread {
+                        status.text = "Telegram không tìm được một nhóm tệp; đang tiếp tục…"
+                    }
+                    advanceGlobalPhase()
+                }
+                return
+            }
+            if (tag.startsWith("savedHistory:")) {
                 historyLoading = false
                 runOnUiThread { refresh.isEnabled = true }
+                return
             }
             if (tag.startsWith("prefetch:")) {
                 prefetchWaiting = null
@@ -735,13 +796,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     runOnUiThread {
                         updatePlaylistButtons()
                         refresh.isEnabled = true
+                        globalSearch.isEnabled = true
                         openDocument.isEnabled = true
                         logout.isEnabled = true
                         submit.isEnabled = false
                         input.visibility = View.GONE
                         authControls.visibility = View.GONE
                     }
-                    loadSavedMessages()
+                    scanAllTelegramAudio()
                 }
             } catch (_: IllegalArgumentException) {
                 showMessage("Không xác minh được tài khoản Telegram.")
@@ -750,46 +812,21 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         if (tag == "savedChat" && kind == "chat") {
             savedChatId = result.optLong("id")
-            requestHistory()
+            if (!allChatsMode) requestHistory()
             return
         }
-        if (tag == "savedHistory" && kind == "messages") {
+        if (tag.startsWith("all:") && kind == "foundMessages") {
+            acceptGlobalResults(result, tag)
+            return
+        }
+        if (tag.startsWith("savedHistory:") && kind == "messages" &&
+            tag == "savedHistory:${globalScanGeneration}" && !allChatsMode) {
             val items = result.optJSONArray("messages") ?: org.json.JSONArray()
             val extracted = mutableListOf<Song>()
             for (i in 0 until items.length()) {
-                val msg = items.optJSONObject(i) ?: continue
-                val content = msg.optJSONObject("content") ?: continue
-                val mediaType = content.optString("@type")
-                val attachment = when (mediaType) {
-                    "messageAudio" -> content.optJSONObject("audio")
-                    "messageDocument" -> content.optJSONObject("document")
-                    else -> null
-                } ?: continue
-                val file = attachment.optJSONObject(
-                    if (mediaType == "messageAudio") "audio" else "document"
-                ) ?: continue
-                val name = attachment.optString("file_name", "bai-hat")
-                val title = attachment.optString("title").ifBlank { name }
-                val looksAudio = (mediaType == "messageAudio") ||
-                    name.lowercase().endsWith(".flac") ||
-                    name.lowercase().endsWith(".mp3") ||
-                    name.lowercase().endsWith(".m4a") ||
-                    name.lowercase().endsWith(".wav")
-                val messageId = msg.optLong("id")
-                if (looksAudio && messageId > 0L && file.optInt("id") > 0 &&
-                    seenSongMessageIds.add(messageId)) {
-                    val local = file.optJSONObject("local")
-                    val path = local?.optString("path").orEmpty()
-                    if (local?.optBoolean("is_downloading_completed") == true &&
-                        path.isNotBlank()) {
-                        val cached = File(path)
-                        if (cached.isFile &&
-                            TelegramAccountStoragePolicy.isOwnedFile(filesRoot, cached)) {
-                            cachedSongPaths[messageId] = cached.canonicalPath
-                        }
-                    }
-                    extracted.add(Song(file.optInt("id"), title, name, messageId))
-                }
+                val item = items.optJSONObject(i) ?: continue
+                val song = parseTelegramSong(item, savedChatId) ?: continue
+                if (seenSongMessageIds.add(song.messageId)) extracted.add(song)
             }
             val pageCount = ++historyPages
             val oldestId = items.optJSONObject(items.length() - 1)?.optLong("id") ?: 0L
@@ -915,6 +952,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
             "authorizationStateLoggingOut", "authorizationStateClosing",
             "authorizationStateClosed" -> {
+                globalScanGeneration++
+                globalScanLoading = false
                 ShareableTdlibOwner.revokeAuthorization()
                 auth.logout()
                 clearPendingQrLink()
@@ -928,6 +967,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     shownSongs = emptyList()
                     updatePlaylistButtons()
                     refresh.isEnabled = false
+                    globalSearch.isEnabled = false
                     openDocument.isEnabled = false
                     logout.isEnabled = false
                     submit.isEnabled = false
@@ -998,8 +1038,73 @@ class TelegramPreviewActivity : AppCompatActivity() {
             .onFailure { showMessage("Không mở được trình chọn tệp trên thiết bị.") }
     }
 
+    private fun parseTelegramSong(message: JSONObject, fallbackChatId: Long): Song? {
+        val content = message.optJSONObject("content") ?: return null
+        val mediaType = content.optString("@type")
+        val attachment = when (mediaType) {
+            "messageAudio" -> content.optJSONObject("audio")
+            "messageDocument" -> content.optJSONObject("document")
+            else -> null
+        } ?: return null
+        val file = attachment.optJSONObject(
+            if (mediaType == "messageAudio") "audio" else "document"
+        ) ?: return null
+        val filename = attachment.optString("file_name", "audio")
+        val title = attachment.optString("title").ifBlank { filename }
+        val audioExtension = listOf(".flac", ".mp3", ".m4a", ".wav",
+            ".ogg", ".opus", ".aac")
+        if (mediaType != "messageAudio" &&
+            audioExtension.none { filename.endsWith(it, ignoreCase = true) }) return null
+        val messageId = message.optLong("id")
+        val chatId = message.optLong("chat_id").takeIf { it != 0L } ?: fallbackChatId
+        val fileId = file.optInt("id")
+        if (messageId <= 0L || chatId == 0L || fileId <= 0) return null
+        val selfChatId = savedChatId.takeIf { it != 0L }
+            ?: (library.authorizedUser()?.value ?: 0L)
+        val key = TelegramSongKey.forMessage(chatId, messageId, selfChatId)
+        val local = file.optJSONObject("local")
+        if (local?.optBoolean("is_downloading_completed") == true) {
+            val path = local.optString("path")
+            if (path.isNotBlank()) {
+                val cached = File(path)
+                if (cached.isFile &&
+                    TelegramAccountStoragePolicy.isOwnedFile(filesRoot, cached)) {
+                    cachedSongPaths[key] = cached.canonicalPath
+                }
+            }
+        }
+        return Song(fileId, title, filename, key)
+    }
+
+    private fun resetSource(modeAllChats: Boolean) {
+        globalScanGeneration++
+        globalScanLoading = false
+        historyLoading = false
+        allChatsMode = modeAllChats
+        downloadWaiting = null
+        prefetchWaiting = null
+        seenSongMessageIds.clear()
+        songs.clear()
+        shownSongs = emptyList()
+        queueSongOrder = emptyList()
+        cachedSongPaths.clear()
+        playlistMode = false
+        ShareablePlaybackService.clearTelegramQueue()
+        runOnUiThread {
+            adapter.clear()
+            songFilter.text?.clear()
+            libraryTitle.text = if (modeAllChats)
+                "THƯ VIỆN NHẠC  ·  CÁC CHAT TELEGRAM"
+                else "THƯ VIỆN NHẠC  ·  SAVED MESSAGES"
+            refresh.isEnabled = auth.isReady()
+            globalSearch.isEnabled = auth.isReady()
+            updatePlaylistButtons()
+        }
+    }
+
     private fun loadSavedMessages() {
         if (!auth.isReady()) return
+        resetSource(false)
         showMessage("Đang đọc nhạc từ Saved Messages…")
         val userId = library.authorizedUser()?.value ?: return
         if (savedChatId != 0L) requestHistory()
@@ -1010,7 +1115,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun requestHistory() {
-        if (savedChatId == 0L || !auth.isReady() || historyLoading) return
+        if (allChatsMode || savedChatId == 0L || !auth.isReady() ||
+            historyLoading) return
         historyCursorId = 0L
         historyPages = 0
         seenSongMessageIds.clear()
@@ -1020,12 +1126,87 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun requestHistoryPage() {
-        send("getChatHistory", "savedHistory") {
+        if (!auth.isReady() || allChatsMode) return
+        send("getChatHistory", "savedHistory:${globalScanGeneration}") {
             it.put("chat_id", savedChatId)
             it.put("from_message_id", historyCursorId)
             it.put("offset", 0)
             it.put("limit", 60)
             it.put("only_local", false)
+        }
+    }
+
+    private fun scanAllTelegramAudio() {
+        if (!auth.isReady()) return
+        resetSource(true)
+        globalScanPhase = "audio"
+        globalScanOffset = ""
+        globalScanPages = 0
+        globalScanLoading = true
+        runOnUiThread { globalSearch.isEnabled = false }
+        showMessage("Đang tìm tệp nhạc trong các cuộc trò chuyện Telegram…")
+        requestGlobalPage()
+    }
+
+    private fun requestGlobalPage() {
+        if (!auth.isReady() || !allChatsMode || !globalScanLoading) return
+        val filter = if (globalScanPhase == "audio")
+            "searchMessagesFilterAudio" else "searchMessagesFilterDocument"
+        val tag = "all:${globalScanGeneration}:${globalScanPhase}"
+        send("searchMessages", tag) {
+            it.put("chat_list", JSONObject.NULL)
+            it.put("query", "")
+            it.put("offset", globalScanOffset)
+            it.put("limit", 100)
+            it.put("filter", JSONObject().put("@type", filter))
+            it.put("chat_type_filter", JSONObject.NULL)
+            it.put("min_date", 0)
+            it.put("max_date", 0)
+        }
+    }
+
+    private fun advanceGlobalPhase() {
+        if (!allChatsMode || !auth.isReady()) return
+        if (globalScanPhase == "audio") {
+            globalScanPhase = "document"
+            globalScanOffset = ""
+            globalScanPages = 0
+            requestGlobalPage()
+        } else {
+            globalScanLoading = false
+            runOnUiThread {
+                globalSearch.isEnabled = true
+                status.text = "Tìm thấy ${songs.size} bài từ các chat Telegram " +
+                    "(quét giới hạn mỗi loại 15 trang)."
+            }
+        }
+    }
+
+    private fun acceptGlobalResults(response: JSONObject, tag: String) {
+        if (!allChatsMode || !auth.isReady() ||
+            tag != "all:${globalScanGeneration}:${globalScanPhase}") return
+        val items = response.optJSONArray("messages") ?: org.json.JSONArray()
+        val incoming = mutableListOf<Song>()
+        for (i in 0 until items.length()) {
+            val msg = items.optJSONObject(i) ?: continue
+            val song = parseTelegramSong(msg, 0L) ?: continue
+            if (seenSongMessageIds.add(song.messageId)) incoming.add(song)
+        }
+        globalScanPages++
+        val newOffset = response.optString("next_offset")
+        val hasMore = newOffset.isNotEmpty() && newOffset != globalScanOffset &&
+            globalScanPages < maxGlobalPagesPerKind
+        runOnUiThread {
+            if (!allChatsMode || !auth.isReady()) return@runOnUiThread
+            songs.addAll(incoming)
+            refreshSongRows()
+            status.text = "Đang quét các chat: đã tìm ${songs.size} bài…"
+        }
+        if (hasMore) {
+            globalScanOffset = newOffset
+            requestGlobalPage()
+        } else {
+            advanceGlobalPhase()
         }
     }
 
@@ -1144,6 +1325,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         if (!auth.isReady()) return
         clearPendingQrLink()
         auth.logout()
+        globalScanGeneration++
+        globalScanLoading = false
         ShareableTdlibOwner.revokeAuthorization()
         clearPlaybackSession()
         songs.clear()
@@ -1157,6 +1340,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         currentSongIndex = -1
         nowPlayingTitle.text = "Chọn một bài hát để bắt đầu"
         refresh.isEnabled = false
+        globalSearch.isEnabled = false
         openDocument.isEnabled = false
         logout.isEnabled = false
         submit.isEnabled = false
