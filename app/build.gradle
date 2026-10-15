@@ -55,9 +55,12 @@ android {
         shareable {
             dimension 'distribution'
             applicationId 'app.melovault.player'
+            // Owner Beta only: preserve the existing on-device signing identity.
+            // Replace with a managed release key before any public distribution.
+            signingConfig signingConfigs.debug
             // Beta-only bump; never alter the existing Personal Stable artifact.
-            versionCode 64
-            versionName '0.6.43'
+            versionCode 65
+            versionName '0.6.44'
             versionNameSuffix '-beta'
             buildConfigField 'boolean', 'PERSONAL_BACKEND_ENABLED', 'false'
             buildConfigField 'String', 'CAR_API_PRIMARY', '""'

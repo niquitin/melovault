@@ -6,6 +6,8 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.view.MotionEvent
+import androidx.appcompat.app.AlertDialog
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -78,6 +80,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var refresh: Button
     private lateinit var globalSearch: Button
     private lateinit var libraryTitle: TextView
+    private lateinit var collapsibleNavigation: LinearLayout
+    private var navigationCollapsed = false
+    private var gestureLastY = 0f
+    private var gestureAccumulation = 0f
     private lateinit var sourcesButton: Button
     private lateinit var songFilter: EditText
     private lateinit var openDocument: Button
@@ -376,19 +382,23 @@ class TelegramPreviewActivity : AppCompatActivity() {
             setPadding(0, 0, 0, dp(10))
             root.addView(this)
         }
+        collapsibleNavigation = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            root.addView(this, LinearLayout.LayoutParams(-1, -2))
+        }
         status = TextView(this).apply {
             text = "Đang khởi tạo Telegram…"
             textSize = 13f
             setTextColor(ink)
             background = rounded(panel)
             setPadding(dp(12), dp(10), dp(12), dp(10))
-            root.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
+            collapsibleNavigation.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
                 bottomMargin = dp(10)
             })
         }
         authControls = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            root.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
+            collapsibleNavigation.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
                 bottomMargin = dp(8)
             })
         }
@@ -419,7 +429,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         val sourceRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            root.addView(this, LinearLayout.LayoutParams(-1, dp(47)).apply {
+            collapsibleNavigation.addView(this, LinearLayout.LayoutParams(-1, dp(47)).apply {
                 bottomMargin = dp(10)
             })
         }
@@ -439,7 +449,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         val sourceAllRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            root.addView(this, LinearLayout.LayoutParams(-1, dp(43)).apply {
+            collapsibleNavigation.addView(this, LinearLayout.LayoutParams(-1, dp(43)).apply {
                 bottomMargin = dp(10)
             })
         }
@@ -468,7 +478,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 refreshSongRows()
                 updatePlaylistButtons()
             }
-            root.addView(this, LinearLayout.LayoutParams(-1, dp(43)).apply {
+            collapsibleNavigation.addView(this, LinearLayout.LayoutParams(-1, dp(43)).apply {
                 bottomMargin = dp(8)
             })
         }
@@ -495,7 +505,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         val playlistRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            root.addView(this, LinearLayout.LayoutParams(-1, dp(43)).apply {
+            collapsibleNavigation.addView(this, LinearLayout.LayoutParams(-1, dp(43)).apply {
                 bottomMargin = dp(9)
             })
         }
@@ -534,6 +544,31 @@ class TelegramPreviewActivity : AppCompatActivity() {
             dividerHeight = dp(6)
             cacheColorHint = Color.TRANSPARENT
             setSelector(android.R.color.transparent)
+            setOnTouchListener { _, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        gestureLastY = event.y
+                        gestureAccumulation = 0f
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val delta = event.y - gestureLastY
+                        gestureLastY = event.y
+                        gestureAccumulation = (gestureAccumulation + delta)
+                            .coerceIn(-dp(90).toFloat(), dp(90).toFloat())
+                        val desired = TelegramLibraryChromePolicy.collapsedAfter(
+                            navigationCollapsed, gestureAccumulation,
+                            dp(36).toFloat(), auth.isReady(), this.count
+                        )
+                        if (desired != navigationCollapsed) {
+                            setNavigationCollapsed(desired)
+                            gestureAccumulation = 0f
+                        }
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                        gestureAccumulation = 0f
+                }
+                false // ListView still owns fling, item click and native scroll
+            }
         }
         adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_list_item_1,
             mutableListOf()) {
@@ -647,6 +682,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
         setContentView(root)
     }
 
+    private fun setNavigationCollapsed(collapsed: Boolean) {
+        if (navigationCollapsed == collapsed) return
+        if (collapsed && (!auth.isReady() || tracks.count < 2)) return
+        navigationCollapsed = collapsed
+        collapsibleNavigation.visibility = if (collapsed) View.GONE else View.VISIBLE
+    }
+
     private fun showFullPlayer() {
         val dialog = fullPlayer ?: NowPlayingFullScreenDialog(
             this,
@@ -658,9 +700,48 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 else "Tệp âm thanh đã chọn"
             },
             previous = { playAdjacent(-1) },
-            next = { playAdjacent(1) }
+            next = { playAdjacent(1) },
+            isFavorite = {
+                val current = currentTelegramMessageId()
+                current != null && current in favoriteIds
+            },
+            toggleFavorite = { toggleCurrentFavorite() },
+            openQueue = { showUpcomingQueue() }
         ).also { fullPlayer = it }
         dialog.show()
+    }
+
+    private fun showUpcomingQueue() {
+        if (!auth.isReady()) return
+        val list = queueSongOrder
+        if (list.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("Hàng đợi hiện tại")
+                .setMessage("Chưa có hàng đợi Telegram.")
+                .setPositiveButton("Đóng", null)
+                .show()
+            return
+        }
+        val selected = currentTelegramMessageId()
+        val at = list.indexOfFirst { it.messageId == selected }.coerceAtLeast(0)
+        val from = (at - 10).coerceAtLeast(0)
+        val to = minOf(list.size, at + 60)
+        val excerpt = list.subList(from, to)
+        val labels = excerpt.mapIndexed { i, song ->
+            val local = cachedSongPaths[song.messageId]?.let { File(it) }
+            val ready = local?.isFile == true &&
+                TelegramAccountStoragePolicy.isOwnedFile(filesRoot, local)
+            val marker = if (from + i == at) "▶ " else ""
+            marker + (from + i + 1).toString() + ". " + song.title.take(90) +
+                if (ready) "  ·  Đã tải" else "  ·  Chưa tải"
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Hàng đợi Telegram  ·  ${list.size} bài")
+            .setItems(labels) { _, index ->
+                excerpt.getOrNull(index)?.let { downloadAndPlay(it) }
+            }
+            .setNegativeButton("Đóng", null)
+            .show()
     }
 
     private fun currentTelegramMessageId(): Long? {
@@ -1288,6 +1369,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun loadSavedMessages() {
         if (!auth.isReady()) return
+        setNavigationCollapsed(false)
         resetSource(false)
         showMessage("Đang đọc nhạc từ Saved Messages…")
         val userId = library.authorizedUser()?.value ?: return
@@ -1322,6 +1404,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun scanAllTelegramAudio() {
         if (!auth.isReady()) return
+        setNavigationCollapsed(false)
         resetSource(true)
         globalScanPhase = "audio"
         globalScanOffset = ""
@@ -1518,6 +1601,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun logoutUser() {
         if (!auth.isReady()) return
+        setNavigationCollapsed(false)
         clearPendingQrLink()
         auth.logout()
         globalScanGeneration++

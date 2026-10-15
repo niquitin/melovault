@@ -29,7 +29,10 @@ internal class NowPlayingFullScreenDialog(
     private val media: () -> MediaController?,
     private val source: () -> String,
     private val previous: () -> Unit,
-    private val next: () -> Unit
+    private val next: () -> Unit,
+    private val isFavorite: () -> Boolean,
+    private val toggleFavorite: () -> Unit,
+    private val openQueue: () -> Unit
 ) {
     private val background = Color.rgb(9, 17, 29)
     private val surface = Color.rgb(26, 41, 56)
@@ -40,7 +43,11 @@ internal class NowPlayingFullScreenDialog(
     private var dialog: Dialog? = null
     private var title: TextView? = null
     private var category: TextView? = null
+    private var formatLabel: TextView? = null
     private var playButton: Button? = null
+    private var shuffleButton: Button? = null
+    private var repeatButton: Button? = null
+    private var favoriteButton: Button? = null
     private var positionLabel: TextView? = null
     private var durationLabel: TextView? = null
     private var seek: SeekBar? = null
@@ -85,6 +92,37 @@ internal class NowPlayingFullScreenDialog(
         } else String.format(Locale.US, "%02d:%02d", total / 60L, total % 60L)
     }
 
+    private fun audioFormatText(player: MediaController?): String {
+        val groups = player?.currentTracks?.groups ?: return "Chưa có thông tin âm thanh"
+        for (group in groups) {
+            if (group.type != C.TRACK_TYPE_AUDIO) continue
+            for (index in 0 until group.length) {
+                if (!group.isTrackSelected(index)) continue
+                val format = group.getTrackFormat(index)
+                val codec = when (format.sampleMimeType) {
+                    "audio/mpeg" -> "MP3"
+                    "audio/flac" -> "FLAC"
+                    "audio/raw" -> "PCM/WAV"
+                    "audio/mp4a-latm" -> "AAC"
+                    "audio/opus" -> "OPUS"
+                    "audio/vorbis" -> "VORBIS"
+                    else -> format.sampleMimeType
+                        ?.removePrefix("audio/")?.uppercase(Locale.ROOT)
+                        ?: "Âm thanh"
+                }
+                val fields = mutableListOf(codec)
+                if (format.sampleRate > 0) {
+                    fields.add(String.format(Locale.US,
+                        "%.1f kHz", format.sampleRate / 1000.0))
+                }
+                if (format.channelCount > 0) fields.add("${format.channelCount} kênh")
+                if (format.bitrate > 0) fields.add("${format.bitrate / 1000} kbps")
+                return "Đầu vào: " + fields.joinToString(" · ")
+            }
+        }
+        return "Đang đọc định dạng âm thanh…"
+    }
+
     private val update = object : Runnable {
         override fun run() {
             if (dialog?.isShowing != true) return
@@ -92,7 +130,21 @@ internal class NowPlayingFullScreenDialog(
             title?.text = player?.currentMediaItem?.mediaMetadata?.title
                 ?.toString()?.ifBlank { "Chọn bài hát" } ?: "Chọn bài hát"
             category?.text = source()
+            formatLabel?.text = audioFormatText(player)
             playButton?.text = if (player?.isPlaying == true) "Ⅱ" else "▶"
+            val shuffle = player?.shuffleModeEnabled == true
+            shuffleButton?.text = if (shuffle) "⇄ Đảo: Bật" else "⇄ Đảo: Tắt"
+            shuffleButton?.setTextColor(if (shuffle) mint else secondary)
+            repeatButton?.text = when (player?.repeatMode) {
+                Player.REPEAT_MODE_ALL -> "↻ Lặp tất cả"
+                Player.REPEAT_MODE_ONE -> "↻ Lặp một"
+                else -> "↻ Không lặp"
+            }
+            repeatButton?.setTextColor(
+                if (player?.repeatMode != Player.REPEAT_MODE_OFF) mint else secondary
+            )
+            favoriteButton?.text = if (isFavorite()) "★ Đã lưu" else "☆ Lưu bài"
+            favoriteButton?.setTextColor(if (isFavorite()) mint else secondary)
             val duration = player?.duration ?: C.TIME_UNSET
             val validDuration = duration != C.TIME_UNSET && duration > 0
             val current = player?.currentPosition?.coerceAtLeast(0L) ?: 0L
@@ -149,7 +201,9 @@ internal class NowPlayingFullScreenDialog(
         }
         root.addView(title, LinearLayout.LayoutParams(-1, -2))
         category = label("", 13f, secondary)
-        root.addView(category, LinearLayout.LayoutParams(-1, dp(42)))
+        root.addView(category, LinearLayout.LayoutParams(-1, dp(30)))
+        formatLabel = label("Đang đọc định dạng âm thanh…", 12f, secondary)
+        root.addView(formatLabel, LinearLayout.LayoutParams(-1, dp(28)))
 
         seek = SeekBar(activity).apply {
             max = 1000
@@ -217,9 +271,55 @@ internal class NowPlayingFullScreenDialog(
         }
         root.addView(controls, LinearLayout.LayoutParams(-1, dp(80)).apply {
             topMargin = dp(8)
-            bottomMargin = dp(20)
+            bottomMargin = dp(9)
         })
-        root.addView(label("Nhạc Telegram  •  Phát nền qua Media3", 12f, secondary),
+        val modes = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        shuffleButton = button("⇄ Đảo: Tắt", surface, secondary, 12f).apply {
+            setOnClickListener {
+                media()?.let { player ->
+                    player.shuffleModeEnabled = !player.shuffleModeEnabled
+                }
+            }
+        }
+        repeatButton = button("↻ Không lặp", surface, secondary, 12f).apply {
+            setOnClickListener {
+                media()?.let { player ->
+                    player.repeatMode = when (player.repeatMode) {
+                        Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                        Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                        else -> Player.REPEAT_MODE_OFF
+                    }
+                }
+            }
+        }
+        for (b in listOf(shuffleButton!!, repeatButton!!)) {
+            modes.addView(b, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+                leftMargin = dp(4)
+                rightMargin = dp(4)
+            })
+        }
+        root.addView(modes, LinearLayout.LayoutParams(-1, dp(52)))
+        val extras = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        favoriteButton = button("☆ Lưu bài", surface, secondary, 13f).apply {
+            setOnClickListener { toggleFavorite() }
+        }
+        val queue = button("☷ Hàng đợi", surface, foreground, 13f).apply {
+            setOnClickListener { openQueue() }
+        }
+        for (b in listOf(favoriteButton!!, queue)) {
+            extras.addView(b, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+                leftMargin = dp(4)
+                rightMargin = dp(4)
+            })
+        }
+        root.addView(extras, LinearLayout.LayoutParams(-1, dp(55)))
+        root.addView(label("Ngẫu nhiên: bài đã tải • Phát nền Media3", 11f, secondary),
             LinearLayout.LayoutParams(-1, dp(30)))
 
         popup.setContentView(root)
@@ -229,7 +329,11 @@ internal class NowPlayingFullScreenDialog(
             seek = null
             title = null
             category = null
+            formatLabel = null
             playButton = null
+            shuffleButton = null
+            repeatButton = null
+            favoriteButton = null
         }
         popup.show()
         popup.window?.apply {
