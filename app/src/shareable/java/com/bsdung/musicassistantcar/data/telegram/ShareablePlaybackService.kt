@@ -55,6 +55,10 @@ class ShareablePlaybackService : MediaSessionService() {
     private var allowedRoot: File? = null
     private var queueTracks = emptyList<QueueTrack>()
     private var pendingDownloadId: Int? = null
+    private var pendingMessageId: Long? = null
+    private var pendingAttempt = 0
+    private var pendingRequestTag: String? = null
+    private var queueGeneration = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -84,8 +88,21 @@ class ShareablePlaybackService : MediaSessionService() {
             // Native receive thread may not touch the Media3 player directly.
             val tag = event.optString("@extra")
             val kind = event.optString("@type")
-            if ((kind == "file" && tag.startsWith("background:")) ||
-                kind == "updateFile" || kind == "error") {
+            if (kind == "updateAuthorizationState") {
+                val state = event.optJSONObject("authorization_state")
+                    ?.optString("@type").orEmpty()
+                if (state in setOf("authorizationStateLoggingOut",
+                        "authorizationStateClosing", "authorizationStateClosed")) {
+                    main.post {
+                        ShareableTdlibOwner.revokeAuthorization()
+                        clearQueue()
+                        exoPlayer?.stop()
+                        exoPlayer?.clearMediaItems()
+                    }
+                }
+            } else if ((kind == "file" && tag.startsWith("background:")) ||
+                kind == "updateFile" ||
+                (kind == "error" && tag.startsWith("background:"))) {
                 main.post { acceptBackgroundEvent(event) }
             }
         }
@@ -107,11 +124,19 @@ class ShareablePlaybackService : MediaSessionService() {
         queueTracks = ordered.toList()
     }
 
+    private fun clearPending() {
+        pendingDownloadId = null
+        pendingMessageId = null
+        pendingAttempt = 0
+        pendingRequestTag = null
+    }
+
     private fun clearQueue() {
+        queueGeneration++
+        clearPending()
         expectedAccount = null
         allowedRoot = null
         queueTracks = emptyList()
-        pendingDownloadId = null
     }
 
     private fun nextTrack(): QueueTrack? {
@@ -129,8 +154,15 @@ class ShareablePlaybackService : MediaSessionService() {
     private fun requestNextIfMissing() {
         // Foreground Activity already handles prefetch; never start two
         // independent TDLib downloads for the same neighbor.
-        if (ShareableTdlibOwner.uiIsAttached() || pendingDownloadId != null) return
-        val next = nextTrack() ?: return
+        if (ShareableTdlibOwner.uiIsAttached()) return
+        val next = nextTrack()
+        if (next == null) {
+            clearPending()
+            return
+        }
+        if (pendingDownloadId == next.fileId &&
+            pendingMessageId == next.messageId) return
+        clearPending()
         val player = exoPlayer ?: return
         if ((0 until player.mediaItemCount).any {
                 player.getMediaItemAt(it).mediaId == "telegram:${next.messageId}"
@@ -142,37 +174,84 @@ class ShareablePlaybackService : MediaSessionService() {
             insertNext(next, cached)
             return
         }
+        startDownload(next, 1)
+    }
+
+    private fun startDownload(next: QueueTrack, attempt: Int) {
+        if (ShareableTdlibOwner.uiIsAttached() ||
+            nextTrack()?.messageId != next.messageId ||
+            expectedAccount != ShareableTdlibOwner.authorizedAccount()) return
+        val generation = queueGeneration
+        val tag = "background:${next.fileId}:$generation:$attempt"
         pendingDownloadId = next.fileId
-        runCatching {
-            ShareableTdlibOwner.send("downloadFile", "background:${next.fileId}") {
+        pendingMessageId = next.messageId
+        pendingAttempt = attempt
+        pendingRequestTag = tag
+        val sent = runCatching {
+            ShareableTdlibOwner.send("downloadFile", tag) {
                 it.put("file_id", next.fileId)
                 it.put("priority", 4)
                 it.put("offset", 0)
                 it.put("limit", 0)
                 it.put("synchronous", false)
             }
-        }.onFailure { pendingDownloadId = null }
+        }.isSuccess
+        if (!sent) {
+            retryOrStop(next, attempt, generation)
+            return
+        }
+        main.postDelayed({
+            if (queueGeneration == generation &&
+                pendingDownloadId == next.fileId &&
+                pendingMessageId == next.messageId &&
+                pendingAttempt == attempt &&
+                pendingRequestTag == tag) {
+                retryOrStop(next, attempt, generation)
+            }
+        }, TelegramBackgroundPrefetchPolicy.TIMEOUT_MS)
+    }
+
+    private fun retryOrStop(next: QueueTrack, attempt: Int, generation: Long) {
+        clearPending()
+        if (!TelegramBackgroundPrefetchPolicy.canRetry(
+                attempt, expectedAccount, ShareableTdlibOwner.authorizedAccount(),
+                next.messageId, nextTrack()?.messageId
+            )) return
+        main.postDelayed({
+            if (queueGeneration == generation &&
+                pendingDownloadId == null &&
+                !ShareableTdlibOwner.uiIsAttached() &&
+                nextTrack()?.messageId == next.messageId) {
+                startDownload(next, attempt + 1)
+            }
+        }, TelegramBackgroundPrefetchPolicy.RETRY_DELAY_MS)
     }
 
     private fun acceptBackgroundEvent(event: JSONObject) {
         val id = pendingDownloadId ?: return
-        if (event.optString("@type") == "error" &&
-            event.optString("@extra") == "background:$id") {
-            pendingDownloadId = null
+        val kind = event.optString("@type")
+        val tag = event.optString("@extra")
+        if (kind == "error") {
+            if (tag == pendingRequestTag) {
+                nextTrack()?.takeIf { it.fileId == id }?.let { next ->
+                    retryOrStop(next, pendingAttempt, queueGeneration)
+                } ?: clearPending()
+            }
             return
         }
-        val file = if (event.optString("@type") == "updateFile") {
+        // Stale tagged response from a previous attempt or queue is discarded.
+        if (kind == "file" && tag != pendingRequestTag) return
+        val file = if (kind == "updateFile") {
             event.optJSONObject("file") ?: return
         } else event
-        if (file.optInt("id") != id) return
+        val next = nextTrack() ?: return
+        if (!TelegramBackgroundPrefetchPolicy.isCurrentResult(
+                id, file.optInt("id"), expectedAccount,
+                ShareableTdlibOwner.authorizedAccount(), pendingMessageId, next.messageId
+            )) return
         val local = file.optJSONObject("local") ?: return
         if (!local.optBoolean("is_downloading_completed")) return
-        pendingDownloadId = null
-
-        // A background result must never cross accounts or stale queue epochs.
-        if (expectedAccount != ShareableTdlibOwner.authorizedAccount()) return
-        val next = nextTrack() ?: return
-        if (next.fileId != id) return
+        clearPending()
         val filePath = local.optString("path")
         if (filePath.isBlank()) return
         val target = File(filePath)
@@ -202,6 +281,7 @@ class ShareablePlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         clearQueue()
+        main.removeCallbacksAndMessages(null)
         ShareableTdlibOwner.unbindPlayback()
         serviceRef?.clear()
         serviceRef = null
