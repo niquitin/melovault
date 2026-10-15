@@ -263,7 +263,10 @@ internal class NowPlayingFullScreenDialog(
             ?: activity.resources.displayMetrics.widthPixels) / density).toInt()
         val heightDp = ((windowBounds?.height()
             ?: activity.resources.displayMetrics.heightPixels) / density).toInt()
+        val layoutMode = CarPaneLayoutPolicy.modeFor(widthDp, heightDp)
+        val wide = layoutMode == CarPaneLayoutPolicy.Mode.WIDE
         val compact = CarPaneLayoutPolicy.compactFor(widthDp, heightDp)
+        val coverDp = CarPaneLayoutPolicy.coverSizeDp(widthDp, heightDp)
         val root = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
@@ -278,52 +281,69 @@ internal class NowPlayingFullScreenDialog(
             orientation = LinearLayout.HORIZONTAL
         }
         val close = button("⌄", surface, foreground, 27f).apply {
+            contentDescription = "Đóng trình phát toàn màn hình"
             setOnClickListener { popup.dismiss() }
         }
         top.addView(close, LinearLayout.LayoutParams(
-            dp(if (compact) 38 else 62), dp(if (compact) 36 else 56)))
+            dp(if (compact || wide) 44 else 62), dp(if (compact || wide) 44 else 56)))
         top.addView(label("MELOVAULT  ·  NOW PLAYING",
             if (compact) 10f else 12f, mint, true),
-            LinearLayout.LayoutParams(0, dp(if (compact) 36 else 56), 1f))
-        root.addView(top, LinearLayout.LayoutParams(-1, dp(if (compact) 38 else 60)))
+            LinearLayout.LayoutParams(0, dp(if (compact || wide) 44 else 56), 1f))
+        root.addView(top, LinearLayout.LayoutParams(-1, dp(if (compact || wide) 46 else 60)))
 
-        // Album-art placeholder. Actual cover art will be used only when
-        // provided by the selected account's Media3 item in a future release.
+        val body = LinearLayout(activity).apply {
+            orientation = if (wide) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+            gravity = if (wide) Gravity.TOP else Gravity.CENTER_HORIZONTAL
+        }
+        root.addView(body, LinearLayout.LayoutParams(-1, if (wide) 0 else -2,
+            if (wide) 1f else 0f))
+        // Preserve the entire album image, even for Telegram DJ mix banners.
         val art = FrameLayout(activity).apply {
             background = bubble(surface, 26)
             clipToOutline = true
         }
         albumImage = ImageView(activity).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP
+            scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "Ảnh bìa của bài đang phát"
         }
         art.addView(albumImage, FrameLayout.LayoutParams(-1, -1))
-        albumPlaceholder = label("♫", 100f, mint)
+        albumPlaceholder = label("♫", 72f, mint).apply {
+            gravity = Gravity.CENTER
+        }
         art.addView(albumPlaceholder, FrameLayout.LayoutParams(-1, -1))
-        root.addView(art,
-            if (compact) LinearLayout.LayoutParams(-1, dp(98)).apply {
-                topMargin = dp(5)
-                bottomMargin = dp(8)
-            } else LinearLayout.LayoutParams(-1, 0, 1f).apply {
-                topMargin = dp(20)
-                bottomMargin = dp(22)
-            })
+        body.addView(art, LinearLayout.LayoutParams(dp(coverDp), dp(coverDp)).apply {
+            topMargin = dp(if (compact) 4 else 10)
+            bottomMargin = dp(if (wide) 0 else 12)
+            if (wide) rightMargin = dp(22)
+        })
+        val details = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        if (wide) {
+            val detailScroll = ScrollView(activity).apply {
+                isFillViewport = true
+                clipToPadding = false
+                addView(details, ViewGroup.LayoutParams(-1, -2))
+            }
+            body.addView(detailScroll, LinearLayout.LayoutParams(0, -1, 1f))
+        } else body.addView(details, LinearLayout.LayoutParams(-1, -2))
 
         title = label("Chọn bài hát",
             if (compact) 17f else 23f, foreground, true).apply {
             maxLines = if (compact) 2 else 3
             ellipsize = android.text.TextUtils.TruncateAt.END
         }
-        root.addView(title, LinearLayout.LayoutParams(-1, -2))
+        details.addView(title, LinearLayout.LayoutParams(-1, -2))
         category = label("", 13f, secondary)
-        root.addView(category, LinearLayout.LayoutParams(
-            -1, dp(if (compact) 21 else 30)))
+        details.addView(category, LinearLayout.LayoutParams(
+            -1, dp(if (compact || wide) 21 else 30)))
         formatLabel = label("Đang đọc định dạng âm thanh…", 12f, secondary)
-        root.addView(formatLabel, LinearLayout.LayoutParams(
-            -1, dp(if (compact) 20 else 28)))
+        details.addView(formatLabel, LinearLayout.LayoutParams(
+            -1, dp(if (compact || wide) 21 else 28)))
         downloadLabel = label("", 12f, mint)
-        root.addView(downloadLabel, LinearLayout.LayoutParams(
-            -1, dp(if (compact) 20 else 27)))
+        details.addView(downloadLabel, LinearLayout.LayoutParams(
+            -1, dp(if (compact || wide) 21 else 27)))
 
         seek = SeekBar(activity).apply {
             max = 1000
@@ -352,8 +372,8 @@ internal class NowPlayingFullScreenDialog(
                 }
             })
         }
-        root.addView(seek, LinearLayout.LayoutParams(
-            -1, dp(if (compact) 30 else 45)))
+        details.addView(seek, LinearLayout.LayoutParams(
+            -1, dp(if (compact || wide) 33 else 45)))
         val times = LinearLayout(activity).apply {
             gravity = Gravity.CENTER_VERTICAL
             orientation = LinearLayout.HORIZONTAL
@@ -363,16 +383,18 @@ internal class NowPlayingFullScreenDialog(
         times.addView(positionLabel)
         times.addView(View(activity), LinearLayout.LayoutParams(0, 1, 1f))
         times.addView(durationLabel)
-        root.addView(times, LinearLayout.LayoutParams(-1, dp(if (compact) 21 else 25)))
+        details.addView(times, LinearLayout.LayoutParams(-1, dp(if (compact || wide) 21 else 25)))
 
         val controls = LinearLayout(activity).apply {
             gravity = Gravity.CENTER
             orientation = LinearLayout.HORIZONTAL
         }
         val back = button("⏮", surface, foreground, 27f).apply {
+            contentDescription = "Bài trước"
             setOnClickListener { previous() }
         }
         playButton = button("▶", mint, background, 32f).apply {
+            contentDescription = "Phát hoặc tạm dừng"
             setOnClickListener {
                 media()?.let { player ->
                     if (player.currentMediaItem != null) {
@@ -382,17 +404,18 @@ internal class NowPlayingFullScreenDialog(
             }
         }
         val forward = button("⏭", surface, foreground, 27f).apply {
+            contentDescription = "Bài tiếp theo"
             setOnClickListener { next() }
         }
         for (b in listOf(back, playButton!!, forward)) {
             controls.addView(b, LinearLayout.LayoutParams(
-                0, dp(if (compact) 47 else 72), 1f).apply {
+                0, dp(if (compact) 52 else if (wide) 64 else 72), 1f).apply {
                 leftMargin = dp(4)
                 rightMargin = dp(4)
             })
         }
-        root.addView(controls, LinearLayout.LayoutParams(
-            -1, dp(if (compact) 51 else 80)).apply {
+        details.addView(controls, LinearLayout.LayoutParams(
+            -1, dp(if (compact) 56 else if (wide) 68 else 80)).apply {
             topMargin = dp(if (compact) 2 else 8)
             bottomMargin = dp(if (compact) 3 else 9)
         })
@@ -401,6 +424,7 @@ internal class NowPlayingFullScreenDialog(
             gravity = Gravity.CENTER
         }
         shuffleButton = button("⇄ Đảo: Tắt", surface, secondary, 12f).apply {
+            contentDescription = "Bật hoặc tắt phát ngẫu nhiên"
             setOnClickListener {
                 media()?.let { player ->
                     player.shuffleModeEnabled = !player.shuffleModeEnabled
@@ -408,6 +432,7 @@ internal class NowPlayingFullScreenDialog(
             }
         }
         repeatButton = button("↻ Không lặp", surface, secondary, 12f).apply {
+            contentDescription = "Bật hoặc tắt lặp lại bài hát"
             setOnClickListener {
                 media()?.let { player ->
                     player.repeatMode = when (player.repeatMode) {
@@ -420,36 +445,38 @@ internal class NowPlayingFullScreenDialog(
         }
         for (b in listOf(shuffleButton!!, repeatButton!!)) {
             modes.addView(b, LinearLayout.LayoutParams(
-                0, dp(if (compact) 38 else 48), 1f).apply {
+                0, dp(if (compact) 44 else 48), 1f).apply {
                 leftMargin = dp(4)
                 rightMargin = dp(4)
             })
         }
-        root.addView(modes, LinearLayout.LayoutParams(
-            -1, dp(if (compact) 40 else 52)))
+        details.addView(modes, LinearLayout.LayoutParams(
+            -1, dp(if (compact) 46 else 52)))
         val extras = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
         }
         favoriteButton = button("☆ Lưu bài", surface, secondary, 13f).apply {
+            contentDescription = "Lưu hoặc bỏ lưu bài hát yêu thích"
             setOnClickListener { toggleFavorite() }
         }
         val queue = button("☷ Hàng đợi", surface, foreground, 13f).apply {
+            contentDescription = "Xem hàng đợi danh sách phát"
             setOnClickListener { openQueue() }
         }
         for (b in listOf(favoriteButton!!, queue)) {
             extras.addView(b, LinearLayout.LayoutParams(
-                0, dp(if (compact) 38 else 48), 1f).apply {
+                0, dp(if (compact) 44 else 48), 1f).apply {
                 leftMargin = dp(4)
                 rightMargin = dp(4)
             })
         }
-        root.addView(extras, LinearLayout.LayoutParams(
-            -1, dp(if (compact) 41 else 55)))
-        if (!compact) root.addView(
+        details.addView(extras, LinearLayout.LayoutParams(
+            -1, dp(if (compact) 46 else 55)))
+        if (!compact && !wide) details.addView(
             label("Ngẫu nhiên: bài đã tải • Phát nền Media3", 11f, secondary),
             LinearLayout.LayoutParams(-1, dp(30)))
-        if (compact) {
+        if (!wide) {
             val scroll = ScrollView(activity).apply {
                 isFillViewport = true
                 setBackgroundColor(this@NowPlayingFullScreenDialog.background)

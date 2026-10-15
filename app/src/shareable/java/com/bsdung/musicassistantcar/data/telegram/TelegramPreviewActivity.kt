@@ -1,13 +1,20 @@
 package com.bsdung.musicassistantcar.data.telegram
 
 import android.app.Activity
+import android.app.Dialog
 import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
+import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.WindowManager
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
+import android.widget.PopupMenu
 import androidx.appcompat.app.AlertDialog
 import android.net.Uri
 import android.os.Bundle
@@ -76,6 +83,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var nowPlayingTitle: TextView
     private lateinit var playPause: Button
     private var fullPlayer: NowPlayingFullScreenDialog? = null
+    private var queueDialog: Dialog? = null
     private var currentSongIndex = -1
     private lateinit var input: EditText
     private lateinit var submit: Button
@@ -83,6 +91,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var refresh: Button
     private lateinit var globalSearch: Button
     private lateinit var libraryTitle: TextView
+    private lateinit var mainRoot: LinearLayout
+    private lateinit var miniPlayerBar: LinearLayout
+    private lateinit var topBar: LinearLayout
+    private lateinit var overflowButton: Button
+    private lateinit var miniControls: LinearLayout
+    private var isShortLayout = false
+    private lateinit var titleHeader: TextView
+    private lateinit var navigationRow: LinearLayout
+    private lateinit var miniOpenPlayer: Button
     private lateinit var collapsibleNavigation: LinearLayout
     private var navigationCollapsed = false
     private var gestureLastY = 0f
@@ -173,19 +190,62 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
+        val firstVisible = if (::tracks.isInitialized) tracks.firstVisiblePosition else 0
+        val firstOffset = if (::tracks.isInitialized) tracks.getChildAt(0)?.top ?: 0 else 0
         super.onConfigurationChanged(newConfig)
         // Multi-window car head units change the playback pane size often.
         // Keep TDLib and the MediaSession alive; rebuild only the dialog chrome.
         val fullWasShowing = fullPlayer?.isShowing() == true
+        val queueWasShowing = queueDialog?.isShowing == true
         fullPlayer?.dismiss()
         fullPlayer = null
+        queueDialog?.dismiss()
+        queueDialog = null
+        applyResponsiveLibraryUi()
+        if (::tracks.isInitialized) {
+            tracks.post { if (!isDestroyed) tracks.setSelectionFromTop(firstVisible, firstOffset) }
+        }
         if (fullWasShowing) showFullPlayer()
+        if (queueWasShowing) showUpcomingQueue()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean("key_all_chats_mode", allChatsMode)
+        outState.putBoolean("key_browse_sources", browseSources)
+        outState.putBoolean("key_playlist_mode", playlistMode)
+        selectedChatId?.let { outState.putLong("key_selected_chat_id", it) }
+        if (::songFilter.isInitialized) {
+            songFilter.text?.toString()?.takeIf { it.isNotEmpty() }?.let {
+                outState.putString("key_filter_query", it)
+            }
+        }
+        if (::tracks.isInitialized) {
+            outState.putInt("key_list_pos", tracks.firstVisiblePosition)
+            outState.putInt("key_list_offset", tracks.getChildAt(0)?.top ?: 0)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setTheme(R.style.Theme_MusicAssistantCar)
         buildUi()
+        if (savedInstanceState != null) {
+            allChatsMode = savedInstanceState.getBoolean("key_all_chats_mode", allChatsMode)
+            browseSources = savedInstanceState.getBoolean("key_browse_sources", browseSources)
+            playlistMode = savedInstanceState.getBoolean("key_playlist_mode", playlistMode)
+            if (savedInstanceState.containsKey("key_selected_chat_id")) {
+                selectedChatId = savedInstanceState.getLong("key_selected_chat_id")
+            }
+            savedInstanceState.getString("key_filter_query")?.let {
+                if (it.isNotEmpty()) songFilter.setText(it)
+            }
+            val pos = savedInstanceState.getInt("key_list_pos", -1)
+            val offset = savedInstanceState.getInt("key_list_offset", 0)
+            if (pos >= 0) {
+                tracks.post { if (!isDestroyed) tracks.setSelectionFromTop(pos, offset) }
+            }
+        }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (allChatsMode && (!browseSources || playlistMode)) {
@@ -408,20 +468,35 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun buildUi() {
         window.statusBarColor = midnight
         window.navigationBarColor = midnight
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         @Suppress("DEPRECATION")
         window.decorView.systemUiVisibility = 0
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(midnight)
-            setPadding(dp(16), dp(12), dp(16), dp(10))
+            setPadding(dp(8), dp(5), dp(8), dp(4))
         }
-        TextView(this).apply {
+        mainRoot = root
+        val topBarView = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            root.addView(this, LinearLayout.LayoutParams(-1, dp(48)))
+        }
+        topBar = topBarView
+        titleHeader = TextView(this).apply {
             text = "MeloVault"
-            textSize = 27f
+            textSize = 22f
             setTextColor(ink)
             setTypeface(null, android.graphics.Typeface.BOLD)
-            root.addView(this)
         }
+        topBar.addView(titleHeader, LinearLayout.LayoutParams(0, -2, 1f))
+        val overflow = uiButton("⋮").apply {
+            textSize = 21f
+            contentDescription = "Tác vụ và cài đặt MeloVault"
+            setOnClickListener { showLibraryOverflow(this) }
+        }
+        overflowButton = overflow
+        topBar.addView(overflow, LinearLayout.LayoutParams(dp(49), dp(47)))
         note = TextView(this).apply {
             text = "TELEGRAM  ·  NHẠC CÁ NHÂN  ·  PREVIEW"
             textSize = 10f
@@ -430,19 +505,65 @@ class TelegramPreviewActivity : AppCompatActivity() {
             setPadding(0, 0, 0, dp(10))
             root.addView(this)
         }
+        navigationRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            root.addView(this, LinearLayout.LayoutParams(-1, dp(45)).apply {
+                bottomMargin = dp(4)
+            })
+        }
+        fun tab(label: String, description: String, action: () -> Unit) {
+            val btn = uiButton(label).apply {
+                contentDescription = description
+                textSize = 11f
+                setSingleLine(true)
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setPadding(dp(2), 0, dp(2), 0)
+                setOnClickListener { action() }
+            }
+            navigationRow.addView(btn, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
+                leftMargin = dp(2)
+                rightMargin = dp(2)
+            })
+        }
+        tab("Thư viện", "Danh sách tất cả bài hát") {
+            if (!auth.isReady()) return@tab
+            playlistMode = false
+            browseSources = false
+            selectedChatId = null
+            if (!allChatsMode) scanAllTelegramAudio(browseAfter = false)
+            else { songFilter.text?.clear(); refreshSongRows() }
+        }
+        tab("Nguồn Telegram", "Xem nhóm và kênh Telegram") {
+            if (!auth.isReady()) return@tab
+            playlistMode = false
+            browseSources = true
+            selectedChatId = null
+            if (!allChatsMode) scanAllTelegramAudio()
+            else { songFilter.text?.clear(); refreshSongRows() }
+        }
+        tab("Playlist", "Playlist các bài yêu thích") {
+            if (!auth.isReady()) return@tab
+            playlistMode = true
+            browseSources = false
+            selectedChatId = null
+            songFilter.text?.clear()
+            updatePlaylistButtons()
+            refreshSongRows()
+        }
+        tab("Đang phát", "Mở trình phát nhạc") { showFullPlayer() }
         collapsibleNavigation = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             root.addView(this, LinearLayout.LayoutParams(-1, -2))
         }
         status = TextView(this).apply {
             text = "Đang khởi tạo Telegram…"
-            textSize = 13f
-            setTextColor(ink)
-            background = rounded(panel)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-            collapsibleNavigation.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
-                bottomMargin = dp(10)
-            })
+            textSize = 11f
+            setTextColor(subtle)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(dp(2), dp(3), dp(2), dp(3))
+            root.addView(this, LinearLayout.LayoutParams(-1, dp(23)))
         }
         authControls = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -476,6 +597,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             })
         }
         val sourceRow = LinearLayout(this).apply {
+            visibility = View.GONE
             orientation = LinearLayout.HORIZONTAL
             collapsibleNavigation.addView(this, LinearLayout.LayoutParams(-1, dp(47)).apply {
                 bottomMargin = dp(10)
@@ -496,6 +618,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             })
         }
         val sourceAllRow = LinearLayout(this).apply {
+            visibility = View.GONE
             orientation = LinearLayout.HORIZONTAL
             collapsibleNavigation.addView(this, LinearLayout.LayoutParams(-1, dp(43)).apply {
                 bottomMargin = dp(10)
@@ -511,11 +634,22 @@ class TelegramPreviewActivity : AppCompatActivity() {
             textSize = 12f
             setTextColor(subtle)
             setTypeface(null, android.graphics.Typeface.BOLD)
+            setOnClickListener {
+                if (allChatsMode && (!browseSources || playlistMode)) {
+                    playlistMode = false
+                    browseSources = true
+                    selectedChatId = null
+                    songFilter.text?.clear()
+                    updatePlaylistButtons()
+                    refreshSongRows()
+                }
+            }
             root.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
                 bottomMargin = dp(6)
             })
         }
         sourcesButton = uiButton("☷  Nhóm / kênh / bot", primary = true).apply {
+            visibility = View.GONE
             isEnabled = false
             setOnClickListener {
                 if (!auth.isReady() || !allChatsMode) return@setOnClickListener
@@ -538,6 +672,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
             setHintTextColor(subtle)
             background = rounded(panel)
             setPadding(dp(13), dp(9), dp(13), dp(9))
+            imeOptions = EditorInfo.IME_ACTION_SEARCH
+            contentDescription = "Ô tìm kiếm nhóm, kênh hoặc bài hát"
+            setOnEditorActionListener { v, actionId, _ ->
+                if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE) {
+                    val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                    imm?.hideSoftInputFromWindow(v.windowToken, 0)
+                    v.clearFocus()
+                    true
+                } else false
+            }
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(
                     s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -552,6 +696,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             })
         }
         val playlistRow = LinearLayout(this).apply {
+            visibility = View.GONE
             orientation = LinearLayout.HORIZONTAL
             collapsibleNavigation.addView(this, LinearLayout.LayoutParams(-1, dp(43)).apply {
                 bottomMargin = dp(9)
@@ -611,6 +756,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
             setOnTouchListener { _, event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
+                        if (::songFilter.isInitialized && songFilter.hasFocus()) {
+                            val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                            imm?.hideSoftInputFromWindow(songFilter.windowToken, 0)
+                            songFilter.clearFocus()
+                        }
                         gestureLastY = event.y
                         gestureAccumulation = 0f
                         pendingNavigationCollapse = null
@@ -646,13 +796,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
             mutableListOf()) {
             override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
                 val item = super.getView(position, convertView, parent) as TextView
-                item.textSize = 15f
+                item.textSize = if (isShortLayout) 13.5f else 15f
                 item.setTextColor(ink)
                 item.maxLines = 2
                 item.ellipsize = android.text.TextUtils.TruncateAt.END
                 item.background = rounded(panel, 11)
-                item.setPadding(dp(14), dp(16), dp(14), dp(16))
-                item.minHeight = dp(70)
+                val padV = dp(if (isShortLayout) 8 else 16)
+                item.setPadding(dp(14), padV, dp(14), padV)
+                item.minHeight = dp(if (isShortLayout) 46 else 70)
+                item.minimumHeight = dp(if (isShortLayout) 46 else 70)
                 return item
             }
         }
@@ -662,19 +814,26 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 position: Int, convertView: View?, parent: android.view.ViewGroup
             ): View {
                 val item = super.getView(position, convertView, parent) as TextView
-                item.textSize = 14f
+                item.textSize = if (isShortLayout) 13f else 14f
                 item.setTextColor(ink)
                 item.maxLines = 2
                 item.ellipsize = android.text.TextUtils.TruncateAt.END
                 item.background = rounded(panel, 11)
-                item.setPadding(dp(14), dp(12), dp(14), dp(12))
-                item.minHeight = dp(62)
+                val padV = dp(if (isShortLayout) 6 else 12)
+                item.setPadding(dp(14), padV, dp(14), padV)
+                item.minHeight = dp(if (isShortLayout) 42 else 62)
+                item.minimumHeight = dp(if (isShortLayout) 42 else 62)
                 return item
             }
         }
         tracks.adapter = adapter
         tracks.onItemClickListener = android.widget.AdapterView.OnItemClickListener {
                 _, _, position, _ ->
+            if (::songFilter.isInitialized && songFilter.hasFocus()) {
+                val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                imm?.hideSoftInputFromWindow(songFilter.windowToken, 0)
+                songFilter.clearFocus()
+            }
             if (allChatsMode && browseSources && !playlistMode) {
                 visibleSourceIds.getOrNull(position)?.let { source ->
                     selectedChatId = source.takeIf { it != 0L }
@@ -685,12 +844,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
             } else shownSongs.getOrNull(position)?.let { downloadAndPlay(it) }
         }
         root.addView(tracks, LinearLayout.LayoutParams(-1, 0, 1f))
-        val playerBar = LinearLayout(this).apply {
+        miniPlayerBar = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = rounded(panel)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+            setPadding(dp(8), dp(3), dp(8), dp(3))
             root.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
-                topMargin = dp(8)
+                topMargin = dp(3)
             })
         }
         TextView(this).apply {
@@ -698,7 +857,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
             textSize = 10f
             letterSpacing = 0.12f
             setTextColor(accent)
-            playerBar.addView(this)
+            visibility = View.GONE
+            miniPlayerBar.addView(this)
         }
         nowPlayingTitle = TextView(this).apply {
             text = "Chọn một bài hát để bắt đầu"
@@ -707,20 +867,21 @@ class TelegramPreviewActivity : AppCompatActivity() {
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
             setPadding(0, dp(4), 0, dp(8))
-            playerBar.addView(this)
+            miniPlayerBar.addView(this)
             setOnClickListener { showFullPlayer() }
         }
-        playerBar.addView(uiButton("⤢  Mở trình phát toàn màn hình").apply {
+        miniOpenPlayer = uiButton("⤢  Mở trình phát toàn màn hình").apply {
             textSize = 12f
+            visibility = View.GONE
             setOnClickListener { showFullPlayer() }
-        }, LinearLayout.LayoutParams(-1, dp(40)).apply {
-            bottomMargin = dp(8)
-        })
+        }
+        miniPlayerBar.addView(miniOpenPlayer, LinearLayout.LayoutParams(-1, dp(40)))
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            playerBar.addView(this, LinearLayout.LayoutParams(-1, dp(43)))
+            miniPlayerBar.addView(this, LinearLayout.LayoutParams(-1, dp(45)))
         }
+        miniControls = controls
         fun control(symbol: String, action: () -> Unit): Button =
             uiButton(symbol).apply {
                 textSize = 20f
@@ -753,6 +914,125 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         authControls.visibility = View.GONE
         setContentView(root)
+        applyResponsiveLibraryUi()
+    }
+
+    private fun showLibraryOverflow(anchor: View) {
+        val themed = ContextThemeWrapper(this, R.style.Theme_MusicAssistantCar_Dialog)
+        val menu = PopupMenu(themed, anchor)
+        menu.menu.add(0, 1, 1, "☆ Tin đã lưu")
+        menu.menu.add(0, 2, 2, "Tìm nhạc mọi chat Telegram")
+        menu.menu.add(0, 3, 3, "Chọn tệp nhạc (Google Drive / thiết bị)")
+        menu.menu.add(0, 4, 4, "Nhóm / kênh / bot Telegram")
+        menu.menu.add(0, 5, 5, "Làm mới danh sách")
+        menu.menu.add(0, 6, 6, "Đăng xuất Telegram")
+        menu.setOnMenuItemClickListener {
+            when (it.itemId) {
+                1 -> if (auth.isReady()) loadSavedMessages()
+                2, 5 -> if (auth.isReady()) scanAllTelegramAudio()
+                3 -> if (auth.isReady()) openAudioDocument()
+                4 -> if (auth.isReady()) {
+                    if (!allChatsMode) scanAllTelegramAudio()
+                    browseSources = true
+                    selectedChatId = null
+                    playlistMode = false
+                    songFilter.text?.clear()
+                    refreshSongRows()
+                }
+                6 -> if (auth.isReady()) {
+                    AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                        .setTitle("Đăng xuất tài khoản Telegram?")
+                        .setMessage("Bài đã tải và phiên đăng nhập trên thiết bị sẽ thay đổi.")
+                        .setNegativeButton("Hủy", null)
+                        .setPositiveButton("Đăng xuất") { _, _ -> logoutUser() }
+                        .show()
+                }
+            }
+            true
+        }
+        menu.show()
+    }
+
+    private fun applyResponsiveLibraryUi() {
+        if (!::navigationRow.isInitialized || !::mainRoot.isInitialized) return
+        val bounds = if (android.os.Build.VERSION.SDK_INT >= 30) {
+            windowManager.currentWindowMetrics.bounds
+        } else null
+        val density = resources.displayMetrics.density
+        val width = ((bounds?.width() ?: resources.displayMetrics.widthPixels) / density).toInt()
+        val height = ((bounds?.height() ?: resources.displayMetrics.heightPixels) / density).toInt()
+        val pane = CarPaneLayoutPolicy.modeFor(width, height)
+        val short = height in 1..600
+        val narrow = pane == CarPaneLayoutPolicy.Mode.NARROW
+        isShortLayout = short
+        mainRoot.setPadding(dp(if (narrow) 6 else 12),
+            dp(if (short) 2 else 6),
+            dp(if (narrow) 6 else 12),
+            dp(3))
+        if (::topBar.isInitialized) {
+            topBar.layoutParams.height = dp(if (short) 36 else 48)
+        }
+        if (::overflowButton.isInitialized) {
+            overflowButton.layoutParams.height = dp(if (short) 34 else 47)
+            overflowButton.layoutParams.width = dp(if (short) 40 else 49)
+            overflowButton.minHeight = dp(if (short) 30 else 45)
+            overflowButton.minimumHeight = dp(if (short) 30 else 45)
+            overflowButton.textSize = if (short) 16f else 21f
+            overflowButton.setPadding(0, 0, 0, 0)
+        }
+        titleHeader.textSize = if (short) 17f else 22f
+        note.visibility = if (auth.isReady() || short) View.GONE else View.VISIBLE
+        collapsibleNavigation.visibility = if (auth.isReady()) View.GONE else View.VISIBLE
+        navigationRow.visibility = if (navigationCollapsed) View.GONE else View.VISIBLE
+        if (::navigationRow.isInitialized) {
+            navigationRow.layoutParams.height = dp(if (short) 38 else 45)
+            for (i in 0 until navigationRow.childCount) {
+                val child = navigationRow.getChildAt(i)
+                child.layoutParams.height = dp(if (short) 36 else 48)
+                if (child is TextView) {
+                    child.textSize = if (narrow) 10.5f else 12f
+                    child.minHeight = dp(if (short) 32 else 45)
+                    child.minimumHeight = dp(if (short) 32 else 45)
+                    child.setPadding(dp(2), 0, dp(2), 0)
+                }
+            }
+        }
+        if (::libraryTitle.isInitialized) {
+            libraryTitle.textSize = if (short) 11f else 12f
+            libraryTitle.maxLines = 1
+            libraryTitle.ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+        if (::songFilter.isInitialized) {
+            songFilter.layoutParams.height = dp(if (short) 36 else 45)
+            songFilter.textSize = if (short) 12.5f else 14f
+            songFilter.setPadding(dp(11), dp(if (short) 4 else 9), dp(11), dp(if (short) 4 else 9))
+            songFilter.imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+        }
+        if (::status.isInitialized) {
+            status.visibility = if (short && !globalScanLoading) View.GONE else View.VISIBLE
+        }
+        // Keep the source rows as the main scroll surface. The mini-player
+        // cannot steal most of a short split-screen pane.
+        miniOpenPlayer.visibility = View.GONE
+        nowPlayingTitle.maxLines = 1
+        nowPlayingTitle.textSize = if (short) 12.5f else 15f
+        nowPlayingTitle.setPadding(0, dp(if (short) 2 else 4), 0, dp(if (short) 2 else 8))
+        if (::miniControls.isInitialized) {
+            miniControls.layoutParams.height = dp(if (short) 38 else 45)
+            for (i in 0 until miniControls.childCount) {
+                val child = miniControls.getChildAt(i)
+                child.layoutParams.height = dp(if (short) 36 else 45)
+                if (child is TextView) {
+                    child.minHeight = dp(if (short) 32 else 45)
+                    child.minimumHeight = dp(if (short) 32 else 45)
+                    child.textSize = if (short) 17f else 20f
+                    child.setPadding(0, 0, 0, 0)
+                }
+            }
+        }
+        tracks.clipToPadding = false
+        if (::adapter.isInitialized) adapter.notifyDataSetChanged()
+        if (::sourcesAdapter.isInitialized) sourcesAdapter.notifyDataSetChanged()
     }
 
     private fun commitNavigationGestureIfIdle() {
@@ -768,7 +1048,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val firstVisible = tracks.firstVisiblePosition
         val firstOffset = tracks.getChildAt(0)?.top ?: 0
         navigationCollapsed = collapsed
-        collapsibleNavigation.visibility = if (collapsed) View.GONE else View.VISIBLE
+        // Only the one-row navigation tabs hide on song-list scroll.
+        // Login forms remain independent; search always stays accessible.
+        navigationRow.visibility = if (collapsed) View.GONE else View.VISIBLE
         tracks.post { if (!isDestroyed) tracks.setSelectionFromTop(firstVisible, firstOffset) }
     }
 
@@ -834,8 +1116,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
         if (!auth.isReady()) return
         library.authorizedUser()?.value?.let { restorePlayingQueueIfAny(it) }
         val list = queueSongOrder
+        queueDialog?.dismiss()
         if (list.isEmpty()) {
             val popup = android.app.Dialog(this, android.R.style.Theme_Material_NoActionBar)
+            queueDialog = popup
+            popup.setOnDismissListener { if (queueDialog === popup) queueDialog = null }
             val wrapper = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(dp(18), dp(18), dp(18), dp(18))
@@ -878,6 +1163,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // unloaded Telegram files are labelled, not falsely claimed to be in
         // the small already-cached Media3 transport queue.
         val popup = android.app.Dialog(this, android.R.style.Theme_Material_NoActionBar)
+        queueDialog = popup
+        popup.setOnDismissListener { if (queueDialog === popup) queueDialog = null }
         val container = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(14), dp(16), dp(16))
@@ -1026,7 +1313,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         libraryTitle.text = when {
             playlistMode -> "PLAYLIST  ·  BÀI ĐÃ LƯU"
             !allChatsMode -> "THƯ VIỆN NHẠC  ·  SAVED MESSAGES"
-            chatId != null -> sourceNames[chatId] ?: "Nguồn Telegram $chatId"
+            chatId != null -> "‹ " + (sourceNames[chatId] ?: "Nguồn Telegram $chatId")
             else -> "THƯ VIỆN NHẠC  ·  TẤT CẢ TELEGRAM"
         }
         sourcesButton.text = "‹  Trở về nhóm / kênh (${groups.size})"
@@ -1256,6 +1543,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         input.visibility = View.GONE
                         authControls.visibility = View.GONE
                         restorePlayingQueueIfAny(verified.value)
+                        applyResponsiveLibraryUi()
                     }
                     scanAllTelegramAudio()
                 }
@@ -1454,6 +1742,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     submit.isEnabled = false
                     currentSongIndex = -1
                     nowPlayingTitle.text = "Chọn một bài hát để bắt đầu"
+                    applyResponsiveLibraryUi()
                 }
                 showMessage("Đã đóng phiên Telegram. Mở lại ứng dụng để đăng nhập lại.")
             }
@@ -1466,6 +1755,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             input.text?.clear()
             input.inputType = type
             authControls.visibility = View.VISIBLE
+            collapsibleNavigation.visibility = View.VISIBLE
             input.visibility = View.VISIBLE
             submit.isEnabled = true
             status.text = help
@@ -1634,10 +1924,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
     }
 
-    private fun scanAllTelegramAudio() {
+    private fun scanAllTelegramAudio(browseAfter: Boolean = true) {
         if (!auth.isReady()) return
         setNavigationCollapsed(false)
         resetSource(true)
+        browseSources = browseAfter
         globalScanPhase = "audio"
         globalScanOffset = ""
         globalScanPages = 0
@@ -1895,6 +2186,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     override fun onDestroy() {
         fullPlayer?.dismiss()
         fullPlayer = null
+        queueDialog?.dismiss()
+        queueDialog = null
         clearPendingQrLink()
         running = false
         nativeReceiver?.let { ShareableTdlibOwner.detachUi(it) }
