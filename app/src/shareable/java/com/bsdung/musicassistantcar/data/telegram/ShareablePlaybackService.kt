@@ -114,7 +114,7 @@ class ShareablePlaybackService : MediaSessionService() {
             clearQueue()
             return
         }
-        if (ordered.size > 300 || ordered.any { it.messageId <= 0L || it.fileId <= 0 }) {
+        if (ordered.size > 2000 || ordered.any { it.messageId <= 0L || it.fileId <= 0 }) {
             clearQueue()
             return
         }

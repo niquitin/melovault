@@ -70,6 +70,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var authControls: LinearLayout
     private lateinit var nowPlayingTitle: TextView
     private lateinit var playPause: Button
+    private var fullPlayer: NowPlayingFullScreenDialog? = null
     private var currentSongIndex = -1
     private lateinit var input: EditText
     private lateinit var submit: Button
@@ -259,22 +260,38 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
             )
         }
-        val playable = queueSongOrder.mapNotNull { item ->
-            val path = cachedSongPaths[item.messageId] ?: return@mapNotNull null
+        // Only contiguous cached neighbors may enter Media3's transport queue:
+        // skipping a missing file to jump to a distant cached song is incorrect.
+        val selected = queueSongOrder.indexOfFirst { it.messageId == song.messageId }
+        if (selected < 0) {
+            enqueueItems(listOf(mediaItem(Uri.fromFile(target), song.title,
+                "telegram:${song.messageId}")), 0)
+            return
+        }
+        fun playableAt(index: Int): MediaItem? {
+            val item = queueSongOrder.getOrNull(index) ?: return null
+            val path = cachedSongPaths[item.messageId] ?: return null
             val file = File(path)
             if (!file.isFile || !TelegramAccountStoragePolicy.isOwnedFile(filesRoot, file)) {
                 cachedSongPaths.remove(item.messageId)
-                return@mapNotNull null
+                return null
             }
-            item to mediaItem(Uri.fromFile(file), item.title, "telegram:${item.messageId}")
+            return mediaItem(Uri.fromFile(file), item.title, "telegram:${item.messageId}")
         }
-        val selectedIndex = playable.indexOfFirst { it.first.messageId == song.messageId }
-        if (selectedIndex >= 0) {
-            enqueueItems(playable.map { it.second }, selectedIndex)
-        } else {
-            enqueueItems(listOf(mediaItem(Uri.fromFile(target), song.title,
-                "telegram:${song.messageId}")), 0)
+        val orderIds = queueSongOrder.map { it.messageId }
+        val indices = TelegramContiguousQueuePolicy.indices(orderIds, song.messageId) {
+            id -> id == song.messageId || run {
+                val path = cachedSongPaths[id] ?: return@run false
+                val file = File(path)
+                file.isFile && TelegramAccountStoragePolicy.isOwnedFile(filesRoot, file)
+            }
         }
+        val contiguous = indices.mapNotNull { index ->
+            if (index == selected) mediaItem(Uri.fromFile(target), song.title,
+                "telegram:${song.messageId}")
+            else playableAt(index)
+        }
+        enqueueItems(contiguous, indices.indexOf(selected).coerceAtLeast(0))
     }
 
     private fun enqueueItems(items: List<MediaItem>, startIndex: Int) {
@@ -584,7 +601,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
             ellipsize = android.text.TextUtils.TruncateAt.END
             setPadding(0, dp(4), 0, dp(8))
             playerBar.addView(this)
+            setOnClickListener { showFullPlayer() }
         }
+        playerBar.addView(uiButton("⤢  Mở trình phát toàn màn hình").apply {
+            textSize = 12f
+            setOnClickListener { showFullPlayer() }
+        }, LinearLayout.LayoutParams(-1, dp(40)).apply {
+            bottomMargin = dp(8)
+        })
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -621,6 +645,22 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         authControls.visibility = View.GONE
         setContentView(root)
+    }
+
+    private fun showFullPlayer() {
+        val dialog = fullPlayer ?: NowPlayingFullScreenDialog(
+            this,
+            media = { player },
+            source = {
+                val itemId = currentTelegramMessageId()
+                val chat = songs.firstOrNull { it.messageId == itemId }?.chatId
+                if (chat != null) sourceNames[chat] ?: "Nhạc từ Telegram"
+                else "Tệp âm thanh đã chọn"
+            },
+            previous = { playAdjacent(-1) },
+            next = { playAdjacent(1) }
+        ).also { fullPlayer = it }
+        dialog.show()
     }
 
     private fun currentTelegramMessageId(): Long? {
@@ -711,21 +751,22 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun playAdjacent(delta: Int) {
         if (!auth.isReady()) return
-        val controller = player
-        if (controller != null) {
-            if (delta > 0 && controller.hasNextMediaItem()) {
-                controller.seekToNextMediaItem()
-                return
-            }
-            if (delta < 0 && controller.hasPreviousMediaItem()) {
-                controller.seekToPreviousMediaItem()
-                return
-            }
-        }
         val currentId = currentTelegramMessageId() ?: return
         val index = queueSongOrder.indexOfFirst { it.messageId == currentId }
         if (index < 0) return
         val target = queueSongOrder.getOrNull(index + delta) ?: return
+        val controller = player
+        val mediaId = "telegram:${target.messageId}"
+        if (controller != null) {
+            val targetIndex = (0 until controller.mediaItemCount).firstOrNull {
+                controller.getMediaItemAt(it).mediaId == mediaId
+            }
+            if (targetIndex != null) {
+                controller.seekToDefaultPosition(targetIndex)
+                controller.play()
+                return
+            }
+        }
         downloadAndPlay(target)
     }
 
@@ -1427,6 +1468,17 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun downloadAndPlay(song: Song) {
         if (!auth.isReady()) return
+        val cachedPath = cachedSongPaths[song.messageId]
+        if (cachedPath != null) {
+            val cachedFile = File(cachedPath)
+            if (cachedFile.isFile &&
+                TelegramAccountStoragePolicy.isOwnedFile(filesRoot, cachedFile)) {
+                downloadWaiting = null
+                enqueueTelegramPlayback(song, cachedFile)
+                return
+            }
+            cachedSongPaths.remove(song.messageId)
+        }
         currentSongIndex = songs.indexOfFirst { it.messageId == song.messageId }
         nowPlayingTitle.text = song.title
         downloadWaiting = song.fileId
@@ -1434,7 +1486,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         try {
             send("downloadFile", "download:${song.fileId}") {
                 it.put("file_id", song.fileId)
-                it.put("priority", 16)
+                it.put("priority", 32)
                 it.put("offset", 0)
                 it.put("limit", 0)
                 it.put("synchronous", false)
@@ -1495,6 +1547,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        fullPlayer?.dismiss()
+        fullPlayer = null
         clearPendingQrLink()
         running = false
         nativeReceiver?.let { ShareableTdlibOwner.detachUi(it) }
