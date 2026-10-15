@@ -1040,8 +1040,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
         if (!auth.isReady() || !running || currentSongIndex < 0 ||
             prefetchWaiting != null || downloadWaiting != null) return
         val currentId = currentTelegramMessageId() ?: return
-        val idx = queueSongOrder.indexOfFirst { it.messageId == currentId }
-        val next = queueSongOrder.getOrNull(idx + 1) ?: return
+        val nextId = TelegramPrefetchOrderPolicy.immediateSuccessor(
+            queueSongOrder.map { it.messageId }, currentId
+        ) ?: return
+        val next = queueSongOrder.firstOrNull { it.messageId == nextId } ?: return
         val path = cachedSongPaths[next.messageId]
         if (path != null) {
             val target = File(path)
@@ -1085,9 +1087,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val currentId = controller.currentMediaItem?.mediaId.orEmpty()
         if (!currentId.startsWith("telegram:")) return
         val currentIdLong = currentId.removePrefix("telegram:").toLongOrNull() ?: return
-        val position = queueSongOrder.indexOfFirst { it.messageId == currentIdLong }
-        if (position < 0 ||
-            queueSongOrder.getOrNull(position + 1)?.messageId != song.messageId) return
+        if (!TelegramPrefetchOrderPolicy.isStillNext(
+                queueSongOrder.map { it.messageId }, currentIdLong, song.messageId
+            )) return
         val mediaId = "telegram:${song.messageId}"
         for (index in 0 until controller.mediaItemCount) {
             if (controller.getMediaItemAt(index).mediaId == mediaId) return
