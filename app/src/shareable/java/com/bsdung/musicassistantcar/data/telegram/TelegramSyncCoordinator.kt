@@ -117,7 +117,7 @@ class TelegramSyncCoordinator(
             activeAccountId = accountId
         }
 
-        if (isSyncing && !isPaused) {
+        if (isSyncing && !isPaused && !forceFullRestart) {
             val existing = dao.getSyncState(accountId) ?: TelegramSyncState(accountId = accountId)
             return TelegramSyncAction.ProgressUpdate(existing, totalItemsInCycle)
         }

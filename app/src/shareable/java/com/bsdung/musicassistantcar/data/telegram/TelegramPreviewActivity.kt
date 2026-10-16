@@ -133,7 +133,26 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var libraryDb: TelegramLibraryDao? = null
     private var syncCoordinator: TelegramSyncCoordinator? = null
     private val dbExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val uiQueryGeneration = java.util.concurrent.atomic.AtomicLong(1L)
+    @Volatile private var totalCountForCurrentView: Int = 0
     private var isLoadingMoreSongs = false
+
+    private fun executeOnDb(task: () -> Unit) {
+        if (isDestroyed || isFinishing) return
+        try {
+            if (!dbExecutor.isShutdown && !dbExecutor.isTerminated) {
+                dbExecutor.execute {
+                    if (isDestroyed || isFinishing) return@execute
+                    try {
+                        task()
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+        }
+    }
+
     private val songs = mutableListOf<Song>()
     private var shownSongs: List<Song> = emptyList()
     private var queueSongOrder: List<Song> = emptyList()
@@ -791,16 +810,24 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         val userId = library.authorizedUser()?.value ?: 0L
                         val db = libraryDb
                         if (db != null && userId > 0L) {
-                            val q = songFilter.text?.toString()?.trim().orEmpty().takeIf { it.isNotBlank() }
-                            val totalCount = db.getSongCount(userId, chatId = selectedChatId, searchQuery = q)
-                            if (shownSongs.size < totalCount) {
+                            if (shownSongs.size < totalCountForCurrentView) {
                                 isLoadingMoreSongs = true
                                 val nextOffset = shownSongs.size
-                                dbExecutor.execute {
-                                    val more = db.getSongs(userId, chatId = selectedChatId, searchQuery = q, offset = nextOffset, limit = 200)
+                                val currentGen = uiQueryGeneration.get()
+                                val q = songFilter.text?.toString()?.trim().orEmpty().takeIf { it.isNotBlank() }
+                                val currentChat = selectedChatId
+                                executeOnDb {
+                                    val count = db.getSongCount(userId, chatId = currentChat, searchQuery = q)
+                                    val more = if (nextOffset < count) {
+                                        db.getSongs(userId, chatId = currentChat, searchQuery = q, offset = nextOffset, limit = 200)
+                                    } else emptyList()
                                     val mapped = more.map { Song(it.fileId, it.title, it.filename, it.songKey, it.chatId, it.fileSize) }
                                     runOnUiThread {
-                                        if (shownSongs.size == nextOffset && allChatsMode && !browseSources && !playlistMode) {
+                                        if (uiQueryGeneration.get() == currentGen &&
+                                            shownSongs.size == nextOffset &&
+                                            allChatsMode && !browseSources && !playlistMode &&
+                                            mapped.isNotEmpty() && !isDestroyed) {
+                                            totalCountForCurrentView = count
                                             shownSongs = shownSongs + mapped
                                             this@TelegramPreviewActivity.adapter.addAll(
                                                 mapped.map { TelegramSongDisplayPolicy.label(it.title, it.filename) }
@@ -1358,73 +1385,95 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val userId = library.authorizedUser()?.value ?: 0L
         val db = if (userId > 0L) libraryDb else null
 
-        if (allChatsMode && browseSources && !playlistMode) {
-            val sources = if (db != null) db.getSources(userId) else emptyList()
-            val totalCount = if (db != null) db.getSongCount(userId) else songs.size
-            val entries = if (sources.isNotEmpty()) {
-                sources.filter {
-                    q.isBlank() || TelegramSourcePolicy.matchesSource(it.title, q)
-                }.map { it.chatId to it.trackCount }
+        val generation = uiQueryGeneration.incrementAndGet()
+        val isBrowseSources = allChatsMode && browseSources && !playlistMode
+        val isPlaylist = playlistMode
+        val currentChatId = selectedChatId
+        val isAllChats = allChatsMode
+        val currentFavIds = favoriteIds.toSet()
+
+        executeOnDb {
+            if (uiQueryGeneration.get() != generation) return@executeOnDb
+
+            if (isBrowseSources) {
+                val sources = if (db != null && userId > 0L) db.getSources(userId) else emptyList()
+                val totalCount = if (db != null && userId > 0L) db.getSongCount(userId) else songs.size
+                val entries = if (sources.isNotEmpty()) {
+                    sources.filter {
+                        q.isBlank() || TelegramSourcePolicy.matchesSource(it.title, q)
+                    }.map { it.chatId to it.trackCount }
+                } else {
+                    TelegramSourcePolicy.sortedCounts(songs.map { it.chatId }).filter { (chatId, _) ->
+                        TelegramSourcePolicy.matchesSource(sourceNames[chatId] ?: "Nguồn Telegram $chatId", q)
+                    }
+                }
+                val display = if (q.isBlank()) listOf(0L to totalCount) + entries else entries
+                val sourceCount = if (sources.isNotEmpty()) sources.size else display.filter { it.first != 0L }.size
+
+                runOnUiThread {
+                    if (uiQueryGeneration.get() != generation || isDestroyed) return@runOnUiThread
+                    visibleSourceIds = display.map { it.first }
+                    shownSongs = emptyList()
+                    if (tracks.adapter !== sourcesAdapter) tracks.adapter = sourcesAdapter
+                    sourcesAdapter.clear()
+                    sourcesAdapter.addAll(display.map { (chatId, count) ->
+                        val label = if (chatId == 0L) "♫ Tất cả nguồn"
+                            else sourceNames[chatId] ?: "Nguồn Telegram $chatId"
+                        "$label  ·  $count bài"
+                    })
+                    libraryTitle.text = "NGUỒN NHẠC TELEGRAM  ·  $sourceCount nhóm/kênh/chat"
+                    sourcesButton.text = "☷  Nhóm / kênh / bot ($sourceCount)"
+                    songFilter.hint = "Tìm nhóm, kênh hoặc bot…"
+                }
             } else {
-                TelegramSourcePolicy.sortedCounts(songs.map { it.chatId }).filter { (chatId, _) ->
-                    TelegramSourcePolicy.matchesSource(sourceNames[chatId] ?: "Nguồn Telegram $chatId", q)
+                val (loadedSongs, totalDisplayCount) = if (isPlaylist) {
+                    val favSongs = currentFavIds.mapNotNull { id -> songs.firstOrNull { it.messageId == id } }
+                    val filtered = if (q.isBlank()) favSongs else favSongs.filter {
+                        it.title.contains(q, ignoreCase = true) || it.filename.contains(q, ignoreCase = true)
+                    }
+                    Pair(filtered, filtered.size)
+                } else if (isAllChats && db != null && userId > 0L) {
+                    val filterQuery = q.takeIf { it.isNotBlank() }
+                    val count = db.getSongCount(userId, chatId = currentChatId, searchQuery = filterQuery)
+                    val page = db.getSongs(userId, chatId = currentChatId, searchQuery = filterQuery, offset = 0, limit = 200)
+                        .map { Song(it.fileId, it.title, it.filename, it.songKey, it.chatId, it.fileSize) }
+                    Pair(page, count)
+                } else if (currentChatId != null) {
+                    val chatSongs = songs.filter { it.chatId == currentChatId }
+                    val filtered = if (q.isBlank()) chatSongs else chatSongs.filter {
+                        it.title.contains(q, ignoreCase = true) || it.filename.contains(q, ignoreCase = true)
+                    }
+                    Pair(filtered, filtered.size)
+                } else {
+                    val filtered = if (q.isBlank()) songs.toList() else songs.filter {
+                        it.title.contains(q, ignoreCase = true) || it.filename.contains(q, ignoreCase = true)
+                    }
+                    Pair(filtered, filtered.size)
+                }
+
+                val sourceCount = if (db != null && userId > 0L) db.getSources(userId).size else songs.map { it.chatId }.distinct().size
+
+                runOnUiThread {
+                    if (uiQueryGeneration.get() != generation || isDestroyed) return@runOnUiThread
+                    if (tracks.adapter !== adapter) tracks.adapter = adapter
+                    shownSongs = loadedSongs
+                    totalCountForCurrentView = totalDisplayCount
+                    adapter.clear()
+                    adapter.addAll(shownSongs.map {
+                        TelegramSongDisplayPolicy.label(it.title, it.filename)
+                    })
+                    val chatId = currentChatId
+                    libraryTitle.text = when {
+                        isPlaylist -> "PLAYLIST  ·  BÀI ĐÃ LƯU (${shownSongs.size})"
+                        !isAllChats -> "THƯ VIỆN NHẠC  ·  SAVED MESSAGES (${shownSongs.size})"
+                        chatId != null -> "‹ " + (sourceNames[chatId] ?: "Nguồn Telegram $chatId") + " ($totalDisplayCount bài)"
+                        else -> "THƯ VIỆN NHẠC  ·  TẤT CẢ TELEGRAM ($totalDisplayCount bài)"
+                    }
+                    sourcesButton.text = "‹  Trở về nhóm / kênh ($sourceCount)"
+                    songFilter.hint = "Tìm bài hát theo tên…"
                 }
             }
-            val display = if (q.isBlank()) listOf(0L to totalCount) + entries else entries
-            visibleSourceIds = display.map { it.first }
-            shownSongs = emptyList()
-            if (tracks.adapter !== sourcesAdapter) tracks.adapter = sourcesAdapter
-            sourcesAdapter.clear()
-            sourcesAdapter.addAll(display.map { (chatId, count) ->
-                val label = if (chatId == 0L) "♫ Tất cả nguồn"
-                    else sourceNames[chatId] ?: "Nguồn Telegram $chatId"
-                "$label  ·  $count bài"
-            })
-            val sourceCount = if (sources.isNotEmpty()) sources.size else visibleSourceIds.filter { it != 0L }.size
-            libraryTitle.text = "NGUỒN NHẠC TELEGRAM  ·  $sourceCount nhóm/kênh/chat"
-            sourcesButton.text = "☷  Nhóm / kênh / bot ($sourceCount)"
-            songFilter.hint = "Tìm nhóm, kênh hoặc bot…"
-            return
         }
-
-        if (tracks.adapter !== adapter) tracks.adapter = adapter
-        val all = if (playlistMode) {
-            favoriteIds.mapNotNull { id -> songs.firstOrNull { it.messageId == id } }
-        } else if (selectedChatId != null && allChatsMode) {
-            if (db != null) {
-                db.getSongs(userId, chatId = selectedChatId, searchQuery = q.takeIf { it.isNotBlank() }, offset = 0, limit = 500)
-                    .map { Song(it.fileId, it.title, it.filename, it.songKey, it.chatId, it.fileSize) }
-            } else {
-                songs.filter { it.chatId == selectedChatId }
-            }
-        } else if (allChatsMode && db != null && q.isNotBlank()) {
-            db.getSongs(userId, searchQuery = q, offset = 0, limit = 500)
-                .map { Song(it.fileId, it.title, it.filename, it.songKey, it.chatId, it.fileSize) }
-        } else {
-            songs.toList()
-        }
-
-        shownSongs = if (q.isBlank() || (allChatsMode && db != null)) all else all.filter {
-            it.title.contains(q, ignoreCase = true) || it.filename.contains(q, ignoreCase = true)
-        }
-        adapter.clear()
-        adapter.addAll(shownSongs.map {
-            TelegramSongDisplayPolicy.label(it.title, it.filename)
-        })
-        val chatId = selectedChatId
-        val totalDisplayCount = if (allChatsMode && db != null && !playlistMode) {
-            db.getSongCount(userId, chatId = selectedChatId, searchQuery = q.takeIf { it.isNotBlank() })
-        } else shownSongs.size
-
-        libraryTitle.text = when {
-            playlistMode -> "PLAYLIST  ·  BÀI ĐÃ LƯU (${shownSongs.size})"
-            !allChatsMode -> "THƯ VIỆN NHẠC  ·  SAVED MESSAGES (${shownSongs.size})"
-            chatId != null -> "‹ " + (sourceNames[chatId] ?: "Nguồn Telegram $chatId") + " ($totalDisplayCount bài)"
-            else -> "THƯ VIỆN NHẠC  ·  TẤT CẢ TELEGRAM ($totalDisplayCount bài)"
-        }
-        val sourceCount = if (db != null) db.getSources(userId).size else songs.map { it.chatId }.distinct().size
-        sourcesButton.text = "‹  Trở về nhóm / kênh ($sourceCount)"
-        songFilter.hint = "Tìm bài hát theo tên…"
     }
 
     private fun toggleCurrentFavorite() {
@@ -1676,7 +1725,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     sourceNames[chatId] = cleanTitle
                     val user = library.authorizedUser()?.value
                     if (user != null && user > 0L) {
-                        Thread { libraryDb?.updateSourceTitle(user, chatId, cleanTitle) }.start()
+                        executeOnDb { libraryDb?.updateSourceTitle(user, chatId, cleanTitle) }
                     }
                     runOnUiThread {
                         if (allChatsMode && browseSources) {
@@ -2065,7 +2114,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun loadDatabaseIndex(userId: Long, onLoaded: (() -> Unit)? = null) {
         val db = getOrInitDatabase(userId)
-        dbExecutor.execute {
+        executeOnDb {
             val count = db.getSongCount(userId)
             val sources = db.getSources(userId)
             for (src in sources) {
@@ -2074,8 +2123,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val syncState = db.getSyncState(userId)
             val initialSongs = if (count > 0) db.getSongs(userId, offset = 0, limit = 200) else emptyList()
             runOnUiThread {
-                if (!auth.isReady() || library.authorizedUser()?.value != userId) return@runOnUiThread
+                if (!auth.isReady() || library.authorizedUser()?.value != userId || isDestroyed) return@runOnUiThread
                 if (count > 0) {
+                    totalCountForCurrentView = count
                     songs.clear()
                     seenSongMessageIds.clear()
                     for (s in initialSongs) {
@@ -2100,13 +2150,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun reloadIndexedSourcesFromDb(userId: Long) {
         val db = libraryDb ?: return
-        dbExecutor.execute {
+        executeOnDb {
             val sources = db.getSources(userId)
             for (src in sources) {
                 sourceNames[src.chatId] = src.title
             }
             runOnUiThread {
-                if (allChatsMode && browseSources) {
+                if (allChatsMode && browseSources && !isDestroyed) {
                     refreshSongRows()
                 }
             }
@@ -2115,11 +2165,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun checkAutoRecovery() {
         val userId = library.authorizedUser()?.value ?: return
-        dbExecutor.execute {
+        executeOnDb {
             val db = getOrInitDatabase(userId)
             val dbCount = db.getSongCount(userId)
             runOnUiThread {
-                if (autoRecoveryPolicy.shouldAutoRecover(
+                if (!isDestroyed && autoRecoveryPolicy.shouldAutoRecover(
                         auth.isReady(), allChatsMode, globalScanLoading, dbCount, userId
                     )) {
                     scanAllTelegramAudio(browseAfter = browseSources, incremental = false)
@@ -2139,7 +2189,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
         autoRecoveryPolicy.recordScanDispatched(user)
         setNavigationCollapsed(false)
         if (forceRestart) {
-            resetSource(true)
+            globalScanGeneration++
+            historyLoading = false
+            allChatsMode = true
+            globalScanLoading = true
+            seenSongMessageIds.clear()
         } else {
             allChatsMode = true
             globalScanLoading = true
@@ -2242,7 +2296,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun processSyncPage(response: JSONObject, tag: String) {
-        dbExecutor.execute {
+        executeOnDb {
             val parts = tag.split(":")
             val tagUserId = parts.getOrNull(1)?.toLongOrNull() ?: 0L
             val gen = parts.getOrNull(2)?.toLongOrNull() ?: 0L
@@ -2250,11 +2304,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val currentUser = library.authorizedUser()?.value ?: 0L
 
             if (!auth.isReady() || currentUser <= 0L || tagUserId != currentUser) {
-                return@execute
+                return@executeOnDb
             }
-            val coordinator = syncCoordinator ?: return@execute
+            val coordinator = syncCoordinator ?: return@executeOnDb
             if (coordinator.getActiveAccountId() != currentUser || coordinator.getActiveGeneration() != gen) {
-                return@execute
+                return@executeOnDb
             }
 
             val items = response.optJSONArray("messages") ?: org.json.JSONArray()
@@ -2286,13 +2340,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val nextOffset = response.optString("next_offset")
             val nextAction = coordinator.onPageReceived(currentUser, gen, phase, indexedSongs, nextOffset)
             if (nextAction is TelegramSyncAction.DiscardedStale) {
-                return@execute
+                return@executeOnDb
             }
             val syncState = libraryDb?.getSyncState(currentUser)
             val totalSynced = syncState?.totalItemsSynced ?: indexedSongs.size
 
             runOnUiThread {
-                if (!allChatsMode || !auth.isReady() || library.authorizedUser()?.value != currentUser) return@runOnUiThread
+                if (!allChatsMode || !auth.isReady() || library.authorizedUser()?.value != currentUser || isDestroyed) return@runOnUiThread
                 val phaseLabel = if (phase == "audio") "Âm thanh" else "Tệp âm thanh"
                 status.text = "Đang đồng bộ ($phaseLabel): đã tìm $totalSynced bài…"
             }
@@ -2301,14 +2355,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun processSyncError(result: JSONObject, tag: String) {
-        dbExecutor.execute {
+        executeOnDb {
             val parts = tag.split(":")
             val tagUserId = parts.getOrNull(1)?.toLongOrNull() ?: 0L
             val gen = parts.getOrNull(2)?.toLongOrNull() ?: 0L
             val currentUser = library.authorizedUser()?.value ?: 0L
-            if (!auth.isReady() || currentUser <= 0L || tagUserId != currentUser) return@execute
-            val coordinator = syncCoordinator ?: return@execute
-            if (coordinator.getActiveAccountId() != currentUser || coordinator.getActiveGeneration() != gen) return@execute
+            if (!auth.isReady() || currentUser <= 0L || tagUserId != currentUser) return@executeOnDb
+            val coordinator = syncCoordinator ?: return@executeOnDb
+            if (coordinator.getActiveAccountId() != currentUser || coordinator.getActiveGeneration() != gen) return@executeOnDb
             val code = result.optInt("code")
             val msg = result.optString("message")
             val nextAction = coordinator.onError(currentUser, gen, code, msg)

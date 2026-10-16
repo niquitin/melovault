@@ -377,4 +377,57 @@ class TelegramSyncCoordinatorTest {
         assertEquals(0, dao.getSongCount(100L))
         assertEquals(TelegramSyncState.STATUS_COMPLETE, dao.getSyncState(100L)!!.status)
     }
+
+    @Test
+    fun testForceFullRestartResetsAudioCursorAndStartsFullDiscovery() {
+        // Store an existing checkpoint at document phase
+        val checkpoint = TelegramSyncState(
+            accountId = 100L,
+            syncScope = "global",
+            phase = TelegramSyncState.PHASE_DOCUMENT,
+            nextOffset = "doc_offset_88",
+            pagesSynced = 10,
+            totalItemsSynced = 1000,
+            status = TelegramSyncState.STATUS_SYNCING
+        )
+        dao.updateSyncState(checkpoint)
+
+        // Force full restart must NOT resume the document cursor; it must start fresh from audio offset=""
+        val action = coordinator.startSync(100L, TelegramSyncMode.FULL_DISCOVERY, forceFullRestart = true)
+        assertTrue(action is TelegramSyncAction.RequestPage)
+        val req = action as TelegramSyncAction.RequestPage
+        assertEquals(TelegramSyncState.PHASE_AUDIO, req.phase)
+        assertEquals("", req.offset)
+
+        // Verify state was reset in DAO
+        val resetState = dao.getSyncState(100L)
+        assertNotNull(resetState)
+        assertEquals(TelegramSyncState.PHASE_AUDIO, resetState?.phase)
+        assertEquals("", resetState?.nextOffset)
+        assertEquals(0, resetState?.pagesSynced)
+    }
+
+    @Test
+    fun testRapidAccountOrGenerationChangeDiscardsStalePage() {
+        val action1 = coordinator.startSync(100L, TelegramSyncMode.FULL_DISCOVERY)
+        assertTrue(action1 is TelegramSyncAction.RequestPage)
+        val req1 = action1 as TelegramSyncAction.RequestPage
+
+        // User switches account or restarts sync
+        val action2 = coordinator.startSync(100L, TelegramSyncMode.FULL_DISCOVERY, forceFullRestart = true)
+        assertTrue(action2 is TelegramSyncAction.RequestPage)
+        val req2 = action2 as TelegramSyncAction.RequestPage
+        assertTrue(req2.generation > req1.generation)
+
+        // Late response arrives with old generation -> must be DiscardedStale
+        val staleAction = coordinator.onPageReceived(
+            accountId = 100L,
+            generation = req1.generation,
+            phase = TelegramSyncState.PHASE_AUDIO,
+            songs = listOf(sampleSong(messageId = 1L)),
+            nextOffset = "page_1"
+        )
+        assertEquals(TelegramSyncAction.DiscardedStale, staleAction)
+    }
 }
+
