@@ -5,7 +5,7 @@ import struct
 import sys
 
 DEVICE_ID = "QV725WEQ54"
-OUT_DIR = r"Z:\MusicAssistant\AgentBridge\artifacts\e91-shareable\screenshots_e93_01c"
+OUT_DIR = r"Z:\MusicAssistant\AgentBridge\artifacts\e91-shareable\screenshots_e93_01e"
 
 def run(cmd):
     res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
@@ -67,18 +67,18 @@ def main():
         # Tap '▶ Đang phát' at center (924, 2317)
         adb_shell("input tap 924 2317")
         time.sleep(2)
-        capture("02_sony_portrait_full_player.png", expected_wh=(1080, 2520))
+        capture("02_sony_portrait_nowplaying_chevron.png", expected_wh=(1080, 2520))
 
         # 03: Open Queue dialog from full player
         # Tap queue button (center bottom right of full player, ~780, 2160)
         adb_shell("input tap 780 2160")
         time.sleep(2)
         capture("03_sony_portrait_queue.png", expected_wh=(1080, 2520))
-        # Close queue dialog by tapping "Xong" or back
+        # Close queue dialog by back key
         adb_shell("input keyevent KEYCODE_BACK")
         time.sleep(1)
-        # Close full player by back key
-        adb_shell("input keyevent KEYCODE_BACK")
+        # Close full player by tapping the top-left chevron close button (X=100, Y=140)
+        adb_shell("input tap 100 140")
         time.sleep(1)
 
         # 04: Sources tab (tap '☷ Nguồn' at center 411, 2317)
@@ -104,53 +104,62 @@ def main():
         adb_shell("input keyevent KEYCODE_BACK")
         time.sleep(1)
 
-        # 07: Overflow menu showing theme switcher
-        # Overflow button is at top right: center 1000, 150
-        adb_shell("input tap 1000 150")
-        time.sleep(2)
-        capture("07_sony_portrait_overflow_theme.png", expected_wh=(1080, 2520))
-        # Cleanly dismiss overflow popup menu WITHOUT clicking any items
-        adb_shell("input keyevent KEYCODE_BACK")
-        time.sleep(1)
-
-        # 08: Sony native landscape (2520x1080 @420dpi)
+        # 07: Sony native landscape (2520x1080 @420dpi) - Wide navigation before scroll
         adb_shell("settings put system user_rotation 1")
         time.sleep(3)
-        capture("08_sony_landscape_wide.png", expected_wh=(2520, 1080))
+        capture("07_sony_landscape_wide_nav_before_scroll.png", expected_wh=(2520, 1080))
+
+        # 08: Scroll song list upward in landscape to verify top nav DOES NOT auto-collapse
+        adb_shell("input swipe 1260 700 1260 300 300")
+        time.sleep(2)
+        capture("08_sony_landscape_wide_nav_after_scroll.png", expected_wh=(2520, 1080))
+
+        # 09: Open NowPlaying in landscape to verify top-left chevron down button
+        # Tap 'Đang phát' tab at center (2070, 246) or mini-player at (1000, 1000)
+        adb_shell("input tap 2070 246")
+        time.sleep(2)
+        capture("09_sony_landscape_nowplaying_chevron.png", expected_wh=(2520, 1080))
+
+        # Test closing NowPlaying using top-left chevron button (X=120, Y=116) or back key
+        adb_shell("input tap 120 116")
+        time.sleep(1)
+        # Fallback back key to ensure dialog is dismissed before next steps
+        adb_shell("input keyevent KEYCODE_BACK")
+        time.sleep(1)
 
         # Reset rotation back to portrait before wm size overrides
         adb_shell("settings put system user_rotation 0")
         time.sleep(2)
 
-        # 09: FYT 2/3 proxy (1096x1027 @240)
+        # 10: FYT 2/3 proxy (1096x1027 @240)
         adb_shell("wm size 1096x1027")
         adb_shell("wm density 240")
         adb_shell("settings put system user_rotation 0")
         time.sleep(3)
-        capture("09_fyt_2_3_proxy_1096x1027_240dpi.png", expected_wh=(1096, 1027))
+        capture("10_fyt_2_3_proxy_1096x1027_240dpi.png", expected_wh=(1096, 1027))
 
-        # 10: FYT 1/2 proxy (960x1200 @240)
+        # 11: FYT 1/2 proxy (960x1200 @240)
         adb_shell("wm size 960x1200")
         adb_shell("wm density 240")
         adb_shell("settings put system user_rotation 0")
         time.sleep(3)
-        capture("10_fyt_1_2_proxy_960x1200_240dpi.png", expected_wh=(960, 1200))
+        capture("11_fyt_1_2_proxy_960x1200_240dpi.png", expected_wh=(960, 1200))
 
-        # 11: FYT 1/3 proxy (640x1200 @240)
+        # 12: FYT 1/3 proxy (640x1200 @240)
         adb_shell("wm size 640x1200")
         adb_shell("wm density 240")
         adb_shell("settings put system user_rotation 0")
         time.sleep(3)
-        capture("11_fyt_1_3_proxy_640x1200_240dpi.png", expected_wh=(640, 1200))
+        capture("12_fyt_1_3_proxy_640x1200_240dpi.png", expected_wh=(640, 1200))
 
-        # 12: Short landscape proxy (1200x640 requested @240dpi -> Sony physical panel clamps to 1096x584 @ 1.876 aspect ratio)
+        # 13: Short landscape proxy (1200x640 requested @240dpi -> Sony physical panel clamps to 1096x584 @ 1.876 aspect ratio)
         adb_shell("wm size 1200x640")
         adb_shell("wm density 240")
         adb_shell("settings put system user_rotation 0")
         time.sleep(3)
-        capture("12_short_landscape_1200x640_240dpi.png", expected_wh=(1096, 584))
+        capture("13_short_landscape_1200x640_240dpi.png", expected_wh=(1096, 584))
 
-        print("\nQA screenshot collection complete! All 12 screenshots verified.")
+        print("\nQA screenshot collection complete! All 13 screenshots verified.")
 
     finally:
         restore()

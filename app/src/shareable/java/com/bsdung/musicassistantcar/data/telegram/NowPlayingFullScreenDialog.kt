@@ -20,7 +20,9 @@ import android.view.WindowInsetsController
 import android.os.Build
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.ImageButton
 import android.widget.LinearLayout
+import com.bsdung.musicassistantcar.R
 import android.widget.SeekBar
 import android.widget.ScrollView
 import android.widget.TextView
@@ -298,20 +300,30 @@ internal class NowPlayingFullScreenDialog(
             root.setPadding(computed.left, computed.top, computed.right, computed.bottom)
             insets
         }
+        val closeSize = dp(ShortWindowLayoutPolicy.nowPlayingCloseButtonSizeDp(compact || wide))
+        val headerHeight = dp(ShortWindowLayoutPolicy.nowPlayingHeaderHeightDp(compact || wide))
         val top = LinearLayout(activity).apply {
             gravity = Gravity.CENTER_VERTICAL
             orientation = LinearLayout.HORIZONTAL
         }
-        val close = button("⌄", surface, foreground, 27f).apply {
+        val close = ImageButton(activity).apply {
+            setImageResource(R.drawable.ic_chevron_down)
+            imageTintList = android.content.res.ColorStateList.valueOf(this@NowPlayingFullScreenDialog.foreground)
+            scaleType = ImageView.ScaleType.CENTER
+            background = bubble(surface, 20)
             contentDescription = "Đóng trình phát toàn màn hình"
+            setPadding(0, 0, 0, 0)
+            minimumWidth = closeSize
+            minimumHeight = closeSize
             setOnClickListener { popup.dismiss() }
         }
-        top.addView(close, LinearLayout.LayoutParams(
-            dp(if (compact || wide) 44 else 62), dp(if (compact || wide) 44 else 56)))
+        top.addView(close, LinearLayout.LayoutParams(closeSize, closeSize))
         top.addView(label("MELOVAULT  ·  NOW PLAYING",
             if (compact) 10f else 12f, mint, true),
-            LinearLayout.LayoutParams(0, dp(if (compact || wide) 44 else 56), 1f))
-        root.addView(top, LinearLayout.LayoutParams(-1, dp(if (compact || wide) 46 else 60)))
+            LinearLayout.LayoutParams(0, closeSize, 1f))
+        val rightSpacer = View(activity)
+        top.addView(rightSpacer, LinearLayout.LayoutParams(closeSize, closeSize))
+        root.addView(top, LinearLayout.LayoutParams(-1, headerHeight))
 
         val body = LinearLayout(activity).apply {
             orientation = if (wide) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL

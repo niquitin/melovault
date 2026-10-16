@@ -95,4 +95,34 @@ internal object ShortWindowLayoutPolicy {
         val expectedNavTop = topBarTop + topBarHeight + navTopMargin
         return navTop >= expectedNavTop
     }
+
+    /**
+     * Touch target dimension (width & height in dp) for the NowPlaying close/collapse button.
+     * Guaranteed >= 48dp to satisfy accessibility standards across portrait and landscape.
+     */
+    fun nowPlayingCloseButtonSizeDp(isCompactOrWide: Boolean): Int = if (isCompactOrWide) 48 else 56
+
+    /**
+     * Minimum height for the NowPlaying header bar containing the close button and title.
+     * Guaranteed >= nowPlayingCloseButtonSizeDp to prevent vertical clipping.
+     */
+    fun nowPlayingHeaderHeightDp(isCompactOrWide: Boolean): Int = if (isCompactOrWide) 52 else 60
+
+    /**
+     * Determines whether top navigation tabs should auto-collapse on vertical scroll.
+     * In Theme 01 Portrait Edge-to-Edge Pro (and responsive wide tablets), wide / landscape
+     * orientation keeps the compact 4-tab top navigation bar persistently visible so that
+     * all 4 destinations (Thư viện, Nguồn Telegram, Playlist, Đang phát) are always discoverable.
+     */
+    fun shouldAutoCollapseTopNav(
+        preset: UiThemePolicy.ThemePreset,
+        paneMode: CarPaneLayoutPolicy.Mode
+    ): Boolean = false
+
+    /**
+     * Verifies that the NowPlaying header container cleanly fits the close button
+     * without vertical clipping or overflow.
+     */
+    fun verifyNowPlayingCloseButtonFit(headerHeightDp: Int, closeButtonSizeDp: Int): Boolean =
+        headerHeightDp >= closeButtonSizeDp && closeButtonSizeDp >= 48
 }

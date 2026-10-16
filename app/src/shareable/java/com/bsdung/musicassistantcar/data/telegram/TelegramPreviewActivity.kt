@@ -130,6 +130,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var isShortLayout = false
     private var isWideLayout = false
     private var isNarrowLayout = false
+    private var currentPaneMode: CarPaneLayoutPolicy.Mode = CarPaneLayoutPolicy.Mode.MEDIUM
     private var currentThemePreset: UiThemePolicy.ThemePreset = UiThemePolicy.ThemePreset.PORTRAIT_EDGE_PRO
     private var lastSystemBarsInsets = WindowInsetsPolicy.Insets.ZERO
     private var lastImeInsets = WindowInsetsPolicy.Insets.ZERO
@@ -1176,13 +1177,20 @@ class TelegramPreviewActivity : AppCompatActivity() {
                             )
                     }
                     MotionEvent.ACTION_UP -> {
-                        val requested = TelegramLibraryChromePolicy.collapsedAfter(
-                            navigationCollapsed, gestureAccumulation,
-                            dp(36).toFloat(), auth.isReady(), this.count
-                        )
-                        if (requested != navigationCollapsed) {
-                            pendingNavigationCollapse = requested
-                            post { commitNavigationGestureIfIdle() }
+                        val allowCollapse = ShortWindowLayoutPolicy.shouldAutoCollapseTopNav(currentThemePreset, currentPaneMode)
+                        if (allowCollapse) {
+                            val requested = TelegramLibraryChromePolicy.collapsedAfter(
+                                navigationCollapsed, gestureAccumulation,
+                                dp(36).toFloat(), auth.isReady(), this.count
+                            )
+                            if (requested != navigationCollapsed) {
+                                pendingNavigationCollapse = requested
+                                post { commitNavigationGestureIfIdle() }
+                            }
+                        } else {
+                            if (navigationCollapsed) {
+                                setNavigationCollapsed(false)
+                            }
                         }
                         gestureAccumulation = 0f
                     }
@@ -1641,6 +1649,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         isShortLayout = short
         isNarrowLayout = narrow
         isWideLayout = wide
+        currentPaneMode = pane
         applyRootWindowInsets()
         if (::topBar.isInitialized) {
             topBar.layoutParams.height = LinearLayout.LayoutParams.WRAP_CONTENT
@@ -1683,7 +1692,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
         } else {
             if (::bottomNavBar.isInitialized) bottomNavBar.visibility = View.GONE
-            navigationRow.visibility = if (navigationCollapsed || !auth.isReady()) View.GONE else View.VISIBLE
+            val allowCollapse = ShortWindowLayoutPolicy.shouldAutoCollapseTopNav(currentThemePreset, pane)
+            if (!allowCollapse) {
+                navigationCollapsed = false
+                pendingNavigationCollapse = null
+            }
+            navigationRow.visibility = if ((navigationCollapsed && allowCollapse) || !auth.isReady()) View.GONE else View.VISIBLE
             if (::navigationRow.isInitialized) {
                 val navHeight = dp(ShortWindowLayoutPolicy.topNavigationHeightDp(short))
                 navigationRow.layoutParams.height = navHeight
@@ -1757,14 +1771,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun setNavigationCollapsed(collapsed: Boolean) {
-        if (navigationCollapsed == collapsed) return
-        if (collapsed && (!auth.isReady() || tracks.count < 2)) return
+        val allowCollapse = ShortWindowLayoutPolicy.shouldAutoCollapseTopNav(currentThemePreset, currentPaneMode)
+        val targetCollapse = if (allowCollapse) collapsed else false
+        if (navigationCollapsed == targetCollapse) return
+        if (targetCollapse && (!auth.isReady() || tracks.count < 2)) return
         val firstVisible = tracks.firstVisiblePosition
         val firstOffset = tracks.getChildAt(0)?.top ?: 0
-        navigationCollapsed = collapsed
-        // Only the one-row navigation tabs hide on song-list scroll.
-        // Login forms remain independent; search always stays accessible.
-        navigationRow.visibility = if (collapsed) View.GONE else View.VISIBLE
+        navigationCollapsed = targetCollapse
+        // Only the one-row navigation tabs hide on song-list scroll if allowed.
+        // In wide / landscape mode, top navigation tabs remain persistently visible.
+        navigationRow.visibility = if (targetCollapse || !auth.isReady()) View.GONE else View.VISIBLE
         tracks.post { if (!isDestroyed) tracks.setSelectionFromTop(firstVisible, firstOffset) }
     }
 

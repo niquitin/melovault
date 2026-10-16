@@ -141,4 +141,54 @@ class ShortWindowLayoutPolicyTest {
             )
         )
     }
+
+    @Test
+    fun nowPlayingCloseButtonMeetsAccessibilityTouchTarget() {
+        // Accessibility standards require at least 48dp x 48dp touch target
+        val compactOrWideClose = ShortWindowLayoutPolicy.nowPlayingCloseButtonSizeDp(isCompactOrWide = true)
+        val normalClose = ShortWindowLayoutPolicy.nowPlayingCloseButtonSizeDp(isCompactOrWide = false)
+        assertTrue("Compact/wide close button must be >= 48dp touch target", compactOrWideClose >= 48)
+        assertTrue("Normal close button must be >= 48dp touch target", normalClose >= 48)
+
+        val compactOrWideHeader = ShortWindowLayoutPolicy.nowPlayingHeaderHeightDp(isCompactOrWide = true)
+        val normalHeader = ShortWindowLayoutPolicy.nowPlayingHeaderHeightDp(isCompactOrWide = false)
+        assertTrue("Header must fit close button in compact/wide mode", compactOrWideHeader >= compactOrWideClose)
+        assertTrue("Header must fit close button in normal mode", normalHeader >= normalClose)
+
+        assertTrue(
+            "Valid close button fit verification must succeed for compact/wide",
+            ShortWindowLayoutPolicy.verifyNowPlayingCloseButtonFit(compactOrWideHeader, compactOrWideClose)
+        )
+        assertTrue(
+            "Valid close button fit verification must succeed for normal portrait",
+            ShortWindowLayoutPolicy.verifyNowPlayingCloseButtonFit(normalHeader, normalClose)
+        )
+        assertFalse(
+            "Sub-48dp touch target must fail accessibility verification",
+            ShortWindowLayoutPolicy.verifyNowPlayingCloseButtonFit(46, 44)
+        )
+        assertFalse(
+            "Button larger than header container must fail verification",
+            ShortWindowLayoutPolicy.verifyNowPlayingCloseButtonFit(48, 56)
+        )
+    }
+
+    @Test
+    fun landscapeTopNavNeverAutoCollapses() {
+        // Landscape / wide orientation must keep top navigation discoverable without auto-collapsing
+        assertFalse(
+            "Portrait Edge Pro must never auto-collapse top nav in wide landscape",
+            ShortWindowLayoutPolicy.shouldAutoCollapseTopNav(
+                UiThemePolicy.ThemePreset.PORTRAIT_EDGE_PRO,
+                CarPaneLayoutPolicy.Mode.WIDE
+            )
+        )
+        assertFalse(
+            "Classic theme must never auto-collapse top nav in wide landscape",
+            ShortWindowLayoutPolicy.shouldAutoCollapseTopNav(
+                UiThemePolicy.ThemePreset.CLASSIC,
+                CarPaneLayoutPolicy.Mode.WIDE
+            )
+        )
+    }
 }
