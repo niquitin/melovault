@@ -602,7 +602,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             isSyncing = isSyncing,
             isAuthenticated = isAuth,
             isSourcesMode = isSources,
-            sourceCount = visibleSourceIds.size,
+            sourceCount = ShortWindowLayoutPolicy.truthfulSourceCount(visibleSourceIds),
             selectedSourceTitle = selectedChatId?.let { sourceNames[it] }
         )
         syncSubtitle.text = text
@@ -1635,7 +1635,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val width = ((bounds?.width() ?: resources.displayMetrics.widthPixels) / density).toInt()
         val height = ((bounds?.height() ?: resources.displayMetrics.heightPixels) / density).toInt()
         val pane = CarPaneLayoutPolicy.modeFor(width, height)
-        val short = height in 1..600
+        val short = ShortWindowLayoutPolicy.isShort(height)
         val narrow = pane == CarPaneLayoutPolicy.Mode.NARROW
         val wide = pane == CarPaneLayoutPolicy.Mode.WIDE
         isShortLayout = short
@@ -1643,39 +1643,61 @@ class TelegramPreviewActivity : AppCompatActivity() {
         isWideLayout = wide
         applyRootWindowInsets()
         if (::topBar.isInitialized) {
-            topBar.layoutParams.height = dp(if (short) 36 else 48)
+            topBar.layoutParams.height = LinearLayout.LayoutParams.WRAP_CONTENT
+            topBar.minimumHeight = dp(ShortWindowLayoutPolicy.topBarMinHeightDp(short))
+            (topBar.layoutParams as? LinearLayout.LayoutParams)?.apply {
+                bottomMargin = dp(if (short) 2 else 4)
+            }
         }
         if (::overflowButton.isInitialized) {
-            overflowButton.layoutParams.height = dp(if (short) 34 else 47)
-            overflowButton.layoutParams.width = dp(if (short) 40 else 49)
-            overflowButton.minHeight = dp(if (short) 30 else 45)
-            overflowButton.minimumHeight = dp(if (short) 30 else 45)
-            overflowButton.textSize = if (short) 16f else 21f
+            overflowButton.layoutParams.height = dp(if (short) 34 else 44)
+            overflowButton.layoutParams.width = dp(if (short) 38 else 46)
+            overflowButton.minHeight = dp(if (short) 30 else 40)
+            overflowButton.minimumHeight = dp(if (short) 30 else 40)
+            overflowButton.textSize = if (short) 16f else 20f
             overflowButton.setPadding(0, 0, 0, 0)
         }
-        titleHeader.textSize = if (short) 17f else 21f
+        titleHeader.textSize = if (short) 16f else 21f
+        if (::syncSubtitle.isInitialized) {
+            syncSubtitle.textSize = if (short) 10.5f else 11f
+        }
         updateSyncHeaderSubtitle()
         note.visibility = if (auth.isReady() || short) View.GONE else View.VISIBLE
         collapsibleNavigation.visibility = if (auth.isReady()) View.GONE else View.VISIBLE
-        val isEdgeProPortrait = currentThemePreset == UiThemePolicy.ThemePreset.PORTRAIT_EDGE_PRO && !wide
+        val isEdgeProPortrait = ShortWindowLayoutPolicy.shouldUseBottomNav(currentThemePreset, pane)
         if (isEdgeProPortrait) {
             navigationRow.visibility = View.GONE
             if (::bottomNavBar.isInitialized) {
                 bottomNavBar.visibility = if (auth.isReady()) View.VISIBLE else View.GONE
+                bottomNavBar.layoutParams.height = dp(ShortWindowLayoutPolicy.bottomNavHeightDp(short))
+                (bottomNavBar.layoutParams as? LinearLayout.LayoutParams)?.apply {
+                    topMargin = dp(if (short) 2 else 4)
+                }
+                for (btn in bottomNavButtons) {
+                    btn.layoutParams.height = dp(ShortWindowLayoutPolicy.bottomNavButtonHeightDp(short))
+                    btn.minHeight = dp(if (short) 34 else 42)
+                    btn.minimumHeight = dp(if (short) 34 else 42)
+                    btn.textSize = if (short) 10.5f else 11.5f
+                }
                 updateBottomNavState()
             }
         } else {
             if (::bottomNavBar.isInitialized) bottomNavBar.visibility = View.GONE
             navigationRow.visibility = if (navigationCollapsed || !auth.isReady()) View.GONE else View.VISIBLE
             if (::navigationRow.isInitialized) {
-                navigationRow.layoutParams.height = dp(if (short) 38 else 45)
+                val navHeight = dp(ShortWindowLayoutPolicy.topNavigationHeightDp(short))
+                navigationRow.layoutParams.height = navHeight
+                (navigationRow.layoutParams as? LinearLayout.LayoutParams)?.apply {
+                    topMargin = dp(if (short) 2 else 4)
+                    bottomMargin = dp(if (short) 2 else 4)
+                }
                 for (i in 0 until navigationRow.childCount) {
                     val child = navigationRow.getChildAt(i)
-                    child.layoutParams.height = dp(if (short) 36 else 48)
+                    child.layoutParams.height = dp(ShortWindowLayoutPolicy.topNavButtonHeightDp(short))
                     if (child is TextView) {
-                        child.textSize = if (narrow) 10.5f else 12f
-                        child.minHeight = dp(if (short) 32 else 45)
-                        child.minimumHeight = dp(if (short) 32 else 45)
+                        child.textSize = if (narrow) 10.5f else 11.5f
+                        child.minHeight = dp(if (short) 30 else 40)
+                        child.minimumHeight = dp(if (short) 30 else 40)
                         child.setPadding(dp(2), 0, dp(2), 0)
                     }
                 }
@@ -1687,7 +1709,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             libraryTitle.ellipsize = android.text.TextUtils.TruncateAt.END
         }
         if (::songFilter.isInitialized) {
-            songFilter.layoutParams.height = dp(if (short) 36 else 45)
+            songFilter.layoutParams.height = dp(if (short) 36 else 44)
             songFilter.textSize = if (short) 12.5f else 14f
             songFilter.setPadding(dp(11), dp(if (short) 4 else 9), dp(11), dp(if (short) 4 else 9))
             songFilter.imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
@@ -1704,8 +1726,23 @@ class TelegramPreviewActivity : AppCompatActivity() {
         if (::nowPlayingSubtitle.isInitialized) {
             nowPlayingSubtitle.textSize = if (short) 10f else 11.5f
         }
+        if (::miniArtFrame.isInitialized) {
+            val artSize = dp(ShortWindowLayoutPolicy.miniArtSizeDp(short))
+            miniArtFrame.layoutParams.width = artSize
+            miniArtFrame.layoutParams.height = artSize
+        }
         if (::miniControls.isInitialized) {
-            miniControls.layoutParams.height = dp(if (short) 36 else 44)
+            val ctrlHeight = dp(ShortWindowLayoutPolicy.miniControlHeightDp(short))
+            miniControls.layoutParams.height = ctrlHeight
+            for (i in 0 until miniControls.childCount) {
+                val child = miniControls.getChildAt(i)
+                child.layoutParams.height = ctrlHeight
+                if (child is Button) {
+                    child.minHeight = dp(if (short) 30 else 38)
+                    child.minimumHeight = dp(if (short) 30 else 38)
+                    child.textSize = if (short) 15f else 18f
+                }
+            }
         }
         tracks.clipToPadding = false
         if (::adapter.isInitialized) adapter.notifyDataSetChanged()
@@ -2950,10 +2987,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     globalSearch.isEnabled = true
                     refreshSongRows()
                     val modeLabel = if (action.isIncremental) "đồng bộ mới" else "đồng bộ toàn bộ"
+                    val actualSources = ShortWindowLayoutPolicy.truthfulSourceCount(visibleSourceIds).coerceAtLeast(1)
                     status.text = if (action.totalTracksIndexed == 0) {
                         "Không tìm thấy tệp âm thanh trong các chat Telegram."
                     } else {
-                        "Đã $modeLabel: ${action.totalTracksIndexed} bài từ ${visibleSourceIds.size.coerceAtLeast(1)} nguồn Telegram."
+                        "Đã $modeLabel: ${action.totalTracksIndexed} bài từ $actualSources nguồn Telegram."
                     }
                 }
             }
