@@ -101,7 +101,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val artImage: ImageView,
         val artPlaceholder: TextView,
         val titleView: TextView,
-        val subtitleView: TextView
+        val subtitleView: TextView,
+        val trailingContainer: LinearLayout,
+        val statusView: TextView,
+        val durationView: TextView,
+        val moreButton: Button
     )
 
     private val thumbnailCache = android.util.LruCache<Long, Bitmap>(60)
@@ -1131,11 +1135,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
             textSize = 18f
             setTextColor(ink)
             background = rounded(panel, 12)
-            minHeight = dp(44)
-            minimumHeight = dp(44)
+            minHeight = dp(48)
+            minimumHeight = dp(48)
             contentDescription = "Bài trước"
             setOnClickListener { playAdjacent(-1) }
-            transportRow.addView(this, LinearLayout.LayoutParams(dp(52), dp(44)).apply {
+            transportRow.addView(this, LinearLayout.LayoutParams(dp(54), dp(48)).apply {
                 rightMargin = dp(10)
             })
         }
@@ -1145,8 +1149,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
             textSize = 22f
             background = rounded(accent, 14)
             setTextColor(accentContrast)
-            minHeight = dp(48)
-            minimumHeight = dp(48)
+            minHeight = dp(52)
+            minimumHeight = dp(52)
             contentDescription = "Phát hoặc tạm dừng"
             setOnClickListener {
                 player?.let { controller ->
@@ -1155,7 +1159,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     }
                 }
             }
-            transportRow.addView(this, LinearLayout.LayoutParams(dp(58), dp(48)))
+            transportRow.addView(this, LinearLayout.LayoutParams(dp(60), dp(52)))
         }
 
         cockpitNextButton = Button(this).apply {
@@ -1163,11 +1167,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
             textSize = 18f
             setTextColor(ink)
             background = rounded(panel, 12)
-            minHeight = dp(44)
-            minimumHeight = dp(44)
+            minHeight = dp(48)
+            minimumHeight = dp(48)
             contentDescription = "Bài kế tiếp"
             setOnClickListener { playAdjacent(1) }
-            transportRow.addView(this, LinearLayout.LayoutParams(dp(52), dp(44)).apply {
+            transportRow.addView(this, LinearLayout.LayoutParams(dp(54), dp(48)).apply {
                 leftMargin = dp(10)
             })
         }
@@ -1475,6 +1479,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
             background = rounded(panel)
             setPadding(dp(12), dp(12), dp(12), dp(12))
+            imeOptions = EditorInfo.IME_ACTION_DONE or EditorInfo.IME_FLAG_NO_EXTRACT_UI
             authControls.addView(this, LinearLayout.LayoutParams(-1, dp(48)))
         }
         submit = uiButton("Tiếp tục", primary = true).apply {
@@ -1569,7 +1574,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             setHintTextColor(subtle)
             background = rounded(panel)
             setPadding(dp(13), dp(9), dp(13), dp(9))
-            imeOptions = EditorInfo.IME_ACTION_SEARCH
+            imeOptions = EditorInfo.IME_ACTION_SEARCH or EditorInfo.IME_FLAG_NO_EXTRACT_UI
             contentDescription = "Ô tìm kiếm nhóm, kênh hoặc bài hát"
             setOnEditorActionListener { v, actionId, _ ->
                 if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE) {
@@ -1756,7 +1761,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     }
                     val artFrame = FrameLayout(this@TelegramPreviewActivity).apply {
                         rootLayout.addView(this, LinearLayout.LayoutParams(dp(42), dp(42)).apply {
-                            rightMargin = dp(12)
+                            rightMargin = dp(10)
                         })
                     }
                     val artImage = ImageView(this@TelegramPreviewActivity).apply {
@@ -1779,7 +1784,45 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     val subtitleView = TextView(this@TelegramPreviewActivity)
                     textColumn.addView(titleView)
                     textColumn.addView(subtitleView)
-                    holder = SongRowViewHolder(artFrame, artImage, artPlaceholder, titleView, subtitleView)
+
+                    val trailingContainer = LinearLayout(this@TelegramPreviewActivity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        rootLayout.addView(this, LinearLayout.LayoutParams(-2, -2).apply {
+                            leftMargin = dp(6)
+                        })
+                    }
+                    val statusView = TextView(this@TelegramPreviewActivity).apply {
+                        textSize = 12f
+                        gravity = Gravity.CENTER
+                        trailingContainer.addView(this, LinearLayout.LayoutParams(-2, -2).apply {
+                            rightMargin = dp(6)
+                        })
+                    }
+                    val durationView = TextView(this@TelegramPreviewActivity).apply {
+                        textSize = 11.5f
+                        setTextColor(subtle)
+                        gravity = Gravity.CENTER_VERTICAL
+                        trailingContainer.addView(this, LinearLayout.LayoutParams(-2, -2).apply {
+                            rightMargin = dp(4)
+                        })
+                    }
+                    val moreButton = Button(this@TelegramPreviewActivity).apply {
+                        text = "⋮"
+                        textSize = 19f
+                        setTextColor(subtle)
+                        background = rounded(Color.TRANSPARENT, 8)
+                        contentDescription = "Tác vụ bài hát"
+                        minWidth = dp(48)
+                        minimumWidth = dp(48)
+                        minHeight = dp(48)
+                        minimumHeight = dp(48)
+                        setPadding(0, 0, 0, 0)
+                        isFocusable = false
+                        isClickable = true
+                        trailingContainer.addView(this, LinearLayout.LayoutParams(dp(48), dp(48)))
+                    }
+                    holder = SongRowViewHolder(artFrame, artImage, artPlaceholder, titleView, subtitleView, trailingContainer, statusView, durationView, moreButton)
                     rootLayout.tag = holder
                 }
 
@@ -1799,14 +1842,22 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 val local = song?.let { cachedSongPaths[it.messageId]?.let { p -> File(p) } }
                 val isDownloaded = local?.isFile == true && TelegramAccountStoragePolicy.isOwnedFile(filesRoot, local)
 
+                val isWide = isCockpitTwoPaneActive || isWideLayout
+                val performer = song?.performer?.takeIf { it.isNotBlank() }
+                val sourceTitle = song?.sourceTitle ?: (song?.chatId?.let { sourceNames[it] } ?: "Telegram")
+
                 holder.subtitleView.text = if (song != null) {
-                    TelegramSongDisplayPolicy.subtitle(
-                        source = song.sourceTitle ?: (sourceNames[song.chatId] ?: "Telegram"),
-                        isDownloaded = isDownloaded,
-                        fileSizeBytes = song.expectedSize,
-                        durationSeconds = song.durationSeconds,
-                        performer = song.performer
-                    )
+                    if (isWide) {
+                        listOfNotNull(performer, sourceTitle).joinToString(" · ")
+                    } else {
+                        TelegramSongDisplayPolicy.subtitle(
+                            source = sourceTitle,
+                            isDownloaded = isDownloaded,
+                            fileSizeBytes = song.expectedSize,
+                            durationSeconds = song.durationSeconds,
+                            performer = performer
+                        )
+                    }
                 } else {
                     "Telegram · Chưa tải"
                 }
@@ -1827,12 +1878,41 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     holder.artPlaceholder.visibility = View.VISIBLE
                 }
 
+                if (song != null) {
+                    val status = CockpitLayoutPolicy.resolveSongStatus(isCurrent, isDownloaded)
+                    holder.statusView.text = CockpitLayoutPolicy.statusGlyph(status)
+                    holder.statusView.setTextColor(if (status == CockpitLayoutPolicy.SongPlaybackStatus.CLOUD) 0xFF64748B.toInt() else accent)
+                    holder.statusView.visibility = View.VISIBLE
+
+                    val durFormatted = if (song.durationSeconds > 0) {
+                        CockpitLayoutPolicy.formatDuration(song.durationSeconds.toLong())
+                    } else null
+
+                    if (durFormatted != null && (!isNarrowLayout || isWide)) {
+                        holder.durationView.text = durFormatted
+                        holder.durationView.visibility = View.VISIBLE
+                    } else {
+                        holder.durationView.text = ""
+                        holder.durationView.visibility = View.GONE
+                    }
+
+                    holder.moreButton.visibility = View.VISIBLE
+                    holder.moreButton.setOnClickListener { v ->
+                        showSongOptionsMenu(song, isDownloaded, v)
+                    }
+                } else {
+                    holder.statusView.visibility = View.GONE
+                    holder.durationView.visibility = View.GONE
+                    holder.moreButton.visibility = View.GONE
+                    holder.moreButton.setOnClickListener(null)
+                }
+
                 val cardBg = if (isCurrent) cardPlaying else card
                 val cardStroke = if (isCurrent) accent else null
                 rootLayout.background = rounded(cardBg, 12, strokeColor = cardStroke, strokeWidthDp = if (isCurrent) 1 else 0)
                 val padV = dp(if (isShortLayout) 6 else 10)
-                rootLayout.setPadding(dp(12), padV, dp(14), padV)
-                rootLayout.minimumHeight = dp(if (isShortLayout) 48 else 64)
+                rootLayout.setPadding(dp(12), padV, dp(if (song != null) 4 else 14), padV)
+                rootLayout.minimumHeight = dp(if (isShortLayout) 52 else 64)
                 return rootLayout
             }
         }
@@ -2320,7 +2400,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             songFilter.layoutParams.height = dp(if (short) 36 else 44)
             songFilter.textSize = if (short) 12.5f else 14f
             songFilter.setPadding(dp(11), dp(if (short) 4 else 9), dp(11), dp(if (short) 4 else 9))
-            songFilter.imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH
+            songFilter.imeOptions = EditorInfo.IME_ACTION_SEARCH or EditorInfo.IME_FLAG_NO_EXTRACT_UI
         }
         if (::status.isInitialized) {
             status.visibility = if (short && !globalScanLoading) View.GONE else View.VISIBLE
@@ -2786,6 +2866,103 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
         }
         downloadAndPlay(target)
+    }
+
+    private fun showSongOptionsMenu(song: Song, isDownloaded: Boolean, anchor: View) {
+        val themed = ContextThemeWrapper(this, R.style.Theme_MusicAssistantCar_Dialog)
+        val popup = PopupMenu(themed, anchor)
+        val isFav = song.messageId in favoriteIds
+        popup.menu.add(0, 1, 1, "▶ Phát bài này")
+        popup.menu.add(0, 2, 2, "⏭ Phát tiếp theo")
+        popup.menu.add(0, 3, 3, if (isFav) "★ Xóa khỏi Playlist" else "☆ Thêm vào Playlist")
+        if (!isDownloaded) {
+            popup.menu.add(0, 4, 4, "⬇ Tải về và phát")
+        }
+        popup.menu.add(0, 5, 5, "ℹ Thông tin chi tiết")
+
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> downloadAndPlay(song)
+                2 -> addToUpcomingQueue(song)
+                3 -> toggleFavoriteSong(song)
+                4 -> downloadAndPlay(song)
+                5 -> showSongDetailsDialog(song, isDownloaded)
+            }
+            true
+        }
+        popup.show()
+    }
+
+    private fun addToUpcomingQueue(song: Song) {
+        if (!auth.isReady()) return
+        val currentId = currentTelegramMessageId()
+        val mutable = queueSongOrder.toMutableList()
+        val currentIndex = if (currentId != null) mutable.indexOfFirst { it.messageId == currentId } else -1
+        mutable.removeAll { it.messageId == song.messageId }
+        val insertIndex = if (currentIndex >= 0 && currentIndex < mutable.size) {
+            currentIndex + 1
+        } else {
+            mutable.size
+        }
+        mutable.add(insertIndex, song)
+        queueSongOrder = mutable
+        library.authorizedUser()?.let { owner ->
+            ShareablePlaybackService.configureTelegramQueue(
+                owner.value, filesRoot, queueSongOrder.map { entry ->
+                    ShareablePlaybackService.QueueTrack(
+                        entry.messageId, entry.fileId, entry.title,
+                        cachedSongPaths[entry.messageId], entry.filename,
+                        entry.chatId, entry.expectedSize, entry.genuineMessageId
+                    )
+                }
+            )
+        }
+        showMessage("Đã thêm '${song.title}' vào hàng đợi phát tiếp theo.")
+    }
+
+    private fun toggleFavoriteSong(song: Song) {
+        val account = library.authorizedUser() ?: return
+        if (!auth.isReady()) return
+        val target = song.messageId
+        val next = TelegramPlaylistPolicy.toggle(favoriteIds, target)
+        val result = runCatching { playlistStore.save(account, next) }
+        if (result.isFailure) {
+            showMessage("Không lưu được playlist an toàn trên thiết bị.")
+            return
+        }
+        favoriteIds = next
+        updatePlaylistButtons()
+        refreshSongRows()
+        val isAdded = target in next
+        showMessage(if (isAdded) "Đã thêm '${song.title}' vào Playlist." else "Đã xóa '${song.title}' khỏi Playlist.")
+    }
+
+    private fun showSongDetailsDialog(song: Song, isDownloaded: Boolean) {
+        val themed = ContextThemeWrapper(this, R.style.Theme_MusicAssistantCar_Dialog)
+        val source = song.sourceTitle ?: (sourceNames[song.chatId] ?: "Telegram")
+        val performer = song.performer?.takeIf { it.isNotBlank() } ?: "Không xác định"
+        val dur = TelegramSongDisplayPolicy.formatDuration(song.durationSeconds) ?: "Không xác định"
+        val size = TelegramSongDisplayPolicy.formatFileSize(song.expectedSize) ?: "Không xác định"
+        val statusText = if (isDownloaded) "Đã tải về máy (Sẵn sàng phát offline)" else "Lưu trữ trên đám mây Telegram"
+        val localPath = cachedSongPaths[song.messageId]?.let { "• Tệp cục bộ: $it\n" } ?: ""
+
+        val info = buildString {
+            append("• Tiêu đề: ${song.title}\n")
+            append("• Nghệ sĩ: $performer\n")
+            append("• Tệp gốc: ${song.filename}\n")
+            append("• Nguồn: $source\n")
+            append("• Thời lượng: $dur\n")
+            append("• Dung lượng: $size\n")
+            append("• Trạng thái: $statusText\n")
+            append(localPath)
+            append("• ID tin nhắn: ${song.genuineMessageId} (Chat ID: ${song.chatId})")
+        }
+
+        AlertDialog.Builder(themed)
+            .setTitle("Thông tin chi tiết")
+            .setMessage(info)
+            .setPositiveButton("Đóng", null)
+            .show()
     }
 
     private fun qrBridgeFile(): File = File(noBackupFilesDir, "e91_pending_qr_login.txt")

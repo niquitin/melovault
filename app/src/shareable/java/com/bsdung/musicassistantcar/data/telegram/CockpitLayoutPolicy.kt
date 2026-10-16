@@ -23,6 +23,31 @@ internal object CockpitLayoutPolicy {
     const val MIN_SPLIT_TOTAL_WIDTH_DP = 580
     const val MIN_SPLIT_HEIGHT_DP = 320
 
+    const val MIN_TOUCH_TARGET_DP = 48
+    const val MIN_SONG_ROW_HEIGHT_DP = 64
+
+    enum class SongPlaybackStatus {
+        PLAYING,
+        DOWNLOADED,
+        CLOUD
+    }
+
+    fun resolveSongStatus(isCurrent: Boolean, isDownloaded: Boolean): SongPlaybackStatus {
+        return when {
+            isCurrent -> SongPlaybackStatus.PLAYING
+            isDownloaded -> SongPlaybackStatus.DOWNLOADED
+            else -> SongPlaybackStatus.CLOUD
+        }
+    }
+
+    fun statusGlyph(status: SongPlaybackStatus): String {
+        return when (status) {
+            SongPlaybackStatus.PLAYING -> "▶"
+            SongPlaybackStatus.DOWNLOADED -> "✓"
+            SongPlaybackStatus.CLOUD -> "☁"
+        }
+    }
+
     /**
      * Determines whether the current window dimensions in dp qualify for
      * the Cockpit 2-Pane side-by-side split.

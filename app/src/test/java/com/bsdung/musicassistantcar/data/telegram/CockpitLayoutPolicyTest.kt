@@ -234,4 +234,27 @@ class CockpitLayoutPolicyTest {
         )
         assertNull(emptyBadge)
     }
+
+    // ── Song Row Fidelity and Touch Target Constraints ───────────────────────
+
+    @Test
+    fun touchTargetAndRowHeightConstants_satisfyAccessibilityGuidelines() {
+        assertTrue("Min touch target must be at least 48dp", CockpitLayoutPolicy.MIN_TOUCH_TARGET_DP >= 48)
+        assertTrue("Min song row height must be at least 64dp", CockpitLayoutPolicy.MIN_SONG_ROW_HEIGHT_DP >= 64)
+    }
+
+    @Test
+    fun resolveSongStatus_returnsCorrectStatus() {
+        assertEquals(CockpitLayoutPolicy.SongPlaybackStatus.PLAYING, CockpitLayoutPolicy.resolveSongStatus(isCurrent = true, isDownloaded = true))
+        assertEquals(CockpitLayoutPolicy.SongPlaybackStatus.PLAYING, CockpitLayoutPolicy.resolveSongStatus(isCurrent = true, isDownloaded = false))
+        assertEquals(CockpitLayoutPolicy.SongPlaybackStatus.DOWNLOADED, CockpitLayoutPolicy.resolveSongStatus(isCurrent = false, isDownloaded = true))
+        assertEquals(CockpitLayoutPolicy.SongPlaybackStatus.CLOUD, CockpitLayoutPolicy.resolveSongStatus(isCurrent = false, isDownloaded = false))
+    }
+
+    @Test
+    fun statusGlyph_returnsExpectedSymbols() {
+        assertEquals("▶", CockpitLayoutPolicy.statusGlyph(CockpitLayoutPolicy.SongPlaybackStatus.PLAYING))
+        assertEquals("✓", CockpitLayoutPolicy.statusGlyph(CockpitLayoutPolicy.SongPlaybackStatus.DOWNLOADED))
+        assertEquals("☁", CockpitLayoutPolicy.statusGlyph(CockpitLayoutPolicy.SongPlaybackStatus.CLOUD))
+    }
 }
