@@ -50,6 +50,11 @@ interface TelegramLibraryDao {
     fun getSongByKey(accountId: Long, songKey: Long): IndexedTelegramSong?
 
     /**
+     * Updates the session-scoped file_id for a specific indexed song.
+     */
+    fun updateSongFileId(accountId: Long, chatId: Long, messageId: Long, fileId: Int)
+
+    /**
      * Retrieves all sources (channels/chats) for an account, ordered by track count descending.
      */
     fun getSources(accountId: Long): List<IndexedTelegramSource>

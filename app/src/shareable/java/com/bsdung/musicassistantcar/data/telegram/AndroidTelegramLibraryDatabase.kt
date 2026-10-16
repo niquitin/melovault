@@ -236,6 +236,26 @@ class AndroidTelegramLibraryDatabase(
         }
     }
 
+    override fun updateSongFileId(accountId: Long, chatId: Long, messageId: Long, fileId: Int) {
+        if (accountId <= 0L || chatId == 0L || messageId <= 0L || fileId <= 0) return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val cv = ContentValues().apply {
+                put(TelegramLibrarySql.COL_FILE_ID, fileId)
+            }
+            db.update(
+                TelegramLibrarySql.TABLE_SONGS,
+                cv,
+                "${TelegramLibrarySql.COL_ACCOUNT_ID} = ? AND ${TelegramLibrarySql.COL_CHAT_ID} = ? AND ${TelegramLibrarySql.COL_MESSAGE_ID} = ?",
+                arrayOf(accountId.toString(), chatId.toString(), messageId.toString())
+            )
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     override fun getSources(accountId: Long): List<IndexedTelegramSource> {
         val db = readableDatabase
         val selection = "${TelegramLibrarySql.COL_ACCOUNT_ID} = ?"

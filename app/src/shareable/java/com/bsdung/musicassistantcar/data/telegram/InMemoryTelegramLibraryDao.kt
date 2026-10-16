@@ -84,6 +84,14 @@ class InMemoryTelegramLibraryDao : TelegramLibraryDao {
         return songs.values.firstOrNull { it.accountId == accountId && it.songKey == songKey && !it.isDeleted }
     }
 
+    override fun updateSongFileId(accountId: Long, chatId: Long, messageId: Long, fileId: Int) {
+        val key = Triple(accountId, chatId, messageId)
+        val existing = songs[key]
+        if (existing != null) {
+            songs[key] = existing.copy(fileId = fileId)
+        }
+    }
+
     override fun getSources(accountId: Long): List<IndexedTelegramSource> {
         return sources.values
             .asSequence()

@@ -327,4 +327,30 @@ class TelegramLibraryDaoTest {
         val totalSourceTracks = sources.sumOf { it.trackCount }
         assertEquals(totalSongs, totalSourceTracks)
     }
+
+    @Test
+    fun updateSongFileId_updatesFileIdSuccessfully() {
+        val accountId = 100L
+        val chatId = 200L
+        val messageId = 1000L
+        val songKey = 5555L
+        val initialSong = sampleSong(
+            accountId = accountId,
+            chatId = chatId,
+            messageId = messageId,
+            songKey = songKey
+        ).copy(fileId = 1762)
+        dao.upsertSongs(listOf(initialSong))
+
+        val stored = dao.getSongByKey(accountId, songKey)
+        assertNotNull(stored)
+        assertEquals(1762, stored?.fileId)
+
+        // Stale fileId resolution: update to fresh session fileId 9999
+        dao.updateSongFileId(accountId, chatId, messageId, 9999)
+
+        val updated = dao.getSongByKey(accountId, songKey)
+        assertNotNull(updated)
+        assertEquals(9999, updated?.fileId)
+    }
 }

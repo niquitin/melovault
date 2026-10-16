@@ -30,8 +30,11 @@ class ShareablePlaybackService : MediaSessionService() {
         val cachedPath: String?,
         val filename: String = "",
         val chatId: Long = 0L,
-        val expectedSize: Long = -1L
-    )
+        val expectedSize: Long = -1L,
+        val rawMessageId: Long = 0L,
+    ) {
+        val genuineMessageId: Long get() = if (rawMessageId > 0L) rawMessageId else messageId
+    }
 
     companion object {
         private var serviceRef: WeakReference<ShareablePlaybackService>? = null
@@ -204,18 +207,21 @@ class ShareablePlaybackService : MediaSessionService() {
             nextTrack()?.messageId != next.messageId ||
             expectedAccount != ShareableTdlibOwner.authorizedAccount()) return
         val generation = queueGeneration
-        val tag = "background:${next.fileId}:$generation:$attempt"
-        pendingDownloadId = next.fileId
+        val effectiveChatId = if (next.chatId != 0L) next.chatId else (expectedAccount ?: 0L)
+        val rawMsgId = next.genuineMessageId
+        if (effectiveChatId == 0L || rawMsgId <= 0L) {
+            retryOrStop(next, attempt, generation)
+            return
+        }
+        val tag = "background:resolve:${next.messageId}:$generation:$attempt"
+        pendingDownloadId = null
         pendingMessageId = next.messageId
         pendingAttempt = attempt
         pendingRequestTag = tag
         val sent = runCatching {
-            ShareableTdlibOwner.send("downloadFile", tag) {
-                it.put("file_id", next.fileId)
-                it.put("priority", 4)
-                it.put("offset", 0)
-                it.put("limit", 0)
-                it.put("synchronous", false)
+            ShareableTdlibOwner.send("getMessage", tag) {
+                it.put("chat_id", effectiveChatId)
+                it.put("message_id", rawMsgId)
             }
         }.isSuccess
         if (!sent) {
@@ -224,7 +230,6 @@ class ShareablePlaybackService : MediaSessionService() {
         }
         main.postDelayed({
             if (queueGeneration == generation &&
-                pendingDownloadId == next.fileId &&
                 pendingMessageId == next.messageId &&
                 pendingAttempt == attempt &&
                 pendingRequestTag == tag) {
@@ -250,14 +255,58 @@ class ShareablePlaybackService : MediaSessionService() {
     }
 
     private fun acceptBackgroundEvent(event: JSONObject) {
-        val id = pendingDownloadId ?: return
         val kind = event.optString("@type")
         val tag = event.optString("@extra")
+        val next = nextTrack() ?: run {
+            clearPending()
+            return
+        }
+
+        if (tag.startsWith("background:resolve:")) {
+            if (tag != pendingRequestTag || next.messageId != pendingMessageId) return
+            if (kind == "error") {
+                retryOrStop(next, pendingAttempt, queueGeneration)
+                return
+            }
+            when (val parsed = TelegramAudioResolverPolicy.parseMessage(event)) {
+                is TelegramAudioResolverPolicy.Result.Error -> {
+                    retryOrStop(next, pendingAttempt, queueGeneration)
+                }
+                is TelegramAudioResolverPolicy.Result.Resolved -> {
+                    val root = allowedRoot ?: return
+                    val local = if (parsed.localPath.isNotBlank()) File(parsed.localPath) else null
+                    if (parsed.isDownloadingCompleted && local != null && local.isFile &&
+                        TelegramAccountStoragePolicy.isOwnedFile(root, local)) {
+                        clearPending()
+                        insertNext(next.copy(fileId = parsed.freshFileId), local)
+                    } else {
+                        val freshId = parsed.freshFileId
+                        val generation = queueGeneration
+                        val downloadTag = "background:download:$freshId:$generation:$pendingAttempt"
+                        pendingDownloadId = freshId
+                        pendingRequestTag = downloadTag
+                        val sent = runCatching {
+                            ShareableTdlibOwner.send("downloadFile", downloadTag) {
+                                it.put("file_id", freshId)
+                                it.put("priority", 4)
+                                it.put("offset", 0)
+                                it.put("limit", 0)
+                                it.put("synchronous", false)
+                            }
+                        }.isSuccess
+                        if (!sent) {
+                            retryOrStop(next, pendingAttempt, generation)
+                        }
+                    }
+                }
+            }
+            return
+        }
+
+        val id = pendingDownloadId ?: return
         if (kind == "error") {
             if (tag == pendingRequestTag) {
-                nextTrack()?.takeIf { it.fileId == id }?.let { next ->
-                    retryOrStop(next, pendingAttempt, queueGeneration)
-                } ?: clearPending()
+                retryOrStop(next, pendingAttempt, queueGeneration)
             }
             return
         }
@@ -266,7 +315,6 @@ class ShareablePlaybackService : MediaSessionService() {
         val file = if (kind == "updateFile") {
             event.optJSONObject("file") ?: return
         } else event
-        val next = nextTrack() ?: return
         if (!TelegramBackgroundPrefetchPolicy.isCurrentResult(
                 id, file.optInt("id"), expectedAccount,
                 ShareableTdlibOwner.authorizedAccount(), pendingMessageId, next.messageId
@@ -279,7 +327,7 @@ class ShareablePlaybackService : MediaSessionService() {
         val target = File(filePath)
         val root = allowedRoot ?: return
         if (!target.isFile || !TelegramAccountStoragePolicy.isOwnedFile(root, target)) return
-        insertNext(next, target)
+        insertNext(next.copy(fileId = id), target)
     }
 
     private fun insertNext(next: QueueTrack, local: File) {

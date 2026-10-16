@@ -293,7 +293,7 @@ internal class NowPlayingFullScreenDialog(
 
         val body = LinearLayout(activity).apply {
             orientation = if (wide) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-            gravity = if (wide) Gravity.TOP else Gravity.CENTER_HORIZONTAL
+            gravity = if (wide) Gravity.CENTER_VERTICAL else Gravity.CENTER_HORIZONTAL
         }
         root.addView(body, LinearLayout.LayoutParams(-1, if (wide) 0 else -2,
             if (wide) 1f else 0f))
@@ -306,28 +306,39 @@ internal class NowPlayingFullScreenDialog(
             scaleType = ImageView.ScaleType.FIT_CENTER
             contentDescription = "Ảnh bìa của bài đang phát"
         }
-        art.addView(albumImage, FrameLayout.LayoutParams(-1, -1))
+        art.addView(albumImage, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
         albumPlaceholder = label("♫", 72f, mint).apply {
             gravity = Gravity.CENTER
         }
-        art.addView(albumPlaceholder, FrameLayout.LayoutParams(-1, -1))
-        body.addView(art, LinearLayout.LayoutParams(dp(coverDp), dp(coverDp)).apply {
-            topMargin = dp(if (compact) 4 else 10)
-            bottomMargin = dp(if (wide) 0 else 12)
-            if (wide) rightMargin = dp(22)
-        })
+        art.addView(albumPlaceholder, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
+
         val details = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
         }
         if (wide) {
+            val artColumn = FrameLayout(activity)
+            artColumn.addView(art, FrameLayout.LayoutParams(dp(coverDp), dp(coverDp), Gravity.CENTER))
+            body.addView(artColumn, LinearLayout.LayoutParams(dp(coverDp), -1).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                rightMargin = dp(24)
+            })
             val detailScroll = ScrollView(activity).apply {
                 isFillViewport = true
                 clipToPadding = false
                 addView(details, ViewGroup.LayoutParams(-1, -2))
             }
-            body.addView(detailScroll, LinearLayout.LayoutParams(0, -1, 1f))
-        } else body.addView(details, LinearLayout.LayoutParams(-1, -2))
+            body.addView(detailScroll, LinearLayout.LayoutParams(0, -1, 1f).apply {
+                gravity = Gravity.CENTER_VERTICAL
+            })
+        } else {
+            body.addView(art, LinearLayout.LayoutParams(dp(coverDp), dp(coverDp)).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = dp(if (compact) 4 else 12)
+                bottomMargin = dp(if (compact) 6 else 14)
+            })
+            body.addView(details, LinearLayout.LayoutParams(-1, -2))
+        }
 
         title = label("Chọn bài hát",
             if (compact) 17f else 23f, foreground, true).apply {
