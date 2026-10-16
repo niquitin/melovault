@@ -23,6 +23,8 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.PopupMenu
 import android.widget.ProgressBar
+import android.widget.ScrollView
+import android.widget.SeekBar
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -132,6 +134,33 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var isNarrowLayout = false
     private var currentPaneMode: CarPaneLayoutPolicy.Mode = CarPaneLayoutPolicy.Mode.MEDIUM
     private var currentThemePreset: UiThemePolicy.ThemePreset = UiThemePolicy.ThemePreset.PORTRAIT_EDGE_PRO
+    private var isCockpitTwoPaneActive = false
+    private lateinit var splitRoot: LinearLayout
+    private lateinit var libraryContainer: LinearLayout
+    private lateinit var cockpitScrollView: ScrollView
+    private lateinit var cockpitPane: LinearLayout
+    private lateinit var cockpitDivider: View
+    private lateinit var cockpitArtFrame: FrameLayout
+    private lateinit var cockpitArtImage: ImageView
+    private lateinit var cockpitArtPlaceholder: TextView
+    private lateinit var cockpitTitle: TextView
+    private lateinit var cockpitSubtitle: TextView
+    private lateinit var cockpitFormatBadge: TextView
+    private lateinit var cockpitTimeElapsed: TextView
+    private lateinit var cockpitTimeTotal: TextView
+    private lateinit var cockpitSeekBar: SeekBar
+    private lateinit var cockpitPrevButton: Button
+    private lateinit var cockpitPlayPauseButton: Button
+    private lateinit var cockpitNextButton: Button
+    private lateinit var cockpitShuffleButton: Button
+    private lateinit var cockpitRepeatButton: Button
+    private lateinit var cockpitFavoriteButton: Button
+    private lateinit var cockpitQueueButton: Button
+    private var cockpitTrackingTouch = false
+    private lateinit var filterChipsRow: LinearLayout
+    private lateinit var chipAll: Button
+    private lateinit var chipDownloaded: Button
+    private var filterOnlyDownloaded = false
     private var lastSystemBarsInsets = WindowInsetsPolicy.Insets.ZERO
     private var lastImeInsets = WindowInsetsPolicy.Insets.ZERO
     private lateinit var syncSubtitle: TextView
@@ -362,6 +391,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (::playPause.isInitialized) playPause.text = if (isPlaying) "Ⅱ" else "▶"
+            updateCockpitPlayer()
             if (::mainRoot.isInitialized) {
                 if (isPlaying) mainRoot.post(miniPlayerProgressTick)
                 else mainRoot.removeCallbacks(miniPlayerProgressTick)
@@ -378,6 +408,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
             updateMiniPlayerProgress()
             updateMiniPlayerCover(mediaItem)
+            updateCockpitPlayer()
             val id = mediaItem?.mediaId?.removePrefix("telegram:")?.toLongOrNull()
             currentSongIndex = if (mediaItem?.mediaId?.startsWith("telegram:") == true) {
                 songs.indexOfFirst { it.messageId == id }
@@ -393,6 +424,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 playAdjacent(1)
             }
             updateMiniPlayerProgress()
+            updateCockpitPlayer()
         }
     }
 
@@ -411,6 +443,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 nowPlayingTitle.text = controller.currentMediaItem?.mediaMetadata?.title
                     ?: "Chọn một bài hát để bắt đầu"
                 updateMiniPlayerCover(controller.currentMediaItem)
+                updateCockpitPlayer()
                 pendingPlayback?.let { pending ->
                     pendingPlayback = null
                     startPlayback(controller, pending.items, pending.startIndex)
@@ -557,10 +590,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private val card get() = themeTokens.card
     private val border get() = themeTokens.border
     private val accentContrast get() = themeTokens.accentContrast
+    private val cardPlaying get() = themeTokens.cardPlaying
 
     private val miniPlayerProgressTick = object : Runnable {
         override fun run() {
             updateMiniPlayerProgress()
+            updateCockpitPlayer()
             if (player?.isPlaying == true) {
                 if (::mainRoot.isInitialized) mainRoot.postDelayed(this, 1000L)
             }
@@ -713,14 +748,33 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
     }
 
+    private fun showThemePickerDialog() {
+        val presets = UiThemePolicy.ThemePreset.entries.toTypedArray()
+        val names = presets.map { preset ->
+            when (preset) {
+                UiThemePolicy.ThemePreset.PORTRAIT_EDGE_PRO -> "Portrait Edge-to-Edge Pro (Mặc định)"
+                UiThemePolicy.ThemePreset.COCKPIT_TWO_PANE -> "Cockpit 2-Pane Split (Khoang lái 2 cột)"
+                UiThemePolicy.ThemePreset.CLASSIC -> "Cổ điển (Classic)"
+            }
+        }.toTypedArray()
+        val currentIndex = presets.indexOf(currentThemePreset).coerceAtLeast(0)
+
+        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            .setTitle("Chọn giao diện MeloVault")
+            .setSingleChoiceItems(names, currentIndex) { dialog, which ->
+                val chosen = presets[which]
+                dialog.dismiss()
+                if (chosen != currentThemePreset) {
+                    setThemePreset(chosen)
+                    showMessage("Đã đổi sang: ${chosen.displayName}")
+                }
+            }
+            .setNegativeButton("Đóng", null)
+            .show()
+    }
+
     private fun toggleThemePreset() {
-        val nextPreset = if (currentThemePreset == UiThemePolicy.ThemePreset.PORTRAIT_EDGE_PRO) {
-            UiThemePolicy.ThemePreset.CLASSIC
-        } else {
-            UiThemePolicy.ThemePreset.PORTRAIT_EDGE_PRO
-        }
-        setThemePreset(nextPreset)
-        showMessage("Đã đổi sang: ${nextPreset.displayName}")
+        showThemePickerDialog()
     }
 
     private fun setThemePreset(preset: UiThemePolicy.ThemePreset) {
@@ -761,9 +815,475 @@ class TelegramPreviewActivity : AppCompatActivity() {
             bottomNavBar.background = rounded(panel, 14)
             updateBottomNavState()
         }
+        if (::cockpitPane.isInitialized) {
+            cockpitPane.background = rounded(midnight, 0)
+            cockpitDivider.setBackgroundColor(border)
+            cockpitArtFrame.background = rounded(card, 16)
+            cockpitArtPlaceholder.setTextColor(accent)
+            cockpitTitle.setTextColor(ink)
+            cockpitSubtitle.setTextColor(subtle)
+            cockpitFormatBadge.background = rounded(panel, 8)
+            cockpitFormatBadge.setTextColor(subtle)
+            cockpitTimeElapsed.setTextColor(subtle)
+            cockpitTimeTotal.setTextColor(subtle)
+            cockpitSeekBar.progressTintList = ColorStateList.valueOf(accent)
+            cockpitSeekBar.thumbTintList = ColorStateList.valueOf(accent)
+            cockpitPlayPauseButton.background = rounded(accent, 14)
+            cockpitPlayPauseButton.setTextColor(accentContrast)
+            cockpitPrevButton.background = rounded(panel, 12)
+            cockpitPrevButton.setTextColor(ink)
+            cockpitNextButton.background = rounded(panel, 12)
+            cockpitNextButton.setTextColor(ink)
+        }
+        updateFilterChipsUi()
         applyResponsiveLibraryUi()
+        updateCockpitPlayer()
         if (::adapter.isInitialized) adapter.notifyDataSetChanged()
         if (::sourcesAdapter.isInitialized) sourcesAdapter.notifyDataSetChanged()
+    }
+
+    private fun updateCockpitPlayer() {
+        if (!::cockpitPane.isInitialized || !isCockpitTwoPaneActive) return
+        val controller = player
+        val mediaItem = controller?.currentMediaItem
+        val isPlaying = controller?.isPlaying == true
+
+        if (mediaItem == null) {
+            cockpitArtImage.setImageDrawable(null)
+            cockpitArtPlaceholder.visibility = View.VISIBLE
+            cockpitTitle.text = "Chọn một bài hát để bắt đầu"
+            cockpitSubtitle.text = "Telegram · MeloVault"
+            cockpitFormatBadge.visibility = View.GONE
+            cockpitTimeElapsed.text = "00:00"
+            cockpitTimeTotal.text = "--:--"
+            cockpitSeekBar.progress = 0
+            cockpitSeekBar.isEnabled = false
+            cockpitPlayPauseButton.text = "▶"
+            cockpitShuffleButton.alpha = 0.5f
+            cockpitRepeatButton.alpha = 0.5f
+            cockpitFavoriteButton.alpha = 0.5f
+            cockpitQueueButton.alpha = 0.5f
+            return
+        }
+
+        cockpitSeekBar.isEnabled = true
+        cockpitShuffleButton.alpha = 1.0f
+        cockpitRepeatButton.alpha = 1.0f
+        cockpitFavoriteButton.alpha = 1.0f
+        cockpitQueueButton.alpha = 1.0f
+
+        val rawTitle = mediaItem.mediaMetadata.title?.toString().orEmpty()
+        cockpitTitle.text = CockpitLayoutPolicy.cleanTrackTitle(rawTitle).ifEmpty { "Bài hát không tên" }
+
+        val performer = mediaItem.mediaMetadata.artist?.toString()?.takeIf { it.isNotBlank() }
+        val currentMsgId = currentTelegramMessageId()
+        val sourceName = currentMsgId?.let { id ->
+            val chat = songs.firstOrNull { it.messageId == id }?.chatId
+            if (chat != null) sourceNames[chat] else null
+        } ?: "Telegram"
+        cockpitSubtitle.text = listOfNotNull(performer, sourceName).joinToString(" · ")
+
+        val badge = getAudioFormatBadge(controller)
+        if (badge != null) {
+            cockpitFormatBadge.text = badge
+            cockpitFormatBadge.visibility = View.VISIBLE
+        } else {
+            cockpitFormatBadge.visibility = View.GONE
+        }
+
+        cockpitPlayPauseButton.text = if (isPlaying) "Ⅱ" else "▶"
+
+        val dur = controller.duration
+        val pos = controller.currentPosition
+        if (!cockpitTrackingTouch) {
+            if (dur > 0L && dur != C.TIME_UNSET) {
+                val progressPercent = ((pos.toDouble() / dur) * 1000).toInt().coerceIn(0, 1000)
+                cockpitSeekBar.progress = progressPercent
+                cockpitTimeElapsed.text = CockpitLayoutPolicy.formatDurationMs(pos)
+                cockpitTimeTotal.text = CockpitLayoutPolicy.formatDurationMs(dur)
+            } else {
+                cockpitSeekBar.progress = 0
+                cockpitTimeElapsed.text = CockpitLayoutPolicy.formatDurationMs(pos)
+                cockpitTimeTotal.text = "--:--"
+            }
+        }
+
+        val isShuffle = controller.shuffleModeEnabled
+        cockpitShuffleButton.setTextColor(if (isShuffle) accent else ink)
+        cockpitShuffleButton.background = rounded(if (isShuffle) cardPlaying else panel, 10, if (isShuffle) accent else border)
+
+        val isRepeat = controller.repeatMode != Player.REPEAT_MODE_OFF
+        cockpitRepeatButton.setTextColor(if (isRepeat) accent else ink)
+        cockpitRepeatButton.background = rounded(if (isRepeat) cardPlaying else panel, 10, if (isRepeat) accent else border)
+
+        val isFav = currentMsgId != null && favoriteIds.contains(currentMsgId)
+        cockpitFavoriteButton.text = if (isFav) "★ Đã lưu" else "☆ Lưu bài"
+        cockpitFavoriteButton.setTextColor(if (isFav) accent else ink)
+        cockpitFavoriteButton.background = rounded(if (isFav) cardPlaying else panel, 10, if (isFav) accent else border)
+
+        updateCockpitCover(mediaItem)
+    }
+
+    private fun getAudioFormatBadge(controller: MediaController?): String? {
+        val groups = controller?.currentTracks?.groups ?: return null
+        for (group in groups) {
+            if (group.type != C.TRACK_TYPE_AUDIO) continue
+            for (i in 0 until group.length) {
+                if (!group.isTrackSelected(i)) continue
+                val format = group.getTrackFormat(i)
+                return CockpitLayoutPolicy.formatAudioBadge(
+                    sampleMimeType = format.sampleMimeType,
+                    sampleRate = format.sampleRate,
+                    channelCount = format.channelCount,
+                    bitrate = format.bitrate
+                )
+            }
+        }
+        return null
+    }
+
+    private fun updateCockpitCover(mediaItem: MediaItem?) {
+        if (!::cockpitArtImage.isInitialized || !::cockpitArtPlaceholder.isInitialized) return
+        if (mediaItem == null) {
+            cockpitArtImage.setImageDrawable(null)
+            cockpitArtPlaceholder.visibility = View.VISIBLE
+            return
+        }
+        val id = mediaItem.mediaId.removePrefix("telegram:").toLongOrNull()
+        if (id != null) {
+            val cached = thumbnailCache.get(id)
+            if (cached != null) {
+                cockpitArtImage.setImageBitmap(cached)
+                cockpitArtPlaceholder.visibility = View.GONE
+                return
+            }
+            val localPath = cachedSongPaths[id]
+            if (localPath != null) {
+                val localFile = File(localPath)
+                if (localFile.isFile) {
+                    bindSongThumbnail(id, localFile, cockpitArtImage, cockpitArtPlaceholder)
+                    return
+                }
+            }
+        }
+        val artData = mediaItem.mediaMetadata.artworkData
+        if (artData != null && artData.isNotEmpty()) {
+            val bmp = runCatching {
+                BitmapFactory.decodeByteArray(artData, 0, artData.size)
+            }.getOrNull()
+            if (bmp != null) {
+                if (id != null) thumbnailCache.put(id, bmp)
+                cockpitArtImage.setImageBitmap(bmp)
+                cockpitArtPlaceholder.visibility = View.GONE
+                return
+            }
+        }
+        cockpitArtImage.setImageDrawable(null)
+        cockpitArtPlaceholder.visibility = View.VISIBLE
+    }
+
+    private fun buildCockpitLeftPane() {
+        cockpitScrollView = ScrollView(this).apply {
+            isFillViewport = true
+            visibility = View.GONE
+            splitRoot.addView(this, LinearLayout.LayoutParams(0, -1, CockpitLayoutPolicy.LEFT_PANE_WEIGHT))
+        }
+
+        cockpitPane = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            background = rounded(midnight, 0)
+            setPadding(dp(12), dp(6), dp(12), dp(6))
+            cockpitScrollView.addView(this, FrameLayout.LayoutParams(-1, -2))
+        }
+
+        val artContainer = FrameLayout(this).apply {
+            background = rounded(card, 16)
+            setOnClickListener { showFullPlayer() }
+            val initialSize = dp(140)
+            cockpitPane.addView(this, LinearLayout.LayoutParams(initialSize, initialSize).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(6)
+            })
+        }
+        cockpitArtFrame = artContainer
+
+        cockpitArtImage = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            artContainer.addView(this, FrameLayout.LayoutParams(-1, -1))
+        }
+
+        cockpitArtPlaceholder = TextView(this).apply {
+            text = "♫"
+            textSize = 44f
+            gravity = Gravity.CENTER
+            setTextColor(accent)
+            setTypeface(null, Typeface.BOLD)
+            artContainer.addView(this, FrameLayout.LayoutParams(-1, -1))
+        }
+
+        cockpitTitle = TextView(this).apply {
+            text = "Chọn một bài hát để bắt đầu"
+            textSize = 17f
+            setTextColor(ink)
+            setTypeface(null, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(dp(4), dp(2), dp(4), dp(1))
+            cockpitPane.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+            })
+        }
+
+        cockpitSubtitle = TextView(this).apply {
+            text = "Telegram · MeloVault"
+            textSize = 12.5f
+            setTextColor(subtle)
+            gravity = Gravity.CENTER
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(dp(4), 0, dp(4), dp(4))
+            cockpitPane.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+            })
+        }
+
+        cockpitFormatBadge = TextView(this).apply {
+            textSize = 11f
+            setTextColor(subtle)
+            gravity = Gravity.CENTER
+            background = rounded(panel, 8)
+            setPadding(dp(8), dp(3), dp(8), dp(3))
+            visibility = View.GONE
+            cockpitPane.addView(this, LinearLayout.LayoutParams(-2, -2).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                bottomMargin = dp(6)
+            })
+        }
+
+        val seekRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            cockpitPane.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = dp(2)
+                bottomMargin = dp(4)
+            })
+        }
+
+        cockpitTimeElapsed = TextView(this).apply {
+            text = "00:00"
+            textSize = 11f
+            setTextColor(subtle)
+            gravity = Gravity.START
+            seekRow.addView(this, LinearLayout.LayoutParams(dp(42), -2))
+        }
+
+        cockpitSeekBar = SeekBar(this).apply {
+            max = 1000
+            progress = 0
+            progressTintList = ColorStateList.valueOf(accent)
+            thumbTintList = ColorStateList.valueOf(accent)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    if (fromUser) {
+                        val dur = player?.duration ?: C.TIME_UNSET
+                        if (dur > 0L && dur != C.TIME_UNSET) {
+                            val targetMs = (dur * (progress / 1000.0)).toLong()
+                            cockpitTimeElapsed.text = CockpitLayoutPolicy.formatDurationMs(targetMs)
+                        }
+                    }
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {
+                    cockpitTrackingTouch = true
+                }
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {
+                    val dur = player?.duration ?: C.TIME_UNSET
+                    if (dur > 0L && dur != C.TIME_UNSET && seekBar != null) {
+                        val targetMs = (dur * (seekBar.progress / 1000.0)).toLong()
+                        player?.seekTo(targetMs)
+                    }
+                    cockpitTrackingTouch = false
+                }
+            })
+            seekRow.addView(this, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+
+        cockpitTimeTotal = TextView(this).apply {
+            text = "--:--"
+            textSize = 11f
+            setTextColor(subtle)
+            gravity = Gravity.END
+            seekRow.addView(this, LinearLayout.LayoutParams(dp(44), -2))
+        }
+
+        val transportRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            cockpitPane.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = dp(2)
+                bottomMargin = dp(4)
+            })
+        }
+
+        cockpitPrevButton = Button(this).apply {
+            text = "⏮"
+            textSize = 18f
+            setTextColor(ink)
+            background = rounded(panel, 12)
+            minHeight = dp(44)
+            minimumHeight = dp(44)
+            contentDescription = "Bài trước"
+            setOnClickListener { playAdjacent(-1) }
+            transportRow.addView(this, LinearLayout.LayoutParams(dp(52), dp(44)).apply {
+                rightMargin = dp(10)
+            })
+        }
+
+        cockpitPlayPauseButton = Button(this).apply {
+            text = "▶"
+            textSize = 22f
+            background = rounded(accent, 14)
+            setTextColor(accentContrast)
+            minHeight = dp(48)
+            minimumHeight = dp(48)
+            contentDescription = "Phát hoặc tạm dừng"
+            setOnClickListener {
+                player?.let { controller ->
+                    if (controller.currentMediaItem != null) {
+                        if (controller.isPlaying) controller.pause() else controller.play()
+                    }
+                }
+            }
+            transportRow.addView(this, LinearLayout.LayoutParams(dp(58), dp(48)))
+        }
+
+        cockpitNextButton = Button(this).apply {
+            text = "⏭"
+            textSize = 18f
+            setTextColor(ink)
+            background = rounded(panel, 12)
+            minHeight = dp(44)
+            minimumHeight = dp(44)
+            contentDescription = "Bài kế tiếp"
+            setOnClickListener { playAdjacent(1) }
+            transportRow.addView(this, LinearLayout.LayoutParams(dp(52), dp(44)).apply {
+                leftMargin = dp(10)
+            })
+        }
+
+        val secondaryRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            cockpitPane.addView(this, LinearLayout.LayoutParams(-1, dp(38)).apply {
+                topMargin = dp(2)
+            })
+        }
+
+        fun secondaryButton(label: String, desc: String, action: () -> Unit): Button =
+            Button(this).apply {
+                text = label
+                contentDescription = desc
+                textSize = 11.5f
+                isAllCaps = false
+                setSingleLine(true)
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setTextColor(ink)
+                background = rounded(panel, 10, border)
+                setPadding(dp(2), 0, dp(2), 0)
+                minHeight = dp(34)
+                minimumHeight = dp(34)
+                setOnClickListener { action() }
+                secondaryRow.addView(this, LinearLayout.LayoutParams(0, dp(34), 1f).apply {
+                    leftMargin = dp(2)
+                    rightMargin = dp(2)
+                })
+            }
+
+        cockpitShuffleButton = secondaryButton("⇄ Đảo", "Bật hoặc tắt phát ngẫu nhiên") {
+            player?.let {
+                it.shuffleModeEnabled = !it.shuffleModeEnabled
+                updateCockpitPlayer()
+            }
+        }
+
+        cockpitRepeatButton = secondaryButton("↻ Lặp", "Đổi chế độ lặp lại") {
+            player?.let {
+                it.repeatMode = when (it.repeatMode) {
+                    Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                    Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                    else -> Player.REPEAT_MODE_OFF
+                }
+                updateCockpitPlayer()
+            }
+        }
+
+        cockpitFavoriteButton = secondaryButton("☆ Lưu", "Thêm vào danh sách yêu thích") {
+            toggleCurrentFavorite()
+        }
+
+        cockpitQueueButton = secondaryButton("☷ Hàng đợi", "Xem danh sách hàng đợi phát nhạc") {
+            showUpcomingQueue()
+        }
+    }
+
+    private fun buildFilterChips() {
+        filterChipsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            visibility = View.GONE
+            libraryContainer.addView(this, LinearLayout.LayoutParams(-1, dp(34)).apply {
+                bottomMargin = dp(4)
+            })
+        }
+
+        chipAll = Button(this).apply {
+            text = "Tất cả"
+            textSize = 11.5f
+            isAllCaps = false
+            minHeight = dp(30)
+            minimumHeight = dp(30)
+            setPadding(dp(12), 0, dp(12), 0)
+            setOnClickListener {
+                if (filterOnlyDownloaded) {
+                    filterOnlyDownloaded = false
+                    updateFilterChipsUi()
+                    refreshSongRows()
+                }
+            }
+            filterChipsRow.addView(this, LinearLayout.LayoutParams(-2, dp(30)).apply {
+                rightMargin = dp(6)
+            })
+        }
+
+        chipDownloaded = Button(this).apply {
+            text = "Đã tải về máy"
+            textSize = 11.5f
+            isAllCaps = false
+            minHeight = dp(30)
+            minimumHeight = dp(30)
+            setPadding(dp(12), 0, dp(12), 0)
+            setOnClickListener {
+                if (!filterOnlyDownloaded) {
+                    filterOnlyDownloaded = true
+                    updateFilterChipsUi()
+                    refreshSongRows()
+                }
+            }
+            filterChipsRow.addView(this, LinearLayout.LayoutParams(-2, dp(30)))
+        }
+        updateFilterChipsUi()
+    }
+
+    private fun updateFilterChipsUi() {
+        if (!::chipAll.isInitialized || !::chipDownloaded.isInitialized) return
+        chipAll.setTextColor(if (!filterOnlyDownloaded) accentContrast else ink)
+        chipAll.background = rounded(if (!filterOnlyDownloaded) accent else panel, 10)
+        chipAll.setTypeface(null, if (!filterOnlyDownloaded) Typeface.BOLD else Typeface.NORMAL)
+
+        chipDownloaded.setTextColor(if (filterOnlyDownloaded) accentContrast else ink)
+        chipDownloaded.background = rounded(if (filterOnlyDownloaded) accent else panel, 10)
+        chipDownloaded.setTypeface(null, if (filterOnlyDownloaded) Typeface.BOLD else Typeface.NORMAL)
     }
 
     private fun rounded(color: Int, radius: Int = 14, strokeColor: Int? = null, strokeWidthDp: Int = 1): GradientDrawable =
@@ -811,10 +1331,28 @@ class TelegramPreviewActivity : AppCompatActivity() {
             applyRootWindowInsets()
             insets
         }
+        splitRoot = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            root.addView(this, LinearLayout.LayoutParams(-1, 0, 1f))
+        }
+
+        buildCockpitLeftPane()
+
+        cockpitDivider = View(this).apply {
+            setBackgroundColor(border)
+            visibility = View.GONE
+            splitRoot.addView(this, LinearLayout.LayoutParams(dp(1), -1))
+        }
+
+        libraryContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            splitRoot.addView(this, LinearLayout.LayoutParams(0, -1, 1f))
+        }
+
         val topBarView = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            root.addView(this, LinearLayout.LayoutParams(-1, dp(48)))
+            libraryContainer.addView(this, LinearLayout.LayoutParams(-1, dp(48)))
         }
         topBar = topBarView
         val titleColumn = LinearLayout(this).apply {
@@ -850,12 +1388,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
             letterSpacing = 0.12f
             setTextColor(accent)
             setPadding(0, 0, 0, dp(10))
-            root.addView(this)
+            libraryContainer.addView(this)
         }
         navigationRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            root.addView(this, LinearLayout.LayoutParams(-1, dp(45)).apply {
+            libraryContainer.addView(this, LinearLayout.LayoutParams(-1, dp(45)).apply {
                 bottomMargin = dp(4)
             })
         }
@@ -909,7 +1447,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         tab("Đang phát", "Mở trình phát nhạc") { showFullPlayer() }
         collapsibleNavigation = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            root.addView(this, LinearLayout.LayoutParams(-1, -2))
+            libraryContainer.addView(this, LinearLayout.LayoutParams(-1, -2))
         }
         status = TextView(this).apply {
             text = "Đang khởi tạo Telegram…"
@@ -918,8 +1456,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
             setPadding(dp(2), dp(3), dp(2), dp(3))
-            root.addView(this, LinearLayout.LayoutParams(-1, dp(23)))
+            libraryContainer.addView(this, LinearLayout.LayoutParams(-1, dp(23)))
         }
+        buildFilterChips()
         authControls = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             collapsibleNavigation.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
@@ -1002,7 +1541,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     refreshSongRows()
                 }
             }
-            root.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
+            libraryContainer.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
                 bottomMargin = dp(6)
             })
         }
@@ -1049,7 +1588,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
                 override fun afterTextChanged(s: Editable?) = Unit
             })
-            root.addView(this, LinearLayout.LayoutParams(-1, dp(45)).apply {
+            libraryContainer.addView(this, LinearLayout.LayoutParams(-1, dp(45)).apply {
                 bottomMargin = dp(8)
             })
         }
@@ -1248,8 +1787,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 val isCurrent = (song != null && song.messageId == currentTelegramMessageId())
                 val songLabel = song?.let { TelegramSongDisplayPolicy.label(it.title, it.filename) }
                     ?: getItem(position).orEmpty()
+                val displayTitle = CockpitLayoutPolicy.cleanTrackTitle(songLabel)
 
-                holder.titleView.text = (if (isCurrent) "▶ " else "") + songLabel
+                holder.titleView.text = (if (isCurrent) "▶ " else "") + displayTitle
                 holder.titleView.textSize = if (isShortLayout) 13.5f else 15f
                 holder.titleView.setTextColor(if (isCurrent) accent else ink)
                 holder.titleView.maxLines = 1
@@ -1287,10 +1827,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     holder.artPlaceholder.visibility = View.VISIBLE
                 }
 
-                rootLayout.background = rounded(panel, 12)
+                val cardBg = if (isCurrent) cardPlaying else card
+                val cardStroke = if (isCurrent) accent else null
+                rootLayout.background = rounded(cardBg, 12, strokeColor = cardStroke, strokeWidthDp = if (isCurrent) 1 else 0)
                 val padV = dp(if (isShortLayout) 6 else 10)
                 rootLayout.setPadding(dp(12), padV, dp(14), padV)
-                rootLayout.minimumHeight = dp(if (isShortLayout) 48 else 62)
+                rootLayout.minimumHeight = dp(if (isShortLayout) 48 else 64)
                 return rootLayout
             }
         }
@@ -1371,7 +1913,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
             } else shownSongs.getOrNull(position)?.let { downloadAndPlay(it) }
         }
-        root.addView(tracks, LinearLayout.LayoutParams(-1, 0, 1f))
+        libraryContainer.addView(tracks, LinearLayout.LayoutParams(-1, 0, 1f))
         miniPlayerBar = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = rounded(panel, 14, strokeColor = border)
@@ -1580,11 +2122,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         menu.menu.add(0, 5, 5, "Nhóm / kênh / bot Telegram")
         menu.menu.add(0, 6, 6, "Chọn tệp nhạc (Google Drive / thiết bị)")
         menu.menu.add(0, 7, 7, "Đăng xuất Telegram")
-        val themeLabel = if (currentThemePreset == UiThemePolicy.ThemePreset.PORTRAIT_EDGE_PRO) {
-            "Giao diện: Portrait Edge-to-Edge Pro ✓"
-        } else {
-            "Giao diện: Cổ điển (Classic) ✓"
-        }
+        val themeLabel = "Giao diện: ${currentThemePreset.displayName} ✓"
         menu.menu.add(0, 8, 8, themeLabel)
         menu.setOnMenuItemClickListener {
             val user = library.authorizedUser()?.value ?: 0L
@@ -1650,6 +2188,32 @@ class TelegramPreviewActivity : AppCompatActivity() {
         isNarrowLayout = narrow
         isWideLayout = wide
         currentPaneMode = pane
+
+        // Theme 02 Cockpit 2-Pane split eligibility
+        val isCockpitEligible = CockpitLayoutPolicy.isEligibleForCockpitTwoPane(width, height)
+        val shouldShowTwoPane = (currentThemePreset == UiThemePolicy.ThemePreset.COCKPIT_TWO_PANE) && isCockpitEligible
+        isCockpitTwoPaneActive = shouldShowTwoPane
+
+        if (::cockpitScrollView.isInitialized && ::cockpitDivider.isInitialized && ::libraryContainer.isInitialized) {
+            if (shouldShowTwoPane) {
+                cockpitScrollView.visibility = View.VISIBLE
+                cockpitDivider.visibility = View.VISIBLE
+                cockpitScrollView.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, CockpitLayoutPolicy.LEFT_PANE_WEIGHT)
+                libraryContainer.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, CockpitLayoutPolicy.RIGHT_PANE_WEIGHT)
+                val artSize = dp(CockpitLayoutPolicy.cockpitCoverSizeDp(width, height))
+                cockpitArtFrame.layoutParams.width = artSize
+                cockpitArtFrame.layoutParams.height = artSize
+                val isShortH = height < 460
+                (cockpitArtFrame.layoutParams as? LinearLayout.LayoutParams)?.bottomMargin = dp(if (isShortH) 4 else 8)
+                cockpitPane.setPadding(dp(12), dp(if (isShortH) 4 else 8), dp(12), dp(if (isShortH) 4 else 8))
+                updateCockpitPlayer()
+            } else {
+                cockpitScrollView.visibility = View.GONE
+                cockpitDivider.visibility = View.GONE
+                libraryContainer.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1.0f)
+            }
+        }
+
         applyRootWindowInsets()
         if (::topBar.isInitialized) {
             topBar.layoutParams.height = LinearLayout.LayoutParams.WRAP_CONTENT
@@ -1673,32 +2237,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
         updateSyncHeaderSubtitle()
         note.visibility = if (auth.isReady() || short) View.GONE else View.VISIBLE
         collapsibleNavigation.visibility = if (auth.isReady()) View.GONE else View.VISIBLE
-        val isEdgeProPortrait = ShortWindowLayoutPolicy.shouldUseBottomNav(currentThemePreset, pane)
-        if (isEdgeProPortrait) {
-            navigationRow.visibility = View.GONE
-            if (::bottomNavBar.isInitialized) {
-                bottomNavBar.visibility = if (auth.isReady()) View.VISIBLE else View.GONE
-                bottomNavBar.layoutParams.height = dp(ShortWindowLayoutPolicy.bottomNavHeightDp(short))
-                (bottomNavBar.layoutParams as? LinearLayout.LayoutParams)?.apply {
-                    topMargin = dp(if (short) 2 else 4)
-                }
-                for (btn in bottomNavButtons) {
-                    btn.layoutParams.height = dp(ShortWindowLayoutPolicy.bottomNavButtonHeightDp(short))
-                    btn.minHeight = dp(if (short) 34 else 42)
-                    btn.minimumHeight = dp(if (short) 34 else 42)
-                    btn.textSize = if (short) 10.5f else 11.5f
-                }
-                updateBottomNavState()
-            }
-        } else {
+
+        if (shouldShowTwoPane) {
+            if (::miniPlayerBar.isInitialized) miniPlayerBar.visibility = View.GONE
             if (::bottomNavBar.isInitialized) bottomNavBar.visibility = View.GONE
-            val allowCollapse = ShortWindowLayoutPolicy.shouldAutoCollapseTopNav(currentThemePreset, pane)
-            if (!allowCollapse) {
-                navigationCollapsed = false
-                pendingNavigationCollapse = null
-            }
-            navigationRow.visibility = if ((navigationCollapsed && allowCollapse) || !auth.isReady()) View.GONE else View.VISIBLE
             if (::navigationRow.isInitialized) {
+                navigationRow.visibility = if (auth.isReady()) View.VISIBLE else View.GONE
                 val navHeight = dp(ShortWindowLayoutPolicy.topNavigationHeightDp(short))
                 navigationRow.layoutParams.height = navHeight
                 (navigationRow.layoutParams as? LinearLayout.LayoutParams)?.apply {
@@ -1716,6 +2260,56 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     }
                 }
             }
+        } else {
+            if (::miniPlayerBar.isInitialized) miniPlayerBar.visibility = View.VISIBLE
+            val isEdgeProPortrait = ShortWindowLayoutPolicy.shouldUseBottomNav(currentThemePreset, pane)
+            if (isEdgeProPortrait) {
+                navigationRow.visibility = View.GONE
+                if (::bottomNavBar.isInitialized) {
+                    bottomNavBar.visibility = if (auth.isReady()) View.VISIBLE else View.GONE
+                    bottomNavBar.layoutParams.height = dp(ShortWindowLayoutPolicy.bottomNavHeightDp(short))
+                    (bottomNavBar.layoutParams as? LinearLayout.LayoutParams)?.apply {
+                        topMargin = dp(if (short) 2 else 4)
+                    }
+                    for (btn in bottomNavButtons) {
+                        btn.layoutParams.height = dp(ShortWindowLayoutPolicy.bottomNavButtonHeightDp(short))
+                        btn.minHeight = dp(if (short) 34 else 42)
+                        btn.minimumHeight = dp(if (short) 34 else 42)
+                        btn.textSize = if (short) 10.5f else 11.5f
+                    }
+                    updateBottomNavState()
+                }
+            } else {
+                if (::bottomNavBar.isInitialized) bottomNavBar.visibility = View.GONE
+                val allowCollapse = ShortWindowLayoutPolicy.shouldAutoCollapseTopNav(currentThemePreset, pane)
+                if (!allowCollapse) {
+                    navigationCollapsed = false
+                    pendingNavigationCollapse = null
+                }
+                navigationRow.visibility = if ((navigationCollapsed && allowCollapse) || !auth.isReady()) View.GONE else View.VISIBLE
+                if (::navigationRow.isInitialized) {
+                    val navHeight = dp(ShortWindowLayoutPolicy.topNavigationHeightDp(short))
+                    navigationRow.layoutParams.height = navHeight
+                    (navigationRow.layoutParams as? LinearLayout.LayoutParams)?.apply {
+                        topMargin = dp(if (short) 2 else 4)
+                        bottomMargin = dp(if (short) 2 else 4)
+                    }
+                    for (i in 0 until navigationRow.childCount) {
+                        val child = navigationRow.getChildAt(i)
+                        child.layoutParams.height = dp(ShortWindowLayoutPolicy.topNavButtonHeightDp(short))
+                        if (child is TextView) {
+                            child.textSize = if (narrow) 10.5f else 11.5f
+                            child.minHeight = dp(if (short) 30 else 40)
+                            child.minimumHeight = dp(if (short) 30 else 40)
+                            child.setPadding(dp(2), 0, dp(2), 0)
+                        }
+                    }
+                }
+            }
+        }
+
+        if (::filterChipsRow.isInitialized) {
+            filterChipsRow.visibility = if (auth.isReady() && (!browseSources || playlistMode)) View.VISIBLE else View.GONE
         }
         if (::libraryTitle.isInitialized) {
             libraryTitle.textSize = if (short) 11f else 12f
@@ -2116,14 +2710,21 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     }
                     Pair(filtered, filtered.size)
                 }
+                val finalSongs = if (filterOnlyDownloaded) {
+                    loadedSongs.filter { s ->
+                        val p = cachedSongPaths[s.messageId]
+                        p != null && File(p).isFile
+                    }
+                } else loadedSongs
+                val finalDisplayCount = if (filterOnlyDownloaded) finalSongs.size else totalDisplayCount
 
                 val sourceCount = if (db != null && userId > 0L) db.getSources(userId).size else songs.map { it.chatId }.distinct().size
 
                 runOnUiThread {
                     if (uiQueryGeneration.get() != generation || isDestroyed) return@runOnUiThread
                     if (tracks.adapter !== adapter) tracks.adapter = adapter
-                    shownSongs = loadedSongs
-                    totalCountForCurrentView = totalDisplayCount
+                    shownSongs = finalSongs
+                    totalCountForCurrentView = finalDisplayCount
                     adapter.clear()
                     adapter.addAll(shownSongs.map {
                         TelegramSongDisplayPolicy.label(it.title, it.filename)
@@ -2137,6 +2738,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     }
                     sourcesButton.text = "‹  Trở về nhóm / kênh ($sourceCount)"
                     songFilter.hint = "Tìm bài hát theo tên…"
+                    if (::filterChipsRow.isInitialized) {
+                        filterChipsRow.visibility = if (auth.isReady() && !isBrowseSources) View.VISIBLE else View.GONE
+                        updateFilterChipsUi()
+                    }
                     updateBottomNavState()
                     updateSyncHeaderSubtitle()
                 }

@@ -16,6 +16,7 @@ object UiThemePolicy {
 
     enum class ThemePreset(val key: String, val displayName: String) {
         PORTRAIT_EDGE_PRO("portrait_edge_pro", "Portrait Edge-to-Edge Pro"),
+        COCKPIT_TWO_PANE("cockpit_two_pane", "Cockpit 2-Pane Split"),
         CLASSIC("classic", "Cổ điển (Classic)");
 
         companion object {
@@ -35,7 +36,8 @@ object UiThemePolicy {
         val text: Int,
         val subtle: Int,
         val border: Int,
-        val accentContrast: Int
+        val accentContrast: Int,
+        val cardPlaying: Int = card
     )
 
     val TOKENS_PORTRAIT_EDGE_PRO = ThemeTokens(
@@ -47,7 +49,21 @@ object UiThemePolicy {
         text = 0xFFF1F5F9.toInt(),          // #F1F5F9 Slate-50 primary (241, 245, 249)
         subtle = 0xFF94A3B8.toInt(),        // #94A3B8 Slate-400 secondary (148, 163, 184)
         border = 0xFF20364F.toInt(),        // #20364F Border stroke (32, 54, 79)
-        accentContrast = 0xFF0B1420.toInt() // #0B1420 Dark text on teal button
+        accentContrast = 0xFF0B1420.toInt(),// #0B1420 Dark text on teal button
+        cardPlaying = 0xFF163832.toInt()    // #163832 Active playing card background
+    )
+
+    val TOKENS_COCKPIT_TWO_PANE = ThemeTokens(
+        preset = ThemePreset.COCKPIT_TWO_PANE,
+        accent = 0xFF3DDC97.toInt(),        // #3DDC97 Teal (61, 220, 151)
+        background = 0xFF0B1420.toInt(),    // #0B1420 Dark navy (11, 20, 32)
+        surface = 0xFF111C28.toInt(),       // #111C28 Surface panel (17, 28, 40)
+        card = 0xFF111924.toInt(),          // #111924 Song item card (17, 25, 36)
+        text = 0xFFF1F5F9.toInt(),          // #F1F5F9 Slate-50 primary (241, 245, 249)
+        subtle = 0xFF94A3B8.toInt(),        // #94A3B8 Slate-400 secondary (148, 163, 184)
+        border = 0xFF20364F.toInt(),        // #20364F Border stroke (32, 54, 79)
+        accentContrast = 0xFF0B1420.toInt(),// #0B1420 Dark text on teal button
+        cardPlaying = 0xFF163832.toInt()    // #163832 Active playing card background
     )
 
     val TOKENS_CLASSIC = ThemeTokens(
@@ -59,11 +75,13 @@ object UiThemePolicy {
         text = 0xFFE9F1FA.toInt(),          // #E9F1FA Ink (233, 241, 250)
         subtle = 0xFF9EB0C3.toInt(),        // #9EB0C3 Subtle (158, 176, 195)
         border = 0xFF23344B.toInt(),
-        accentContrast = 0xFF0C131F.toInt()
+        accentContrast = 0xFF0C131F.toInt(),
+        cardPlaying = 0xFF23344B.toInt()
     )
 
     fun tokensFor(preset: ThemePreset): ThemeTokens = when (preset) {
         ThemePreset.PORTRAIT_EDGE_PRO -> TOKENS_PORTRAIT_EDGE_PRO
+        ThemePreset.COCKPIT_TWO_PANE -> TOKENS_COCKPIT_TWO_PANE
         ThemePreset.CLASSIC -> TOKENS_CLASSIC
     }
 

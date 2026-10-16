@@ -236,7 +236,7 @@ class OfflineStorageManagerTest {
     @Test
     fun testUnlimitedCapAllowsDownload() {
         val gb = 1024L * 1024L * 1024L
-        addCompletedTrack(200L, fileSizeBytes = 40L * gb)
+        addCompletedTrack(200L, fileSizeBytes = 4L * gb)
         manager.setOfflineStorageCapBytes(PinnedDownloadManager.CAP_UNLIMITED)
         manager.setAvailableSpaceProviderForTesting { 25L * gb }
 

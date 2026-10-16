@@ -70,7 +70,9 @@ internal object ShortWindowLayoutPolicy {
     fun shouldUseBottomNav(
         preset: UiThemePolicy.ThemePreset,
         paneMode: CarPaneLayoutPolicy.Mode
-    ): Boolean = preset == UiThemePolicy.ThemePreset.PORTRAIT_EDGE_PRO && paneMode != CarPaneLayoutPolicy.Mode.WIDE
+    ): Boolean = (preset == UiThemePolicy.ThemePreset.PORTRAIT_EDGE_PRO ||
+            preset == UiThemePolicy.ThemePreset.COCKPIT_TWO_PANE) &&
+            paneMode != CarPaneLayoutPolicy.Mode.WIDE
 
     /**
      * Calculates the truthfully displayed source count, excluding the aggregate row (chatId = 0L)

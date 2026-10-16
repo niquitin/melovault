@@ -22,6 +22,10 @@ class UiThemePolicyTest {
             UiThemePolicy.ThemePreset.fromKey("portrait_edge_pro")
         )
         assertEquals(
+            UiThemePolicy.ThemePreset.COCKPIT_TWO_PANE,
+            UiThemePolicy.ThemePreset.fromKey("cockpit_two_pane")
+        )
+        assertEquals(
             UiThemePolicy.ThemePreset.CLASSIC,
             UiThemePolicy.ThemePreset.fromKey("classic")
         )
@@ -43,6 +47,10 @@ class UiThemePolicyTest {
         // Uninitialized prefs defaults to PORTRAIT_EDGE_PRO
         val initial = UiThemePolicy.getSavedPreset(prefs)
         assertEquals(UiThemePolicy.ThemePreset.PORTRAIT_EDGE_PRO, initial)
+
+        // Save COCKPIT_TWO_PANE
+        UiThemePolicy.savePreset(prefs, UiThemePolicy.ThemePreset.COCKPIT_TWO_PANE)
+        assertEquals(UiThemePolicy.ThemePreset.COCKPIT_TWO_PANE, UiThemePolicy.getSavedPreset(prefs))
 
         // Save CLASSIC
         UiThemePolicy.savePreset(prefs, UiThemePolicy.ThemePreset.CLASSIC)
@@ -74,6 +82,33 @@ class UiThemePolicyTest {
         assertEquals(0xFF20364F.toInt(), tokens.border)
         // Accent contrast color is dark for contrast with teal button
         assertEquals(0xFF0B1420.toInt(), tokens.accentContrast)
+        // Playing card background #163832
+        assertEquals(0xFF163832.toInt(), tokens.cardPlaying)
+    }
+
+    @Test
+    fun cockpitTwoPaneTokensMatchSpecification() {
+        val tokens = UiThemePolicy.tokensFor(UiThemePolicy.ThemePreset.COCKPIT_TWO_PANE)
+
+        assertEquals(UiThemePolicy.ThemePreset.COCKPIT_TWO_PANE, tokens.preset)
+        // Teal #3DDC97
+        assertEquals(0xFF3DDC97.toInt(), tokens.accent)
+        // Dark navy #0B1420
+        assertEquals(0xFF0B1420.toInt(), tokens.background)
+        // Surface #111C28
+        assertEquals(0xFF111C28.toInt(), tokens.surface)
+        // Card #111924
+        assertEquals(0xFF111924.toInt(), tokens.card)
+        // Slate-50 Text #F1F5F9
+        assertEquals(0xFFF1F5F9.toInt(), tokens.text)
+        // Slate-400 Subtle #94A3B8
+        assertEquals(0xFF94A3B8.toInt(), tokens.subtle)
+        // Border #20364F
+        assertEquals(0xFF20364F.toInt(), tokens.border)
+        // Accent contrast #0B1420
+        assertEquals(0xFF0B1420.toInt(), tokens.accentContrast)
+        // Active playing card background #163832
+        assertEquals(0xFF163832.toInt(), tokens.cardPlaying)
     }
 
     @Test
@@ -96,12 +131,12 @@ class UiThemePolicyTest {
     @Test
     fun tokensAreDistinctBetweenPresets() {
         val pro = UiThemePolicy.tokensFor(UiThemePolicy.ThemePreset.PORTRAIT_EDGE_PRO)
+        val cockpit = UiThemePolicy.tokensFor(UiThemePolicy.ThemePreset.COCKPIT_TWO_PANE)
         val classic = UiThemePolicy.tokensFor(UiThemePolicy.ThemePreset.CLASSIC)
 
-        assertNotEquals(pro.accent, classic.accent)
-        assertNotEquals(pro.background, classic.background)
-        assertNotEquals(pro.surface, classic.surface)
-        assertNotEquals(pro.text, classic.text)
-        assertNotEquals(pro.subtle, classic.subtle)
+        assertNotEquals(pro.surface, cockpit.surface)
+        assertNotEquals(pro.card, cockpit.card)
+        assertNotEquals(cockpit.background, classic.background)
+        assertNotEquals(cockpit.accent, classic.accent)
     }
 }

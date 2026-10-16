@@ -127,6 +127,27 @@ class ShortWindowLayoutPolicyTest {
             )
         )
 
+        // Cockpit 2-Pane uses bottom nav in NARROW and MEDIUM as responsive companion
+        assertTrue(
+            ShortWindowLayoutPolicy.shouldUseBottomNav(
+                UiThemePolicy.ThemePreset.COCKPIT_TWO_PANE,
+                CarPaneLayoutPolicy.Mode.NARROW
+            )
+        )
+        assertTrue(
+            ShortWindowLayoutPolicy.shouldUseBottomNav(
+                UiThemePolicy.ThemePreset.COCKPIT_TWO_PANE,
+                CarPaneLayoutPolicy.Mode.MEDIUM
+            )
+        )
+        // Cockpit 2-Pane uses top nav / 2-pane in WIDE
+        assertFalse(
+            ShortWindowLayoutPolicy.shouldUseBottomNav(
+                UiThemePolicy.ThemePreset.COCKPIT_TWO_PANE,
+                CarPaneLayoutPolicy.Mode.WIDE
+            )
+        )
+
         // Classic always uses top nav
         assertFalse(
             ShortWindowLayoutPolicy.shouldUseBottomNav(
