@@ -22,13 +22,12 @@ class AndroidTelegramLibraryDatabase(
 
     init {
         require(accountId > 0L) { "Invalid Telegram account ID: $accountId" }
+        setWriteAheadLoggingEnabled(true)
     }
 
     override fun onConfigure(db: SQLiteDatabase) {
         super.onConfigure(db)
         db.setForeignKeyConstraintsEnabled(true)
-        db.execSQL("PRAGMA synchronous = NORMAL;")
-        db.execSQL("PRAGMA journal_mode = WAL;")
     }
 
     override fun onCreate(db: SQLiteDatabase) {
