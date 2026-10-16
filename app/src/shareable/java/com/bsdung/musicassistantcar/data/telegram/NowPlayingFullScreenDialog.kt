@@ -32,6 +32,7 @@ import java.util.Locale
 /** A real full-screen audio player, backed by the existing MediaSession. */
 internal class NowPlayingFullScreenDialog(
     private val activity: Activity,
+    private val themeTokens: () -> UiThemePolicy.ThemeTokens = { UiThemePolicy.TOKENS_PORTRAIT_EDGE_PRO },
     private val media: () -> MediaController?,
     private val source: () -> String,
     private val downloadProgress: () -> String?,
@@ -41,11 +42,12 @@ internal class NowPlayingFullScreenDialog(
     private val toggleFavorite: () -> Unit,
     private val openQueue: () -> Unit
 ) {
-    private val background = Color.rgb(9, 17, 29)
-    private val surface = Color.rgb(26, 41, 56)
-    private val foreground = Color.rgb(239, 246, 251)
-    private val secondary = Color.rgb(156, 177, 196)
-    private val mint = Color.rgb(67, 212, 174)
+    private val background get() = themeTokens().background
+    private val surface get() = themeTokens().surface
+    private val foreground get() = themeTokens().text
+    private val secondary get() = themeTokens().subtle
+    private val mint get() = themeTokens().accent
+    private val accentContrast get() = themeTokens().accentContrast
     private val main = Handler(Looper.getMainLooper())
     private var dialog: Dialog? = null
     private var title: TextView? = null
@@ -275,6 +277,26 @@ internal class NowPlayingFullScreenDialog(
                 dp(if (compact) 7 else 20),
                 dp(if (compact) 10 else 22),
                 dp(if (compact) 7 else 20))
+        }
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val systemBars = insets.getInsets(
+                androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+                androidx.core.view.WindowInsetsCompat.Type.displayCutout()
+            )
+            val baseH = dp(if (compact) 10 else 22)
+            val baseTop = dp(if (compact) 7 else 20)
+            val baseBottom = dp(if (compact) 7 else 20)
+            val computed = WindowInsetsPolicy.computeDialogRootPadding(
+                systemBars = WindowInsetsPolicy.Insets(
+                    systemBars.left, systemBars.top, systemBars.right, systemBars.bottom
+                ),
+                displayCutout = WindowInsetsPolicy.Insets.ZERO,
+                baseHorizontal = baseH,
+                baseTop = baseTop,
+                baseBottom = baseBottom
+            )
+            root.setPadding(computed.left, computed.top, computed.right, computed.bottom)
+            insets
         }
         val top = LinearLayout(activity).apply {
             gravity = Gravity.CENTER_VERTICAL
@@ -521,19 +543,10 @@ internal class NowPlayingFullScreenDialog(
         popup.window?.apply {
             setLayout(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT)
-            addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
             navigationBarColor = background
-            decorView.systemUiVisibility =
-                View.SYSTEM_UI_FLAG_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            statusBarColor = background
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 setDecorFitsSystemWindows(false)
-                insetsController?.apply {
-                    systemBarsBehavior =
-                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                    hide(WindowInsets.Type.systemBars())
-                }
             }
         }
         main.post(update)

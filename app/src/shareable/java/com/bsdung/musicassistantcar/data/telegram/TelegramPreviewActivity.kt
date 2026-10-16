@@ -5,8 +5,10 @@ import android.app.Dialog
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.ContextThemeWrapper
 import android.view.Gravity
@@ -15,7 +17,10 @@ import android.view.WindowManager
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.PopupMenu
+import android.widget.ProgressBar
 import androidx.appcompat.app.AlertDialog
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -102,6 +107,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var overflowButton: Button
     private lateinit var miniControls: LinearLayout
     private var isShortLayout = false
+    private var isWideLayout = false
+    private var isNarrowLayout = false
+    private var currentThemePreset: UiThemePolicy.ThemePreset = UiThemePolicy.ThemePreset.PORTRAIT_EDGE_PRO
+    private var lastSystemBarsInsets = WindowInsetsPolicy.Insets.ZERO
+    private var lastImeInsets = WindowInsetsPolicy.Insets.ZERO
+    private lateinit var syncSubtitle: TextView
+    private lateinit var bottomNavBar: LinearLayout
+    private val bottomNavButtons = mutableListOf<Button>()
+    private lateinit var miniProgressBar: ProgressBar
+    private lateinit var nowPlayingSubtitle: TextView
     private lateinit var titleHeader: TextView
     private lateinit var navigationRow: LinearLayout
     private lateinit var miniOpenPlayer: Button
@@ -259,6 +274,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setTheme(R.style.Theme_MusicAssistantCar)
+        val prefs = getSharedPreferences(UiThemePolicy.PREFS_NAME, Context.MODE_PRIVATE)
+        currentThemePreset = UiThemePolicy.getSavedPreset(prefs)
         buildUi()
         if (savedInstanceState != null) {
             allChatsMode = savedInstanceState.getBoolean("key_all_chats_mode", allChatsMode)
@@ -320,14 +337,24 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (::playPause.isInitialized) playPause.text = if (isPlaying) "Ⅱ" else "▶"
+            if (::mainRoot.isInitialized) {
+                if (isPlaying) mainRoot.post(miniPlayerProgressTick)
+                else mainRoot.removeCallbacks(miniPlayerProgressTick)
+            }
         }
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-            nowPlayingTitle.text = mediaItem?.mediaMetadata?.title ?: "Chọn một bài hát để bắt đầu"
+            val titleText = mediaItem?.mediaMetadata?.title ?: "Chọn một bài hát để bắt đầu"
+            nowPlayingTitle.text = titleText
+            if (::nowPlayingSubtitle.isInitialized) {
+                nowPlayingSubtitle.text = if (mediaItem != null) "Telegram · Đang phát" else "Telegram · MeloVault"
+            }
+            updateMiniPlayerProgress()
             val id = mediaItem?.mediaId?.removePrefix("telegram:")?.toLongOrNull()
             currentSongIndex = if (mediaItem?.mediaId?.startsWith("telegram:") == true) {
                 songs.indexOfFirst { it.messageId == id }
             } else -1
             updatePlaylistButtons()
+            if (::adapter.isInitialized) adapter.notifyDataSetChanged()
             if (currentSongIndex >= 0 && auth.isReady()) {
                 prefetchNextCachedNeighbor()
             }
@@ -336,6 +363,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             if (playbackState == Player.STATE_ENDED) {
                 playAdjacent(1)
             }
+            updateMiniPlayerProgress()
         }
     }
 
@@ -489,11 +517,130 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun dp(value: Int): Int =
         (value * resources.displayMetrics.density + 0.5f).toInt()
 
-    private val ink get() = Color.rgb(233, 241, 250)
-    private val subtle get() = Color.rgb(158, 176, 195)
-    private val accent get() = Color.rgb(67, 212, 174)
-    private val midnight get() = Color.rgb(12, 19, 31)
-    private val panel get() = Color.rgb(25, 37, 53)
+    private val themeTokens get() = UiThemePolicy.tokensFor(currentThemePreset)
+
+    private val ink get() = themeTokens.text
+    private val subtle get() = themeTokens.subtle
+    private val accent get() = themeTokens.accent
+    private val midnight get() = themeTokens.background
+    private val panel get() = themeTokens.surface
+    private val card get() = themeTokens.card
+    private val border get() = themeTokens.border
+    private val accentContrast get() = themeTokens.accentContrast
+
+    private val miniPlayerProgressTick = object : Runnable {
+        override fun run() {
+            updateMiniPlayerProgress()
+            if (player?.isPlaying == true) {
+                if (::mainRoot.isInitialized) mainRoot.postDelayed(this, 1000L)
+            }
+        }
+    }
+
+    private fun updateMiniPlayerProgress() {
+        if (!::miniProgressBar.isInitialized) return
+        val p = player
+        val dur = p?.duration ?: C.TIME_UNSET
+        val pos = p?.currentPosition ?: 0L
+        if (dur > 0L && dur != C.TIME_UNSET) {
+            miniProgressBar.progress = ((pos.toDouble() / dur) * 1000).toInt().coerceIn(0, 1000)
+        } else {
+            miniProgressBar.progress = 0
+        }
+    }
+
+    private fun applyRootWindowInsets() {
+        if (!::mainRoot.isInitialized) return
+        val computed = WindowInsetsPolicy.computeMainRootPadding(
+            systemBars = lastSystemBarsInsets,
+            ime = lastImeInsets,
+            displayCutout = WindowInsetsPolicy.Insets.ZERO,
+            baseHorizontal = dp(if (isNarrowLayout) 6 else 12),
+            baseTop = dp(if (isShortLayout) 2 else 6),
+            baseBottom = dp(3)
+        )
+        mainRoot.setPadding(computed.left, computed.top, computed.right, computed.bottom)
+    }
+
+    private fun updateSyncHeaderSubtitle() {
+        if (!::syncSubtitle.isInitialized) return
+        val count = songs.size
+        val countLabel = if (count > 0) "${String.format(java.util.Locale.US, "%,d", count)} bài" else "Chưa có bài"
+        val stateLabel = when {
+            globalScanLoading -> "Đang đồng bộ…"
+            syncCoordinator?.isBusy() == true -> "Đang đồng bộ…"
+            auth.isReady() -> "Đã đồng bộ"
+            else -> "Chờ kết nối"
+        }
+        syncSubtitle.text = "$countLabel  ·  $stateLabel"
+    }
+
+    private fun updateBottomNavState() {
+        if (!::bottomNavBar.isInitialized) return
+        val activeIndex = when {
+            playlistMode -> 2
+            browseSources -> 1
+            else -> 0
+        }
+        for (i in 0 until bottomNavButtons.size) {
+            val btn = bottomNavButtons[i]
+            val isActive = (i == activeIndex)
+            btn.setTextColor(if (isActive) accent else subtle)
+            btn.background = if (isActive) rounded(card, 10) else null
+            btn.setTypeface(null, if (isActive) Typeface.BOLD else Typeface.NORMAL)
+        }
+    }
+
+    private fun toggleThemePreset() {
+        val nextPreset = if (currentThemePreset == UiThemePolicy.ThemePreset.PORTRAIT_EDGE_PRO) {
+            UiThemePolicy.ThemePreset.CLASSIC
+        } else {
+            UiThemePolicy.ThemePreset.PORTRAIT_EDGE_PRO
+        }
+        setThemePreset(nextPreset)
+        showMessage("Đã đổi sang: ${nextPreset.displayName}")
+    }
+
+    private fun setThemePreset(preset: UiThemePolicy.ThemePreset) {
+        currentThemePreset = preset
+        val prefs = getSharedPreferences(UiThemePolicy.PREFS_NAME, Context.MODE_PRIVATE)
+        UiThemePolicy.savePreset(prefs, preset)
+        applyThemeColors()
+    }
+
+    private fun applyThemeColors() {
+        window.statusBarColor = midnight
+        window.navigationBarColor = midnight
+        if (::mainRoot.isInitialized) mainRoot.setBackgroundColor(midnight)
+        if (::titleHeader.isInitialized) titleHeader.setTextColor(ink)
+        if (::syncSubtitle.isInitialized) syncSubtitle.setTextColor(subtle)
+        if (::note.isInitialized) note.setTextColor(accent)
+        if (::status.isInitialized) status.setTextColor(subtle)
+        if (::libraryTitle.isInitialized) libraryTitle.setTextColor(subtle)
+        if (::songFilter.isInitialized) {
+            songFilter.setTextColor(ink)
+            songFilter.setHintTextColor(subtle)
+            songFilter.background = rounded(panel)
+        }
+        if (::tracks.isInitialized) tracks.setBackgroundColor(midnight)
+        if (::miniPlayerBar.isInitialized) miniPlayerBar.background = rounded(panel, 12)
+        if (::nowPlayingTitle.isInitialized) nowPlayingTitle.setTextColor(ink)
+        if (::nowPlayingSubtitle.isInitialized) nowPlayingSubtitle.setTextColor(subtle)
+        if (::playPause.isInitialized) {
+            playPause.background = rounded(accent, 12)
+            playPause.setTextColor(accentContrast)
+        }
+        if (::miniProgressBar.isInitialized) {
+            miniProgressBar.progressTintList = ColorStateList.valueOf(accent)
+        }
+        if (::bottomNavBar.isInitialized) {
+            bottomNavBar.background = rounded(panel, 14)
+            updateBottomNavState()
+        }
+        applyResponsiveLibraryUi()
+        if (::adapter.isInitialized) adapter.notifyDataSetChanged()
+        if (::sourcesAdapter.isInitialized) sourcesAdapter.notifyDataSetChanged()
+    }
 
     private fun rounded(color: Int, radius: Int = 14): GradientDrawable =
         GradientDrawable().apply {
@@ -518,27 +665,51 @@ class TelegramPreviewActivity : AppCompatActivity() {
         window.statusBarColor = midnight
         window.navigationBarColor = midnight
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-        @Suppress("DEPRECATION")
-        window.decorView.systemUiVisibility = 0
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(midnight)
-            setPadding(dp(8), dp(5), dp(8), dp(4))
         }
         mainRoot = root
+        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+            val systemBars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            lastSystemBarsInsets = WindowInsetsPolicy.Insets(
+                systemBars.left, systemBars.top, systemBars.right, systemBars.bottom
+            )
+            lastImeInsets = WindowInsetsPolicy.Insets(
+                ime.left, ime.top, ime.right, ime.bottom
+            )
+            applyRootWindowInsets()
+            insets
+        }
         val topBarView = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             root.addView(this, LinearLayout.LayoutParams(-1, dp(48)))
         }
         topBar = topBarView
+        val titleColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
         titleHeader = TextView(this).apply {
             text = "MeloVault"
-            textSize = 22f
+            textSize = 21f
             setTextColor(ink)
-            setTypeface(null, android.graphics.Typeface.BOLD)
+            setTypeface(null, Typeface.BOLD)
         }
-        topBar.addView(titleHeader, LinearLayout.LayoutParams(0, -2, 1f))
+        titleColumn.addView(titleHeader)
+        syncSubtitle = TextView(this).apply {
+            text = "Telegram · Nhạc cá nhân · Preview"
+            textSize = 11f
+            setTextColor(subtle)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+        titleColumn.addView(syncSubtitle)
+        topBar.addView(titleColumn, LinearLayout.LayoutParams(0, -2, 1f))
         val overflow = uiButton("⋮").apply {
             textSize = 21f
             contentDescription = "Tác vụ và cài đặt MeloVault"
@@ -891,17 +1062,50 @@ class TelegramPreviewActivity : AppCompatActivity() {
         adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_list_item_1,
             mutableListOf()) {
             override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
-                val item = super.getView(position, convertView, parent) as TextView
-                item.textSize = if (isShortLayout) 13.5f else 15f
-                item.setTextColor(ink)
-                item.maxLines = 2
-                item.ellipsize = android.text.TextUtils.TruncateAt.END
-                item.background = rounded(panel, 11)
-                val padV = dp(if (isShortLayout) 8 else 16)
-                item.setPadding(dp(14), padV, dp(14), padV)
-                item.minHeight = dp(if (isShortLayout) 46 else 70)
-                item.minimumHeight = dp(if (isShortLayout) 46 else 70)
-                return item
+                val layout = if (convertView is LinearLayout && convertView.childCount == 2) {
+                    convertView
+                } else {
+                    LinearLayout(this@TelegramPreviewActivity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        val tView = TextView(this@TelegramPreviewActivity)
+                        val sView = TextView(this@TelegramPreviewActivity)
+                        addView(tView)
+                        addView(sView)
+                    }
+                }
+                val titleView = layout.getChildAt(0) as TextView
+                val subtitleView = layout.getChildAt(1) as TextView
+                val song = shownSongs.getOrNull(position)
+                val isCurrent = (song != null && song.messageId == currentTelegramMessageId())
+                val songLabel = song?.let { TelegramSongDisplayPolicy.label(it.title, it.filename) }
+                    ?: getItem(position).orEmpty()
+
+                titleView.text = (if (isCurrent) "▶ " else "") + songLabel
+                titleView.textSize = if (isShortLayout) 13.5f else 15f
+                titleView.setTextColor(if (isCurrent) accent else ink)
+                titleView.maxLines = 1
+                titleView.ellipsize = android.text.TextUtils.TruncateAt.END
+                titleView.setTypeface(null, if (isCurrent) Typeface.BOLD else Typeface.NORMAL)
+
+                val local = song?.let { cachedSongPaths[it.messageId]?.let { p -> File(p) } }
+                val isDownloaded = local?.isFile == true && TelegramAccountStoragePolicy.isOwnedFile(filesRoot, local)
+                val statusLabel = if (isDownloaded) "Đã tải" else "Chưa tải"
+                val sizeLabel = song?.expectedSize?.takeIf { it > 0L }?.let {
+                    String.format(java.util.Locale.US, "%.1f MB", it / 1_000_000.0)
+                }
+                val parts = listOfNotNull("Telegram", statusLabel, sizeLabel)
+                subtitleView.text = parts.joinToString(" · ")
+                subtitleView.textSize = if (isShortLayout) 10.5f else 12f
+                subtitleView.setTextColor(subtle)
+                subtitleView.setPadding(0, dp(2), 0, 0)
+                subtitleView.maxLines = 1
+                subtitleView.ellipsize = android.text.TextUtils.TruncateAt.END
+
+                layout.background = rounded(panel, 12)
+                val padV = dp(if (isShortLayout) 6 else 10)
+                layout.setPadding(dp(14), padV, dp(14), padV)
+                layout.minimumHeight = dp(if (isShortLayout) 46 else 62)
+                return layout
             }
         }
         sourcesAdapter = object : ArrayAdapter<String>(this,
@@ -909,17 +1113,38 @@ class TelegramPreviewActivity : AppCompatActivity() {
             override fun getView(
                 position: Int, convertView: View?, parent: android.view.ViewGroup
             ): View {
-                val item = super.getView(position, convertView, parent) as TextView
-                item.textSize = if (isShortLayout) 13f else 14f
-                item.setTextColor(ink)
-                item.maxLines = 2
-                item.ellipsize = android.text.TextUtils.TruncateAt.END
-                item.background = rounded(panel, 11)
-                val padV = dp(if (isShortLayout) 6 else 12)
-                item.setPadding(dp(14), padV, dp(14), padV)
-                item.minHeight = dp(if (isShortLayout) 42 else 62)
-                item.minimumHeight = dp(if (isShortLayout) 42 else 62)
-                return item
+                val layout = if (convertView is LinearLayout && convertView.childCount == 2) {
+                    convertView
+                } else {
+                    LinearLayout(this@TelegramPreviewActivity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        val tView = TextView(this@TelegramPreviewActivity)
+                        val sView = TextView(this@TelegramPreviewActivity)
+                        addView(tView)
+                        addView(sView)
+                    }
+                }
+                val titleView = layout.getChildAt(0) as TextView
+                val subtitleView = layout.getChildAt(1) as TextView
+                val sourceText = getItem(position).orEmpty()
+
+                titleView.text = sourceText
+                titleView.textSize = if (isShortLayout) 13f else 14.5f
+                titleView.setTextColor(ink)
+                titleView.maxLines = 1
+                titleView.ellipsize = android.text.TextUtils.TruncateAt.END
+                titleView.setTypeface(null, Typeface.BOLD)
+
+                subtitleView.text = "Kênh / Nhóm Telegram"
+                subtitleView.textSize = if (isShortLayout) 10f else 11.5f
+                subtitleView.setTextColor(subtle)
+                subtitleView.setPadding(0, dp(2), 0, 0)
+
+                layout.background = rounded(panel, 11)
+                val padV = dp(if (isShortLayout) 6 else 10)
+                layout.setPadding(dp(14), padV, dp(14), padV)
+                layout.minimumHeight = dp(if (isShortLayout) 42 else 58)
+                return layout
             }
         }
         tracks.adapter = adapter
@@ -942,62 +1167,165 @@ class TelegramPreviewActivity : AppCompatActivity() {
         root.addView(tracks, LinearLayout.LayoutParams(-1, 0, 1f))
         miniPlayerBar = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = rounded(panel)
-            setPadding(dp(8), dp(3), dp(8), dp(3))
+            background = rounded(panel, 12)
+            setPadding(dp(8), dp(4), dp(8), dp(4))
             root.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
                 topMargin = dp(3)
             })
         }
-        TextView(this).apply {
-            text = "NOW PLAYING"
-            textSize = 10f
-            letterSpacing = 0.12f
-            setTextColor(accent)
-            visibility = View.GONE
-            miniPlayerBar.addView(this)
+        miniProgressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 1000
+            progress = 0
+            progressTintList = ColorStateList.valueOf(accent)
+            miniPlayerBar.addView(this, LinearLayout.LayoutParams(-1, dp(3)).apply {
+                bottomMargin = dp(3)
+            })
+        }
+        val miniContentRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            miniPlayerBar.addView(this, LinearLayout.LayoutParams(-1, -2))
+        }
+        val miniInfoColumn = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setOnClickListener { showFullPlayer() }
+            miniContentRow.addView(this, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                leftMargin = dp(4)
+                rightMargin = dp(6)
+            })
         }
         nowPlayingTitle = TextView(this).apply {
             text = "Chọn một bài hát để bắt đầu"
-            textSize = 15f
+            textSize = 14f
             setTextColor(ink)
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
-            setPadding(0, dp(4), 0, dp(8))
-            miniPlayerBar.addView(this)
-            setOnClickListener { showFullPlayer() }
+            setTypeface(null, Typeface.BOLD)
+            miniInfoColumn.addView(this)
+        }
+        nowPlayingSubtitle = TextView(this).apply {
+            text = "Telegram · MeloVault"
+            textSize = 11f
+            setTextColor(subtle)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            miniInfoColumn.addView(this)
         }
         miniOpenPlayer = uiButton("⤢  Mở trình phát toàn màn hình").apply {
             textSize = 12f
             visibility = View.GONE
             setOnClickListener { showFullPlayer() }
         }
-        miniPlayerBar.addView(miniOpenPlayer, LinearLayout.LayoutParams(-1, dp(40)))
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER
-            miniPlayerBar.addView(this, LinearLayout.LayoutParams(-1, dp(45)))
+            gravity = Gravity.CENTER_VERTICAL
+            miniContentRow.addView(this, LinearLayout.LayoutParams(-2, dp(44)))
         }
         miniControls = controls
         fun control(symbol: String, action: () -> Unit): Button =
-            uiButton(symbol).apply {
-                textSize = 20f
+            Button(this).apply {
+                text = symbol
+                textSize = 18f
+                setTextColor(ink)
+                background = rounded(panel, 10)
+                setPadding(0, 0, 0, 0)
+                minHeight = dp(40)
+                minimumHeight = dp(40)
                 setOnClickListener { action() }
-                controls.addView(this, LinearLayout.LayoutParams(0, -1, 1f).apply {
-                    leftMargin = dp(4)
-                    rightMargin = dp(4)
+                controls.addView(this, LinearLayout.LayoutParams(dp(40), dp(40)).apply {
+                    leftMargin = dp(2)
+                    rightMargin = dp(2)
                 })
             }
         control("⏮") { playAdjacent(-1) }
-        playPause = control("▶") {
-            player?.let { controller ->
-                if (controller.currentMediaItem != null) {
-                    if (controller.isPlaying) controller.pause() else controller.play()
+        playPause = Button(this).apply {
+            text = "▶"
+            textSize = 18f
+            background = rounded(accent, 12)
+            setTextColor(accentContrast)
+            setPadding(0, 0, 0, 0)
+            minHeight = dp(42)
+            minimumHeight = dp(42)
+            setOnClickListener {
+                player?.let { controller ->
+                    if (controller.currentMediaItem != null) {
+                        if (controller.isPlaying) controller.pause() else controller.play()
+                    }
                 }
             }
+            controls.addView(this, LinearLayout.LayoutParams(dp(44), dp(42)).apply {
+                leftMargin = dp(2)
+                rightMargin = dp(2)
+            })
         }
-        playPause.background = rounded(accent)
-        playPause.setTextColor(midnight)
         control("⏭") { playAdjacent(1) }
+        bottomNavBar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = rounded(panel, 14)
+            setPadding(dp(4), dp(3), dp(4), dp(3))
+            root.addView(this, LinearLayout.LayoutParams(-1, dp(52)).apply {
+                topMargin = dp(4)
+            })
+        }
+        fun bottomTab(index: Int, label: String, description: String, action: () -> Unit) {
+            val btn = Button(this).apply {
+                text = label
+                contentDescription = description
+                textSize = 11.5f
+                isAllCaps = false
+                setSingleLine(true)
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                setPadding(dp(4), 0, dp(4), 0)
+                minHeight = dp(44)
+                minimumHeight = dp(44)
+                setOnClickListener { action() }
+            }
+            bottomNavButtons.add(btn)
+            bottomNavBar.addView(btn, LinearLayout.LayoutParams(0, dp(46), 1f).apply {
+                leftMargin = dp(2)
+                rightMargin = dp(2)
+            })
+        }
+        bottomTab(0, "♫ Thư viện", "Danh sách tất cả bài hát") {
+            if (!auth.isReady()) return@bottomTab
+            playlistMode = false
+            browseSources = false
+            selectedChatId = null
+            val shouldScan = autoRecoveryPolicy.shouldTabTriggerScan(
+                auth.isReady(), allChatsMode, globalScanLoading, songs.size,
+                library.authorizedUser()?.value
+            )
+            if (shouldScan) scanAllTelegramAudio(browseAfter = false)
+            else { songFilter.text?.clear(); refreshSongRows() }
+            updateBottomNavState()
+        }
+        bottomTab(1, "☷ Nguồn", "Xem nhóm và kênh Telegram") {
+            if (!auth.isReady()) return@bottomTab
+            playlistMode = false
+            browseSources = true
+            selectedChatId = null
+            val shouldScan = autoRecoveryPolicy.shouldTabTriggerScan(
+                auth.isReady(), allChatsMode, globalScanLoading, songs.size,
+                library.authorizedUser()?.value
+            )
+            if (shouldScan) scanAllTelegramAudio()
+            else { songFilter.text?.clear(); refreshSongRows() }
+            updateBottomNavState()
+        }
+        bottomTab(2, "☆ Playlist", "Playlist các bài yêu thích") {
+            if (!auth.isReady()) return@bottomTab
+            playlistMode = true
+            browseSources = false
+            selectedChatId = null
+            songFilter.text?.clear()
+            updatePlaylistButtons()
+            refreshSongRows()
+            updateBottomNavState()
+        }
+        bottomTab(3, "▶ Đang phát", "Mở trình phát nhạc toàn màn hình") {
+            showFullPlayer()
+        }
         logout = uiButton("Đăng xuất Telegram").apply {
             textSize = 11f
             isEnabled = false
@@ -1024,6 +1352,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
         menu.menu.add(0, 5, 5, "Nhóm / kênh / bot Telegram")
         menu.menu.add(0, 6, 6, "Chọn tệp nhạc (Google Drive / thiết bị)")
         menu.menu.add(0, 7, 7, "Đăng xuất Telegram")
+        val themeLabel = if (currentThemePreset == UiThemePolicy.ThemePreset.PORTRAIT_EDGE_PRO) {
+            "Giao diện: Portrait Edge-to-Edge Pro ✓"
+        } else {
+            "Giao diện: Cổ điển (Classic) ✓"
+        }
+        menu.menu.add(0, 8, 8, themeLabel)
         menu.setOnMenuItemClickListener {
             val user = library.authorizedUser()?.value ?: 0L
             when (it.itemId) {
@@ -1065,6 +1399,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         .setPositiveButton("Đăng xuất") { _, _ -> logoutUser() }
                         .show()
                 }
+                8 -> toggleThemePreset()
             }
             true
         }
@@ -1082,11 +1417,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val pane = CarPaneLayoutPolicy.modeFor(width, height)
         val short = height in 1..600
         val narrow = pane == CarPaneLayoutPolicy.Mode.NARROW
+        val wide = pane == CarPaneLayoutPolicy.Mode.WIDE
         isShortLayout = short
-        mainRoot.setPadding(dp(if (narrow) 6 else 12),
-            dp(if (short) 2 else 6),
-            dp(if (narrow) 6 else 12),
-            dp(3))
+        isNarrowLayout = narrow
+        isWideLayout = wide
+        applyRootWindowInsets()
         if (::topBar.isInitialized) {
             topBar.layoutParams.height = dp(if (short) 36 else 48)
         }
@@ -1098,20 +1433,31 @@ class TelegramPreviewActivity : AppCompatActivity() {
             overflowButton.textSize = if (short) 16f else 21f
             overflowButton.setPadding(0, 0, 0, 0)
         }
-        titleHeader.textSize = if (short) 17f else 22f
+        titleHeader.textSize = if (short) 17f else 21f
+        updateSyncHeaderSubtitle()
         note.visibility = if (auth.isReady() || short) View.GONE else View.VISIBLE
         collapsibleNavigation.visibility = if (auth.isReady()) View.GONE else View.VISIBLE
-        navigationRow.visibility = if (navigationCollapsed) View.GONE else View.VISIBLE
-        if (::navigationRow.isInitialized) {
-            navigationRow.layoutParams.height = dp(if (short) 38 else 45)
-            for (i in 0 until navigationRow.childCount) {
-                val child = navigationRow.getChildAt(i)
-                child.layoutParams.height = dp(if (short) 36 else 48)
-                if (child is TextView) {
-                    child.textSize = if (narrow) 10.5f else 12f
-                    child.minHeight = dp(if (short) 32 else 45)
-                    child.minimumHeight = dp(if (short) 32 else 45)
-                    child.setPadding(dp(2), 0, dp(2), 0)
+        val isEdgeProPortrait = currentThemePreset == UiThemePolicy.ThemePreset.PORTRAIT_EDGE_PRO && !wide
+        if (isEdgeProPortrait) {
+            navigationRow.visibility = View.GONE
+            if (::bottomNavBar.isInitialized) {
+                bottomNavBar.visibility = if (auth.isReady()) View.VISIBLE else View.GONE
+                updateBottomNavState()
+            }
+        } else {
+            if (::bottomNavBar.isInitialized) bottomNavBar.visibility = View.GONE
+            navigationRow.visibility = if (navigationCollapsed || !auth.isReady()) View.GONE else View.VISIBLE
+            if (::navigationRow.isInitialized) {
+                navigationRow.layoutParams.height = dp(if (short) 38 else 45)
+                for (i in 0 until navigationRow.childCount) {
+                    val child = navigationRow.getChildAt(i)
+                    child.layoutParams.height = dp(if (short) 36 else 48)
+                    if (child is TextView) {
+                        child.textSize = if (narrow) 10.5f else 12f
+                        child.minHeight = dp(if (short) 32 else 45)
+                        child.minimumHeight = dp(if (short) 32 else 45)
+                        child.setPadding(dp(2), 0, dp(2), 0)
+                    }
                 }
             }
         }
@@ -1133,20 +1479,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // cannot steal most of a short split-screen pane.
         miniOpenPlayer.visibility = View.GONE
         nowPlayingTitle.maxLines = 1
-        nowPlayingTitle.textSize = if (short) 12.5f else 15f
-        nowPlayingTitle.setPadding(0, dp(if (short) 2 else 4), 0, dp(if (short) 2 else 8))
+        nowPlayingTitle.textSize = if (short) 12.5f else 14f
+        nowPlayingTitle.setPadding(0, dp(if (short) 1 else 2), 0, dp(if (short) 1 else 2))
+        if (::nowPlayingSubtitle.isInitialized) {
+            nowPlayingSubtitle.textSize = if (short) 10f else 11.5f
+        }
         if (::miniControls.isInitialized) {
-            miniControls.layoutParams.height = dp(if (short) 38 else 45)
-            for (i in 0 until miniControls.childCount) {
-                val child = miniControls.getChildAt(i)
-                child.layoutParams.height = dp(if (short) 36 else 45)
-                if (child is TextView) {
-                    child.minHeight = dp(if (short) 32 else 45)
-                    child.minimumHeight = dp(if (short) 32 else 45)
-                    child.textSize = if (short) 17f else 20f
-                    child.setPadding(0, 0, 0, 0)
-                }
-            }
+            miniControls.layoutParams.height = dp(if (short) 36 else 44)
         }
         tracks.clipToPadding = false
         if (::adapter.isInitialized) adapter.notifyDataSetChanged()
@@ -1175,6 +1514,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun showFullPlayer() {
         val dialog = fullPlayer ?: NowPlayingFullScreenDialog(
             this,
+            themeTokens = { themeTokens },
             media = { player },
             downloadProgress = {
                 val uri = player?.currentMediaItem?.localConfiguration?.uri
@@ -1261,6 +1601,22 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 })
                 addView(uiButton("Đóng").apply { setOnClickListener { popup.dismiss() } })
             }
+            ViewCompat.setOnApplyWindowInsetsListener(wrapper) { _, insets ->
+                val systemBars = insets.getInsets(
+                    WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+                )
+                val computed = WindowInsetsPolicy.computeDialogRootPadding(
+                    systemBars = WindowInsetsPolicy.Insets(
+                        systemBars.left, systemBars.top, systemBars.right, systemBars.bottom
+                    ),
+                    displayCutout = WindowInsetsPolicy.Insets.ZERO,
+                    baseHorizontal = dp(18),
+                    baseTop = dp(18),
+                    baseBottom = dp(18)
+                )
+                wrapper.setPadding(computed.left, computed.top, computed.right, computed.bottom)
+                insets
+            }
             popup.setContentView(wrapper)
             popup.show()
             popup.window?.apply {
@@ -1269,6 +1625,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     android.view.ViewGroup.LayoutParams.WRAP_CONTENT
                 )
                 navigationBarColor = midnight
+                statusBarColor = midnight
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                    setDecorFitsSystemWindows(false)
+                }
             }
             return
         }
@@ -1276,10 +1636,6 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val at = list.indexOfFirst { it.messageId == selected }.coerceAtLeast(0)
         val from = 0
         val excerpt = list // ListView virtualizes rows; don't silently omit later tracks.
-        // Dark, native-feeling queue with the SAME song typography and rounded
-        // tiles as the library. It is the source's LOGICAL ordered playlist;
-        // unloaded Telegram files are labelled, not falsely claimed to be in
-        // the small already-cached Media3 transport queue.
         val popup = android.app.Dialog(this, android.R.style.Theme_Material_NoActionBar)
         queueDialog = popup
         popup.setOnDismissListener { if (queueDialog === popup) queueDialog = null }
@@ -1287,6 +1643,22 @@ class TelegramPreviewActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(14), dp(16), dp(16))
             setBackgroundColor(midnight)
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(container) { _, insets ->
+            val systemBars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            val computed = WindowInsetsPolicy.computeDialogRootPadding(
+                systemBars = WindowInsetsPolicy.Insets(
+                    systemBars.left, systemBars.top, systemBars.right, systemBars.bottom
+                ),
+                displayCutout = WindowInsetsPolicy.Insets.ZERO,
+                baseHorizontal = dp(16),
+                baseTop = dp(14),
+                baseBottom = dp(16)
+            )
+            container.setPadding(computed.left, computed.top, computed.right, computed.bottom)
+            insets
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1363,6 +1735,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT)
             navigationBarColor = midnight
             statusBarColor = midnight
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                setDecorFitsSystemWindows(false)
+            }
         }
         rows.setSelection((at - from - 2).coerceAtLeast(0))
     }
@@ -1432,6 +1807,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     libraryTitle.text = "NGUỒN NHẠC TELEGRAM  ·  $sourceCount nhóm/kênh/chat"
                     sourcesButton.text = "☷  Nhóm / kênh / bot ($sourceCount)"
                     songFilter.hint = "Tìm nhóm, kênh hoặc bot…"
+                    updateBottomNavState()
+                    updateSyncHeaderSubtitle()
                 }
             } else {
                 val (loadedSongs, totalDisplayCount) = if (isPlaylist) {
@@ -1479,6 +1856,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     }
                     sourcesButton.text = "‹  Trở về nhóm / kênh ($sourceCount)"
                     songFilter.hint = "Tìm bài hát theo tên…"
+                    updateBottomNavState()
+                    updateSyncHeaderSubtitle()
                 }
             }
         }
@@ -2764,6 +3143,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (::mainRoot.isInitialized) mainRoot.removeCallbacks(miniPlayerProgressTick)
         fullPlayer?.dismiss()
         fullPlayer = null
         queueDialog?.dismiss()
