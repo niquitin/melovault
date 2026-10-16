@@ -7,9 +7,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.content.res.Configuration
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.media.MediaMetadataRetriever
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.MotionEvent
@@ -82,8 +87,24 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val chatId: Long,
         val expectedSize: Long = -1L,
         val rawMessageId: Long = 0L,
+        val performer: String? = null,
+        val durationSeconds: Int = 0,
+        val sourceTitle: String? = null,
     ) {
         val genuineMessageId: Long get() = if (rawMessageId > 0L) rawMessageId else messageId
+    }
+
+    private class SongRowViewHolder(
+        val artFrame: FrameLayout,
+        val artImage: ImageView,
+        val artPlaceholder: TextView,
+        val titleView: TextView,
+        val subtitleView: TextView
+    )
+
+    private val thumbnailCache = android.util.LruCache<Long, Bitmap>(60)
+    private val thumbnailExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "MeloVault-ThumbLoader").apply { priority = Thread.MIN_PRIORITY }
     }
     private val library = TelegramAccountLibrary()
     private val auth = TelegramAuthorizationFlow(library)
@@ -116,6 +137,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var bottomNavBar: LinearLayout
     private val bottomNavButtons = mutableListOf<Button>()
     private lateinit var miniProgressBar: ProgressBar
+    private lateinit var miniArtFrame: FrameLayout
+    private lateinit var miniArtImage: ImageView
+    private lateinit var miniArtPlaceholder: TextView
     private lateinit var nowPlayingSubtitle: TextView
     private lateinit var titleHeader: TextView
     private lateinit var navigationRow: LinearLayout
@@ -346,9 +370,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val titleText = mediaItem?.mediaMetadata?.title ?: "Chọn một bài hát để bắt đầu"
             nowPlayingTitle.text = titleText
             if (::nowPlayingSubtitle.isInitialized) {
-                nowPlayingSubtitle.text = if (mediaItem != null) "Telegram · Đang phát" else "Telegram · MeloVault"
+                val artist = mediaItem?.mediaMetadata?.artist?.toString()?.takeIf { it.isNotBlank() }
+                nowPlayingSubtitle.text = if (mediaItem != null) {
+                    listOfNotNull(artist, "Telegram · Đang phát").joinToString(" · ")
+                } else "Telegram · MeloVault"
             }
             updateMiniPlayerProgress()
+            updateMiniPlayerCover(mediaItem)
             val id = mediaItem?.mediaId?.removePrefix("telegram:")?.toLongOrNull()
             currentSongIndex = if (mediaItem?.mediaId?.startsWith("telegram:") == true) {
                 songs.indexOfFirst { it.messageId == id }
@@ -381,6 +409,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 updatePlaylistButtons()
                 nowPlayingTitle.text = controller.currentMediaItem?.mediaMetadata?.title
                     ?: "Chọn một bài hát để bắt đầu"
+                updateMiniPlayerCover(controller.currentMediaItem)
                 pendingPlayback?.let { pending ->
                     pendingPlayback = null
                     startPlayback(controller, pending.items, pending.startIndex)
@@ -564,15 +593,107 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun updateSyncHeaderSubtitle() {
         if (!::syncSubtitle.isInitialized) return
-        val count = songs.size
-        val countLabel = if (count > 0) "${String.format(java.util.Locale.US, "%,d", count)} bài" else "Chưa có bài"
-        val stateLabel = when {
-            globalScanLoading -> "Đang đồng bộ…"
-            syncCoordinator?.isBusy() == true -> "Đang đồng bộ…"
-            auth.isReady() -> "Đã đồng bộ"
-            else -> "Chờ kết nối"
+        val isSyncing = globalScanLoading || syncCoordinator?.isBusy() == true
+        val isAuth = auth.isReady()
+        val isSources = (allChatsMode && browseSources && !playlistMode)
+        val text = TelegramLibrarySyncDisplayPolicy.formatSyncSubtitle(
+            displayedCount = shownSongs.size,
+            totalIndexedCount = totalCountForCurrentView,
+            isSyncing = isSyncing,
+            isAuthenticated = isAuth,
+            isSourcesMode = isSources,
+            sourceCount = visibleSourceIds.size,
+            selectedSourceTitle = selectedChatId?.let { sourceNames[it] }
+        )
+        syncSubtitle.text = text
+    }
+
+    private fun bindSongThumbnail(
+        messageId: Long,
+        localFile: File,
+        imageView: ImageView,
+        placeholder: TextView
+    ) {
+        val cached = thumbnailCache.get(messageId)
+        if (cached != null) {
+            imageView.tag = messageId
+            imageView.setImageBitmap(cached)
+            placeholder.visibility = View.GONE
+            return
         }
-        syncSubtitle.text = "$countLabel  ·  $stateLabel"
+        imageView.tag = messageId
+        imageView.setImageDrawable(null)
+        placeholder.visibility = View.VISIBLE
+
+        thumbnailExecutor.execute {
+            if (isDestroyed || isFinishing) return@execute
+            val bitmap = runCatching {
+                val extractor = MediaMetadataRetriever()
+                try {
+                    extractor.setDataSource(localFile.path)
+                    val bytes = extractor.embeddedPicture
+                    if (bytes != null && bytes.isNotEmpty()) {
+                        val sample = TelegramSongDisplayPolicy.computeSample(bytes.size, 96, 96)
+                        BitmapFactory.decodeByteArray(
+                            bytes, 0, bytes.size,
+                            BitmapFactory.Options().apply { inSampleSize = sample }
+                        )
+                    } else null
+                } finally {
+                    extractor.release()
+                }
+            }.getOrNull()
+
+            if (bitmap != null) {
+                thumbnailCache.put(messageId, bitmap)
+                runOnUiThread {
+                    if (!isDestroyed && imageView.tag == messageId) {
+                        imageView.setImageBitmap(bitmap)
+                        placeholder.visibility = View.GONE
+                    }
+                }
+            }
+        }
+    }
+
+    private fun updateMiniPlayerCover(mediaItem: MediaItem?) {
+        if (!::miniArtImage.isInitialized || !::miniArtPlaceholder.isInitialized) return
+        if (mediaItem == null) {
+            miniArtImage.setImageDrawable(null)
+            miniArtPlaceholder.visibility = View.VISIBLE
+            return
+        }
+        val id = mediaItem.mediaId.removePrefix("telegram:").toLongOrNull()
+        if (id != null) {
+            val cached = thumbnailCache.get(id)
+            if (cached != null) {
+                miniArtImage.setImageBitmap(cached)
+                miniArtPlaceholder.visibility = View.GONE
+                return
+            }
+            val localPath = cachedSongPaths[id]
+            if (localPath != null) {
+                val localFile = File(localPath)
+                if (localFile.isFile) {
+                    bindSongThumbnail(id, localFile, miniArtImage, miniArtPlaceholder)
+                    return
+                }
+            }
+        }
+        val artData = mediaItem.mediaMetadata.artworkData
+        if (artData != null && artData.isNotEmpty()) {
+            val bmp = runCatching {
+                BitmapFactory.decodeByteArray(artData, 0, artData.size)
+            }.getOrNull()
+            if (bmp != null) {
+                if (id != null) thumbnailCache.put(id, bmp)
+                miniArtImage.setImageBitmap(bmp)
+                miniArtPlaceholder.visibility = View.GONE
+                return
+            }
+        }
+        miniArtImage.setImageDrawable(null)
+        miniArtPlaceholder.visibility = View.VISIBLE
     }
 
     private fun updateBottomNavState() {
@@ -623,7 +744,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
             songFilter.background = rounded(panel)
         }
         if (::tracks.isInitialized) tracks.setBackgroundColor(midnight)
-        if (::miniPlayerBar.isInitialized) miniPlayerBar.background = rounded(panel, 12)
+        if (::miniPlayerBar.isInitialized) miniPlayerBar.background = rounded(panel, 14, strokeColor = border)
+        if (::miniArtFrame.isInitialized) miniArtFrame.background = rounded(card, 8)
+        if (::miniArtPlaceholder.isInitialized) miniArtPlaceholder.setTextColor(accent)
         if (::nowPlayingTitle.isInitialized) nowPlayingTitle.setTextColor(ink)
         if (::nowPlayingSubtitle.isInitialized) nowPlayingSubtitle.setTextColor(subtle)
         if (::playPause.isInitialized) {
@@ -642,11 +765,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
         if (::sourcesAdapter.isInitialized) sourcesAdapter.notifyDataSetChanged()
     }
 
-    private fun rounded(color: Int, radius: Int = 14): GradientDrawable =
+    private fun rounded(color: Int, radius: Int = 14, strokeColor: Int? = null, strokeWidthDp: Int = 1): GradientDrawable =
         GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = dp(radius).toFloat()
             setColor(color)
+            if (strokeColor != null) {
+                setStroke(dp(strokeWidthDp), strokeColor)
+            }
         }
 
     private fun uiButton(label: String, primary: Boolean = false): Button =
@@ -1000,7 +1126,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
                                     val more = if (nextOffset < count) {
                                         db.getSongs(userId, chatId = currentChat, searchQuery = q, offset = nextOffset, limit = 200)
                                     } else emptyList()
-                                    val mapped = more.map { Song(it.fileId, it.title, it.filename, it.songKey, it.chatId, it.fileSize, rawMessageId = it.messageId) }
+                                    val mapped = more.map {
+                                        Song(
+                                            it.fileId, it.title, it.filename, it.songKey, it.chatId, it.fileSize,
+                                            rawMessageId = it.messageId,
+                                            performer = it.performer,
+                                            durationSeconds = it.durationSeconds,
+                                            sourceTitle = it.sourceTitle
+                                        )
+                                    }
                                     runOnUiThread {
                                         if (uiQueryGeneration.get() == currentGen &&
                                             shownSongs.size == nextOffset &&
@@ -1011,6 +1145,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                                             this@TelegramPreviewActivity.adapter.addAll(
                                                 mapped.map { TelegramSongDisplayPolicy.label(it.title, it.filename) }
                                             )
+                                            updateSyncHeaderSubtitle()
                                         }
                                         isLoadingMoreSongs = false
                                     }
@@ -1062,50 +1197,93 @@ class TelegramPreviewActivity : AppCompatActivity() {
         adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_list_item_1,
             mutableListOf()) {
             override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
-                val layout = if (convertView is LinearLayout && convertView.childCount == 2) {
-                    convertView
+                val holder: SongRowViewHolder
+                val rootLayout: LinearLayout
+                if (convertView is LinearLayout && convertView.tag is SongRowViewHolder) {
+                    rootLayout = convertView
+                    holder = convertView.tag as SongRowViewHolder
                 } else {
-                    LinearLayout(this@TelegramPreviewActivity).apply {
-                        orientation = LinearLayout.VERTICAL
-                        val tView = TextView(this@TelegramPreviewActivity)
-                        val sView = TextView(this@TelegramPreviewActivity)
-                        addView(tView)
-                        addView(sView)
+                    rootLayout = LinearLayout(this@TelegramPreviewActivity).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
                     }
+                    val artFrame = FrameLayout(this@TelegramPreviewActivity).apply {
+                        rootLayout.addView(this, LinearLayout.LayoutParams(dp(42), dp(42)).apply {
+                            rightMargin = dp(12)
+                        })
+                    }
+                    val artImage = ImageView(this@TelegramPreviewActivity).apply {
+                        scaleType = ImageView.ScaleType.CENTER_CROP
+                        artFrame.addView(this, FrameLayout.LayoutParams(-1, -1))
+                    }
+                    val artPlaceholder = TextView(this@TelegramPreviewActivity).apply {
+                        text = "♫"
+                        textSize = 18f
+                        gravity = Gravity.CENTER
+                        setTypeface(null, Typeface.BOLD)
+                        artFrame.addView(this, FrameLayout.LayoutParams(-1, -1))
+                    }
+                    val textColumn = LinearLayout(this@TelegramPreviewActivity).apply {
+                        orientation = LinearLayout.VERTICAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        rootLayout.addView(this, LinearLayout.LayoutParams(0, -2, 1f))
+                    }
+                    val titleView = TextView(this@TelegramPreviewActivity)
+                    val subtitleView = TextView(this@TelegramPreviewActivity)
+                    textColumn.addView(titleView)
+                    textColumn.addView(subtitleView)
+                    holder = SongRowViewHolder(artFrame, artImage, artPlaceholder, titleView, subtitleView)
+                    rootLayout.tag = holder
                 }
-                val titleView = layout.getChildAt(0) as TextView
-                val subtitleView = layout.getChildAt(1) as TextView
+
                 val song = shownSongs.getOrNull(position)
                 val isCurrent = (song != null && song.messageId == currentTelegramMessageId())
                 val songLabel = song?.let { TelegramSongDisplayPolicy.label(it.title, it.filename) }
                     ?: getItem(position).orEmpty()
 
-                titleView.text = (if (isCurrent) "▶ " else "") + songLabel
-                titleView.textSize = if (isShortLayout) 13.5f else 15f
-                titleView.setTextColor(if (isCurrent) accent else ink)
-                titleView.maxLines = 1
-                titleView.ellipsize = android.text.TextUtils.TruncateAt.END
-                titleView.setTypeface(null, if (isCurrent) Typeface.BOLD else Typeface.NORMAL)
+                holder.titleView.text = (if (isCurrent) "▶ " else "") + songLabel
+                holder.titleView.textSize = if (isShortLayout) 13.5f else 15f
+                holder.titleView.setTextColor(if (isCurrent) accent else ink)
+                holder.titleView.maxLines = 1
+                holder.titleView.ellipsize = android.text.TextUtils.TruncateAt.END
+                holder.titleView.setTypeface(null, if (isCurrent) Typeface.BOLD else Typeface.NORMAL)
 
                 val local = song?.let { cachedSongPaths[it.messageId]?.let { p -> File(p) } }
                 val isDownloaded = local?.isFile == true && TelegramAccountStoragePolicy.isOwnedFile(filesRoot, local)
-                val statusLabel = if (isDownloaded) "Đã tải" else "Chưa tải"
-                val sizeLabel = song?.expectedSize?.takeIf { it > 0L }?.let {
-                    String.format(java.util.Locale.US, "%.1f MB", it / 1_000_000.0)
-                }
-                val parts = listOfNotNull("Telegram", statusLabel, sizeLabel)
-                subtitleView.text = parts.joinToString(" · ")
-                subtitleView.textSize = if (isShortLayout) 10.5f else 12f
-                subtitleView.setTextColor(subtle)
-                subtitleView.setPadding(0, dp(2), 0, 0)
-                subtitleView.maxLines = 1
-                subtitleView.ellipsize = android.text.TextUtils.TruncateAt.END
 
-                layout.background = rounded(panel, 12)
+                holder.subtitleView.text = if (song != null) {
+                    TelegramSongDisplayPolicy.subtitle(
+                        source = song.sourceTitle ?: (sourceNames[song.chatId] ?: "Telegram"),
+                        isDownloaded = isDownloaded,
+                        fileSizeBytes = song.expectedSize,
+                        durationSeconds = song.durationSeconds,
+                        performer = song.performer
+                    )
+                } else {
+                    "Telegram · Chưa tải"
+                }
+                holder.subtitleView.textSize = if (isShortLayout) 10.5f else 12f
+                holder.subtitleView.setTextColor(subtle)
+                holder.subtitleView.setPadding(0, dp(2), 0, 0)
+                holder.subtitleView.maxLines = 1
+                holder.subtitleView.ellipsize = android.text.TextUtils.TruncateAt.END
+
+                holder.artFrame.background = rounded(card, 8)
+                holder.artPlaceholder.setTextColor(if (isCurrent) accent else subtle)
+
+                if (song != null && isDownloaded && local != null) {
+                    bindSongThumbnail(song.messageId, local, holder.artImage, holder.artPlaceholder)
+                } else {
+                    holder.artImage.tag = null
+                    holder.artImage.setImageDrawable(null)
+                    holder.artPlaceholder.visibility = View.VISIBLE
+                }
+
+                rootLayout.background = rounded(panel, 12)
                 val padV = dp(if (isShortLayout) 6 else 10)
-                layout.setPadding(dp(14), padV, dp(14), padV)
-                layout.minimumHeight = dp(if (isShortLayout) 46 else 62)
-                return layout
+                rootLayout.setPadding(dp(12), padV, dp(14), padV)
+                rootLayout.minimumHeight = dp(if (isShortLayout) 48 else 62)
+                return rootLayout
             }
         }
         sourcesAdapter = object : ArrayAdapter<String>(this,
@@ -1117,15 +1295,36 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     convertView
                 } else {
                     LinearLayout(this@TelegramPreviewActivity).apply {
-                        orientation = LinearLayout.VERTICAL
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        val iconFrame = FrameLayout(this@TelegramPreviewActivity).apply {
+                            addView(TextView(this@TelegramPreviewActivity).apply {
+                                text = "☷"
+                                textSize = 18f
+                                gravity = Gravity.CENTER
+                                setTextColor(accent)
+                                setTypeface(null, Typeface.BOLD)
+                            }, FrameLayout.LayoutParams(-1, -1))
+                        }
+                        val textCol = LinearLayout(this@TelegramPreviewActivity).apply {
+                            orientation = LinearLayout.VERTICAL
+                            gravity = Gravity.CENTER_VERTICAL
+                        }
                         val tView = TextView(this@TelegramPreviewActivity)
                         val sView = TextView(this@TelegramPreviewActivity)
-                        addView(tView)
-                        addView(sView)
+                        textCol.addView(tView)
+                        textCol.addView(sView)
+                        addView(iconFrame, LinearLayout.LayoutParams(dp(42), dp(42)).apply {
+                            rightMargin = dp(12)
+                        })
+                        addView(textCol, LinearLayout.LayoutParams(0, -2, 1f))
                     }
                 }
-                val titleView = layout.getChildAt(0) as TextView
-                val subtitleView = layout.getChildAt(1) as TextView
+                val iconFrame = layout.getChildAt(0) as FrameLayout
+                iconFrame.background = rounded(card, 8)
+                val textCol = layout.getChildAt(1) as LinearLayout
+                val titleView = textCol.getChildAt(0) as TextView
+                val subtitleView = textCol.getChildAt(1) as TextView
                 val sourceText = getItem(position).orEmpty()
 
                 titleView.text = sourceText
@@ -1142,8 +1341,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
                 layout.background = rounded(panel, 11)
                 val padV = dp(if (isShortLayout) 6 else 10)
-                layout.setPadding(dp(14), padV, dp(14), padV)
-                layout.minimumHeight = dp(if (isShortLayout) 42 else 58)
+                layout.setPadding(dp(12), padV, dp(14), padV)
+                layout.minimumHeight = dp(if (isShortLayout) 44 else 58)
                 return layout
             }
         }
@@ -1167,7 +1366,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         root.addView(tracks, LinearLayout.LayoutParams(-1, 0, 1f))
         miniPlayerBar = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = rounded(panel, 12)
+            background = rounded(panel, 14, strokeColor = border)
             setPadding(dp(8), dp(4), dp(8), dp(4))
             root.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
                 topMargin = dp(3)
@@ -1186,11 +1385,32 @@ class TelegramPreviewActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
             miniPlayerBar.addView(this, LinearLayout.LayoutParams(-1, -2))
         }
+        val miniArtFrameView = FrameLayout(this).apply {
+            background = rounded(card, 8)
+            setOnClickListener { showFullPlayer() }
+            miniContentRow.addView(this, LinearLayout.LayoutParams(dp(42), dp(42)).apply {
+                leftMargin = dp(4)
+                rightMargin = dp(8)
+            })
+        }
+        miniArtFrame = miniArtFrameView
+        miniArtImage = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            miniArtFrame.addView(this, FrameLayout.LayoutParams(-1, -1))
+        }
+        miniArtPlaceholder = TextView(this).apply {
+            text = "♫"
+            textSize = 20f
+            gravity = Gravity.CENTER
+            setTextColor(accent)
+            setTypeface(null, Typeface.BOLD)
+            miniArtFrame.addView(this, FrameLayout.LayoutParams(-1, -1))
+        }
         val miniInfoColumn = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setOnClickListener { showFullPlayer() }
             miniContentRow.addView(this, LinearLayout.LayoutParams(0, -2, 1f).apply {
-                leftMargin = dp(4)
+                leftMargin = dp(2)
                 rightMargin = dp(6)
             })
         }
@@ -1821,7 +2041,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     val filterQuery = q.takeIf { it.isNotBlank() }
                     val count = db.getSongCount(userId, chatId = currentChatId, searchQuery = filterQuery)
                     val page = db.getSongs(userId, chatId = currentChatId, searchQuery = filterQuery, offset = 0, limit = 200)
-                        .map { Song(it.fileId, it.title, it.filename, it.songKey, it.chatId, it.fileSize, rawMessageId = it.messageId) }
+                        .map {
+                            Song(
+                                it.fileId, it.title, it.filename, it.songKey, it.chatId, it.fileSize,
+                                rawMessageId = it.messageId,
+                                performer = it.performer,
+                                durationSeconds = it.durationSeconds,
+                                sourceTitle = it.sourceTitle
+                            )
+                        }
                     Pair(page, count)
                 } else if (currentChatId != null) {
                     val chatSongs = songs.filter { it.chatId == currentChatId }
@@ -2467,10 +2695,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
             }
         }
+        val performer = attachment.optString("performer").takeIf { it.isNotBlank() }
+        val duration = attachment.optInt("duration")
         return Song(fileId, title, filename, key, chatId,
             file.optLong("size").takeIf { it > 0 }
                 ?: file.optLong("expected_size").takeIf { it > 0 } ?: -1L,
-            rawMessageId = messageId)
+            rawMessageId = messageId,
+            performer = performer,
+            durationSeconds = duration,
+            sourceTitle = sourceNames[chatId])
     }
 
     private fun resetSource(modeAllChats: Boolean) {
@@ -2571,7 +2804,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     songs.clear()
                     seenSongMessageIds.clear()
                     for (s in initialSongs) {
-                        val song = Song(s.fileId, s.title, s.filename, s.songKey, s.chatId, s.fileSize, rawMessageId = s.messageId)
+                        val song = Song(
+                            s.fileId, s.title, s.filename, s.songKey, s.chatId, s.fileSize,
+                            rawMessageId = s.messageId,
+                            performer = s.performer,
+                            durationSeconds = s.durationSeconds,
+                            sourceTitle = s.sourceTitle
+                        )
                         songs.add(song)
                         seenSongMessageIds.add(song.messageId)
                     }
@@ -3151,6 +3390,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         clearPendingQrLink()
         syncCoordinator?.cancelSync()
         dbExecutor.shutdownNow()
+        thumbnailExecutor.shutdownNow()
+        thumbnailCache.evictAll()
         if (libraryDb is AndroidTelegramLibraryDatabase) {
             runCatching { (libraryDb as AndroidTelegramLibraryDatabase).close() }
         }

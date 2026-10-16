@@ -3,24 +3,24 @@ import time
 import os
 import sys
 
-ADB = ["adb", "-s", "QV725WEQ54"]
-OUT_DIR = r"Z:\MusicAssistant\AgentBridge\artifacts\e91-shareable\screenshots_e93_01"
+DEVICE_ID = "QV725WEQ54"
+OUT_DIR = r"Z:\MusicAssistant\AgentBridge\artifacts\e91-shareable\screenshots_e93_01b"
 
 def run(cmd):
     print("RUN:", cmd)
     res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-    if res.returncode != 0:
+    if res.returncode != 0 and res.stderr:
         print("WARN:", res.stderr.strip())
     return res.stdout.strip()
 
 def adb_shell(cmd):
-    return run(f"adb -s QV725WEQ54 shell \"{cmd}\"")
+    return run(f'adb -s {DEVICE_ID} shell "{cmd}"')
 
 def capture(name):
     path = os.path.join(OUT_DIR, name)
     print(f"Capturing screenshot: {path}")
     with open(path, "wb") as f:
-        res = subprocess.run(["adb", "-s", "QV725WEQ54", "exec-out", "screencap", "-p"], stdout=f)
+        subprocess.run(["adb", "-s", DEVICE_ID, "exec-out", "screencap", "-p"], stdout=f)
     size = os.path.getsize(path)
     print(f"Captured {name}: {size} bytes")
     return size
@@ -36,46 +36,44 @@ def restore():
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     try:
-        # Step 1: Ensure native portrait 1080x2520 @420dpi
+        # Step 0: Ensure native physical portrait 1080x2520 @420dpi
         restore()
         adb_shell("settings put system accelerometer_rotation 0")
         adb_shell("settings put system user_rotation 0")
         adb_shell("am start -n app.melovault.player/com.bsdung.musicassistantcar.data.telegram.TelegramPreviewActivity")
         time.sleep(3)
 
-        # 01: Native portrait main library with playing mini-player
+        # Ensure track 0 is playing so mini-player has live playing state
+        adb_shell("input tap 540 560")
+        time.sleep(2)
+
+        # 01: Native portrait main library with playing mini-player & thumbnail rows
         capture("01_sony_portrait_edge_pro_playing.png")
 
-        # 02: Open full screen Now Playing dialog (tap mini-player or tab 'Đang phát')
-        # Tap tab 'Đang phát' at bounds [801,2257][1048,2378] -> center (924, 2317)
+        # 02: Open full screen Now Playing dialog
+        # Tap '▶ Đang phát' at center (924, 2317)
         adb_shell("input tap 924 2317")
         time.sleep(2)
         capture("02_sony_portrait_full_player.png")
 
         # 03: Open Queue dialog from full player
-        # In NowPlaying, 'Hàng đợi' button is in extras row near bottom
-        # Let's tap 'Hàng đợi' or call showUpcomingQueue
-        # Let's find queue button coordinates or tap center right near bottom
-        adb_shell("uiautomator dump /sdcard/ui.xml")
-        res = adb_shell("grep -o 'bounds=\"\\[[0-9]*,[0-9]*\\]\\[[0-9]*,[0-9]*\\]\"' /sdcard/ui.xml | tail -n 10")
-        print("Full player dump bounds:", res)
-        # Tap queue button (approx center bottom right)
+        # Tap queue button (center bottom right of full player, ~780, 2160)
         adb_shell("input tap 780 2160")
         time.sleep(2)
         capture("03_sony_portrait_queue.png")
-        # Close queue dialog by tapping "Xong" (approx top right)
-        adb_shell("input tap 950 160")
+        # Close queue dialog by tapping "Xong" or back
+        adb_shell("input keyevent KEYCODE_BACK")
         time.sleep(1)
-        # Close full player by tapping "⌄" (approx top left)
-        adb_shell("input tap 100 160")
+        # Close full player by back key
+        adb_shell("input keyevent KEYCODE_BACK")
         time.sleep(1)
 
-        # 04: Sources tab (tap '☷ Nguồn' at [288,2257][534,2378] -> center 411, 2317)
+        # 04: Sources tab (tap '☷ Nguồn' at center 411, 2317)
         adb_shell("input tap 411 2317")
         time.sleep(2)
         capture("04_sony_portrait_sources.png")
 
-        # 05: Playlist tab (tap '☆ Playlist' at [544,2257][791,2378] -> center 667, 2317)
+        # 05: Playlist tab (tap '☆ Playlist' at center 667, 2317)
         adb_shell("input tap 667 2317")
         time.sleep(2)
         capture("05_sony_portrait_playlist.png")
@@ -85,21 +83,21 @@ def main():
         time.sleep(1)
 
         # 06: Search / IME keyboard active
-        # Tap search box near top [16, 380][1064, 480] -> center 540, 430
-        adb_shell("input tap 540 430")
+        # Tap search box near top (540, 400)
+        adb_shell("input tap 540 400")
         time.sleep(2)
         capture("06_sony_portrait_search_ime.png")
-        # Hide keyboard
+        # Hide keyboard cleanly
         adb_shell("input keyevent KEYCODE_BACK")
         time.sleep(1)
 
         # 07: Overflow menu showing theme switcher
-        # Overflow button is at top right: bounds [975, 100][1064, 200] -> center 1020, 150
-        adb_shell("input tap 1020 150")
+        # Overflow button is at top right: center 1000, 150
+        adb_shell("input tap 1000 150")
         time.sleep(2)
         capture("07_sony_portrait_overflow_theme.png")
-        # Close overflow by tapping outside
-        adb_shell("input tap 500 1000")
+        # Cleanly dismiss overflow popup menu WITHOUT clicking any items
+        adb_shell("input keyevent KEYCODE_BACK")
         time.sleep(1)
 
         # 08: Sony native landscape (2520x1080 @420dpi)
