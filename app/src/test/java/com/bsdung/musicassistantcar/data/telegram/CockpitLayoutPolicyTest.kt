@@ -235,6 +235,113 @@ class CockpitLayoutPolicyTest {
         assertNull(emptyBadge)
     }
 
+    @Test
+    fun formatAudioBadge_rawPcmWithMp3Source_suppressesPcmBitrateAndLabelsMp3() {
+        val badge = CockpitLayoutPolicy.formatAudioBadge(
+            sampleMimeType = "audio/raw",
+            sampleRate = 44100,
+            channelCount = 2,
+            bitrate = 1411200, // Decoded PCM throughput - must be suppressed
+            sourceFileName = "Summer_Vibes_2026.mp3"
+        )
+        assertEquals("MP3 · 44.1 kHz · Stereo", badge)
+    }
+
+    @Test
+    fun formatAudioBadge_rawPcmWithFlacSource_suppressesPcmBitrateAndLabelsFlac() {
+        val badge = CockpitLayoutPolicy.formatAudioBadge(
+            sampleMimeType = "audio/raw",
+            sampleRate = 48000,
+            channelCount = 2,
+            bitrate = 1536000, // Decoded PCM throughput - must be suppressed
+            sourceFileName = "Lossless_Symphony.flac"
+        )
+        assertEquals("FLAC · 48.0 kHz · Stereo", badge)
+    }
+
+    @Test
+    fun formatAudioBadge_rawPcmWithWavSource_showsWavAndBitrate() {
+        val badge = CockpitLayoutPolicy.formatAudioBadge(
+            sampleMimeType = "audio/raw",
+            sampleRate = 44100,
+            channelCount = 2,
+            bitrate = 1411200,
+            sourceFileName = "Original_Studio_Master.wav"
+        )
+        assertEquals("WAV · 44.1 kHz · Stereo · 1411 kbps", badge)
+    }
+
+    @Test
+    fun formatAudioBadge_rawPcmWithUnknownSource_labelsDecodedPcmOutputAndSuppressesBitrate() {
+        val badge = CockpitLayoutPolicy.formatAudioBadge(
+            sampleMimeType = "audio/raw",
+            sampleRate = 44100,
+            channelCount = 2,
+            bitrate = 1411200,
+            sourceFileName = null
+        )
+        assertEquals("PCM (Đầu ra) · 44.1 kHz · Stereo", badge)
+    }
+
+    @Test
+    fun formatAudioBadge_compressedContainer_keepsGenuineBitrate() {
+        val badge = CockpitLayoutPolicy.formatAudioBadge(
+            sampleMimeType = "audio/mpeg",
+            sampleRate = 44100,
+            channelCount = 2,
+            bitrate = 320000,
+            sourceFileName = "track.mp3"
+        )
+        assertEquals("MP3 · 44.1 kHz · Stereo · 320 kbps", badge)
+    }
+
+    @Test
+    fun formatAudioBadge_monoChannel_formatsMono() {
+        val badge = CockpitLayoutPolicy.formatAudioBadge(
+            sampleMimeType = "audio/opus",
+            sampleRate = 48000,
+            channelCount = 1,
+            bitrate = 64000,
+            sourceFileName = "voice_note.opus"
+        )
+        assertEquals("OPUS · 48.0 kHz · Mono · 64 kbps", badge)
+    }
+
+    @Test
+    fun formatAudioBadge_neverFabricatesHiResOrUnverifiedStats() {
+        val badge = CockpitLayoutPolicy.formatAudioBadge(
+            sampleMimeType = "audio/raw",
+            sampleRate = 96000,
+            channelCount = 2,
+            bitrate = 3072000,
+            sourceFileName = "hi_def.flac"
+        )
+        assertFalse("Badge must never fabricate Hi-Res marketing claims", badge?.contains("Hi-Res") == true)
+        assertEquals("FLAC · 96.0 kHz · Stereo", badge)
+    }
+
+    // ── Landscape IME Header Collapse Policy ─────────────────────────────────
+
+    @Test
+    fun shouldCollapseHeaderForLandscapeIme_twoPaneWithIme_returnsTrue() {
+        assertTrue(CockpitLayoutPolicy.shouldCollapseHeaderForLandscapeIme(isWideOrTwoPane = true, isImeVisible = true))
+    }
+
+    @Test
+    fun shouldCollapseHeaderForLandscapeIme_twoPaneNoIme_returnsFalse() {
+        assertFalse(CockpitLayoutPolicy.shouldCollapseHeaderForLandscapeIme(isWideOrTwoPane = true, isImeVisible = false))
+    }
+
+    @Test
+    fun shouldCollapseHeaderForLandscapeIme_portraitWithIme_returnsFalse() {
+        assertFalse(CockpitLayoutPolicy.shouldCollapseHeaderForLandscapeIme(isWideOrTwoPane = false, isImeVisible = true))
+    }
+
+    @Test
+    fun shouldCollapseHeaderForLandscapeIme_portraitNoIme_returnsFalse() {
+        assertFalse(CockpitLayoutPolicy.shouldCollapseHeaderForLandscapeIme(isWideOrTwoPane = false, isImeVisible = false))
+    }
+
     // ── Song Row Fidelity and Touch Target Constraints ───────────────────────
 
     @Test

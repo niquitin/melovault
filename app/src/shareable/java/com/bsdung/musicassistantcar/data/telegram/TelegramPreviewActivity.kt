@@ -10,6 +10,7 @@ import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.media.MediaMetadataRetriever
@@ -618,6 +619,45 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
     }
 
+    private var isLandscapeImeCollapsed = false
+
+    private fun updateLandscapeImeLayout(imeVisible: Boolean, force: Boolean = false) {
+        val shouldCollapse = CockpitLayoutPolicy.shouldCollapseHeaderForLandscapeIme(
+            isWideOrTwoPane = isCockpitTwoPaneActive || isWideLayout,
+            isImeVisible = imeVisible
+        )
+        if (!force && shouldCollapse == isLandscapeImeCollapsed) return
+        isLandscapeImeCollapsed = shouldCollapse
+
+        if (shouldCollapse) {
+            if (::topBar.isInitialized) topBar.visibility = View.GONE
+            if (::navigationRow.isInitialized) navigationRow.visibility = View.GONE
+            if (::filterChipsRow.isInitialized) filterChipsRow.visibility = View.GONE
+            if (::status.isInitialized) status.visibility = View.GONE
+            if (::cockpitArtFrame.isInitialized) cockpitArtFrame.visibility = View.GONE
+        } else {
+            if (::topBar.isInitialized) topBar.visibility = View.VISIBLE
+            if (::navigationRow.isInitialized) {
+                val shouldShowNav = if (isCockpitTwoPaneActive) {
+                    auth.isReady()
+                } else {
+                    val isEdgeProPortrait = ShortWindowLayoutPolicy.shouldUseBottomNav(currentThemePreset, currentPaneMode)
+                    !isEdgeProPortrait && auth.isReady() && !navigationCollapsed
+                }
+                navigationRow.visibility = if (shouldShowNav) View.VISIBLE else View.GONE
+            }
+            if (::filterChipsRow.isInitialized) {
+                filterChipsRow.visibility = if (auth.isReady() && (!browseSources || playlistMode)) View.VISIBLE else View.GONE
+            }
+            if (::status.isInitialized) {
+                status.visibility = if (isShortLayout && !globalScanLoading) View.GONE else View.VISIBLE
+            }
+            if (::cockpitArtFrame.isInitialized) {
+                cockpitArtFrame.visibility = if (isCockpitTwoPaneActive) View.VISIBLE else View.GONE
+            }
+        }
+    }
+
     private fun applyRootWindowInsets() {
         if (!::mainRoot.isInitialized) return
         val computed = WindowInsetsPolicy.computeMainRootPadding(
@@ -930,6 +970,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun getAudioFormatBadge(controller: MediaController?): String? {
         val groups = controller?.currentTracks?.groups ?: return null
+        val currentMsgId = currentTelegramMessageId()
+        val currentSong = currentMsgId?.let { id ->
+            songs.firstOrNull { it.messageId == id } ?: shownSongs.firstOrNull { it.messageId == id }
+        }
+        val sourceFileName = currentSong?.filename
+            ?: controller.currentMediaItem?.mediaMetadata?.title?.toString()
         for (group in groups) {
             if (group.type != C.TRACK_TYPE_AUDIO) continue
             for (i in 0 until group.length) {
@@ -939,7 +985,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     sampleMimeType = format.sampleMimeType,
                     sampleRate = format.sampleRate,
                     channelCount = format.channelCount,
-                    bitrate = format.bitrate
+                    bitrate = format.bitrate,
+                    sourceFileName = sourceFileName
                 )
             }
         }
@@ -1326,6 +1373,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            val imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime()) || ime.bottom > 0
             lastSystemBarsInsets = WindowInsetsPolicy.Insets(
                 systemBars.left, systemBars.top, systemBars.right, systemBars.bottom
             )
@@ -1333,7 +1381,20 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 ime.left, ime.top, ime.right, ime.bottom
             )
             applyRootWindowInsets()
+            updateLandscapeImeLayout(imeVisible)
             insets
+        }
+        root.viewTreeObserver.addOnGlobalLayoutListener {
+            val r = Rect()
+            root.getWindowVisibleDisplayFrame(r)
+            val screenHeight = root.rootView.height
+            if (screenHeight <= 0) return@addOnGlobalLayoutListener
+            val heightDiff = screenHeight - r.bottom
+            val isImeOpen = heightDiff > screenHeight * 0.15
+            updateLandscapeImeLayout(isImeOpen)
+            if (!isImeOpen && ::songFilter.isInitialized && songFilter.hasFocus()) {
+                songFilter.clearFocus()
+            }
         }
         splitRoot = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1576,6 +1637,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
             setPadding(dp(13), dp(9), dp(13), dp(9))
             imeOptions = EditorInfo.IME_ACTION_SEARCH or EditorInfo.IME_FLAG_NO_EXTRACT_UI
             contentDescription = "Ô tìm kiếm nhóm, kênh hoặc bài hát"
+            setOnFocusChangeListener { _, hasFocus ->
+                if (hasFocus && (isCockpitTwoPaneActive || isWideLayout)) {
+                    updateLandscapeImeLayout(true)
+                }
+            }
             setOnEditorActionListener { v, actionId, _ ->
                 if (actionId == EditorInfo.IME_ACTION_SEARCH || actionId == EditorInfo.IME_ACTION_DONE) {
                     val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
@@ -1886,6 +1952,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
                     val durFormatted = if (song.durationSeconds > 0) {
                         CockpitLayoutPolicy.formatDuration(song.durationSeconds.toLong())
+                    } else if (isCurrent) {
+                        val playerDur = player?.duration ?: 0L
+                        if (playerDur > 0L && playerDur != C.TIME_UNSET) {
+                            CockpitLayoutPolicy.formatDurationMs(playerDur)
+                        } else null
                     } else null
 
                     if (durFormatted != null && (!isNarrowLayout || isWide)) {
@@ -2433,6 +2504,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
         }
         tracks.clipToPadding = false
+        if (isLandscapeImeCollapsed) {
+            updateLandscapeImeLayout(true, force = true)
+        }
         if (::adapter.isInitialized) adapter.notifyDataSetChanged()
         if (::sourcesAdapter.isInitialized) sourcesAdapter.notifyDataSetChanged()
     }
@@ -2800,6 +2874,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
                 val sourceCount = if (db != null && userId > 0L) db.getSources(userId).size else songs.map { it.chatId }.distinct().size
 
+                val withDurationCount = finalSongs.count { it.durationSeconds > 0 }
+                android.util.Log.i("MeloVault", "SongItemCard duration audit: $withDurationCount of ${finalSongs.size} displayed songs have positive duration metadata")
+
                 runOnUiThread {
                     if (uiQueryGeneration.get() != generation || isDestroyed) return@runOnUiThread
                     if (tracks.adapter !== adapter) tracks.adapter = adapter
@@ -2819,7 +2896,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     sourcesButton.text = "‹  Trở về nhóm / kênh ($sourceCount)"
                     songFilter.hint = "Tìm bài hát theo tên…"
                     if (::filterChipsRow.isInitialized) {
-                        filterChipsRow.visibility = if (auth.isReady() && !isBrowseSources) View.VISIBLE else View.GONE
+                        val shouldShowChips = !isLandscapeImeCollapsed && auth.isReady() && !isBrowseSources
+                        filterChipsRow.visibility = if (shouldShowChips) View.VISIBLE else View.GONE
                         updateFilterChipsUi()
                     }
                     updateBottomNavState()

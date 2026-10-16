@@ -127,31 +127,67 @@ internal object CockpitLayoutPolicy {
     }
 
     /**
-     * Generates a truthful audio format badge string from actual track format metadata.
-     * Never fabricates bitrate, sample rate, or channels.
+     * Determines whether non-essential headers and left-pane artwork should be
+     * temporarily collapsed when IME (soft keyboard) is visible in landscape / two-pane mode,
+     * ensuring search query and result rows remain legible and interactable above the keyboard.
+     */
+    fun shouldCollapseHeaderForLandscapeIme(
+        isWideOrTwoPane: Boolean,
+        isImeVisible: Boolean
+    ): Boolean {
+        return isWideOrTwoPane && isImeVisible
+    }
+
+    /**
+     * Generates a truthful audio format badge string from actual track format metadata and source file info.
+     * Never fabricates bitrate, sample rate, channels, or "Hi-Res" claims.
+     *
+     * Disentangles decoded PCM output (audio/raw) from source codecs. Suppresses false 1411 kbps PCM
+     * throughput when source is compressed (e.g. MP3, AAC, FLAC).
      *
      * Example outputs:
-     * - "MP3 · 44.1 kHz · 320 kbps"
-     * - "FLAC · 48.0 kHz · 2 kênh"
-     * - "AAC · 256 kbps"
+     * - "MP3 · 44.1 kHz · Stereo" (decoded from MP3, suppressing false 1411 kbps)
+     * - "MP3 · 44.1 kHz · Stereo · 320 kbps" (genuine container bitrate)
+     * - "FLAC · 48.0 kHz · Stereo"
+     * - "WAV · 44.1 kHz · Stereo · 1411 kbps" (genuine uncompressed PCM WAV)
+     * - "PCM (Đầu ra) · 44.1 kHz · Stereo" (raw decoded PCM without verified source codec)
      * - null if no information available
      */
     fun formatAudioBadge(
         sampleMimeType: String?,
         sampleRate: Int,
         channelCount: Int,
-        bitrate: Int
+        bitrate: Int,
+        sourceFileName: String? = null
     ): String? {
-        val codec = when (sampleMimeType) {
-            "audio/mpeg" -> "MP3"
-            "audio/flac" -> "FLAC"
-            "audio/raw" -> "PCM/WAV"
-            "audio/mp4a-latm" -> "AAC"
-            "audio/opus" -> "OPUS"
-            "audio/vorbis" -> "VORBIS"
-            null -> null
-            else -> sampleMimeType.removePrefix("audio/").uppercase(Locale.ROOT)
+        val ext = sourceFileName?.substringAfterLast('.', "")?.lowercase(Locale.ROOT)
+        val sourceCodecFromExt = when (ext) {
+            "mp3" -> "MP3"
+            "flac" -> "FLAC"
+            "m4a", "aac" -> "AAC"
+            "opus" -> "OPUS"
+            "ogg", "oga" -> "OGG"
+            "wav" -> "WAV"
+            else -> null
         }
+
+        val isRawPcm = sampleMimeType == "audio/raw"
+        val codec: String? = when {
+            isRawPcm -> {
+                sourceCodecFromExt ?: "PCM (Đầu ra)"
+            }
+            sampleMimeType == "audio/mpeg" -> "MP3"
+            sampleMimeType == "audio/flac" -> "FLAC"
+            sampleMimeType == "audio/mp4a-latm" -> "AAC"
+            sampleMimeType == "audio/opus" -> "OPUS"
+            sampleMimeType == "audio/vorbis" -> "VORBIS"
+            sampleMimeType == "audio/wav" || sampleMimeType == "audio/x-wav" -> "WAV"
+            sampleMimeType != null -> {
+                sourceCodecFromExt ?: sampleMimeType.removePrefix("audio/").uppercase(Locale.ROOT)
+            }
+            else -> sourceCodecFromExt
+        }
+
         val parts = mutableListOf<String>()
         if (!codec.isNullOrBlank()) {
             parts.add(codec)
@@ -160,11 +196,22 @@ internal object CockpitLayoutPolicy {
             parts.add(String.format(Locale.US, "%.1f kHz", sampleRate / 1000.0))
         }
         if (channelCount > 0) {
-            parts.add(if (channelCount == 2) "Stereo" else "$channelCount kênh")
+            parts.add(if (channelCount == 2) "Stereo" else if (channelCount == 1) "Mono" else "$channelCount kênh")
         }
-        if (bitrate > 0) {
+        // Bitrate fidelity:
+        // When sampleMimeType is audio/raw, Media3 format.bitrate is decoded PCM throughput (e.g. 1411 kbps).
+        // Only display bitrate for audio/raw if the source container is genuinely uncompressed WAV.
+        // For compressed sources (MP3, AAC, FLAC, etc.) or unknown sources decoded to raw PCM,
+        // suppress false 1411 kbps PCM throughput unless the genuine container bitrate is known.
+        val allowBitrate = if (isRawPcm) {
+            codec == "WAV"
+        } else {
+            true
+        }
+        if (allowBitrate && bitrate > 0) {
             parts.add("${bitrate / 1000} kbps")
         }
+
         return if (parts.isNotEmpty()) parts.joinToString(" · ") else null
     }
 }
