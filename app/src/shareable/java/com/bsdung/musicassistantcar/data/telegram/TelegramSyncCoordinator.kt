@@ -50,6 +50,14 @@ sealed class TelegramSyncAction {
         val canResume: Boolean
     ) : TelegramSyncAction()
 
+    data class BackoffScheduled(
+        val retryAfterSeconds: Int,
+        val attempt: Int,
+        val nextOffset: String,
+        val phase: String,
+        val generation: Long
+    ) : TelegramSyncAction()
+
     object DiscardedStale : TelegramSyncAction()
 }
 
@@ -73,12 +81,14 @@ class TelegramSyncCoordinator(
     private var totalItemsInCycle: Int = 0
     private var highWaterDate: Long = 0L
     private var overlapEncounteredCount: Int = 0
+    private var retryAttemptCount: Int = 0
 
     companion object {
         const val PAGE_LIMIT = 100
         const val INCREMENTAL_OVERLAP_TOLERANCE = 10
         const val COOPERATIVE_PACE_DELAY_MS = 50L
         const val RATE_LIMIT_DEFAULT_BACKOFF_MS = 3000L
+        const val MAX_BACKOFF_RETRIES = 3
     }
 
     @Synchronized
@@ -118,16 +128,22 @@ class TelegramSyncCoordinator(
         isPaused = false
         totalItemsInCycle = 0
         overlapEncounteredCount = 0
-
-        highWaterDate = dao.getLatestSongDate(accountId)
+        retryAttemptCount = 0
 
         val existingState = dao.getSyncState(accountId)
-        if (mode == TelegramSyncMode.FULL_DISCOVERY && !forceFullRestart &&
-            existingState != null && existingState.status in listOf(TelegramSyncState.STATUS_PARTIAL, TelegramSyncState.STATUS_PAUSED) &&
-            existingState.phase in listOf(TelegramSyncState.PHASE_AUDIO, TelegramSyncState.PHASE_DOCUMENT)
-        ) {
-            // Resume from stored cursor
-            currentPhase = existingState.phase
+        val canResumeExisting = mode == TelegramSyncMode.FULL_DISCOVERY && !forceFullRestart &&
+            existingState != null &&
+            existingState.status in listOf(
+                TelegramSyncState.STATUS_PARTIAL,
+                TelegramSyncState.STATUS_PAUSED,
+                TelegramSyncState.STATUS_SYNCING
+            ) &&
+            existingState.phase in listOf(TelegramSyncState.PHASE_AUDIO, TelegramSyncState.PHASE_DOCUMENT) &&
+            (existingState.nextOffset.isNotEmpty() || existingState.phase == TelegramSyncState.PHASE_DOCUMENT)
+
+        if (canResumeExisting) {
+            // Resume from stored cursor (even if process died mid-sync in STATUS_SYNCING)
+            currentPhase = existingState!!.phase
             currentOffset = existingState.nextOffset
             pagesInPhase = existingState.pagesSynced
             totalItemsInCycle = existingState.totalItemsSynced
@@ -138,6 +154,12 @@ class TelegramSyncCoordinator(
             pagesInPhase = 0
             totalItemsInCycle = 0
         }
+
+        // Phase-specific high-water mark to prevent document termination based on audio dates
+        highWaterDate = dao.getLatestSongDate(
+            accountId,
+            if (currentPhase == TelegramSyncState.PHASE_DOCUMENT) "document" else "audio"
+        )
 
         val updatedState = TelegramSyncState(
             accountId = accountId,
@@ -192,6 +214,7 @@ class TelegramSyncCoordinator(
         generationCounter.incrementAndGet()
         isSyncing = false
         isPaused = false
+        retryAttemptCount = 0
         if (activeAccountId > 0L) {
             val state = dao.getSyncState(activeAccountId)?.copy(status = TelegramSyncState.STATUS_PARTIAL)
             if (state != null) dao.updateSyncState(state)
@@ -213,15 +236,34 @@ class TelegramSyncCoordinator(
             return TelegramSyncAction.DiscardedStale
         }
 
-        // Commit songs to durable database
-        if (songs.isNotEmpty()) {
-            dao.upsertSongs(songs)
-            totalItemsInCycle += songs.size
+        // Stalled cursor check: repeated identical non-empty offset is a stall, NOT completion!
+        val isCursorStalled = nextOffset.isNotEmpty() && nextOffset == currentOffset
+        if (isCursorStalled) {
+            isSyncing = false
+            val errorMsg = "Cursor stalled at offset: $nextOffset"
+            val state = TelegramSyncState(
+                accountId = accountId,
+                syncScope = TelegramSyncState.SCOPE_GLOBAL,
+                phase = currentPhase,
+                nextOffset = currentOffset,
+                pagesSynced = pagesInPhase,
+                totalItemsSynced = totalItemsInCycle,
+                status = TelegramSyncState.STATUS_PARTIAL,
+                highWaterDate = highWaterDate,
+                lastErrorMessage = errorMsg
+            )
+            dao.updateSyncState(state)
+            return TelegramSyncAction.Failed(
+                errorCode = -2,
+                errorMessage = errorMsg,
+                canResume = true
+            )
         }
 
+        retryAttemptCount = 0
         pagesInPhase++
 
-        // Check incremental sync high-water boundary
+        // Check incremental sync high-water boundary for current phase
         var incrementalDone = false
         if (activeMode == TelegramSyncMode.INCREMENTAL && highWaterDate > 0L) {
             for (song in songs) {
@@ -234,12 +276,11 @@ class TelegramSyncCoordinator(
             }
         }
 
-        // Check if cursor is exhausted, stalled, or incremental boundary reached
-        val isCursorStalled = nextOffset.isNotEmpty() && nextOffset == currentOffset
-        val isPhaseExhausted = nextOffset.isEmpty() || isCursorStalled || incrementalDone
+        // Cursor is exhausted if nextOffset is empty, or incremental threshold reached
+        val isPhaseExhausted = nextOffset.isEmpty() || incrementalDone
 
         if (!isPhaseExhausted) {
-            // Continue in current phase
+            // Continue in current phase with atomic page and checkpoint commit
             currentOffset = nextOffset
             val state = TelegramSyncState(
                 accountId = accountId,
@@ -247,11 +288,12 @@ class TelegramSyncCoordinator(
                 phase = currentPhase,
                 nextOffset = currentOffset,
                 pagesSynced = pagesInPhase,
-                totalItemsSynced = totalItemsInCycle,
+                totalItemsSynced = totalItemsInCycle + songs.size,
                 status = TelegramSyncState.STATUS_SYNCING,
                 highWaterDate = highWaterDate
             )
-            dao.updateSyncState(state)
+            dao.commitPageAndCheckpoint(accountId, currentPhase, currentOffset, songs, state)
+            totalItemsInCycle += songs.size
 
             return TelegramSyncAction.RequestPage(
                 phase = currentPhase,
@@ -261,7 +303,21 @@ class TelegramSyncCoordinator(
                 recommendedDelayMs = COOPERATIVE_PACE_DELAY_MS
             )
         } else {
-            // Current phase is finished, advance to next phase or complete
+            // Phase is finished; commit any remaining songs on this boundary page
+            if (songs.isNotEmpty()) {
+                totalItemsInCycle += songs.size
+                val interimState = TelegramSyncState(
+                    accountId = accountId,
+                    syncScope = TelegramSyncState.SCOPE_GLOBAL,
+                    phase = currentPhase,
+                    nextOffset = nextOffset,
+                    pagesSynced = pagesInPhase,
+                    totalItemsSynced = totalItemsInCycle,
+                    status = TelegramSyncState.STATUS_SYNCING,
+                    highWaterDate = highWaterDate
+                )
+                dao.commitPageAndCheckpoint(accountId, currentPhase, nextOffset, songs, interimState)
+            }
             return advanceToNextPhaseOrComplete(accountId)
         }
     }
@@ -274,6 +330,9 @@ class TelegramSyncCoordinator(
             currentOffset = ""
             pagesInPhase = 0
             overlapEncounteredCount = 0
+
+            // Phase-specific high-water mark for document phase
+            highWaterDate = dao.getLatestSongDate(accountId, "document")
 
             val state = TelegramSyncState(
                 accountId = accountId,
@@ -339,8 +398,33 @@ class TelegramSyncCoordinator(
             return TelegramSyncAction.DiscardedStale
         }
 
-        isSyncing = false
         val isRateLimit = errorCode == 429 || errorMessage.contains("FLOOD_WAIT", ignoreCase = true)
+        if (isRateLimit && retryAttemptCount < MAX_BACKOFF_RETRIES) {
+            retryAttemptCount++
+            val match = Regex("FLOOD_WAIT_(\\d+)", RegexOption.IGNORE_CASE).find(errorMessage)
+            val waitSec = match?.groupValues?.get(1)?.toIntOrNull()
+                ?: (2 * (1 shl (retryAttemptCount - 1).coerceAtMost(5))).coerceAtMost(60)
+
+            val state = dao.getSyncState(accountId)?.copy(
+                status = TelegramSyncState.STATUS_PARTIAL,
+                lastErrorMessage = "FLOOD_WAIT: retrying in ${waitSec}s (attempt $retryAttemptCount/$MAX_BACKOFF_RETRIES)"
+            ) ?: TelegramSyncState(
+                accountId = accountId,
+                status = TelegramSyncState.STATUS_PARTIAL,
+                lastErrorMessage = "FLOOD_WAIT: retrying in ${waitSec}s (attempt $retryAttemptCount/$MAX_BACKOFF_RETRIES)"
+            )
+            dao.updateSyncState(state)
+
+            return TelegramSyncAction.BackoffScheduled(
+                retryAfterSeconds = waitSec,
+                attempt = retryAttemptCount,
+                nextOffset = currentOffset,
+                phase = currentPhase,
+                generation = activeGeneration
+            )
+        }
+
+        isSyncing = false
         val canResume = isRateLimit || currentOffset.isNotEmpty()
 
         val state = dao.getSyncState(accountId)?.copy(

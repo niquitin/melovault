@@ -81,6 +81,71 @@ class AndroidTelegramLibraryDatabase(
         return count
     }
 
+    override fun commitPageAndCheckpoint(
+        accountId: Long,
+        phase: String,
+        cursor: String,
+        items: Collection<IndexedTelegramSong>,
+        checkpoint: TelegramSyncState
+    ): Int {
+        val db = writableDatabase
+        var count = 0
+        db.beginTransactionNonExclusive()
+        try {
+            for (song in items) {
+                if (song.accountId != accountId) continue
+                val values = ContentValues().apply {
+                    put(TelegramLibrarySql.COL_ACCOUNT_ID, song.accountId)
+                    put(TelegramLibrarySql.COL_CHAT_ID, song.chatId)
+                    put(TelegramLibrarySql.COL_MESSAGE_ID, song.messageId)
+                    put(TelegramLibrarySql.COL_SONG_KEY, song.songKey)
+                    put(TelegramLibrarySql.COL_FILE_ID, song.fileId)
+                    put(TelegramLibrarySql.COL_TITLE, song.title)
+                    put(TelegramLibrarySql.COL_FILENAME, song.filename)
+                    put(TelegramLibrarySql.COL_PERFORMER, song.performer)
+                    put(TelegramLibrarySql.COL_DURATION_SECONDS, song.durationSeconds)
+                    put(TelegramLibrarySql.COL_FILE_SIZE, song.fileSize)
+                    put(TelegramLibrarySql.COL_MIME_TYPE, song.mimeType)
+                    put(TelegramLibrarySql.COL_MEDIA_TYPE, song.mediaType)
+                    put(TelegramLibrarySql.COL_DATE, song.date)
+                    put(TelegramLibrarySql.COL_LAST_SEEN_AT_MS, song.lastSeenAtMs)
+                    put(TelegramLibrarySql.COL_SOURCE_TITLE, song.sourceTitle)
+                    put(TelegramLibrarySql.COL_IS_DELETED, if (song.isDeleted) 1 else 0)
+                }
+                val rowId = db.insertWithOnConflict(
+                    TelegramLibrarySql.TABLE_SONGS,
+                    null,
+                    values,
+                    SQLiteDatabase.CONFLICT_REPLACE
+                )
+                if (rowId != -1L) count++
+            }
+
+            val stateValues = ContentValues().apply {
+                put(TelegramLibrarySql.COL_ACCOUNT_ID, checkpoint.accountId)
+                put(TelegramLibrarySql.COL_SYNC_SCOPE, checkpoint.syncScope)
+                put(TelegramLibrarySql.COL_PHASE, checkpoint.phase)
+                put(TelegramLibrarySql.COL_NEXT_OFFSET, checkpoint.nextOffset)
+                put(TelegramLibrarySql.COL_PAGES_SYNCED, checkpoint.pagesSynced)
+                put(TelegramLibrarySql.COL_TOTAL_ITEMS_SYNCED, checkpoint.totalItemsSynced)
+                put(TelegramLibrarySql.COL_STATUS, checkpoint.status)
+                put(TelegramLibrarySql.COL_HIGH_WATER_DATE, checkpoint.highWaterDate)
+                put(TelegramLibrarySql.COL_LAST_SYNC_COMPLETED_AT_MS, checkpoint.lastSyncCompletedAtMs)
+                put(TelegramLibrarySql.COL_LAST_ERROR_MESSAGE, checkpoint.lastErrorMessage)
+            }
+            db.insertWithOnConflict(
+                TelegramLibrarySql.TABLE_SYNC_STATE,
+                null,
+                stateValues,
+                SQLiteDatabase.CONFLICT_REPLACE
+            )
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return count
+    }
+
     override fun getSongs(
         accountId: Long,
         chatId: Long?,

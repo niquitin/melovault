@@ -27,6 +27,26 @@ class InMemoryTelegramLibraryDao : TelegramLibraryDao {
         return count
     }
 
+    override fun commitPageAndCheckpoint(
+        accountId: Long,
+        phase: String,
+        cursor: String,
+        items: Collection<IndexedTelegramSong>,
+        checkpoint: TelegramSyncState
+    ): Int {
+        synchronized(this) {
+            var count = 0
+            for (song in items) {
+                if (song.accountId != accountId) continue
+                val key = Triple(song.accountId, song.chatId, song.messageId)
+                this.songs[key] = song
+                count++
+            }
+            syncStates[Pair(checkpoint.accountId, checkpoint.syncScope)] = checkpoint
+            return count
+        }
+    }
+
     override fun getSongs(
         accountId: Long,
         chatId: Long?,

@@ -236,4 +236,95 @@ class TelegramLibraryDaoTest {
         assertEquals(0, dao.getSongCount(accountId = 100L))
         assertNull(dao.getSongByKey(accountId = 100L, songKey = 20L))
     }
+
+    @Test
+    fun testCommitPageAndCheckpointAtomic() {
+        val checkpoint = TelegramSyncState(
+            accountId = 100L,
+            syncScope = "global",
+            phase = "audio",
+            nextOffset = "cur_123",
+            pagesSynced = 1,
+            totalItemsSynced = 2,
+            status = TelegramSyncState.STATUS_SYNCING
+        )
+        val s1 = sampleSong(accountId = 100L, messageId = 1L, title = "Atomic Song 1")
+        val s2 = sampleSong(accountId = 100L, messageId = 2L, title = "Atomic Song 2")
+
+        val committed = dao.commitPageAndCheckpoint(
+            accountId = 100L,
+            phase = "audio",
+            cursor = "cur_123",
+            items = listOf(s1, s2),
+            checkpoint = checkpoint
+        )
+
+        assertEquals(2, committed)
+        assertEquals(2, dao.getSongCount(accountId = 100L))
+        val state = dao.getSyncState(accountId = 100L, scope = "global")
+        assertNotNull(state)
+        assertEquals("cur_123", state?.nextOffset)
+        assertEquals(TelegramSyncState.STATUS_SYNCING, state?.status)
+    }
+
+    @Test
+    fun testLargeCatalogBeyond20kItems() {
+        val totalSongs = 25_000
+        val numSources = 25
+        val batchSize = 1000
+        val accountId = 100L
+
+        // Generate 25,000 songs across 25 channels
+        val songList = ArrayList<IndexedTelegramSong>(batchSize)
+        for (i in 1..totalSongs) {
+            val chatId = 2000L + (i % numSources)
+            val isTarget = (i == 24_500)
+            val title = if (isTarget) "Special Rare Hidden Gem In 24500" else "Track Index $i"
+            val song = sampleSong(
+                accountId = accountId,
+                chatId = chatId,
+                messageId = i.toLong(),
+                songKey = chatId * 1_000_000L + i,
+                title = title,
+                date = 1_000_000L + i,
+                sourceTitle = "Channel $chatId"
+            )
+            songList.add(song)
+            if (songList.size == batchSize) {
+                dao.upsertSongs(songList)
+                songList.clear()
+            }
+        }
+        if (songList.isNotEmpty()) {
+            dao.upsertSongs(songList)
+            songList.clear()
+        }
+
+        // 1. Verify total count
+        assertEquals(totalSongs, dao.getSongCount(accountId = accountId))
+
+        // 2. Verify paging beyond 6,000
+        val pageAt6k = dao.getSongs(accountId = accountId, offset = 6000, limit = 200)
+        assertEquals(200, pageAt6k.size)
+
+        // 3. Verify paging beyond 20,000
+        val pageAt20k = dao.getSongs(accountId = accountId, offset = 20_000, limit = 200)
+        assertEquals(200, pageAt20k.size)
+
+        // 4. Verify search finding specific item near end of collection
+        val searchResults = dao.getSongs(accountId = accountId, searchQuery = "Rare Hidden Gem")
+        assertEquals(1, searchResults.size)
+        assertEquals("Special Rare Hidden Gem In 24500", searchResults[0].title)
+
+        // 5. Verify search count
+        val searchCount = dao.getSongCount(accountId = accountId, searchQuery = "Rare Hidden Gem")
+        assertEquals(1, searchCount)
+
+        // 6. Verify sources recomputation across 25 channels
+        dao.recomputeSourceTrackCounts(accountId = accountId)
+        val sources = dao.getSources(accountId = accountId)
+        assertEquals(numSources, sources.size)
+        val totalSourceTracks = sources.sumOf { it.trackCount }
+        assertEquals(totalSongs, totalSourceTracks)
+    }
 }

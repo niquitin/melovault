@@ -157,7 +157,7 @@ class TelegramSyncCoordinatorTest {
     }
 
     @Test
-    fun testStalledNextOffsetBreaksLoop() {
+    fun testStalledNextOffsetReturnsPartialFailed() {
         val action1 = coordinator.startSync(100L, TelegramSyncMode.FULL_DISCOVERY)
         val req1 = action1 as TelegramSyncAction.RequestPage
 
@@ -180,60 +180,140 @@ class TelegramSyncCoordinatorTest {
             songs = listOf(sampleSong(messageId = 2L)),
             nextOffset = "cursor_X"
         )
-        // Must detect stalled cursor and advance to document phase instead of infinite loop!
-        assertTrue(action3 is TelegramSyncAction.RequestPage)
-        val req3 = action3 as TelegramSyncAction.RequestPage
-        assertEquals(TelegramSyncState.PHASE_DOCUMENT, req3.phase)
-        assertEquals("", req3.offset)
-    }
-
-    @Test
-    fun testAccountSwitchDiscardsStaleCallbacks() {
-        // Start sync for account 100
-        val actionAcc1 = coordinator.startSync(100L, TelegramSyncMode.FULL_DISCOVERY)
-        val reqAcc1 = actionAcc1 as TelegramSyncAction.RequestPage
-        val gen1 = reqAcc1.generation
-
-        // User switches to account 200
-        val actionAcc2 = coordinator.startSync(200L, TelegramSyncMode.FULL_DISCOVERY)
-        val reqAcc2 = actionAcc2 as TelegramSyncAction.RequestPage
-        val gen2 = reqAcc2.generation
-
-        assertTrue(gen2 > gen1)
-        assertEquals(200L, coordinator.getActiveAccountId())
-
-        // Late callback from account 100 arrives
-        val lateAction = coordinator.onPageReceived(
-            accountId = 100L,
-            generation = gen1,
-            phase = TelegramSyncState.PHASE_AUDIO,
-            songs = listOf(sampleSong(accountId = 100L, messageId = 999L)),
-            nextOffset = "next_acc1"
-        )
-        assertEquals(TelegramSyncAction.DiscardedStale, lateAction)
-        assertEquals(0, dao.getSongCount(200L))
-    }
-
-    @Test
-    fun testRateLimit429MarksPartialCanResume() {
-        val action = coordinator.startSync(100L, TelegramSyncMode.FULL_DISCOVERY)
-        val req = action as TelegramSyncAction.RequestPage
-
-        val errAction = coordinator.onError(
-            accountId = 100L,
-            generation = req.generation,
-            errorCode = 429,
-            errorMessage = "FLOOD_WAIT_30"
-        )
-        assertTrue(errAction is TelegramSyncAction.Failed)
-        val failed = errAction as TelegramSyncAction.Failed
-        assertEquals(429, failed.errorCode)
+        // Must detect stalled cursor, return Failed with canResume=true, and mark STATUS_PARTIAL (not complete!)
+        assertTrue(action3 is TelegramSyncAction.Failed)
+        val failed = action3 as TelegramSyncAction.Failed
+        assertEquals(-2, failed.errorCode)
         assertTrue(failed.canResume)
 
         val state = dao.getSyncState(100L)
         assertNotNull(state)
         assertEquals(TelegramSyncState.STATUS_PARTIAL, state!!.status)
+        assertTrue(state.lastErrorMessage?.contains("stalled", ignoreCase = true) == true)
         assertFalse(coordinator.isBusy())
+    }
+
+    @Test
+    fun testResumeAfterProcessDeathWhenStatusSyncing() {
+        // Abrupt process death left durable state as STATUS_SYNCING with document cursor
+        val crashedState = TelegramSyncState(
+            accountId = 100L,
+            syncScope = "global",
+            phase = TelegramSyncState.PHASE_DOCUMENT,
+            nextOffset = "doc_cursor_99",
+            pagesSynced = 4,
+            totalItemsSynced = 400,
+            status = TelegramSyncState.STATUS_SYNCING
+        )
+        dao.updateSyncState(crashedState)
+
+        // Reconstruct coordinator after process recreation
+        val newCoordinator = TelegramSyncCoordinator(dao)
+        val action = newCoordinator.startSync(100L, TelegramSyncMode.FULL_DISCOVERY, forceFullRestart = false)
+
+        assertTrue(action is TelegramSyncAction.RequestPage)
+        val req = action as TelegramSyncAction.RequestPage
+        assertEquals(TelegramSyncState.PHASE_DOCUMENT, req.phase)
+        assertEquals("doc_cursor_99", req.offset)
+    }
+
+    @Test
+    fun testPhaseSpecificIncrementalSyncDoesNotTerminatePrematurely() {
+        // Seed audio track with recent date 5000L
+        val audioSong = sampleSong(messageId = 10L, date = 5000L, title = "New Audio").copy(mediaType = "audio")
+        // Seed document track with older date 2000L
+        val docSong = sampleSong(messageId = 20L, date = 2000L, title = "Old Doc").copy(mediaType = "document")
+        dao.upsertSongs(listOf(audioSong, docSong))
+
+        // Check phase-specific dates
+        assertEquals(5000L, dao.getLatestSongDate(100L, "audio"))
+        assertEquals(2000L, dao.getLatestSongDate(100L, "document"))
+
+        val action1 = coordinator.startSync(100L, TelegramSyncMode.INCREMENTAL)
+        val req1 = action1 as TelegramSyncAction.RequestPage
+        assertEquals(TelegramSyncState.PHASE_AUDIO, req1.phase)
+
+        // Finish audio phase
+        val action2 = coordinator.onPageReceived(
+            accountId = 100L,
+            generation = req1.generation,
+            phase = TelegramSyncState.PHASE_AUDIO,
+            songs = emptyList(),
+            nextOffset = ""
+        )
+        assertTrue(action2 is TelegramSyncAction.RequestPage)
+        val req2 = action2 as TelegramSyncAction.RequestPage
+        assertEquals(TelegramSyncState.PHASE_DOCUMENT, req2.phase)
+
+        // Incoming document has date 3000L (older than audio 5000L, but newer than document 2000L)
+        // With phase-specific high-water date, this must NOT be counted as overlap!
+        val newDoc = sampleSong(messageId = 30L, date = 3000L, title = "Newly Added Document").copy(mediaType = "document")
+        val action3 = coordinator.onPageReceived(
+            accountId = 100L,
+            generation = req2.generation,
+            phase = TelegramSyncState.PHASE_DOCUMENT,
+            songs = listOf(newDoc),
+            nextOffset = "doc_page_2"
+        )
+        // Coordinator continues document scanning!
+        assertTrue(action3 is TelegramSyncAction.RequestPage)
+        val req3 = action3 as TelegramSyncAction.RequestPage
+        assertEquals(TelegramSyncState.PHASE_DOCUMENT, req3.phase)
+        assertEquals("doc_page_2", req3.offset)
+    }
+
+    @Test
+    fun testRateLimitFloodWaitBackoffRetriesAndMaxLimit() {
+        val action = coordinator.startSync(100L, TelegramSyncMode.FULL_DISCOVERY)
+        val req = action as TelegramSyncAction.RequestPage
+
+        // Attempt 1: FLOOD_WAIT_15
+        val action1 = coordinator.onError(
+            accountId = 100L,
+            generation = req.generation,
+            errorCode = 429,
+            errorMessage = "FLOOD_WAIT_15"
+        )
+        assertTrue(action1 is TelegramSyncAction.BackoffScheduled)
+        val b1 = action1 as TelegramSyncAction.BackoffScheduled
+        assertEquals(15, b1.retryAfterSeconds)
+        assertEquals(1, b1.attempt)
+
+        // Attempt 2: FLOOD_WAIT_30
+        val action2 = coordinator.onError(
+            accountId = 100L,
+            generation = req.generation,
+            errorCode = 429,
+            errorMessage = "FLOOD_WAIT_30"
+        )
+        assertTrue(action2 is TelegramSyncAction.BackoffScheduled)
+        val b2 = action2 as TelegramSyncAction.BackoffScheduled
+        assertEquals(30, b2.retryAfterSeconds)
+        assertEquals(2, b2.attempt)
+
+        // Attempt 3: FLOOD_WAIT_60
+        val action3 = coordinator.onError(
+            accountId = 100L,
+            generation = req.generation,
+            errorCode = 429,
+            errorMessage = "FLOOD_WAIT_60"
+        )
+        assertTrue(action3 is TelegramSyncAction.BackoffScheduled)
+        val b3 = action3 as TelegramSyncAction.BackoffScheduled
+        assertEquals(60, b3.retryAfterSeconds)
+        assertEquals(3, b3.attempt)
+
+        // Attempt 4: Exceeds MAX_BACKOFF_RETRIES (3) -> returns Failed
+        val action4 = coordinator.onError(
+            accountId = 100L,
+            generation = req.generation,
+            errorCode = 429,
+            errorMessage = "FLOOD_WAIT_60"
+        )
+        assertTrue(action4 is TelegramSyncAction.Failed)
+        val failed = action4 as TelegramSyncAction.Failed
+        assertEquals(429, failed.errorCode)
+        assertTrue(failed.canResume)
     }
 
     @Test

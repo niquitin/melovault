@@ -12,6 +12,18 @@ interface TelegramLibraryDao {
     fun upsertSongs(songs: Collection<IndexedTelegramSong>): Int
 
     /**
+     * Inserts or updates songs AND updates sync state checkpoint atomically
+     * in a single transaction. Returns count of songs committed.
+     */
+    fun commitPageAndCheckpoint(
+        accountId: Long,
+        phase: String,
+        cursor: String,
+        items: Collection<IndexedTelegramSong>,
+        checkpoint: TelegramSyncState
+    ): Int
+
+    /**
      * Retrieves songs for an account, with optional chat filtering, substring title search,
      * pagination, ordered by message date descending.
      */
