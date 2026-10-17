@@ -1,7 +1,6 @@
 package com.bsdung.musicassistantcar.data.telegram
 
 import android.content.Context
-import android.content.res.Configuration
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
@@ -12,7 +11,6 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.view.ContextThemeWrapper
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -31,12 +29,6 @@ import com.bsdung.musicassistantcar.data.telegram.MeloScreenPolicy.Layout
  */
 class MeloUiPreviewActivity : AppCompatActivity() {
 
-    private lateinit var root: FrameLayout
-    private lateinit var frame: FrameLayout
-    private lateinit var scaleNote: TextView
-    private var frameWidthPx = 0
-    private var frameHeightPx = 0
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setTheme(R.style.Theme_MusicAssistantCar)
@@ -51,7 +43,7 @@ class MeloUiPreviewActivity : AppCompatActivity() {
         val carPreview = MeloScreenPolicy.loadPreviewCarMode(prefs)
         val real = MeloUiLabActivity.realMeasurements(this).display
         val spec = emulation.spec() ?: real
-        val frameContext = if (emulation.isActive) emulatedContext(spec) else this
+        val frameContext = if (emulation.isActive) MeloEmulation.emulatedContext(this, spec) else this
 
         val layout = MeloScreenPolicy.chooseLayout(spec.widthDp, spec.heightDp, carPreview)
         val profile = MeloScreenPolicy.profileFor(layout, spec.smallestWidthDp)
@@ -59,64 +51,12 @@ class MeloUiPreviewActivity : AppCompatActivity() {
         val components = MeloComponents(frameContext, sizes)
         val songCount = intent.getIntExtra(MeloUiLabActivity.EXTRA_SONG_COUNT, 0).takeIf { it > 0 }
 
-        root = FrameLayout(this).apply { setBackgroundColor(DIMMED) }
-        frame = FrameLayout(frameContext).apply { setBackgroundColor(components.palette.background) }
-        if (emulation.isActive) {
-            frameWidthPx = spec.widthPx
-            frameHeightPx = spec.heightPx
-            root.addView(frame, FrameLayout.LayoutParams(spec.widthPx, spec.heightPx, Gravity.CENTER))
-        } else {
-            root.addView(frame, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        }
-        frame.addView(
+        val host = MeloEmulation.FrameHost(this, frameContext, if (emulation.isActive) spec else null, components.palette.background)
+        host.frame.addView(
             PreviewContent(frameContext, components, spec, emulation, layout, songCount) { finish() }.build(),
             FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         )
-        scaleNote = TextView(this).apply {
-            setTextColor(0xFFFFD27A.toInt())
-            textSize = 14f
-            setBackgroundColor(0xCC000000.toInt())
-            setPadding(24, 12, 24, 12)
-            visibility = View.GONE
-        }
-        root.addView(scaleNote, FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL
-        ))
-        root.addOnLayoutChangeListener { _, l, t, r, b, _, _, _, _ -> fitFrame(r - l, b - t) }
-        setContentView(root)
-    }
-
-    /** Resources inside the frame report the emulated density and dp size, like the real device. */
-    private fun emulatedContext(spec: DisplaySpec): Context {
-        val config = Configuration(resources.configuration).apply {
-            densityDpi = spec.densityDpi
-            screenWidthDp = spec.widthDp
-            screenHeightDp = spec.heightDp
-            smallestScreenWidthDp = spec.smallestWidthDp
-            fontScale = spec.fontScale
-            orientation = if (spec.isLandscape) Configuration.ORIENTATION_LANDSCAPE else Configuration.ORIENTATION_PORTRAIT
-        }
-        return ContextThemeWrapper(createConfigurationContext(config), R.style.Theme_MusicAssistantCar)
-    }
-
-    private fun fitFrame(availableW: Int, availableH: Int) {
-        if (frameWidthPx <= 0) return
-        val scale = MeloScreenPolicy.fitScale(frameWidthPx, frameHeightPx, availableW, availableH)
-        if (frame.scaleX == scale && frame.scaleY == scale) return
-        frame.pivotX = frameWidthPx / 2f
-        frame.pivotY = frameHeightPx / 2f
-        frame.scaleX = scale
-        frame.scaleY = scale
-        if (scale < 1f) {
-            scaleNote.text = "Khung ${frameWidthPx}×${frameHeightPx} lớn hơn màn này: đang thu nhỏ còn ${(scale * 100).toInt()}%. Xoay máy để xem đúng 1:1."
-            scaleNote.visibility = View.VISIBLE
-        } else {
-            scaleNote.visibility = View.GONE
-        }
-    }
-
-    private companion object {
-        const val DIMMED = 0xFF03070B.toInt()
+        setContentView(host.root)
     }
 
     /** The preview screen built only from the shared components. */
