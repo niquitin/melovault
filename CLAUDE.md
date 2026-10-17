@@ -16,7 +16,7 @@ Nếu working tree bẩn bất ngờ, branch lạ, hoặc có agent khác (Codex
 ## Cấm tuyệt đối (trừ khi chủ dự án cho phép rõ ràng trong chat)
 - `git reset --hard`, `git clean`, `git stash`, `git checkout`/`restore` đè lên thay đổi, `git push --force`, viết lại lịch sử.
 - `adb uninstall`, `pm clear`, logout Telegram, xóa database/cache/playlist/APK Beta cũ.
-- Cài/gửi/upload APK chưa qua gate. APK vc85 build thử ở Tiny (thiếu Telegram API config) KHÔNG được cài.
+- Cài/gửi/upload APK chưa qua gate (ngoại lệ: upload Drive riêng mặc định theo mục "Quy trình gate" bên dưới). APK vc85 build thử ở Tiny (thiếu Telegram API config) KHÔNG được cài.
 - Đọc, in, log, commit hoặc chuyển đi: `local.properties`, `secrets.properties`, Telegram API ID/hash, keystore, OTP/2FA, file noBackup/session TDLib. Telegram credentials chỉ nằm trên Tiny.
 - Đổi package, signing, `songKey`, khóa chính `(accountId, chatId, messageId)`, schema DB khi chưa được duyệt.
 - Thêm framework UI mới (Compose...) hoặc viết lại kiến trúc. UI Shareable dùng Android Views/AppCompat.
@@ -50,6 +50,12 @@ Kotlin, Java/JVM 17 (Gradle chạy bằng JDK 21), Gradle 8.13, AGP 8.13.0, Kotl
 
 ## Quy trình gate (không bỏ bước)
 Test JVM trên Ni → commit → Git bundle delta + SHA256 → import vào clone cô lập trên Tiny → build có Telegram config hợp lệ (chỉ trên Tiny) → verify package/version/signer/SHA256 → QA Sony → audit độc lập → upload Drive riêng (đã được duyệt sau khi qua QA) → chủ dự án QA trên Lenovo Y700.
+
+**Mặc định mới (chủ dự án duyệt trong chat 17/10/2026, áp dụng từ Beta87):** sau khi bump + bundle, Claude tự build trên Tiny và tự upload Drive riêng, không cần hỏi lại:
+1. Tiny = Desktop Commander device `DESKTOP-HNP4GVR`. Chỉ thao tác trong clone cô lập `C:\Bots\MeloVault-E93D-IsolatedQA` (fast-forward `--ff-only`, dừng nếu bẩn/HEAD lạ) và `C:\Bots\_qa_temp\Beta<code>_<sha>\`. Không đọc/in Telegram config; chỉ kiểm có/không trong BuildConfig.
+2. Build test Debug+Release + `assembleShareableRelease`; verify aapt2 (package/vc/versionName) + `apksigner --print-certs`. Signer phải = `eecd3df7…ce8`; khác thì DỪNG, không upload, báo chủ dự án.
+3. Upload: tạo thư mục MỚI `H:\My Drive\MeloVault-Owner-Beta-v<versionName>-b<versionCode>-Y700-REVIEW` trên Tiny (Google Drive for desktop), chứa `MeloVault-Owner-Beta-v<ver>-b<code>.apk`, `SHA256.txt`, `README_OWNER_ONLY.txt` (theo mẫu thư mục b86). Kiểm SHA256 bản trên H:. Không ghi đè/xóa thư mục cũ, không chia sẻ công khai, không đụng `melovault-private-signer`.
+4. README ghi rõ đã/không QA Sony. Vẫn KHÔNG tự cài lên thiết bị, KHÔNG cài FYT.
 
 ## Trạng thái và việc tiếp theo
 - Branch `feature/e93-03d-y700-offline-cockpit`. Mốc an toàn: tag `pre-claude-migration` (= 83b66c1, code E9.3-03D, chưa QA thiết bị).
