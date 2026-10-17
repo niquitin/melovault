@@ -1,6 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
           xmlns:tools="http://schemas.android.com/tools">
+    <!-- Car Mode voice search: lets Android 11+ find a speech recognizer app. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
     <!-- Shareable never permits plaintext fallback to owner's LAN backend. -->
     <application android:usesCleartextTraffic="false"
                  tools:replace="android:usesCleartextTraffic">

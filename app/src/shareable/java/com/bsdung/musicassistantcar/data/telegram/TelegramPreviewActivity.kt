@@ -29,6 +29,7 @@ import android.widget.SeekBar
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -249,8 +250,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
     // Gọn layout (docs/ui-spec.md step 4): a view layer over the unchanged legacy tree.
     private lateinit var outerRoot: FrameLayout
     private var compactScreen: MeloCompactScreen? = null
-    private var compactLayer: View? = null
-    private var compactLayerKey: String? = null
+    private var carScreen: MeloCarScreen? = null
+    private var meloLayer: View? = null
+    private var meloLayerKey: String? = null
+    private var carPromptShown = false
     private var compactRefreshPosted = false
     private var authEpoch: Long = 0L
     private var tdlibParametersSent = false
@@ -277,6 +280,25 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var currentTask = ""
     private var mutedMessages = false
     private var nativeReceiver: ((JSONObject) -> Unit)? = null
+
+    // Car Mode voice search: the spoken text only fills the search field; nothing is stored.
+    private var voiceSearchCallback: ((String) -> Unit)? = null
+    private val voiceSearchResult = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val callback = voiceSearchCallback
+        voiceSearchCallback = null
+        val text = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+        if (result.resultCode == Activity.RESULT_OK && !text.isNullOrBlank()) callback?.invoke(text)
+    }
+
+    private fun voiceSearchIntent(): Intent =
+        Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            .putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, "vi-VN")
+            .putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Nói tên bài hát")
+
+    private fun voiceSearchAvailable(): Boolean = voiceSearchIntent().resolveActivity(packageManager) != null
 
     // Android's system picker grants access only to the selected document.
     // Deliberately do not persist or log provider URIs or account tokens.
@@ -327,7 +349,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         if (fullWasShowing) showFullPlayer()
         if (queueWasShowing) showUpcomingQueue()
-        applyCompactMode()
+        applyMeloLayer()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -408,7 +430,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         // Picks up a changed "Bố cục Gọn" setting when returning from Cài đặt giao diện.
-        applyCompactMode()
+        applyMeloLayer()
         if (auth.isReady()) {
             val user = library.authorizedUser()?.value ?: 0L
             if (user > 0L && songs.isEmpty()) {
@@ -432,7 +454,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 if (isPlaying) mainRoot.post(miniPlayerProgressTick)
                 else mainRoot.removeCallbacks(miniPlayerProgressTick)
             }
-            compactScreen?.onPlaybackChanged()
+            notifyMeloPlayback()
         }
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             val titleText = mediaItem?.mediaMetadata?.title ?: "Chọn một bài hát để bắt đầu"
@@ -455,7 +477,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             if (currentSongIndex >= 0 && auth.isReady()) {
                 prefetchNextCachedNeighbor()
             }
-            compactScreen?.onPlaybackChanged()
+            notifyMeloPlayback()
         }
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_ENDED) {
@@ -463,7 +485,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
             updateMiniPlayerProgress()
             updateCockpitPlayer()
-            compactScreen?.onPlaybackChanged()
+            notifyMeloPlayback()
         }
     }
 
@@ -636,7 +658,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         override fun run() {
             updateMiniPlayerProgress()
             updateCockpitPlayer()
-            compactScreen?.onPlaybackChanged()
+            notifyMeloPlayback()
             if (player?.isPlaying == true) {
                 if (::mainRoot.isInitialized) mainRoot.postDelayed(this, 1000L)
             }
@@ -2578,8 +2600,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         tracks.adapter = adapter
         // The Gọn layout mirrors whatever the legacy list shows; coalesce bursts of clear/addAll.
         val compactObserver = object : android.database.DataSetObserver() {
-            override fun onChanged() = scheduleCompactLibraryRefresh()
-            override fun onInvalidated() = scheduleCompactLibraryRefresh()
+            override fun onChanged() = scheduleMeloLibraryRefresh()
+            override fun onInvalidated() = scheduleMeloLibraryRefresh()
         }
         adapter.registerDataSetObserver(compactObserver)
         sourcesAdapter.registerDataSetObserver(compactObserver)
@@ -2824,7 +2846,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         setContentView(outerRoot)
         applyResponsiveLibraryUi()
-        applyCompactMode()
+        applyMeloLayer()
     }
 
     private fun showLibraryOverflow(anchor: View) {
@@ -3574,7 +3596,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     }
                     visibleSourceIds = display.map { it.first }
                     visibleSourceCounts = display
-                    scheduleCompactLibraryRefresh()
+                    scheduleMeloLibraryRefresh()
 
                     if (currentSourceDisplayMode == TelegramVaultBentoPolicy.SourceDisplayMode.BENTO) {
                         tracks.visibility = View.GONE
@@ -3705,25 +3727,34 @@ class TelegramPreviewActivity : AppCompatActivity() {
         showMessage("Playlist cá nhân: ${favoriteIds.size} bài đã lưu.")
     }
 
-    // ---- Gọn layout host ---------------------------------------------------------------------
+    // ---- New-screen layers (Gọn, Car Mode) ---------------------------------------------------
 
-    /** Shows the Gọn layer when the setting/screen asks for it and the account is verified. */
-    private fun applyCompactMode() {
+    /**
+     * Shows Car Mode or the Gọn layer over the legacy tree when their settings/screen ask for
+     * it and the account is verified. Car Mode wins over every other rule (spec).
+     */
+    private fun applyMeloLayer() {
         if (!::outerRoot.isInitialized || !::mainRoot.isInitialized || isDestroyed) return
         val prefs = getSharedPreferences(MeloScreenPolicy.PREFS_NAME, Context.MODE_PRIVATE)
-        val setting = MeloCompactPolicy.loadSetting(prefs)
         val display = MeloUiLabActivity.realMeasurements(this).display
+        val carSetting = MeloCarPolicy.loadSetting(prefs)
+        if (MeloCarPolicy.shouldUseCar(carSetting, auth.isReady())) {
+            showCarLayer(carSetting, display)
+            return
+        }
+        maybeAskCarMode(prefs, carSetting, display)
+        val setting = MeloCompactPolicy.loadSetting(prefs)
         val wanted = MeloCompactPolicy.shouldUseCompact(setting, display.widthDp, display.heightDp, auth.isReady())
         if (!wanted) {
-            detachCompact()
+            detachMeloLayer()
             return
         }
-        val key = "${setting.key}:${display.widthPx}x${display.heightPx}:${display.densityDpi}:${display.fontScale}"
-        if (compactScreen != null && compactLayerKey == key) {
-            scheduleCompactLibraryRefresh()
+        val key = "compact:${setting.key}:${display.widthPx}x${display.heightPx}:${display.densityDpi}:${display.fontScale}"
+        if (compactScreen != null && meloLayerKey == key) {
+            scheduleMeloLibraryRefresh()
             return
         }
-        detachCompact()
+        detachMeloLayer()
         if (MeloCompactPolicy.needsDefaultDownloadedFilter(MeloCompactPolicy.defaultApplied(prefs))) {
             MeloCompactPolicy.markDefaultApplied(prefs)
             playlistMode = false
@@ -3737,7 +3768,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val spec = if (emulate) MeloScreenPolicy.Emulation.SHANLING_M3_ULTRA.spec() ?: display else display
         val frameContext = if (emulate) MeloEmulation.emulatedContext(this, spec) else this
         val sizes = MeloDesignTokens.sizes(MeloDesignTokens.Profile.COMPACT, spec.density, spec.fontScale, spec.physicalPpi)
-        val screen = MeloCompactScreen(frameContext, sizes, compactHost, onBackPressedDispatcher)
+        val screen = MeloCompactScreen(frameContext, sizes, meloHost, onBackPressedDispatcher)
         val layer: View = if (emulate) {
             MeloEmulation.FrameHost(this, frameContext, spec, MeloDesignTokens.PALETTE.background).also {
                 it.frame.addView(screen.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -3752,33 +3783,110 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
             }
         }
-        // The layer is opaque and takes every touch; the legacy tree keeps running underneath.
-        layer.isClickable = true
-        outerRoot.addView(layer, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        mainRoot.visibility = View.INVISIBLE
         compactScreen = screen
-        compactLayer = layer
-        compactLayerKey = key
+        addMeloLayer(layer, key)
         screen.attach()
         ViewCompat.requestApplyInsets(layer)
     }
 
-    private fun detachCompact() {
+    /** Car Mode at the panel's real pixels, full screen; emulated FYT frames for testing on a tablet. */
+    private fun showCarLayer(setting: MeloCarPolicy.CarSetting, display: MeloScreenPolicy.DisplaySpec) {
+        val key = "car:${setting.key}:${display.widthPx}x${display.heightPx}:${display.densityDpi}"
+        if (carScreen != null && meloLayerKey == key) {
+            scheduleMeloLibraryRefresh()
+            return
+        }
+        detachMeloLayer()
+        val emulation = setting.emulation
+        val spec = emulation?.spec() ?: display
+        val frameContext = if (emulation != null) MeloEmulation.emulatedContext(this, spec) else this
+        val ppi = MeloCarPolicy.effectivePpi(spec.physicalPpi, spec.widthPx, spec.heightPx)
+        val sizes = MeloDesignTokens.sizes(MeloDesignTokens.Profile.CAR, spec.density, spec.fontScale, ppi)
+        val screen = MeloCarScreen(frameContext, sizes, meloHost, onBackPressedDispatcher, voiceSearchAvailable())
+        val layer: View = if (emulation != null) {
+            MeloEmulation.FrameHost(this, frameContext, spec, MeloDesignTokens.CAR_PALETTE.background).also {
+                it.frame.addView(screen.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            }.root
+        } else {
+            screen.view
+        }
+        setCarFullscreen(true)
+        carScreen = screen
+        addMeloLayer(layer, key)
+        screen.attach()
+    }
+
+    private fun addMeloLayer(layer: View, key: String) {
+        // The layer is opaque and takes every touch; the legacy tree keeps running underneath.
+        layer.isClickable = true
+        outerRoot.addView(layer, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        mainRoot.visibility = View.INVISIBLE
+        meloLayer = layer
+        meloLayerKey = key
+    }
+
+    private fun detachMeloLayer() {
+        val wasCar = carScreen != null
         compactScreen?.detach()
-        compactLayer?.let { if (::outerRoot.isInitialized) outerRoot.removeView(it) }
+        carScreen?.detach()
+        meloLayer?.let { if (::outerRoot.isInitialized) outerRoot.removeView(it) }
         compactScreen = null
-        compactLayer = null
-        compactLayerKey = null
+        carScreen = null
+        meloLayer = null
+        meloLayerKey = null
+        if (wasCar) setCarFullscreen(false)
         if (::mainRoot.isInitialized) mainRoot.visibility = View.VISIBLE
     }
 
-    private fun scheduleCompactLibraryRefresh() {
-        if (compactScreen == null || compactRefreshPosted || !::mainRoot.isInitialized) return
+    /** Spec: Car Mode hides the system bars; a swipe shows them for a moment. */
+    private fun setCarFullscreen(on: Boolean) {
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            if (on) {
+                systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                hide(WindowInsetsCompat.Type.systemBars())
+            } else {
+                show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+
+    /** First time on a wide landscape display: ask "Bật Car Mode?" once instead of switching on. */
+    private fun maybeAskCarMode(
+        prefs: android.content.SharedPreferences,
+        setting: MeloCarPolicy.CarSetting,
+        display: MeloScreenPolicy.DisplaySpec
+    ) {
+        if (carPromptShown || !MeloCarPolicy.shouldAskCarMode(
+                setting, MeloCarPolicy.asked(prefs), display.widthDp, display.heightDp, auth.isReady())) return
+        carPromptShown = true
+        MeloCarPolicy.markAsked(prefs)
+        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            .setTitle("Bật Car Mode?")
+            .setMessage("Màn hình này rộng như màn hình ô tô. Car Mode dùng nút to, chữ lớn, 5 bài mỗi trang và ẩn thanh hệ thống. " +
+                "Có thể đổi lại trong ⋮ → Cài đặt giao diện.")
+            .setNegativeButton("Không", null)
+            .setPositiveButton("Bật Car Mode") { _, _ ->
+                MeloCarPolicy.saveSetting(prefs, MeloCarPolicy.CarSetting.ON)
+                applyMeloLayer()
+            }
+            .show()
+    }
+
+    private fun scheduleMeloLibraryRefresh() {
+        if ((compactScreen == null && carScreen == null) || compactRefreshPosted || !::mainRoot.isInitialized) return
         compactRefreshPosted = true
         mainRoot.post {
             compactRefreshPosted = false
-            if (!isDestroyed) compactScreen?.onLibraryChanged()
+            if (!isDestroyed) {
+                compactScreen?.onLibraryChanged()
+                carScreen?.onLibraryChanged()
+            }
         }
+    }
+
+    private fun notifyMeloPlayback() {
+        compactScreen?.onPlaybackChanged()
+        carScreen?.onPlaybackChanged()
     }
 
     private fun songIsDownloaded(song: Song): Boolean {
@@ -3796,8 +3904,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         else shownSongs.getOrNull(index)?.let { downloadAndPlay(it) }
     }
 
-    private val compactHost = object : MeloCompactScreen.Host {
-        override fun snapshot(): MeloCompactScreen.Snapshot {
+    private val meloHost = object : MeloScreenHost {
+        override fun snapshot(): MeloScreenHost.Snapshot {
             val showingSources = allChatsMode && browseSources && !playlistMode
             val mode = when {
                 playlistMode -> MeloCompactPolicy.Mode.PLAYLIST
@@ -3807,7 +3915,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val playingKey = currentTelegramMessageId()
             val downloadingPercent = playingKey?.let { currentDownloadPercent() }
             val rows = if (showingSources) emptyList() else shownSongs.map { song ->
-                MeloCompactScreen.Row(
+                MeloScreenHost.Row(
                     title = TelegramSongDisplayPolicy.label(song.title, song.filename),
                     sourceTitle = song.sourceTitle ?: sourceNames[song.chatId],
                     filename = song.filename,
@@ -3819,7 +3927,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 )
             }
             val sources = visibleSourceCounts.map { (chatId, count) ->
-                MeloCompactScreen.SourceRow(chatId, if (chatId == 0L) "Tất cả nguồn" else sourceTitleOf(chatId), count)
+                MeloScreenHost.SourceRow(chatId, if (chatId == 0L) "Tất cả nguồn" else sourceTitleOf(chatId), count)
             }
             val total = when {
                 showingSources -> null
@@ -3832,7 +3940,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 !allChatsMode -> "Saved Messages"
                 else -> selectedChatId?.let { sourceTitleOf(it) }
             }
-            return MeloCompactScreen.Snapshot(
+            return MeloScreenHost.Snapshot(
                 showingSources = showingSources,
                 mode = mode,
                 rows = rows,
@@ -3891,7 +3999,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             else shownSongs.getOrNull(index)?.let { showSongOptionsMenu(it, songIsDownloaded(it), anchor) }
         }
 
-        override fun nowPlaying(): MeloCompactScreen.NowPlaying? {
+        override fun nowPlaying(): MeloScreenHost.NowPlaying? {
             val controller = player ?: return null
             val item = controller.currentMediaItem ?: return null
             val key = currentTelegramMessageId()
@@ -3900,7 +4008,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     ?: songs.firstOrNull { it.messageId == k }
             }
             val duration = controller.duration.takeIf { it != C.TIME_UNSET && it > 0L } ?: 0L
-            return MeloCompactScreen.NowPlaying(
+            return MeloScreenHost.NowPlaying(
                 songKey = key,
                 title = item.mediaMetadata.title?.toString()?.takeIf { it.isNotBlank() }
                     ?: song?.let { TelegramSongDisplayPolicy.label(it.title, it.filename) } ?: "Đang phát",
@@ -3935,7 +4043,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
         override fun seekTo(positionMs: Long) {
             player?.seekTo(positionMs.coerceAtLeast(0L))
-            compactScreen?.onPlaybackChanged()
+            notifyMeloPlayback()
         }
 
         override fun toggleFavorite() = toggleCurrentFavorite()
@@ -3965,6 +4073,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
         override fun openUiLab() {
             startActivity(Intent(this@TelegramPreviewActivity, MeloUiLabActivity::class.java)
                 .putExtra(MeloUiLabActivity.EXTRA_SONG_COUNT, totalCountForCurrentView))
+        }
+
+        override fun startVoiceSearch(onText: (String) -> Unit): Boolean {
+            if (!voiceSearchAvailable()) return false
+            voiceSearchCallback = onText
+            return runCatching { voiceSearchResult.launch(voiceSearchIntent()) }
+                .onFailure { voiceSearchCallback = null }
+                .isSuccess
         }
     }
 
@@ -4378,7 +4494,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         authControls.visibility = View.GONE
                         restorePlayingQueueIfAny(verified.value)
                         applyResponsiveLibraryUi()
-                        applyCompactMode()
+                        applyMeloLayer()
                     }
                     loadDatabaseIndex(verified.value) {
                         scanAllTelegramAudio(browseAfter = false, incremental = true)
@@ -5364,7 +5480,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun logoutUser() {
         if (!auth.isReady()) return
-        detachCompact()
+        detachMeloLayer()
         autoRecoveryPolicy.reset()
         setNavigationCollapsed(false)
         clearPendingQrLink()
@@ -5403,7 +5519,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        detachCompact()
+        detachMeloLayer()
         if (::mainRoot.isInitialized) mainRoot.removeCallbacks(miniPlayerProgressTick)
         fullPlayer?.dismiss()
         fullPlayer = null

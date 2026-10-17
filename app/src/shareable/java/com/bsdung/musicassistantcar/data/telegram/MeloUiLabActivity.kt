@@ -127,6 +127,20 @@ class MeloUiLabActivity : AppCompatActivity() {
             "Mở màn này trên S25 Ultra và Y700 (cầm dọc và ngang), bấm \"Sao chép số đo\" rồi gửi lại để chốt ngưỡng bố cục."
         ))
 
+        content.addView(components.sectionTitle("Car Mode (FYT 7870)"))
+        content.addView(note(
+            "Nút to, chữ lớn, 5 bài mỗi trang, tua −30s / +60s, ẩn thanh hệ thống; dùng nhạc thật. " +
+                "Car Mode đè lên mọi bố cục khác. \"Thử trong khung FYT\" vẽ đúng 1920 × 1200 điểm ảnh, " +
+                "nên cầm máy ngang. Chỉ hiện sau khi đã đăng nhập Telegram."
+        ))
+        val carSetting = MeloCarPolicy.loadSetting(prefs)
+        MeloCarPolicy.CarSetting.entries.forEach { setting ->
+            content.addView(choiceRow(setting.displayName, setting == carSetting) {
+                MeloCarPolicy.saveSetting(prefs, setting)
+                render()
+            })
+        }
+
         content.addView(components.sectionTitle("Bố cục Gọn (Shanling M3 Ultra)"))
         content.addView(note(
             "Thư viện, Telegram và Đang phát rút gọn cho máy nhỏ, dùng nhạc thật của bạn. " +
