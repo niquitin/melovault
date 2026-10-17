@@ -233,6 +233,11 @@ Mã này đã import vào Tiny standalone clone C:\Bots\MeloVault-E93D-IsolatedQ
   - Không crash, không ANR, không khởi động lại tiến trình.
   - **Lỗi/việc cần sửa:** F1 Studio Deck vẽ lại liên tục (biểu tượng đang phát ~14 fps + dựng lại hàng đợi mỗi 5 s trên UI thread); F2 ký tự ⏾ ở nút Hẹn giờ hiện ô vuông trên Sony Android 12; F3 lật trang Car dựng lại 5 dòng; F4 native heap tăng khi quét offline lại (TDLib cùng tiến trình) rồi giảm — [CẦN XÁC NHẬN] trên Shanling 3GB.
   - Sony đã khôi phục: Car Mode Tắt, Bố cục Gọn Tự động, Màn Đang phát Studio Deck (mặc định), danh sách "Tất cả", nhạc tạm dừng, rotation 1/0, density/size không đổi, không file tạm.
+- **Beta91 — sửa F1–F3 từ test hiệu năng Sony (18/10/2026):** commit sửa f5821e3 (perf(shareable): fix Sony findings F1-F3), bump vc91 / 0.6.70-beta (b30eaff). Bundle `D:\Bots\_transfer\MeloVault_Beta91_d1417fb-b30eaff_delta_20261018.bundle` (9.703 bytes, SHA256 4DD9C231D5476391FDDC72D6C4A34B7975D9FFDB53DD90393FA3BBEBAB9F7DEC, khớp trên Tiny); clone cô lập d1417fb → b30eaff; test Tiny 1.116 / 1.095 passed / 21 skipped / 0 failed mỗi biến thể; APK **SHA256 308AEA85A00E06DC804462D04A8D67DA57D125590C2B86999DDF2E07300C6104**, vc91, signer eecd3df7…ce8, Telegram config có mặt. Drive: `H:\My Drive\MeloVault-Owner-Beta-v0.6.70-b91-Y700-REVIEW` (SHA256 khớp). Đã cài đè lên Sony và đo lại (`C:\Bots\_qa_temp\Perf_Beta91\PERF_REPORT_Beta91_Sony.txt`):
+  - F1 Studio Deck khi phát: Beta90 222 khung/30 s, giật 5,41%, p99 40 ms → Beta91 42 khung, 0%, p99 10 ms. ĐÃ SỬA.
+  - F2 nút "Hẹn giờ" hiện chữ đúng (không còn ô vuông). ĐÃ SỬA.
+  - F3 lật trang Car: 26% giật / p99 18 ms → 3,4% / p99 14 ms. ĐÃ CẢI THIỆN.
+  - Lưu ý nhỏ: thanh tua khi chưa có sóng âm, núm tròn ở vị trí 0 bị cắt nửa bên trái. Sony đã khôi phục (Car Tắt, "Tất cả", nhạc dừng, rotation 1/0, density 420).
 - **Gate cài Beta87 lên Y700:** chỉ hướng dẫn cài đè (`adb install -r`, không bao giờ gỡ app) khi SHA-256 chứng chỉ ký của APK Beta87 build trên Tiny TRÙNG với Beta86 đang cài (eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8), so bằng `apksigner verify --print-certs`. Khác khóa → dừng, báo chủ dự án.
 
 ### Chưa làm / chưa nghiệm thu
