@@ -55,8 +55,8 @@ Test JVM trên Ni → commit → Git bundle delta + SHA256 → import vào clone
 - Branch `feature/e93-03d-y700-offline-cockpit`. Mốc an toàn: tag `pre-claude-migration` (= 83b66c1, code E9.3-03D, chưa QA thiết bị).
 - P1 đã xong: commit `b490ded` bump shareable lên vc86 / `0.6.65-beta`; test sau bump giữ mốc 1.029 passed / 21 skipped / 0 failed mỗi biến thể.
 - P2 phía Ni đã xong: bundle `D:\Bots\_transfer\MeloVault_E93_03D_Beta86_83b66c1-f2eae36_delta_20261017.bundle` (SHA256 `527991A3…B764C`, đủ giá trị trong HANDOFF.md và file `.sha256` cạnh bundle). Bundle tạo bằng `git bundle create <file> <tiny-HEAD>..<branch>`, rồi `git bundle verify` + sidecar `.sha256`; không ghi đè bundle cũ.
-- P2 phía Tiny và P3 đã xong (theo chủ dự án): clone cô lập ở f2eae36; APK Beta86 vc86 `0.6.65-beta` SHA256 `98FA98F6…5D85` tại `C:\Bots\_qa_temp\Beta86_f2eae36\` trên Tiny, chưa cài/upload.
-- P4 Sony QA đạt với APK Beta86 đó; 2 lỗi UI nhỏ sửa ở `2a9ac8e` (chưa có trong APK, chưa bump).
-- Việc kế tiếp (chỉ làm khi chủ dự án yêu cầu): chủ dự án chọn đi P5 với Beta86 hiện tại hay bump + build lại có `2a9ac8e`. Xem mục 5 và 8 của `HANDOFF.md`.
+- P2–P6 đã xong, **Beta86 và Theme 03 đã chốt (17/10/2026)**. APK chính thức build từ `dbafe3e` (có fix chooser `2a9ac8e`), vc86 `0.6.65-beta`, SHA256 `B5F9C261…523F`; đã upload Drive riêng, chủ dự án QA Y700 đạt. APK vc86 cũ từ `f2eae36` (`98FA98F6…5D85`) đã bị thay thế: không cài/gửi.
+- Hai APK cùng vc86 chỉ phân biệt bằng SHA256 → bản phát hành sau phải bump versionCode ≥ 87.
+- Việc kế tiếp (chỉ làm khi chủ dự án yêu cầu và gửi ảnh concept): thiết kế Theme 04, lập plan trước khi code. Xem mục 5 và 8 của `HANDOFF.md`.
 - Commit trên Ni: máy chưa có git identity; dùng `git -c user.name="Claude Code" -c user.email="noreply@anthropic.com" commit ...` (không sửa git config), giống cách Codex dùng identity riêng.
 - Kết thúc mỗi phần việc: cập nhật mục "Đang làm dở" và "Việc làm tiếp theo" trong `HANDOFF.md`, cập nhật file này nếu có quy ước mới, rồi commit.
