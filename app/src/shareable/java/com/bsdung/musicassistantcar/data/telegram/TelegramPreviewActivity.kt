@@ -3384,10 +3384,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val account = library.authorizedUser()?.value ?: return
         val labels = group.entries.map { entry ->
             val s = entry.song
-            val playing = if (s.songKey == currentTelegramMessageId()) "▶ " else ""
-            playing + (s.sourceTitle ?: sourceNames[s.chatId] ?: "Telegram") + " · " + s.filename
+            TelegramSongDisplayPolicy.versionLabel(
+                s.sourceTitle ?: sourceNames[s.chatId], s.filename, s.date, s.fileSize,
+                playing = s.songKey == currentTelegramMessageId()
+            )
         }.toTypedArray()
-        AlertDialog.Builder(this).setTitle(group.label).setItems(labels) { _, index ->
+        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog).setTitle(group.label).setItems(labels) { _, index ->
             val selected = group.entries[index].song
             val entry = group.selected(account, selected.chatId, selected.messageId) ?: return@setItems
             if (library.authorizedUser()?.value != account || !auth.isReady()) return@setItems

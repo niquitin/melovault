@@ -1,9 +1,11 @@
 package com.bsdung.musicassistantcar.data.telegram
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.TimeZone
 
 class TelegramSongDisplayPolicyTest {
 
@@ -89,5 +91,37 @@ class TelegramSongDisplayPolicyTest {
     fun computeSampleWithinBounds() {
         assertTrue(TelegramSongDisplayPolicy.computeSample(100_000, 96, 96) >= 1)
         assertTrue(TelegramSongDisplayPolicy.computeSample(5_000_000, 96, 96) in 2..16)
+    }
+
+    private val utc = TimeZone.getTimeZone("UTC")
+
+    @Test
+    fun messageDateFormatsUnixSecondsAndHidesUnknown() {
+        assertEquals("14/11/2023 22:13", TelegramSongDisplayPolicy.formatMessageDate(1_700_000_000L, utc))
+        assertNull(TelegramSongDisplayPolicy.formatMessageDate(0L, utc))
+        assertNull(TelegramSongDisplayPolicy.formatMessageDate(-1L, utc))
+    }
+
+    @Test
+    fun versionLabelShowsSourceFileDateAndSize() {
+        assertEquals(
+            "▶ Kênh A · song.mp3 · 14/11/2023 22:13 · 9.6 MB",
+            TelegramSongDisplayPolicy.versionLabel("Kênh A", "song.mp3", 1_700_000_000L, 9_600_000L, playing = true, zone = utc)
+        )
+    }
+
+    @Test
+    fun versionLabelOmitsUnknownDateAndSizeAndFallsBackSource() {
+        assertEquals(
+            "Telegram · song.mp3",
+            TelegramSongDisplayPolicy.versionLabel(" ", "song.mp3", 0L, -1L, zone = utc)
+        )
+    }
+
+    @Test
+    fun sameNamedCopiesInOneChatGetDistinctLabels() {
+        val first = TelegramSongDisplayPolicy.versionLabel("Kênh A", "song.mp3", 1_700_000_000L, 9_600_000L, zone = utc)
+        val second = TelegramSongDisplayPolicy.versionLabel("Kênh A", "song.mp3", 1_700_086_400L, 9_600_000L, zone = utc)
+        assertNotEquals(first, second)
     }
 }

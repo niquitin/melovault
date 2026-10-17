@@ -1,6 +1,9 @@
 package com.bsdung.musicassistantcar.data.telegram
 
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 /** Song-list display never duplicates Telegram's title and its filename, and formats metadata truthfully. */
 internal object TelegramSongDisplayPolicy {
@@ -27,6 +30,29 @@ internal object TelegramSongDisplayPolicy {
     fun formatFileSize(fileSizeBytes: Long): String? {
         if (fileSizeBytes <= 0L) return null
         return String.format(Locale.US, "%.1f MB", fileSizeBytes / 1_000_000.0)
+    }
+
+    /** Telegram message date is Unix seconds; 0 or negative means unknown. */
+    fun formatMessageDate(dateSeconds: Long, zone: TimeZone = TimeZone.getDefault()): String? {
+        if (dateSeconds <= 0L) return null
+        return SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.US)
+            .apply { timeZone = zone }
+            .format(Date(dateSeconds * 1000L))
+    }
+
+    /** One chooser row per copy; date and size tell apart same-named copies from one chat. */
+    fun versionLabel(
+        source: String?,
+        filename: String,
+        dateSeconds: Long,
+        fileSizeBytes: Long,
+        playing: Boolean = false,
+        zone: TimeZone = TimeZone.getDefault()
+    ): String {
+        val parts = mutableListOf(source?.takeIf { it.isNotBlank() } ?: "Telegram", filename)
+        formatMessageDate(dateSeconds, zone)?.let { parts.add(it) }
+        formatFileSize(fileSizeBytes)?.let { parts.add(it) }
+        return (if (playing) "▶ " else "") + parts.joinToString(" · ")
     }
 
     fun subtitle(
