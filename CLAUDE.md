@@ -30,7 +30,7 @@ Nếu working tree bẩn bất ngờ, branch lạ, hoặc có agent khác (Codex
 .\gradlew.bat :app:assembleShareableRelease --console=plain
 git diff --check
 ```
-Mốc hiện tại (Beta89, sau bước 5 ui-spec): mỗi biến thể 1.107 tests, 1.086 passed, 21 skipped, 0 failed. Skipped không tính là pass. Build trên Ni có Telegram API ID 0 là bình thường; build PASS không có nghĩa APK dùng được.
+Mốc hiện tại (Beta90, sau bước 6 ui-spec): mỗi biến thể 1.116 tests, 1.095 passed, 21 skipped, 0 failed. Skipped không tính là pass. Build trên Ni có Telegram API ID 0 là bình thường; build PASS không có nghĩa APK dùng được.
 
 ## Stack
 Kotlin, Java/JVM 17 (Gradle chạy bằng JDK 21), Gradle 8.13, AGP 8.13.0, Kotlin 2.2.10, compileSdk/targetSdk 36, minSdk 26. Một module `:app`, flavor `personal` / `shareable` (`app.melovault.player`). Media3 1.11.1, WorkManager, SQLite tự viết DAO, TDLib JNI/JSON, JUnit4.
@@ -68,6 +68,7 @@ Test JVM trên Ni → commit → Git bundle delta + SHA256 → import vào clone
 - APK Beta87 đã build + verify trên Tiny (SHA256 `2D8E621D…71EE`, signer trùng Beta86). Build trên Tiny chạy qua Desktop Commander, máy `DESKTOP-HNP4GVR` = Tiny, chỉ trong clone cô lập + `C:\Bots\_qa_temp\`.
 - Bước 4 (bản Gọn Shanling) code xong ở Beta88 (vc88 `0.6.67-beta`): `MeloCompactScreen` là lớp view phủ lên `TelegramPreviewActivity` qua interface `MeloScreenHost`; KHÔNG tự truy vấn DB/TDLib. Bước 5 (Car Mode) ở Beta89 (`MeloCarScreen`, cùng mẫu; `applyMeloLayer()` ưu tiên Car > Gọn > cũ). Màn mới sau này đi theo cùng mẫu.
 - Y700 không đo (chủ dự án bỏ). Tìm không dấu là việc riêng, có thể cần đổi schema → phải được duyệt.
-- Việc kế tiếp (chỉ làm khi chủ dự án yêu cầu): chủ dự án thử Beta89, rồi bước 6 (màn Đang phát Studio Deck). Xem mục 5 và 8 của `HANDOFF.md`.
+- Bước 6 (Studio Deck) ở Beta90: `MeloStudioDeck` mở từ `showFullPlayer()` (mặc định), hẹn giờ + công tắc tải trước nằm trong `ShareablePlaybackService`. EQ chưa làm.
+- Việc kế tiếp (chỉ làm khi chủ dự án yêu cầu): chủ dự án thử Beta90, rồi bước 7 (Thư viện dọc S25, Hai khung Y700). Xem mục 5 và 8 của `HANDOFF.md`.
 - Commit trên Ni: máy chưa có git identity; dùng `git -c user.name="Claude Code" -c user.email="noreply@anthropic.com" commit ...` (không sửa git config), giống cách Codex dùng identity riêng.
 - Kết thúc mỗi phần việc: cập nhật mục "Đang làm dở" và "Việc làm tiếp theo" trong `HANDOFF.md`, cập nhật file này nếu có quy ước mới, rồi commit.
