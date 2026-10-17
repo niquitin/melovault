@@ -9,7 +9,7 @@ import kotlin.math.sqrt
  * docs/ui-spec.md. Pure JVM except the SharedPreferences helpers.
  * The thresholds 600/700/840/1200dp are the spec's estimates. Measured on S25 Ultra
  * (2026-10-17): 384 × 832dp portrait, 832 × 384dp landscape, 450 dpi, 376 ppi.
- * Y700 numbers are still to be measured with the "Thông tin màn hình" screen.
+ * Y700 measurement was dropped by the owner; tablet thresholds stay at the spec estimates.
  */
 internal object MeloScreenPolicy {
 
