@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "model": "opusplan",
+  "permissions": {
+    "deny": [
+      "Read(./local.properties)",
+      "Read(./secrets.properties)",
+      "Read(./bridge/.env)",
+      "Read(**/*.keystore)",
+      "Read(**/*.jks)",
+      "Edit(./local.properties)",
+      "Edit(./secrets.properties)",
+      "Bash(git reset --hard *)",
+      "Bash(git clean *)",
+      "Bash(git stash *)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(adb uninstall *)",
+      "Bash(adb * uninstall *)",
+      "Bash(adb shell pm clear *)",
+      "Bash(adb * shell pm clear *)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(git checkout *)",
+      "Bash(git restore *)",
+      "Bash(git rebase *)",
+      "Bash(adb * install *)",
+      "Bash(adb install *)"
+    ]
+  }
+}

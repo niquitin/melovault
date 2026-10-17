@@ -51,3 +51,6 @@ bridge/**/__pycache__/
 *.session
 *.session-journal
 *.session-*
+
+# Claude Code personal settings (keep out of Git)
+.claude/settings.local.json
