@@ -2863,6 +2863,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         menu.menu.add(0, 8, 8, themeLabel)
         val bentoLabel = "Hiển thị nguồn: ${currentSourceDisplayMode.displayName} ›"
         menu.menu.add(0, 9, 9, bentoLabel)
+        menu.menu.add(0, 10, 10, "⚙ Cài đặt giao diện (thử nghiệm)")
         menu.setOnMenuItemClickListener {
             val user = library.authorizedUser()?.value ?: 0L
             when (it.itemId) {
@@ -2906,6 +2907,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
                 8 -> toggleThemePreset()
                 9 -> showSourceDisplayModeDialog()
+                10 -> startActivity(Intent(this, MeloUiLabActivity::class.java)
+                    .putExtra(MeloUiLabActivity.EXTRA_SONG_COUNT, totalCountForCurrentView))
             }
             true
         }

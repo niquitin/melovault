@@ -21,6 +21,14 @@
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </service>
+        <!-- UI lab (docs/ui-spec.md step 1): screen info + device emulation, own prefs only. -->
+        <activity android:name=".data.telegram.MeloUiLabActivity"
+                  android:exported="false"
+                  android:theme="@style/Theme.MusicAssistantCar" />
+        <activity android:name=".data.telegram.MeloUiPreviewActivity"
+                  android:exported="false"
+                  android:resizeableActivity="true"
+                  android:theme="@style/Theme.MusicAssistantCar" />
         <activity android:name=".data.telegram.TelegramPreviewActivity"
                   android:exported="true"
                   android:resizeableActivity="true"
