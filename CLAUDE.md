@@ -30,7 +30,7 @@ Nếu working tree bẩn bất ngờ, branch lạ, hoặc có agent khác (Codex
 .\gradlew.bat :app:assembleShareableRelease --console=plain
 git diff --check
 ```
-Mốc hiện tại (HEAD 83b66c1, giữ nguyên sau bump b490ded): mỗi biến thể 1.029 passed, 21 skipped, 0 failed. Skipped không tính là pass. Build trên Ni có Telegram API ID 0 là bình thường; build PASS không có nghĩa APK dùng được.
+Mốc hiện tại (HEAD 2a9ac8e): mỗi biến thể 1.054 tests, 1.033 passed, 21 skipped, 0 failed (trước 2a9ac8e là 1.029 passed). Skipped không tính là pass. Build trên Ni có Telegram API ID 0 là bình thường; build PASS không có nghĩa APK dùng được.
 
 ## Stack
 Kotlin, Java/JVM 17 (Gradle chạy bằng JDK 21), Gradle 8.13, AGP 8.13.0, Kotlin 2.2.10, compileSdk/targetSdk 36, minSdk 26. Một module `:app`, flavor `personal` / `shareable` (`app.melovault.player`). Media3 1.11.1, WorkManager, SQLite tự viết DAO, TDLib JNI/JSON, JUnit4.
@@ -56,6 +56,7 @@ Test JVM trên Ni → commit → Git bundle delta + SHA256 → import vào clone
 - P1 đã xong: commit `b490ded` bump shareable lên vc86 / `0.6.65-beta`; test sau bump giữ mốc 1.029 passed / 21 skipped / 0 failed mỗi biến thể.
 - P2 phía Ni đã xong: bundle `D:\Bots\_transfer\MeloVault_E93_03D_Beta86_83b66c1-f2eae36_delta_20261017.bundle` (SHA256 `527991A3…B764C`, đủ giá trị trong HANDOFF.md và file `.sha256` cạnh bundle). Bundle tạo bằng `git bundle create <file> <tiny-HEAD>..<branch>`, rồi `git bundle verify` + sidecar `.sha256`; không ghi đè bundle cũ.
 - P2 phía Tiny và P3 đã xong (theo chủ dự án): clone cô lập ở f2eae36; APK Beta86 vc86 `0.6.65-beta` SHA256 `98FA98F6…5D85` tại `C:\Bots\_qa_temp\Beta86_f2eae36\` trên Tiny, chưa cài/upload.
-- Việc kế tiếp (chỉ làm khi chủ dự án yêu cầu): P4 Sony QA với đúng APK đó. Xem mục 5 và 8 của `HANDOFF.md`.
+- P4 Sony QA đạt với APK Beta86 đó; 2 lỗi UI nhỏ sửa ở `2a9ac8e` (chưa có trong APK, chưa bump).
+- Việc kế tiếp (chỉ làm khi chủ dự án yêu cầu): chủ dự án chọn đi P5 với Beta86 hiện tại hay bump + build lại có `2a9ac8e`. Xem mục 5 và 8 của `HANDOFF.md`.
 - Commit trên Ni: máy chưa có git identity; dùng `git -c user.name="Claude Code" -c user.email="noreply@anthropic.com" commit ...` (không sửa git config), giống cách Codex dùng identity riêng.
 - Kết thúc mỗi phần việc: cập nhật mục "Đang làm dở" và "Việc làm tiếp theo" trong `HANDOFF.md`, cập nhật file này nếu có quy ước mới, rồi commit.
