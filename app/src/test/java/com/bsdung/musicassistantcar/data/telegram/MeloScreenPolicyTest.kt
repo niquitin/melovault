@@ -107,6 +107,29 @@ class MeloScreenPolicyTest {
     }
 
     @Test
+    fun measuredS25UltraUsesPhonePortraitAndTwoPaneLandscape() {
+        // Owner measurement 2026-10-17, SM-S938B: 1080 × 2340 px, 450 dpi, 375.8 × 376.2 ppi.
+        val portrait = DisplaySpec(1080, 2340, 450, 375.8f, 376.2f)
+        val landscape = DisplaySpec(2340, 1080, 450, 375.8f, 376.2f)
+        assertEquals(384, portrait.widthDp)
+        assertEquals(832, portrait.heightDp)
+        assertEquals(0.190f, portrait.dpInMm, 0.002f)
+        assertEquals(6.9f, portrait.diagonalInches, 0.05f)
+        assertEquals(Layout.PHONE_PORTRAIT, MeloScreenPolicy.chooseLayout(384, 832, false))
+        assertEquals(Layout.TWO_PANE, MeloScreenPolicy.chooseLayout(landscape.widthDp, landscape.heightDp, false))
+        assertEquals(Profile.PHONE, MeloScreenPolicy.profileFor(Layout.TWO_PANE, landscape.smallestWidthDp))
+        assertFalse(MeloCompactPolicy.shouldUseCompact(MeloCompactPolicy.CompactSetting.AUTO, 384, 832, authorized = true))
+        assertFalse(MeloScreenPolicy.shouldOfferCarMode(832, 384, carMode = false, alreadyAsked = false))
+    }
+
+    @Test
+    fun landscapeBetween600And839IsTwoPanePortraitStaysTablet() {
+        assertEquals(Layout.TWO_PANE, MeloScreenPolicy.chooseLayout(700, 500, false))
+        assertEquals(Layout.TABLET_PORTRAIT, MeloScreenPolicy.chooseLayout(700, 1000, false))
+        assertEquals(Layout.TABLET_PORTRAIT, MeloScreenPolicy.chooseLayout(800, 800, false))
+    }
+
+    @Test
     fun y700LikeDisplayChoosesTwoPaneLandscapeAndTabletPortrait() {
         // [CẦN XÁC NHẬN] real Y700 density must come from the "Thông tin màn hình" screen.
         val landscape = DisplaySpec(2560, 1600, 400, 343f, 343f)

@@ -7,8 +7,9 @@ import kotlin.math.sqrt
 /**
  * Screen measurements, test-only device emulation and the layout rules of
  * docs/ui-spec.md. Pure JVM except the SharedPreferences helpers.
- * The thresholds 600/700/840/1200dp are the spec's estimates, to be confirmed
- * with the "Thông tin màn hình" numbers measured on S25 Ultra and Y700.
+ * The thresholds 600/700/840/1200dp are the spec's estimates. Measured on S25 Ultra
+ * (2026-10-17): 384 × 832dp portrait, 832 × 384dp landscape, 450 dpi, 376 ppi.
+ * Y700 numbers are still to be measured with the "Thông tin màn hình" screen.
  */
 internal object MeloScreenPolicy {
 
@@ -108,8 +109,11 @@ internal object MeloScreenPolicy {
         carMode -> Layout.CAR
         widthDp < COMPACT_MAX_WIDTH_DP && heightDp < COMPACT_MAX_HEIGHT_DP -> Layout.COMPACT
         widthDp < TABLET_MIN_WIDTH_DP -> Layout.PHONE_PORTRAIT
-        widthDp < TWO_PANE_MIN_WIDTH_DP -> Layout.TABLET_PORTRAIT
-        else -> Layout.TWO_PANE
+        widthDp >= TWO_PANE_MIN_WIDTH_DP -> Layout.TWO_PANE
+        // Measured S25 Ultra turned sideways is 832 × 384dp: just under 840 but far too short
+        // for the tablet column, so any landscape window from 600dp wide gets the two panes.
+        widthDp > heightDp -> Layout.TWO_PANE
+        else -> Layout.TABLET_PORTRAIT
     }
 
     /** Y700 uses Tablet in both orientations; a phone turned sideways keeps the Phone sizes. */
