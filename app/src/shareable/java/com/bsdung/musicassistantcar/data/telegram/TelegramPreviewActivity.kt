@@ -123,6 +123,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var nowPlayingTitle: TextView
     private lateinit var playPause: Button
     private var fullPlayer: NowPlayingFullScreenDialog? = null
+    private var studioDeck: MeloStudioDeck? = null
     private var queueDialog: Dialog? = null
     private var currentSongIndex = -1
     private lateinit var input: EditText
@@ -337,10 +338,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
         super.onConfigurationChanged(newConfig)
         // Multi-window car head units change the playback pane size often.
         // Keep TDLib and the MediaSession alive; rebuild only the dialog chrome.
-        val fullWasShowing = fullPlayer?.isShowing() == true
+        val fullWasShowing = fullPlayer?.isShowing() == true || studioDeck?.isShowing() == true
         val queueWasShowing = queueDialog?.isShowing == true
         fullPlayer?.dismiss()
         fullPlayer = null
+        studioDeck?.dismiss()
+        studioDeck = null
         queueDialog?.dismiss()
         queueDialog = null
         applyResponsiveLibraryUi()
@@ -3155,6 +3158,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun showFullPlayer() {
+        // Studio Deck is the default Now Playing; "Màn cũ" in Cài đặt giao diện keeps the old dialog.
+        val style = MeloNowPlayingPolicy.loadStyle(getSharedPreferences(MeloScreenPolicy.PREFS_NAME, Context.MODE_PRIVATE))
+        if (style == MeloNowPlayingPolicy.NowPlayingStyle.STUDIO_DECK) {
+            val deck = studioDeck?.takeIf { it.isShowing() } ?: MeloStudioDeck(this, meloHost)
+            studioDeck = deck
+            deck.show()
+            return
+        }
         val dialog = fullPlayer ?: NowPlayingFullScreenDialog(
             this,
             themeTokens = { themeTokens },
@@ -4082,6 +4093,69 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 .onFailure { voiceSearchCallback = null }
                 .isSuccess
         }
+
+        override fun queue(): List<MeloScreenHost.QueueItem> {
+            val account = library.authorizedUser()?.value ?: return emptyList()
+            restorePlayingQueueIfAny(account)
+            val current = currentTelegramMessageId()
+            val percent = current?.let { currentDownloadPercent() }
+            return queueSongOrder.map { song ->
+                MeloScreenHost.QueueItem(
+                    title = TelegramSongDisplayPolicy.label(song.title, song.filename),
+                    sourceTitle = song.sourceTitle ?: sourceNames[song.chatId],
+                    durationSeconds = song.durationSeconds,
+                    songKey = song.messageId,
+                    downloaded = ownedCachedFile(song.messageId) != null,
+                    downloadingPercent = if (song.messageId == current) percent else null
+                )
+            }
+        }
+
+        override fun playQueueAt(index: Int) {
+            queueSongOrder.getOrNull(index)?.let { downloadAndPlay(it) }
+        }
+
+        override fun qualityLabel(bitDepth: Int?): String? {
+            val groups = player?.currentTracks?.groups ?: return null
+            val key = currentTelegramMessageId()
+            val filename = key?.let { k ->
+                (queueSongOrder.firstOrNull { it.messageId == k } ?: songs.firstOrNull { it.messageId == k })?.filename
+            }
+            for (group in groups) {
+                if (group.type != C.TRACK_TYPE_AUDIO) continue
+                for (i in 0 until group.length) {
+                    if (!group.isTrackSelected(i)) continue
+                    val f = group.getTrackFormat(i)
+                    return MeloNowPlayingPolicy.qualityLabel(f.sampleMimeType, filename, f.sampleRate, f.bitrate, bitDepth)
+                }
+            }
+            return null
+        }
+
+        override fun currentLocalFile(): File? = currentTelegramMessageId()?.let { ownedCachedFile(it) }
+
+        override fun accountId(): Long = library.authorizedUser()?.value ?: 0L
+
+        override fun prefetchEnabled(): Boolean = prefetchNextEnabled()
+
+        override fun setPrefetchEnabled(enabled: Boolean) {
+            MeloNowPlayingPolicy.setPrefetchEnabled(
+                getSharedPreferences(MeloNowPlayingPolicy.PLAYBACK_PREFS, Context.MODE_PRIVATE), enabled)
+            if (enabled) prefetchNextCachedNeighbor()
+        }
+
+        override fun sleepTimer(): Pair<Long?, Boolean> = ShareablePlaybackService.sleepTimerState()
+
+        override fun setSleepTimer(option: MeloNowPlayingPolicy.SleepOption) = ShareablePlaybackService.setSleepTimer(option)
+    }
+
+    private fun prefetchNextEnabled(): Boolean =
+        MeloNowPlayingPolicy.prefetchEnabled(getSharedPreferences(MeloNowPlayingPolicy.PLAYBACK_PREFS, Context.MODE_PRIVATE))
+
+    /** A downloaded, account-owned file for [songKey], same check as the legacy list. */
+    private fun ownedCachedFile(songKey: Long): File? {
+        val local = cachedSongPaths[songKey]?.let { File(it) } ?: return null
+        return local.takeIf { it.isFile && TelegramAccountStoragePolicy.isOwnedFile(filesRoot, it) }
     }
 
     /** Next page of the visible list; callers decide the list is near its end. */
@@ -5275,6 +5349,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
             cachedSongPaths.remove(next.messageId)
         }
+        // "Tải trước bài kế" off: already-downloaded neighbors above still play next; no new download.
+        if (!prefetchNextEnabled()) return
         val effectiveChatId = if (next.chatId != 0L) next.chatId else (savedChatId.takeIf { it != 0L } ?: (library.authorizedUser()?.value ?: 0L))
         val rawMsgId = next.genuineMessageId
         if (effectiveChatId == 0L || rawMsgId <= 0L) return
@@ -5523,6 +5599,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         if (::mainRoot.isInitialized) mainRoot.removeCallbacks(miniPlayerProgressTick)
         fullPlayer?.dismiss()
         fullPlayer = null
+        studioDeck?.dismiss()
+        studioDeck = null
         queueDialog?.dismiss()
         queueDialog = null
         clearPendingQrLink()

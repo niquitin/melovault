@@ -127,6 +127,20 @@ class MeloUiLabActivity : AppCompatActivity() {
             "Mở màn này trên S25 Ultra và Y700 (cầm dọc và ngang), bấm \"Sao chép số đo\" rồi gửi lại để chốt ngưỡng bố cục."
         ))
 
+        content.addView(components.sectionTitle("Màn Đang phát"))
+        content.addView(note(
+            "Studio Deck: ảnh bìa lớn, sóng âm thật của bài đã tải để tua, −30s / +60s, hẹn giờ tắt, " +
+                "hàng đợi có trạng thái từng bài và công tắc Tải trước bài kế. Chọn \"Màn cũ\" nếu cần quay về. " +
+                "Bản Gọn và Car Mode có màn Đang phát riêng."
+        ))
+        val nowStyle = MeloNowPlayingPolicy.loadStyle(prefs)
+        MeloNowPlayingPolicy.NowPlayingStyle.entries.forEach { style ->
+            content.addView(choiceRow(style.displayName, style == nowStyle) {
+                MeloNowPlayingPolicy.saveStyle(prefs, style)
+                render()
+            })
+        }
+
         content.addView(components.sectionTitle("Car Mode (FYT 7870)"))
         content.addView(note(
             "Nút to, chữ lớn, 5 bài mỗi trang, tua −30s / +60s, ẩn thanh hệ thống; dùng nhạc thật. " +

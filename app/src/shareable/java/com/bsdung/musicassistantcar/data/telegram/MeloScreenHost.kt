@@ -33,6 +33,31 @@ internal interface MeloScreenHost {
     /** Starts speech input; false when this device has no speech recognizer. */
     fun startVoiceSearch(onText: (String) -> Unit): Boolean
 
+    // ---- Studio Deck (Now Playing) --------------------------------------------------------
+
+    /** Current playback queue in play order (the service's authoritative order). */
+    fun queue(): List<QueueItem>
+    fun playQueueAt(index: Int)
+    /** Real decoder format of the current track; [bitDepth] from the file when known. */
+    fun qualityLabel(bitDepth: Int?): String?
+    /** The fully downloaded, account-owned file of the current track, or null. */
+    fun currentLocalFile(): java.io.File?
+    fun accountId(): Long
+    fun prefetchEnabled(): Boolean
+    fun setPrefetchEnabled(enabled: Boolean)
+    /** (deadline in elapsedRealtime millis or null, stop at end of track). */
+    fun sleepTimer(): Pair<Long?, Boolean>
+    fun setSleepTimer(option: MeloNowPlayingPolicy.SleepOption)
+
+    data class QueueItem(
+        val title: String,
+        val sourceTitle: String?,
+        val durationSeconds: Int,
+        val songKey: Long,
+        val downloaded: Boolean,
+        val downloadingPercent: Int?
+    )
+
     data class Row(
         val title: String,
         val sourceTitle: String?,
