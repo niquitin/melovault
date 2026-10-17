@@ -22,81 +22,23 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.OnBackPressedDispatcher
 import com.bsdung.musicassistantcar.data.telegram.MeloCompactPolicy.Mode
 import com.bsdung.musicassistantcar.data.telegram.MeloComponents.SongRowModel
+import com.bsdung.musicassistantcar.data.telegram.MeloScreenHost.NowPlaying
+import com.bsdung.musicassistantcar.data.telegram.MeloScreenHost.Row
+import com.bsdung.musicassistantcar.data.telegram.MeloScreenHost.Snapshot
+import com.bsdung.musicassistantcar.data.telegram.MeloScreenHost.SourceRow
 import com.bsdung.musicassistantcar.data.telegram.MeloDesignTokens.Sizes
 
 /**
  * Gọn layout for small players (Shanling M3 Ultra), docs/ui-spec.md step 4.
- * Pure view layer: every list, count and action comes from [Host], which maps to
+ * Pure view layer: every list, count and action comes from [MeloScreenHost], which maps to
  * the existing library / download / playback logic of TelegramPreviewActivity.
  */
 internal class MeloCompactScreen(
     private val context: Context,
     sizes: Sizes,
-    private val host: Host,
+    private val host: MeloScreenHost,
     private val backDispatcher: OnBackPressedDispatcher
 ) {
-
-    interface Host {
-        fun snapshot(): Snapshot
-        fun setMode(mode: Mode)
-        fun showSources()
-        fun openSource(chatId: Long?)
-        fun setQuery(query: String)
-        fun loadMore()
-        fun playAt(index: Int)
-        fun openSongMenu(index: Int, anchor: View)
-        fun nowPlaying(): NowPlaying?
-        fun playPause()
-        fun next()
-        fun previous()
-        fun seekTo(positionMs: Long)
-        fun toggleFavorite()
-        fun toggleShuffle()
-        fun cycleRepeat()
-        fun openQueue()
-        fun openLegacyOverflow(anchor: View)
-        fun openUiLab()
-    }
-
-    data class Row(
-        val title: String,
-        val sourceTitle: String?,
-        val filename: String,
-        val durationSeconds: Int,
-        val songKey: Long,
-        val downloaded: Boolean,
-        val downloadingPercent: Int?,
-        val art: Bitmap?
-    )
-
-    data class SourceRow(val chatId: Long, val title: String, val count: Int)
-
-    data class Snapshot(
-        val showingSources: Boolean,
-        val mode: Mode,
-        val rows: List<Row>,
-        val sources: List<SourceRow>,
-        val total: Int?,
-        val sourceTitle: String?,
-        val playingKey: Long?,
-        val query: String,
-        val note: String?
-    )
-
-    data class NowPlaying(
-        val songKey: Long?,
-        val title: String,
-        val sourceTitle: String?,
-        val filename: String?,
-        val positionMs: Long,
-        val durationMs: Long,
-        val playing: Boolean,
-        val art: Bitmap?,
-        val favorite: Boolean,
-        val shuffle: Boolean,
-        val repeatLabel: String,
-        val downloadNote: String?
-    )
 
     private val c = MeloComponents(context, sizes)
     private val s = c.sizes
