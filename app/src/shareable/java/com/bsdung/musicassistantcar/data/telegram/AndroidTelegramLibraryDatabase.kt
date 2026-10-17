@@ -169,7 +169,7 @@ class AndroidTelegramLibraryDatabase(
             selectionArgs.add("%$cleanQuery%")
         }
 
-        val orderBy = "${TelegramLibrarySql.COL_DATE} DESC, ${TelegramLibrarySql.COL_MESSAGE_ID} DESC LIMIT $limit OFFSET $offset"
+        val orderBy = "${TelegramLibrarySql.COL_DATE} DESC, ${TelegramLibrarySql.COL_MESSAGE_ID} DESC, ${TelegramLibrarySql.COL_CHAT_ID} DESC LIMIT $limit OFFSET $offset"
         val results = mutableListOf<IndexedTelegramSong>()
 
         db.query(

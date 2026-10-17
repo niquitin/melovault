@@ -26,6 +26,10 @@ internal object CockpitLayoutPolicy {
     const val MIN_TOUCH_TARGET_DP = 48
     const val MIN_SONG_ROW_HEIGHT_DP = 64
 
+    /** Inputs share one unit (runtime uses pixels). Insets are already removed by the parent. */
+    fun measuredCoverSize(availableHeight: Int, availableWidth: Int, reservedHeight: Int, cap: Int): Int =
+        minOf((availableHeight - reservedHeight).coerceAtLeast(0), availableWidth.coerceAtLeast(0), cap.coerceAtLeast(0))
+
     enum class SongPlaybackStatus {
         PLAYING,
         DOWNLOADED,

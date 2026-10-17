@@ -60,7 +60,7 @@ class InMemoryTelegramLibraryDao : TelegramLibraryDao {
             .filter { it.accountId == accountId && !it.isDeleted }
             .filter { chatId == null || it.chatId == chatId }
             .filter { queryLower.isNullOrEmpty() || it.title.lowercase().contains(queryLower) }
-            .sortedWith(compareByDescending<IndexedTelegramSong> { it.date }.thenByDescending { it.messageId })
+            .sortedWith(compareByDescending<IndexedTelegramSong> { it.date }.thenByDescending { it.messageId }.thenByDescending { it.chatId })
             .drop(offset)
             .take(limit)
             .toList()

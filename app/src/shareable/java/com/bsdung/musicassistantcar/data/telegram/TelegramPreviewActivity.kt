@@ -161,6 +161,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var cockpitRepeatButton: Button
     private lateinit var cockpitFavoriteButton: Button
     private lateinit var cockpitQueueButton: Button
+    private lateinit var cockpitSecondaryRow: LinearLayout
+    private lateinit var cockpitOverflowButton: Button
     private var cockpitTrackingTouch = false
     private lateinit var filterChipsRow: LinearLayout
     private lateinit var chipAll: Button
@@ -211,6 +213,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var syncCoordinator: TelegramSyncCoordinator? = null
     private val dbExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val uiQueryGeneration = java.util.concurrent.atomic.AtomicLong(1L)
+    private val offlineExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val pendingOffline = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<JSONObject>>()
+    private var offlineGroups = emptyList<TelegramOfflineLibrary.Group>()
+    private var offlineSummary: String? = null
+    private var offlineVisibleLimit = 200
     @Volatile private var totalCountForCurrentView: Int = 0
     private var isLoadingMoreSongs = false
 
@@ -318,6 +325,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         outState.putBoolean("key_all_chats_mode", allChatsMode)
         outState.putBoolean("key_browse_sources", browseSources)
         outState.putBoolean("key_playlist_mode", playlistMode)
+        outState.putBoolean("key_downloaded_only", filterOnlyDownloaded)
         outState.putString("key_source_display_mode", currentSourceDisplayMode.key)
         outState.putBoolean("key_zero_tracks_expanded", isZeroTracksSectionExpanded)
         outState.putBoolean("key_hide_zero_sources", hideZeroSources)
@@ -345,6 +353,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             allChatsMode = savedInstanceState.getBoolean("key_all_chats_mode", allChatsMode)
             browseSources = savedInstanceState.getBoolean("key_browse_sources", browseSources)
             playlistMode = savedInstanceState.getBoolean("key_playlist_mode", playlistMode)
+            filterOnlyDownloaded = savedInstanceState.getBoolean("key_downloaded_only", false)
             savedInstanceState.getString("key_source_display_mode")?.let {
                 currentSourceDisplayMode = TelegramVaultBentoPolicy.SourceDisplayMode.fromKey(it)
             }
@@ -487,7 +496,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // Playback queue follows only the selected source (and visible title
         // filter), never silently jumps into a different Telegram channel.
         queueSongOrder = TelegramQueueRetentionPolicy.forSelected(
-            shownSongs, queueSongOrder, song.messageId
+            if (filterOnlyDownloaded) offlineGroups.flatMap { it.entries }.map { offlineSong(it.song) } else shownSongs,
+            queueSongOrder, song.messageId
         ) { it.messageId }.ifEmpty { listOf(song) }
         library.authorizedUser()?.let { owner ->
             ShareablePlaybackService.configureTelegramQueue(
@@ -694,6 +704,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun updateSyncHeaderSubtitle() {
         if (!::syncSubtitle.isInitialized) return
+        if (filterOnlyDownloaded && offlineSummary != null && !(allChatsMode && browseSources && !playlistMode)) {
+            syncSubtitle.text = offlineSummary
+            return
+        }
         val isSyncing = globalScanLoading || syncCoordinator?.isBusy() == true
         val isAuth = auth.isReady()
         val isSources = (allChatsMode && browseSources && !playlistMode)
@@ -1477,6 +1491,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             setPadding(dp(12), dp(6), dp(12), dp(6))
             cockpitScrollView.addView(this, FrameLayout.LayoutParams(-1, -2))
         }
+        cockpitScrollView.viewTreeObserver.addOnGlobalLayoutListener { fitMeasuredCockpit() }
 
         val artContainer = FrameLayout(this).apply {
             background = rounded(card, 16)
@@ -1587,7 +1602,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     cockpitTrackingTouch = false
                 }
             })
-            seekRow.addView(this, LinearLayout.LayoutParams(0, -2, 1f))
+            seekRow.addView(this, LinearLayout.LayoutParams(0, dp(48), 1f))
         }
 
         cockpitTimeTotal = TextView(this).apply {
@@ -1616,8 +1631,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
             minimumHeight = dp(48)
             contentDescription = "Bài trước"
             setOnClickListener { playAdjacent(-1) }
-            transportRow.addView(this, LinearLayout.LayoutParams(dp(54), dp(48)).apply {
-                rightMargin = dp(10)
+            transportRow.addView(this, LinearLayout.LayoutParams(dp(48), dp(48)).apply {
+                rightMargin = dp(6)
             })
         }
 
@@ -1636,7 +1651,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     }
                 }
             }
-            transportRow.addView(this, LinearLayout.LayoutParams(dp(60), dp(52)))
+            transportRow.addView(this, LinearLayout.LayoutParams(dp(52), dp(52)))
         }
 
         cockpitNextButton = Button(this).apply {
@@ -1648,17 +1663,40 @@ class TelegramPreviewActivity : AppCompatActivity() {
             minimumHeight = dp(48)
             contentDescription = "Bài kế tiếp"
             setOnClickListener { playAdjacent(1) }
-            transportRow.addView(this, LinearLayout.LayoutParams(dp(54), dp(48)).apply {
-                leftMargin = dp(10)
+            transportRow.addView(this, LinearLayout.LayoutParams(dp(48), dp(48)).apply {
+                leftMargin = dp(6)
             })
         }
 
         val secondaryRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            cockpitPane.addView(this, LinearLayout.LayoutParams(-1, dp(38)).apply {
+            cockpitPane.addView(this, LinearLayout.LayoutParams(-1, dp(48)).apply {
                 topMargin = dp(2)
             })
+        }
+        cockpitSecondaryRow = secondaryRow
+        cockpitOverflowButton = Button(this).apply {
+            text = "⋮"
+            contentDescription = "Đảo, lặp, lưu bài và hàng đợi"
+            setPadding(0, 0, 0, 0)
+            minWidth = dp(48)
+            minimumWidth = dp(48)
+            visibility = View.GONE
+            setOnClickListener {
+                val popup = android.widget.PopupMenu(this@TelegramPreviewActivity, this)
+                listOf(cockpitShuffleButton, cockpitRepeatButton, cockpitFavoriteButton, cockpitQueueButton)
+                    .forEachIndexed { index, button ->
+                        popup.menu.add(0, index, index, button.text).isEnabled = button.isEnabled
+                    }
+                popup.setOnMenuItemClickListener { item ->
+                    listOf(cockpitShuffleButton, cockpitRepeatButton, cockpitFavoriteButton, cockpitQueueButton)
+                        .get(item.itemId).performClick()
+                    true
+                }
+                popup.show()
+            }
+            transportRow.addView(this, LinearLayout.LayoutParams(dp(48), dp(48)).apply { leftMargin = dp(4) })
         }
 
         fun secondaryButton(label: String, desc: String, action: () -> Unit): Button =
@@ -1672,10 +1710,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 setTextColor(ink)
                 background = rounded(panel, 10, border)
                 setPadding(dp(2), 0, dp(2), 0)
-                minHeight = dp(34)
-                minimumHeight = dp(34)
+                minHeight = dp(48)
+                minimumHeight = dp(48)
+                minWidth = dp(48)
+                minimumWidth = dp(48)
                 setOnClickListener { action() }
-                secondaryRow.addView(this, LinearLayout.LayoutParams(0, dp(34), 1f).apply {
+                secondaryRow.addView(this, LinearLayout.LayoutParams(0, dp(48), 1f).apply {
                     leftMargin = dp(2)
                     rightMargin = dp(2)
                 })
@@ -1706,6 +1746,47 @@ class TelegramPreviewActivity : AppCompatActivity() {
         cockpitQueueButton = secondaryButton("☷ Hàng đợi", "Xem danh sách hàng đợi phát nhạc") {
             showUpcomingQueue()
         }
+    }
+
+    private fun fitMeasuredCockpit() {
+        if (!isCockpitTwoPaneActive || !::cockpitArtFrame.isInitialized || cockpitScrollView.height <= 0) return
+        // splitRoot is already laid out inside root WindowInsets padding. Do not subtract bars again.
+        val available = cockpitScrollView.height - cockpitScrollView.paddingTop - cockpitScrollView.paddingBottom
+        val compact = available < dp(360)
+        val lines = if (compact) 1 else 2
+        if (cockpitTitle.maxLines != lines) cockpitTitle.maxLines = lines
+        val subtitleVisibility = if (compact) View.GONE else View.VISIBLE
+        if (cockpitSubtitle.visibility != subtitleVisibility) cockpitSubtitle.visibility = subtitleVisibility
+        var reserved = cockpitPane.paddingTop + cockpitPane.paddingBottom
+        for (index in 0 until cockpitPane.childCount) {
+            val child = cockpitPane.getChildAt(index)
+            if (child === cockpitArtFrame || child === cockpitSecondaryRow || child.visibility == View.GONE) continue
+            val lp = child.layoutParams as LinearLayout.LayoutParams
+            reserved += child.measuredHeight + lp.topMargin + lp.bottomMargin
+        }
+        val secondaryParams = cockpitSecondaryRow.layoutParams as LinearLayout.LayoutParams
+        val secondaryHeight = dp(48) + secondaryParams.topMargin + secondaryParams.bottomMargin
+        val overflow = reserved + secondaryHeight > available
+        val secondaryVisibility = if (overflow) View.GONE else View.VISIBLE
+        if (cockpitSecondaryRow.visibility != secondaryVisibility) cockpitSecondaryRow.visibility = secondaryVisibility
+        val overflowVisibility = if (overflow) View.VISIBLE else View.GONE
+        if (cockpitOverflowButton.visibility != overflowVisibility) cockpitOverflowButton.visibility = overflowVisibility
+        if (!overflow) reserved += secondaryHeight
+        val artParams = cockpitArtFrame.layoutParams as LinearLayout.LayoutParams
+        reserved += artParams.topMargin + artParams.bottomMargin
+        val size = if (isLandscapeImeCollapsed) 0 else CockpitLayoutPolicy.measuredCoverSize(
+            available, cockpitPane.width - cockpitPane.paddingLeft - cockpitPane.paddingRight,
+            reserved, dp(360)
+        )
+        val visibility = if (size > 0) View.VISIBLE else View.GONE
+        if (cockpitArtFrame.visibility != visibility) cockpitArtFrame.visibility = visibility
+        if (artParams.width != size || artParams.height != size) {
+            artParams.width = size
+            artParams.height = size
+            cockpitArtFrame.layoutParams = artParams
+        }
+        // Remove obsolete scroll offset after shrinking artwork or resizing the window.
+        if (reserved + size <= available && cockpitScrollView.scrollY != 0) cockpitScrollView.scrollTo(0, 0)
     }
 
     private fun buildFilterChips() {
@@ -1745,11 +1826,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
             minimumHeight = dp(30)
             setPadding(dp(12), 0, dp(12), 0)
             setOnClickListener {
-                if (!filterOnlyDownloaded) {
-                    filterOnlyDownloaded = true
-                    updateFilterChipsUi()
-                    refreshSongRows()
-                }
+                filterOnlyDownloaded = true
+                updateFilterChipsUi()
+                refreshSongRows()
             }
             filterChipsRow.addView(this, LinearLayout.LayoutParams(-2, dp(30)))
         }
@@ -2190,7 +2269,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     view: AbsListView?, firstVisibleItem: Int,
                     visibleItemCount: Int, totalItemCount: Int
                 ) {
-                    if (allChatsMode && !browseSources && !playlistMode &&
+                    if (filterOnlyDownloaded && !(allChatsMode && browseSources && !playlistMode) &&
+                        firstVisibleItem + visibleItemCount >= totalItemCount - 20 && totalItemCount > 0 &&
+                        shownSongs.size < offlineGroups.size) {
+                        val more = offlineGroups.drop(shownSongs.size).take(200).map { offlineRepresentative(it) }
+                        offlineVisibleLimit += more.size
+                        shownSongs = shownSongs + more
+                        this@TelegramPreviewActivity.adapter.addAll(more.map { TelegramSongDisplayPolicy.label(it.title, it.filename) })
+                    }
+                    if (!filterOnlyDownloaded && allChatsMode && !browseSources && !playlistMode &&
                         firstVisibleItem + visibleItemCount >= totalItemCount - 20 &&
                         totalItemCount > 0 && !isLoadingMoreSongs) {
                         val userId = library.authorizedUser()?.value ?: 0L
@@ -2363,7 +2450,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
 
                 val song = shownSongs.getOrNull(position)
-                val isCurrent = (song != null && song.messageId == currentTelegramMessageId())
+                val group = offlineGroups.getOrNull(position).takeIf { filterOnlyDownloaded }
+                val isCurrent = (song != null && song.messageId == currentTelegramMessageId()) ||
+                    group?.entries?.any { it.song.songKey == currentTelegramMessageId() } == true
                 val songLabel = song?.let { TelegramSongDisplayPolicy.label(it.title, it.filename) }
                     ?: getItem(position).orEmpty()
                 val displayTitle = CockpitLayoutPolicy.cleanTrackTitle(songLabel)
@@ -2397,6 +2486,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 } else {
                     "Telegram · Chưa tải"
                 }
+                if (group != null && group.entries.size > 1) holder.subtitleView.text = group.label + " · Chạm để mở"
                 holder.subtitleView.textSize = if (isShortLayout) 10.5f else 12f
                 holder.subtitleView.setTextColor(subtle)
                 holder.subtitleView.setPadding(0, dp(2), 0, 0)
@@ -2439,7 +2529,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
                     holder.moreButton.visibility = View.VISIBLE
                     holder.moreButton.setOnClickListener { v ->
-                        showSongOptionsMenu(song, isDownloaded, v)
+                        if (group != null && group.entries.size > 1) showOfflineVersions(group, v)
+                        else showSongOptionsMenu(song, isDownloaded, v)
                     }
                 } else {
                     holder.statusView.visibility = View.GONE
@@ -2532,7 +2623,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     songFilter.text?.clear()
                     refreshSongRows()
                 }
-            } else shownSongs.getOrNull(position)?.let { downloadAndPlay(it) }
+            } else {
+                val group = offlineGroups.getOrNull(position).takeIf { filterOnlyDownloaded }
+                if (group != null && group.entries.size > 1) showOfflineVersions(group)
+                else shownSongs.getOrNull(position)?.let { downloadAndPlay(it) }
+            }
         }
         libraryContainer.addView(tracks, LinearLayout.LayoutParams(-1, 0, 1f))
         bentoScrollView = ScrollView(this).apply {
@@ -2845,13 +2940,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 cockpitDivider.visibility = View.VISIBLE
                 cockpitScrollView.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, CockpitLayoutPolicy.LEFT_PANE_WEIGHT)
                 libraryContainer.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, CockpitLayoutPolicy.RIGHT_PANE_WEIGHT)
-                val artSize = dp(CockpitLayoutPolicy.cockpitCoverSizeDp(width, height))
-                cockpitArtFrame.layoutParams.width = artSize
-                cockpitArtFrame.layoutParams.height = artSize
                 val isShortH = height < 460
                 (cockpitArtFrame.layoutParams as? LinearLayout.LayoutParams)?.bottomMargin = dp(if (isShortH) 4 else 8)
                 cockpitPane.setPadding(dp(12), dp(if (isShortH) 4 else 8), dp(12), dp(if (isShortH) 4 else 8))
                 updateCockpitPlayer()
+                cockpitScrollView.post { fitMeasuredCockpit() }
             } else {
                 cockpitScrollView.visibility = View.GONE
                 cockpitDivider.visibility = View.GONE
@@ -3277,6 +3370,139 @@ class TelegramPreviewActivity : AppCompatActivity() {
         playlistButton.text = if (playlistMode) "☷ Tất cả bài" else "☷ Playlist"
     }
 
+    private fun offlineSong(it: IndexedTelegramSong) = Song(
+        it.fileId, it.title, it.filename, it.songKey, it.chatId, it.fileSize,
+        rawMessageId = it.messageId, performer = it.performer,
+        durationSeconds = it.durationSeconds, sourceTitle = it.sourceTitle
+    )
+
+    private fun offlineRepresentative(group: TelegramOfflineLibrary.Group): Song = offlineSong(
+        group.entries.firstOrNull { it.song.songKey == currentTelegramMessageId() }?.song ?: group.entries.first().song
+    )
+
+    private fun showOfflineVersions(group: TelegramOfflineLibrary.Group, anchor: View? = null) {
+        val account = library.authorizedUser()?.value ?: return
+        val labels = group.entries.map { entry ->
+            val s = entry.song
+            val playing = if (s.songKey == currentTelegramMessageId()) "▶ " else ""
+            playing + (s.sourceTitle ?: sourceNames[s.chatId] ?: "Telegram") + " · " + s.filename
+        }.toTypedArray()
+        AlertDialog.Builder(this).setTitle(group.label).setItems(labels) { _, index ->
+            val selected = group.entries[index].song
+            val entry = group.selected(account, selected.chatId, selected.messageId) ?: return@setItems
+            if (library.authorizedUser()?.value != account || !auth.isReady()) return@setItems
+            val song = offlineSong(entry.song)
+            if (anchor != null) showSongOptionsMenu(song, true, tracks) else downloadAndPlay(song)
+        }.setNegativeButton("Đóng", null).show()
+    }
+
+    private fun discoverOffline(
+        db: TelegramLibraryDao, account: Long, chat: Long?, query: String,
+        playlist: Boolean, favorites: Set<Long>, generation: Long
+    ) {
+        val root = filesRoot
+        val cancelled = { uiQueryGeneration.get() != generation || isDestroyed ||
+            Thread.currentThread().isInterrupted || !auth.isReady() || library.authorizedUser()?.value != account }
+        offlineSummary = "Đang kiểm tra tệp offline trên toàn bộ thư viện…"
+        shownSongs = emptyList()
+        tracks.adapter = adapter
+        adapter.clear()
+        tracks.setSelectionFromTop(0, tracks.paddingTop)
+        updateSyncHeaderSubtitle()
+        offlineExecutor.execute {
+            try {
+                fun publish(snapshot: TelegramOfflineLibrary.Snapshot) {
+                    val groups = TelegramOfflineLibrary.groups(snapshot.entries)
+                    runOnUiThread {
+                        if (cancelled()) return@runOnUiThread
+                        offlineGroups = groups
+                        snapshot.entries.forEach { cachedSongPaths[it.song.songKey] = it.path }
+                        shownSongs = groups.take(offlineVisibleLimit).map { offlineRepresentative(it) }
+                        totalCountForCurrentView = groups.size
+                        offlineSummary = "${groups.size} nhóm / ${snapshot.entries.size} bản offline đã xác minh · " +
+                            "${snapshot.checked} mục đã kiểm tra" +
+                            (if (!snapshot.finished) " · Đang kiểm tra…" else "") +
+                            (if (snapshot.unknown > 0) " · ${snapshot.unknown} mục chưa xác minh được" else "")
+                        bentoScrollView.visibility = View.GONE
+                        sourceViewModeToggle.visibility = View.GONE
+                        hideZeroSourcesToggle.visibility = View.GONE
+                        tracks.visibility = View.VISIBLE
+                        if (tracks.adapter !== adapter) tracks.adapter = adapter
+                        val first = tracks.firstVisiblePosition
+                        val oldTop = tracks.getChildAt(0)?.top ?: tracks.paddingTop
+                        val top = if (first == 0) oldTop.coerceAtLeast(tracks.paddingTop) else oldTop
+                        adapter.clear()
+                        adapter.addAll(shownSongs.map { TelegramSongDisplayPolicy.label(it.title, it.filename) })
+                        if (first >= 0 && first < shownSongs.size) tracks.setSelectionFromTop(first, top)
+                        libraryTitle.text = if (playlist) "PLAYLIST · OFFLINE" else "THƯ VIỆN OFFLINE · " +
+                            (chat?.let { sourceNames[it] } ?: "TẤT CẢ TELEGRAM")
+                        filterChipsRow.visibility = if (isLandscapeImeCollapsed) View.GONE else View.VISIBLE
+                        updateFilterChipsUi()
+                        updateBottomNavState()
+                        updateSyncHeaderSubtitle()
+                    }
+                }
+                val snapshot = TelegramOfflineLibrary.scan(account, root,
+                    page = { offset, limit ->
+                        // Apply playlist selection AFTER pagination, never truncate the account index.
+                        db.getSongs(account, chatId = chat, searchQuery = query.takeIf { it.isNotBlank() }, offset = offset, limit = limit)
+                    },
+                    resolve = { rows ->
+                        val eligible = rows.filter { !playlist || it.songKey in favorites }
+                        val results = resolveOfflineBatch(eligible, generation, cancelled)
+                        val byKey = eligible.zip(results).associate { it.first.songKey to it.second }
+                        rows.map { byKey[it.songKey] ?: TelegramOfflineLibrary.Local.NotDownloaded }
+                    }, cancelled = cancelled, progress = { publish(it) })
+                if (snapshot != null) publish(snapshot)
+            } catch (_: Exception) {
+                runOnUiThread {
+                    if (!cancelled()) {
+                        offlineSummary = "Kiểm tra offline chưa hoàn tất. Hãy thử lại."
+                        updateSyncHeaderSubtitle()
+                    }
+                }
+            }
+        }
+    }
+
+    /** At most 32 outstanding local-only requests. Never use a persisted session file_id. */
+    private fun resolveOfflineBatch(
+        rows: List<IndexedTelegramSong>, generation: Long, cancelled: () -> Boolean
+    ): List<TelegramOfflineLibrary.Local> {
+        val requests = rows.map { song ->
+            val tag = "offlineLocal:$generation:${song.chatId}:${song.messageId}"
+            val future = java.util.concurrent.CompletableFuture<JSONObject>()
+            pendingOffline[tag] = future
+            try {
+                send("getMessageLocally", tag) {
+                    it.put("chat_id", song.chatId).put("message_id", song.messageId)
+                }
+            } catch (_: Exception) { future.complete(JSONObject()) }
+            Triple(song, tag, future)
+        }
+        val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(8)
+        try {
+            return requests.map { (song, _, future) ->
+                while (!future.isDone && !cancelled() && System.nanoTime() < deadline) {
+                    try { future.get(100, java.util.concurrent.TimeUnit.MILLISECONDS) }
+                    catch (_: java.util.concurrent.TimeoutException) { }
+                }
+                if (!cancelled() && !future.isDone) throw java.util.concurrent.TimeoutException("Local discovery timed out")
+                val json = if (!cancelled() && future.isDone) future.getNow(JSONObject()) else JSONObject()
+                if (json.optLong("chat_id") != song.chatId || json.optLong("id") != song.messageId) {
+                    TelegramOfflineLibrary.Local.Unknown
+                } else when (val result = TelegramAudioResolverPolicy.parseMessage(json)) {
+                    is TelegramAudioResolverPolicy.Result.Resolved -> if (result.isDownloadingCompleted) {
+                        TelegramOfflineLibrary.Local.Complete(result.localPath, result.size)
+                    } else TelegramOfflineLibrary.Local.NotDownloaded
+                    else -> TelegramOfflineLibrary.Local.Unknown
+                }
+            }
+        } finally {
+            requests.forEach { (_, tag, future) -> pendingOffline.remove(tag, future) }
+        }
+    }
+
     private fun refreshSongRows() {
         if (!::sourcesAdapter.isInitialized || !::songFilter.isInitialized) return
         val q = songFilter.text?.toString()?.trim().orEmpty()
@@ -3292,6 +3518,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val currentChatId = selectedChatId
         val isAllChats = allChatsMode
         val currentFavIds = favoriteIds.toSet()
+
+        offlineSummary = null
+        offlineGroups = emptyList()
+        offlineVisibleLimit = 200
+        if (filterOnlyDownloaded && !isBrowseSources && db != null && userId > 0L) {
+            discoverOffline(db, userId, currentChatId, q, isPlaylist, currentFavIds, generation)
+            return
+        }
 
         executeOnDb {
             if (uiQueryGeneration.get() != generation) return@executeOnDb
@@ -3738,6 +3972,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun onNativeEvent(result: JSONObject, sessionDb: File, secret: String) {
         val kind = result.optString("@type")
         val tag = result.optString("@extra")
+        if (tag.startsWith("offlineLocal:")) {
+            pendingOffline.remove(tag)?.complete(result)
+            return
+        }
         if (kind == "error") {
             if (tag.startsWith("resolveMsg:")) {
                 val cb = pendingMessageResolutions.remove(tag)
@@ -4859,6 +5097,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
         clearPendingQrLink()
         syncCoordinator?.cancelSync()
         dbExecutor.shutdownNow()
+        offlineExecutor.shutdownNow()
+        pendingOffline.values.forEach { it.cancel(false) }
+        pendingOffline.clear()
         thumbnailExecutor.shutdownNow()
         thumbnailCache.evictAll()
         if (libraryDb is AndroidTelegramLibraryDatabase) {
