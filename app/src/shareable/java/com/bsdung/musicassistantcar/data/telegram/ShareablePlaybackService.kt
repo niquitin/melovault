@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -63,6 +64,17 @@ class ShareablePlaybackService : MediaSessionService() {
         internal fun onPreviewDetached() {
             serviceRef?.get()?.requestNextIfMissing()
         }
+
+        /** Studio Deck "Hẹn giờ tắt"; runs here so it still fires with the screen off. Main thread. */
+        internal fun setSleepTimer(option: MeloNowPlayingPolicy.SleepOption) {
+            serviceRef?.get()?.applySleepTimer(option)
+        }
+
+        /** (deadline in elapsedRealtime millis or null, stop at end of the current track). */
+        internal fun sleepTimerState(): Pair<Long?, Boolean> {
+            val service = serviceRef?.get() ?: return null to false
+            return service.sleepDeadline to service.sleepAtEndOfTrack
+        }
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -76,6 +88,34 @@ class ShareablePlaybackService : MediaSessionService() {
     private var pendingAttempt = 0
     private var pendingRequestTag: String? = null
     private var queueGeneration = 0L
+    private var sleepDeadline: Long? = null
+    private var sleepAtEndOfTrack = false
+    private val sleepRunnable = Runnable {
+        sleepDeadline = null
+        exoPlayer?.pause()
+    }
+
+    private fun applySleepTimer(option: MeloNowPlayingPolicy.SleepOption) {
+        main.removeCallbacks(sleepRunnable)
+        sleepDeadline = null
+        if (sleepAtEndOfTrack) {
+            exoPlayer?.pauseAtEndOfMediaItems = false
+            sleepAtEndOfTrack = false
+        }
+        val now = SystemClock.elapsedRealtime()
+        val deadline = MeloNowPlayingPolicy.sleepDeadline(option, now)
+        if (deadline != null) {
+            sleepDeadline = deadline
+            main.postDelayed(sleepRunnable, deadline - now)
+        } else if (option == MeloNowPlayingPolicy.SleepOption.END_OF_TRACK) {
+            exoPlayer?.pauseAtEndOfMediaItems = true
+            sleepAtEndOfTrack = true
+        }
+    }
+
+    /** "Tải trước bài kế" switch; when off, no new background download starts. */
+    private fun prefetchAllowed(): Boolean =
+        MeloNowPlayingPolicy.prefetchEnabled(getSharedPreferences(MeloNowPlayingPolicy.PLAYBACK_PREFS, MODE_PRIVATE))
 
     override fun onCreate() {
         super.onCreate()
@@ -90,6 +130,13 @@ class ShareablePlaybackService : MediaSessionService() {
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 requestNextIfMissing()
+            }
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                // "Hết bài này" is a one-shot: after pausing at the end, normal play resumes.
+                if (sleepAtEndOfTrack && reason == Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) {
+                    player.pauseAtEndOfMediaItems = false
+                    sleepAtEndOfTrack = false
+                }
             }
         })
 
@@ -203,7 +250,7 @@ class ShareablePlaybackService : MediaSessionService() {
     }
 
     private fun startDownload(next: QueueTrack, attempt: Int) {
-        if (ShareableTdlibOwner.uiIsAttached() ||
+        if (!prefetchAllowed() || ShareableTdlibOwner.uiIsAttached() ||
             nextTrack()?.messageId != next.messageId ||
             expectedAccount != ShareableTdlibOwner.authorizedAccount()) return
         val generation = queueGeneration
