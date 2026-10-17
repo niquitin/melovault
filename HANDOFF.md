@@ -1,0 +1,230 @@
+# HANDOFF — MeloVault / Music Assistant Car
+
+**Snapshot:** 17/10/2026 (Asia/Ho_Chi_Minh). Tài liệu phục vụ AI/kỹ sư mới tiếp quản. Thông tin lấy từ code, Gradle, Git, test XML và các báo cáo có thật. Phần chưa kiểm chứng đánh dấu **[CẦN XÁC NHẬN]**. Trước khi hành động phải kiểm tra Git live vì trạng thái có thể thay đổi sau khi viết tài liệu.
+
+**ĐIỂM DỪNG QUAN TRỌNG:** E9.3-03D đã được Codex trên Ni lập trình/commit, chuyển bằng Git bundle, test và build thử trên Tiny cô lập. CHƯA có APK Beta 86 hợp lệ hoặc QA thiết bị thực cho E9.3-03D. APK build thử hiện có vẫn là versionCode 85 và **thiếu cấu hình Telegram API hợp lệ**, tuyệt đối **KHÔNG CÀI / GỬI / UPLOAD**. Không triển khai Theme 04.
+
+## 0. Đọc nhanh / môi trường
+
+- Repo lập trình chính: Ni PC Windows, D:\Bots\MeloVault-E91-Shareable.
+- Branch hiện tại lúc viết: feature/e93-03d-y700-offline-cockpit; HEAD 83b66c177498457165ec5d009a5afb0414fa2aee; base Beta 85 e278649a6c9f2166e39653bf151dec5a4af94b0e.
+- Clone Tiny để build/test độc lập: C:\Bots\MeloVault-E93D-IsolatedQA, HEAD 83b66c1.
+- Worktree Beta 85 gốc của Tiny: C:\Bots\MeloVault-E91-Shareable, HEAD e278649; là worktree liên kết với Git metadata của Private Stable nên không được sao chép .git hoặc chỉnh trực tiếp để cập nhật từ Ni.
+- TUYỆT ĐỐI không sửa/tác động Private Stable C:\Bots\MusicAssistantCar, production backend C:\Bots\MusicAssistant, dự án Telegram Secretary C:\Bots\TelegramSecretary hoặc các session TDLib người dùng.
+- Handoff mới hơn file cũ: D:\Bots\_handoff\MeloVault\CHATGPT_TINY_TRANSFER_BUILD_GATE_E93_03D_20261017.md; CODEX_NI_E93_03D_IMPLEMENTATION_REPORT.md; CHATGPT_NI_INDEPENDENT_AUDIT_E93_03D_20261017.md; FIELD_REPORT_E93_03D_Y700_BETA85_DOWNLOADED_DUPLICATES_COCKPIT_CLIP_20261017.md. File LATEST_HANDOFF.txt ở đó dừng tại Beta 85 và **không phản ánh đầy đủ E9.3-03D**.
+
+Kiểm tra đầu phiên (PowerShell):
+
+~~~powershell
+cd D:\Bots\MeloVault-E91-Shareable
+git status --short
+git branch --show-current
+git rev-parse HEAD
+git log -5 --oneline
+git diff --check
+~~~
+
+Nếu branch, HEAD, working tree hoặc process Agent đang hoạt động khác snapshot này, **dừng và đối chiếu**, không git reset/clean/stash/checkout đè.
+
+## 1. Mục tiêu sản phẩm và phạm vi hiện tại
+
+MeloVault là ứng dụng quản lý/phát nhạc Android cho điện thoại, tablet và màn hình giải trí ô tô. Mục tiêu UX là phát nhạc ổn định, thư viện lớn, tìm kiếm, playlist/hàng đợi, tải offline/cache và giao diện phù hợp dọc/ngang/chia cửa sổ, điều khiển MediaSession/phím vô lăng. Thiết bị phát triển/QA chính: Sony Xperia, Lenovo Legion Y700 Gen 3, FYT 7870 (trên xe).
+
+**Phạm vi tích cực đang làm: APK Shareable Preview** phục vụ nhạc trong tài khoản Telegram được chính người dùng đăng nhập bằng TDLib. Đồng bộ metadata nhạc từ nhóm/kênh/chat/Saved Messages mà tài khoản có quyền truy cập, index và tìm kiếm; phát nhạc bằng Media3 từ file TDLib, hỗ trợ nguồn offline. Hiện E9.3-03D xử lý lỗi lọc offline và Cockpit ngang trên Y700.
+
+Hai flavor trong một module :app:
+- personal: applicationId mặc định com.bsdung.musicassistantcar, versionCode 61/versionName 0.6.40 trong defaultConfig; còn code API/backend cá nhân và UI cũ. Giữ nguyên Private Stable đã phát hành và dữ liệu của nó.
+- shareable: applicationId app.melovault.player, PERSONAL_BACKEND_ENABLED=false, launcher TelegramPreviewActivity, ShareablePlaybackService riêng; bản trên Y700 hiện là Beta 85 (vc85, 0.6.64-beta). Bản code E9.3-03D **chưa phải Beta86**.
+- bridge/ chứa Python bridge (app.py, catalog.py, streaming.py, telegram_stream.py, tests) nhưng không phải luồng bắt buộc cho Shareable native Telegram. [CẦN XÁC NHẬN] môi trường chạy bridge hiện còn dùng cho mục đích nào.
+- **Nguồn nhạc Google Drive/OneDrive riêng trong Shareable chưa triển khai**. Các file Drive/backend trong src/main thuộc kiến trúc cũ, không có nghĩa đã có OAuth/library Drive trên Shareable. Google Drive hiện dùng lưu APK/handoff cho chủ dự án.
+- Có 9 concept UI định hướng phát triển, nhưng **không có 9 theme hoàn chỉnh trong code**.
+
+## 2. Tech stack, phiên bản, build/chạy/test
+
+Xác nhận trực tiếp:
+- Windows; Java source/target 17, Kotlin jvmTarget 17; trên Ni dùng OpenJDK 21 để chạy Gradle.
+- Gradle Wrapper 8.13; Android Gradle Plugin 8.13.0; Kotlin plugin 2.2.10; Groovy Gradle.
+- Android: compileSdk 36, targetSdk 36, minSdk 26. Module Gradle duy nhất :app; flavor dimension distribution: personal/shareable, buildTypes debug/release.
+- Shareable UI dùng Android Views/AppCompat (Activity, LinearLayout, ListView, ScrollView, v.v.), **không dùng Jetpack Compose**.
+- Media3 1.11.1 (ExoPlayer, Session, DataSource), WorkManager 2.9.1, RecyclerView 1.3.2, Coil 2.6.0, AndroidX Core KTX 1.18.0, Activity KTX 1.13.0, AppCompat 1.7.0, Material 1.12.0.
+- Telegram: TDLib JNI/JSON, thư viện libtdjsonjava.so đóng gói. Tài liệu E9.1 từng ghi TDLib 1.8.68 revision c15d3f5a5de6e3ba5839822c451152e5e18bb700; **[CẦN XÁC NHẬN]** revision/hashes chính xác của binary hiện đóng gói trước khi phát hành rộng.
+- Data: SQLite/SQLiteOpenHelper, DAO tự viết; JUnit4 JVM tests; Android instrumentation sources hiện diện.
+
+Lệnh trên Ni (PowerShell, repo đã mở):
+
+~~~powershell
+cd D:\Bots\MeloVault-E91-Shareable
+.\gradlew.bat :app:testShareableDebugUnitTest :app:testShareableReleaseUnitTest --console=plain
+.\gradlew.bat :app:assembleShareableDebug --console=plain
+.\gradlew.bat :app:assembleShareableRelease --console=plain
+git diff --check
+~~~
+
+Ni Android SDK: C:\Users\ntdun\.cache\codex-toolchains\android-sdk (ghi sdk.dir vào local.properties, file ignored). Tiny SDK: C:\Android\Sdk. Gradle đọc telegram.api.id và telegram.api.hash từ local.properties local-private. Nếu thiếu/sai, build **vẫn có thể PASS** nhưng BuildConfig sẽ dùng ID 0 và hash rỗng, đăng nhập Telegram không sử dụng được. Không bao giờ đưa các giá trị đó vào Git, file HANDOFF, Drive, log, ChatGPT hoặc Ni chỉ để build.
+
+Shareable hiện có signingConfig signingConfigs.debug ngay cả release: dùng **chữ ký Preview cũ**, không phải khóa phát hành production lâu dài. Build output: app\build\outputs\apk\shareable\release\app-shareable-release.apk. Không được tự cài/chia sẻ file build nếu chưa qua gate version/config/signature/QA.
+
+Test hiện đã kiểm tra trên Ni **và Tiny clone độc lập** cho HEAD 83b66c1:
+- Debug: 100 suites, 1.050 defined, **1.029 executed/passed**, 21 skipped, 0 failed/error.
+- Release: như trên. Tiny Gradle test+assembleShareableRelease **BUILD SUCCESSFUL**.
+- XML: app\build\test-results\testShareableDebugUnitTest và ...\testShareableReleaseUnitTest. Các test skipped không tính pass.
+- Chưa chạy trên thiết bị thật cho HEAD 83b66c1; unit tests không thay runtime TDLib/Android layout testing.
+- Để cài test **chỉ sau khi APK hợp lệ và cho phép**: adb devices; adb -s <SERIAL> install -r "<SIGNED_APK>"; mở launcher MeloVault. Không uninstall/pm clear/logout/cache wipe. Dùng apksigner trong Android SDK build-tools thực tế để verify cert/package/version trước khi cài. [CẦN XÁC NHẬN] path apksigner cụ thể trên máy kế nhiệm.
+
+## 3. Kiến trúc: module, dữ liệu, Telegram, phát nhạc
+
+### 3.1. Cấu trúc code
+
+- app/src/main/java/com/bsdung/musicassistantcar: code chung/Personal, MainActivity.kt, MeloVaultApplication.kt, data/, lyrics/, playback/, ui/.
+- app/src/main/.../data/telegram/TelegramAuthorizationFlow.kt, TelegramSessionEpoch.kt, TelegramAccountPartition.kt: auth/epoch/identity và bảo vệ vùng file theo chủ tài khoản.
+- app/src/shareable/AndroidManifest.xml: launcher TelegramPreviewActivity; thay thế/tắt Activity/Service của Personal, ShareablePlaybackService (MediaSessionService + MEDIA_BUTTON), usesCleartextTraffic=false.
+- app/src/shareable/java/com/bsdung/musicassistantcar/data/telegram/TelegramPreviewActivity.kt: UI Shareable, auth callback, nguồn/bộ lọc/tìm kiếm, lựa chọn bài, player, theme/Bento, offline discovery và Cockpit.
+- ShareableTdlibOwner.kt + TdlibNativeJsonGateway.kt: TDLib client, một receive loop, callback UI và background, getMe-verified owner.
+- TelegramSyncCoordinator.kt, TelegramLibraryDao.kt, TelegramLibraryEntities.kt, TelegramLibrarySql.kt, AndroidTelegramLibraryDatabase.kt: phân trang/cursor/checkpoint và SQLite library.
+- ShareablePlaybackService.kt: Media3 ExoPlayer, MediaSession, queue/prefetch và playback trong service.
+- TelegramAudioResolverPolicy.kt, TelegramOwnerAudioDataSource.kt, TelegramProgressiveCache.kt, TelegramBackgroundPrefetchPolicy.kt, TelegramQueueRetentionPolicy.kt: giải quyết current file_id, đọc file/cache TDLib và queue.
+- TelegramSavedPlaylistStore.kt: saved playlist account-scoped, dữ liệu noBackup bảo vệ AES-GCM Android Keystore.
+- UiThemePolicy.kt, CockpitLayoutPolicy.kt, TelegramVaultBentoPolicy.kt, NowPlayingFullScreenDialog.kt, WindowInsetsPolicy.kt, CarPaneLayoutPolicy.kt: theme, split và responsive UI.
+- E9.3-03D mới: TelegramOfflineLibrary.kt (policy scan/nhóm offline); TelegramOfflineLibraryTest.kt và CockpitMeasuredFitTest.kt (JVM tests). AndroidTelegramLibraryDatabase.kt và InMemoryTelegramLibraryDao.kt được sửa tie-break sort.
+- app/src/test/: unit; app/src/androidTest/: instrumentation (mức độ test thực trên các biến thể mới **[CẦN XÁC NHẬN]**).
+- tools/: các scripts TDLib preflight/ELF security audit, APK release guard, Sony soak... đọc kỹ trước khi chạy vì có scripts phục vụ giai đoạn cũ.
+- bridge/: Python source, tách luồng Shareable.
+
+### 3.2. Dữ liệu Telegram
+
+Luồng chuẩn:
+
+~~~text
+TDLib native/JSON
+  -> ShareableTdlibOwner + TelegramAuthorizationFlow + TelegramSessionEpoch
+  -> TelegramPreviewActivity nhận event/ủy quyền
+  -> TelegramSyncCoordinator: Saved Messages getChatHistory,
+     toàn nguồn searchMessages (audio/document) với paging/cursor/incremental
+  -> TelegramLibraryDao -> AndroidTelegramLibraryDatabase (SQLite)
+  -> UI thư viện/Bento/Search/Queue/Offline
+~~~
+
+TDLib phải báo authorizationStateReady và **getMe() thành công** trước khi coi account là authenticated. Số điện thoại/username nhập tay không phải identity. Nhiều trạng thái auth gồm phone/email/code/QR/2FA tùy native, callback cũ bị kiểm soát bằng epoch/generation. Không lưu OTP/password trong prefs/log.
+
+Sync state: TelegramSyncCoordinator có PAGE_LIMIT=100, phases audio/document, checkpoint/resume, incremental overlap, rate-limit backoff và generation chống cập nhật quá hạn. Saved Messages riêng dùng getChatHistory. Các loại audio và tài liệu có đuôi nhạc được parse; không giả định mọi tin nhắn đều là bài hát.
+
+SQLite local ở app-private: melovault_tg_index_{accountId}.db, các bảng songs/sources/sync_state. Định danh bền: **(accountId, chatId, messageId)**; songKey 64-bit dùng để phân biệt queue/playlist; TDLib fileId là **session-scoped** (không dùng lại file_id cũ từ SQLite để phát). Source count lấy từ index thật, không hardcode. Metadata khác nội dung nhạc: audio file vẫn thuộc TDLib files/cache. Song entity chứa title/filename/performer/duration/size/MIME/source/date/isDeleted.
+
+Session TDLib cần thư mục trước khi có getMe: slot UUID tại noBackupFilesDir/telegram_session_slots/slot-..., filesRoot nằm dưới slot hiện hành; có khóa Android Keystore cho TDLib database. Bảo vệ path qua TelegramAccountStoragePolicy.isOwnedFile (canonical path containment), hạn chế đọc nhầm account.
+
+### 3.3. Phát nhạc
+
+~~~text
+Người dùng chọn bài trong TelegramPreviewActivity
+ -> xác định chatId/messageId + account chủ
+ -> TDLib getMessage để resolve file_id HỢP LỆ Ở PHIÊN HIỆN TẠI
+ -> TDLib downloadFile / updateFile (khi cần)
+ -> file đã hoàn tất HOẶC prefix đang tải do TDLib quản lý
+ -> TelegramProgressiveCache.Reader + TelegramOwnerAudioDataSource
+ -> Media3 ExoPlayer trong ShareablePlaybackService
+ -> MediaSession (phát nền, hàng đợi, media buttons/phím vô lăng)
+~~~
+
+TelegramOwnerAudioDataSource giữ nguồn file/content thông thường qua DefaultDataSource, dùng scheme riêng melovault-tdlib cho progressive stream. TelegramProgressiveCache đọc prefix byte liên tục của file TDLib, chờ dữ liệu tiếp theo, không tạo public stream/proxy. Service quản lý queue và tải bài kế tiếp có giới hạn. Không tự đem backend Personal vào Shareable.
+
+**E9.3-03D offline:** TelegramOfflineLibrary.scan đọc tất cả trang phù hợp (mỗi trang 200), resolver getMessageLocally tối đa 32/batch trên executor riêng; không gọi downloadFile khi chỉ kiểm tra offline. Chỉ xác nhận offline nếu TDLib cho biết tải hoàn tất, file local thuộc root chủ, có thể đọc và size khớp. Thiếu metadata = **chưa xác minh**, không tự kết luận “chưa tải”. Nhóm cùng canonical path là cùng file; cùng title nhưng path khác hiển thị “Các bản cùng tên” và cho mở mọi bản/nguồn. Không xóa/gộp cache, Telegram message hay SQLite row.
+
+## 4. Quyết định kỹ thuật đã chốt và lý do
+
+1. **Shareable/Personal tách package + backend boundary:** không làm hỏng Stable, không lộ backend/token riêng, cho APK Telegram độc lập.
+2. **TDLib user client thay Telegram Bot API:** cần truy cập nhạc từ quyền truy cập Telegram của chính user, không phải bot.
+3. **getMe + auth epoch + account-scoped files:** tránh đồng bộ/phát dữ liệu của account khác; không dùng phone/account input làm bằng chứng identity.
+4. **Composite key account/chat/message và fileId theo phiên:** chống trùng message ID liên chat và stale TDLib file_id.
+5. **SQLite + checkpoint + paging:** phù hợp thư viện hàng chục nghìn bài, hỗ trợ resume, hạn chế main-thread/OOM và số liệu giả.
+6. **Media3/ExoPlayer + TDLib progressive DataSource:** playback nền, media buttons/phím vô lăng và nhạc chưa tải đủ, không cần owner backend.
+7. **Không destructive dedup:** nhiều kênh gửi bài cùng tên không chắc nội dung giống nhau; nhóm ở UI kèm chooser, giữ nguyên dữ liệu.
+8. **Theme mặc định Portrait Edge-to-Edge Pro xanh ngọc #3DDC97.** Theme 02 Cockpit Two-Pane 42:58 được chủ dự án nghiệm thu chức năng, màu sắc còn polish. Theme 03 Telegram Vault Bento đã implement nhưng chưa nghiệm thu cuối trên Y700 sau lỗi Beta85. Trong UiThemePolicy chỉ có các preset PORTRAIT_EDGE_PRO, COCKPIT_TWO_PANE, CLASSIC; Bento/List là chế độ xem nguồn, không phải cả 9 concept đã hoàn thành.
+9. **WindowInsets một lần và đo khung thật:** tránh che status/taskbar Y700; không ép immersive; thu nhỏ artwork trước khi giấu action, overflow khi chiều cao quá thấp.
+10. **Ni Codex làm code, Tiny QA thông qua SHA-verified Git bundle:** Tiny original Preview là linked worktree của Stable; không chép đè .git/repo hoặc cho hai Agent cùng sửa.
+11. **Release-gate:** test JVM -> build/signature/API/privacy -> Sony QA -> private Google Drive -> Y700 owner QA -> chốt/theme tiếp theo. Chủ dự án đã duyệt tự upload APK Preview lên Drive riêng **sau khi kiểm toán đạt**, không duyệt cài FYT hay publish công khai.
+
+## 5. Đã xong / đang làm / chưa làm
+
+### Đã có
+- Native TDLib, auth UI và xác minh account; index SQLite, Saved Messages, các nguồn Telegram, tìm kiếm, playlist, queue, phát bằng Media3/cache/stream/offline.
+- Theme 01 mặc định; Theme 02 42:58 và MediaSession; Theme 03 Bento Grid, kênh 0 bài, tổng thư viện và sửa stale header ở Beta85.
+- Beta85 owner-installed, đã có phản hồi ảnh/video Y700. Bản gốc Beta85 vc85/0.6.64-beta là fallback.
+- Code E9.3-03D đã commit + kiểm toán code + unit test cả 2 biến thể trên Ni và Tiny, nhưng **không đồng nghĩa chức năng trên thiết bị đã nghiệm thu**.
+
+### Đang làm dở / dừng ở đâu
+
+Ni commit 83b66c1 (parent e278649) đổi đúng 7 file:
+- app/src/shareable/java/com/bsdung/musicassistantcar/data/telegram/TelegramOfflineLibrary.kt — **mới**, scan+group offline.
+- cùng thư mục/TelegramPreviewActivity.kt — worker offline, chooser nguồn, phân trang và measured Cockpit.
+- cùng thư mục/CockpitLayoutPolicy.kt — measuredCoverSize.
+- cùng thư mục/AndroidTelegramLibraryDatabase.kt và InMemoryTelegramLibraryDao.kt — sort tie-break chatId.
+- app/src/test/java/com/bsdung/musicassistantcar/data/telegram/TelegramOfflineLibraryTest.kt — mới.
+- cùng test directory/CockpitMeasuredFitTest.kt — mới.
+
+Mã này đã import vào Tiny standalone clone C:\Bots\MeloVault-E93D-IsolatedQA và Tiny đã BUILD SUCCESSFUL. Delta bundle Ni: D:\Bots\_transfer\MeloVault_E93_03D_83b66c1_delta_20261017.bundle, SHA256 1EAA7E2E94AEB7D28F1D485ADD09D8E76B9AEEA9B6ADDA3AB1D5F5358682295D, 12.861 bytes. Original Tiny Preview Beta85 vẫn e278649 và sạch.
+
+**BLOCKER bắt buộc:** Tiny build trial từ isolated clone tạo APK 30.210.458 bytes, SHA256 0B507D40A48142C3F88700AB40117AEAA6F9540E72E6F390ED24435885540976 và signer SHA256 eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8; **APK NÀY KHÔNG ĐƯỢC CÀI** vì vẫn vc85 0.6.64-beta + build thiếu Telegram API config, mặc dù test/build PASS.
+
+**Next checkpoint đã giao:** Trên Ni Codex **chỉ** bump shareable flavor trong app/build.gradle versionCode 85 -> 86, versionName 0.6.64 -> 0.6.65 (vẫn suffix -beta), tạo commit riêng; không đổi Personal/backend. **[CẦN XÁC NHẬN]** có agent nào hoàn thành việc bump sau lúc file được viết hay chưa; kiểm tra HEAD/diff live trước khi làm lại.
+
+### Chưa làm / chưa nghiệm thu
+- QA native Sony và nghiệm thu Y700 thực cho E9.3-03D; chưa phát hành Beta86 hợp lệ.
+- Theme 04 trở đi, 9 concept UI đầy đủ và tinh chỉnh màu từng theme.
+- Google Drive/OneDrive như nguồn nhạc cho tài khoản Shareable; chưa có.
+- Phát hành public/Google Play, release signing key quản lý chuyên nghiệp (hiện signer Preview dùng debug config).
+- [CẦN XÁC NHẬN] kiểm thử đa tài khoản TDLib end-to-end theo mọi case trên thiết bị mới, và tiêu chí bit-perfect/DSP FYT.
+
+## 6. Bug đã biết, workaround, chỗ dễ vỡ
+
+- **Beta85 offline bị sai tổng do chỉ lọc trang đầu 200:** E9.3-03D đã sửa trong code, **chưa QA thiết bị**. Không dùng con số “9 bài” của screenshot Y700 làm tổng offline thật.
+- **Cùng bài xuất hiện từ nhiều nhóm Telegram:** UI E9.3-03D nhóm file cùng path/cùng tên có thể mở danh sách bản gốc; không xóa dựa vào title. Nếu khác nội dung nhưng cùng tên chỉ là nhóm mơ hồ.
+- **Cockpit Y700 ngang ảnh bìa chiếm chiều cao, nút phụ dưới taskbar:** đã có measured fit + nút 48dp + overflow, **chưa QA Y700**. Cần thử fontScale/IME/cover/no-cover và nút bấm thực. Đừng kết luận dựa mỗi math unit test.
+- **getMessageLocally có thể thiếu metadata cho file offline:** Unknown không có nghĩa chưa tải. Hệ thống có thể không xác minh hết các file cache đã có từ phiên trước.
+- **Scan 30k bài, progress UI có thể giật:** worker riêng, batch 32; nhưng mỗi trang có thể tái tính nhóm, update cachedSongPaths và adapter trên UI; đo responsiveness/ANR thật trước tối ưu. Không hash toàn bộ file trong UI thread.
+- **file_id TDLib stale:** phải resolve fresh getMessage theo chat+message khi playback; đừng dùng persisted fileId qua các phiên.
+- **Tài khoản, noBackup, path traversal/callback muộn:** kiểm tra authorized account + epoch/generation + canonical path, không copy/merge TDLib DB/cache.
+- **Source overview header count:** đã sửa từ Beta85; tránh vô tình trộn số bài của kênh riêng với tổng.
+- **Insets Android taskbar + keyboard:** padding đúng một lần; không hide bars hoặc chồng mini player/danh sách.
+- **Release ký bằng debug key; build có thể PASS nhưng Telegram API ID 0:** luôn kiểm tra config riêng tại Tiny và signature/version trước APK thực.
+- **21 skipped mỗi variant:** [CẦN XÁC NHẬN] lý do/coverage trước public release; JVM test không chứng minh UI/TDLib thực.
+
+Workaround: dùng Beta85 owner-only đã cài làm rollback; mọi thay đổi lỗi ở E9.3-03D quay về Ni Codex để sửa, không gỡ/xóa data người dùng, không chạy đồng thời Agent sửa code hai máy.
+
+## 7. Quy ước code, naming, repo và quyền thao tác
+
+- Kotlin file ở app/src/{main,shareable,personal}/java/com/bsdung/musicassistantcar; Shareable Telegram ở data/telegram, test cùng package dưới app/src/test/java/...
+- PascalCase class, camelCase biến/hàm; file *Policy.kt cho quy tắc tương đối thuần dễ JVM test, *Dao.kt cho contract persistence, *Database.kt cho SQLite, *Entities.kt cho data class, *Coordinator.kt cho tiến trình, *Test.kt cho regression.
+- Không đổi songKey/composite primary key/DB schema/signing/package tùy tiện; không hardcode số bài, số nguồn, album artwork hay thông số sample rate/bitrate giả.
+- Không thêm framework UI mới (ví dụ Compose) hoặc viết lại architecture nếu không có lệnh; giữ mạch Android Views đang hoạt động.
+- Main thread chỉ thao tác hiển thị; DB/TDLib scan/tệp âm thanh chạy thread pool; cancellation theo owner/generation/lifecycle.
+- .gitignore đã bỏ local.properties, secrets.properties, *.keystore/*.jks, APK/log/debug cache, bridge/.env, session files. Không đưa OTP/password, Telegram API ID/hash, bot token, owner backend secrets, noBackup files, TDLib session keys/cache lên Git/Drive.
+- Mỗi vòng: kiểm tra Git trạng thái; commit scoped trên Ni; test Debug+Release; git diff --check; tạo Git bundle delta với SHA256; kiểm tra prerequisites rồi fetch vào clone Tiny cô lập; Tiny build/QA; lưu report mới; đợi gate tiếp.
+- Không dùng git reset --hard/clean/stash không xin phép; không đồng thời dùng Antigravity sửa cùng branch khi Codex Ni đang làm.
+- Không xóa APK Beta cũ. Không uninstall Android app, pm clear, logout Telegram, xóa database/cache/playlist, can thiệp private Stable/backend, upload public hay cài FYT nếu không có quyền riêng.
+- Chủ dự án đã duyệt tự động upload private APK đã *qua kiểm toán và QA* lên Google Drive riêng, KHÔNG duyệt upload artifact build-only đang thiếu auth hoặc APK chưa thử thiết bị.
+
+## 8. Việc làm tiếp theo theo thứ tự ưu tiên
+
+1. **P0 — Kiểm tra trạng thái live.** git HEAD/branch/status trên Ni và Tiny, các agent/process đang chạy, tài liệu handoff. Nếu đã có commit vc86, đừng bump lại; nếu source dirty hoặc branch khác thì dừng để đối chiếu. Chặn trial APK vc85 thiếu auth.
+2. **P1 — Bump Beta86 trên Ni.** Sửa riêng app/build.gradle shareable: versionCode 86; versionName 0.6.65; suffix -beta. Giữ Personal. Commit riêng và chạy ít nhất 2 biến thể test, diff-check. Không đưa Telegram credentials sang Ni.
+3. **P2 — Chuyển commit mới sang Tiny clone cô lập.** Git delta bundle từ đúng HEAD trước đó, verify SHA256/prerequisite, import vào C:\Bots\MeloVault-E93D-IsolatedQA; giữ nguyên C:\Bots\MeloVault-E91-Shareable Beta85 và Stable.
+4. **P3 — Build Tiny hợp lệ.** Dùng local cấu hình Telegram hợp lệ được cấp và giữ **chỉ trên Tiny** ngoài Git; không in/lộ raw ID/hash. Test Debug+Release, assembleShareableRelease; verify package app.melovault.player, vc86 / 0.6.65-beta, signer Preview cũ, SHA256, privacy/manifest. Lưu đường dẫn APK riêng, không overwrite.
+5. **P4 — Sony QA tại chỗ** sau APK hợp lệ: adb install -r (không uninstall/pm clear). Test nhạc đã tải nằm sau 200 bài, grouping/chooser từng nguồn, queue/playlist/favorite, playback giữ trạng thái, source Bento, Cockpit ngang và tất cả action phía trên taskbar, IME/insets, sự mượt khi sync 30k bài. Ảnh/video và báo cáo không tiết lộ private Telegram data. Restore mọi WM/density/rotation Sony đã thay.
+6. **P5 — ChatGPT độc lập audit native QA**, rồi tự upload APK lên owner-only Drive theo ủy quyền trước đó, verify checksum/quyền truy cập; chủ dự án cài đè và kiểm thử trên Lenovo Y700 Gen 3.
+7. **P6 — Chốt Theme 03** khi owner xác nhận. Nếu Y700 lỗi, quay về Ni Codex sửa E9.3-03D, lặp lại gate. Chỉ sau đó mới lập plan Theme 04 và các theme khác; Drive/OneDrive nguồn nhạc là workstream riêng, không làm chen ngang.
+8. **P7 — Trước public/FYT:** [CẦN XÁC NHẬN] full two-account isolation, 21 skipped, provenance native TDLib, long-lived signing key, privacy audit và thiết bị FYT; tuyệt đối không mặc định sẵn sàng chỉ vì unit tests xanh.
+
+## 9. Tài liệu nguồn và độ ưu tiên
+
+Ưu tiên theo thứ tự: **Git+source hiện tại > test XML/build report vừa chạy > QA thiết bị có artifact > báo cáo E9.3-03D > handoff Beta85 > docs E9.1 lịch sử**.
+
+- D:\Bots\_handoff\MeloVault\CODEX_NI_E93_03D_IMPLEMENTATION_REPORT.md
+- D:\Bots\_handoff\MeloVault\CHATGPT_NI_INDEPENDENT_AUDIT_E93_03D_20261017.md
+- D:\Bots\_handoff\MeloVault\CHATGPT_TINY_TRANSFER_BUILD_GATE_E93_03D_20261017.md
+- D:\Bots\_handoff\MeloVault\FIELD_REPORT_E93_03D_Y700_BETA85_DOWNLOADED_DUPLICATES_COCKPIT_CLIP_20261017.md
+- D:\Bots\_handoff\MeloVault\WORK_ORDER_E93_03D_Y700_OFFLINE_DUPES_COCKPIT_FIT_20261017.md
+- D:\Bots\_handoff\MeloVault\LATEST_HANDOFF.txt — chỉ tới E9.3-03C/Beta85, **không phải checkpoint E9.3-03D mới nhất**.
+- Z:\MusicAssistant\AgentBridge\artifacts\e91-shareable\... — handoff/QA Tiny nếu Google DriveFS đang mount; global AgentBridge\LATEST_HANDOFF.txt có thể thuộc dự án khác hoặc bị Access Denied.
+- Các file E91_SHAREABLE_TELEGRAM_PLAN.md, E91_TDLIB_NATIVE_INTEGRATION.md và E9_RELEASE_GATES.md trong repo là **hồ sơ lịch sử**; dòng “chưa có TDLib/login” ở giai đoạn cũ **không thể coi là trạng thái Beta85/E9.3-03D hiện hành**.
+
+**AI tiếp quản:** Không tuyên bố hoàn tất điều chưa thử trên thiết bị; mọi bất định phải ghi **[CẦN XÁC NHẬN]**. Không tự phá điểm dừng, không tự triển khai Theme04/FYT hoặc sửa Stable.
