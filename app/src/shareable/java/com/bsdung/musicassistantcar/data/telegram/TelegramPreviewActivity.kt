@@ -3362,6 +3362,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         })
                     }
                     updateBottomNavState()
+                    // E9.3-03C: Reset totalCountForCurrentView to the authoritative full-DB
+                    // total whenever we are in sources-overview mode (Bento OR List). Without
+                    // this assignment, a stale per-channel count left by a prior channel visit
+                    // would persist and make updateSyncHeaderSubtitle() report e.g. "4,332 bài"
+                    // instead of the correct library-wide total.
+                    totalCountForCurrentView = totalCount
                     updateSyncHeaderSubtitle()
                 }
             } else {
