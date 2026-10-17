@@ -33,11 +33,11 @@ class MeloNowPlayingPolicyTest {
         assertNull(MeloNowPlayingPolicy.sleepDeadline(SleepOption.OFF, 1_000))
         assertNull(MeloNowPlayingPolicy.sleepDeadline(SleepOption.END_OF_TRACK, 1_000))
         assertEquals(1_000L + 15 * 60_000L, MeloNowPlayingPolicy.sleepDeadline(SleepOption.M15, 1_000))
-        assertEquals("⏾ 15:00", MeloNowPlayingPolicy.sleepLabel(15 * 60_000L, false, 0))
-        assertEquals("⏾ 0:01", MeloNowPlayingPolicy.sleepLabel(500, false, 0))
-        assertEquals("⏾ Hẹn giờ", MeloNowPlayingPolicy.sleepLabel(100, false, 200))
-        assertEquals("⏾ Hẹn giờ", MeloNowPlayingPolicy.sleepLabel(null, false, 0))
-        assertEquals("⏾ Hết bài", MeloNowPlayingPolicy.sleepLabel(null, true, 0))
+        assertEquals("Hẹn giờ 15:00", MeloNowPlayingPolicy.sleepLabel(15 * 60_000L, false, 0))
+        assertEquals("Hẹn giờ 0:01", MeloNowPlayingPolicy.sleepLabel(500, false, 0))
+        assertEquals("Hẹn giờ", MeloNowPlayingPolicy.sleepLabel(100, false, 200))
+        assertEquals("Hẹn giờ", MeloNowPlayingPolicy.sleepLabel(null, false, 0))
+        assertEquals("Dừng hết bài", MeloNowPlayingPolicy.sleepLabel(null, true, 0))
     }
 
     @Test

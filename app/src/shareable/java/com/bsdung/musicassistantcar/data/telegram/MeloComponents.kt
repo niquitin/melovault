@@ -240,6 +240,99 @@ internal class MeloComponents(
         return row
     }
 
+    /**
+     * Same look as [songRow] (numbered, no ⋮) but built once and rebound in place, for
+     * paged lists such as Car Mode where a page turn must not create new views.
+     */
+    inner class SongRowHolder internal constructor() {
+        private val indexView = text("", sizes.secondaryText, palette.textSecondary, bold = true).apply {
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(sizes.minTouch * 6 / 10, ViewGroup.LayoutParams.WRAP_CONTENT)
+        }
+        private val artImage = ImageView(context).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = roundedBackground(palette.surfaceRaised)
+            clipToOutline = true
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        private val artInitial = TextView(context).apply {
+            gravity = Gravity.CENTER
+            setTextSize(TypedValue.COMPLEX_UNIT_PX, sizes.rowArt * 0.42f)
+            setTextColor(palette.text)
+            typeface = Typeface.DEFAULT_BOLD
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        private val title = text("", sizes.titleText, palette.text, maxLines = 2)
+        private val iconSize = (sizes.secondaryText * 1.15f).toInt()
+        private val icon = MeloStatusIconView(context, Status.TELEGRAM, palette.textSecondary, null, palette.onAccent)
+        private val detail = text("", sizes.secondaryText, palette.textSecondary)
+        private val duration = text("", sizes.secondaryText, palette.textSecondary).apply { setPadding(0, 0, sizes.gap / 2, 0) }
+        private var bound: SongRowModel? = null
+
+        val view: LinearLayout = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = sizes.rowHeight
+            setPadding(sizes.gap, sizes.gap / 2, sizes.gap / 2, sizes.gap / 2)
+            isClickable = true
+            isFocusable = true
+            addView(indexView)
+            addView(FrameLayout(context).apply {
+                addView(artImage, FrameLayout.LayoutParams(sizes.rowArt, sizes.rowArt))
+                addView(artInitial, FrameLayout.LayoutParams(sizes.rowArt, sizes.rowArt))
+            }, LinearLayout.LayoutParams(sizes.rowArt, sizes.rowArt))
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(sizes.gap * 3 / 2, 0, sizes.gap, 0)
+                addView(title)
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(0, sizes.gap / 2, 0, 0)
+                    addView(icon, LinearLayout.LayoutParams(iconSize, iconSize).apply { marginEnd = sizes.gap / 2 })
+                    addView(detail, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                })
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(duration)
+        }
+
+        fun bind(model: SongRowModel, onClick: () -> Unit, onLongClick: () -> Unit) {
+            view.setOnClickListener { onClick() }
+            view.setOnLongClickListener { onLongClick(); true }
+            if (model == bound) return
+            bound = model
+            val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent)
+            view.background = roundedBackground(
+                if (status.highlightRow) palette.accentSoft else palette.surface,
+                stroke = if (status.highlightRow) palette.accent else null
+            )
+            view.contentDescription = listOfNotNull(model.title, status.label, model.sourceTitle).joinToString(", ")
+            indexView.text = model.index?.toString().orEmpty()
+            if (model.art != null) {
+                artImage.setImageBitmap(model.art)
+                artImage.visibility = View.VISIBLE
+                artInitial.visibility = View.GONE
+            } else {
+                artImage.setImageDrawable(null)
+                artImage.visibility = View.GONE
+                artInitial.text = MeloComponentPolicy.initialOf(model.sourceTitle, model.title)
+                artInitial.background = roundedBackground(
+                    MeloComponentPolicy.placeholderColor(model.sourceTitle ?: model.title, palette),
+                    radius = minOf(sizes.corner, sizes.rowArt / 4)
+                )
+                artInitial.visibility = View.VISIBLE
+            }
+            title.text = model.title
+            title.setTypeface(null, if (status.highlightRow) Typeface.BOLD else Typeface.NORMAL)
+            icon.set(model.status, color(status.color), model.progressPercent)
+            detail.text = listOfNotNull(status.label, model.sourceTitle?.takeIf { it.isNotBlank() }).joinToString(" · ")
+            detail.setTextColor(color(status.color))
+            duration.text = TelegramSongDisplayPolicy.formatDuration(model.durationSeconds).orEmpty()
+        }
+    }
+
+    fun songRowHolder(): SongRowHolder = SongRowHolder()
+
     fun chip(label: String, selected: Boolean, onClick: (() -> Unit)? = null): TextView =
         TextView(context).apply {
             text = label
@@ -428,9 +521,9 @@ internal class MeloComponents(
 /** Status glyph drawn on canvas so it never depends on emoji fonts: bars, check, ring, cloud, triangle. */
 internal class MeloStatusIconView(
     context: Context,
-    private val status: Status,
-    private val tint: Int,
-    private val progressPercent: Int? = null,
+    private var status: Status,
+    private var tint: Int,
+    private var progressPercent: Int? = null,
     private val onAccent: Int = MeloDesignTokens.PALETTE.onAccent
 ) : View(context) {
 
@@ -441,6 +534,18 @@ internal class MeloStatusIconView(
 
     init {
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+    }
+
+    /** Rebind in place (reused rows); restarts the bars animation only for the playing song. */
+    fun set(status: Status, tint: Int, progressPercent: Int?) {
+        if (this.status == status && this.tint == tint && this.progressPercent == progressPercent) return
+        this.status = status
+        this.tint = tint
+        this.progressPercent = progressPercent
+        paint.color = tint
+        val wasAnimating = animating
+        animating = status == Status.PLAYING && isAttachedToWindow
+        if (animating && !wasAnimating) postInvalidateOnAnimation() else invalidate()
     }
 
     override fun onAttachedToWindow() {
@@ -471,7 +576,8 @@ internal class MeloStatusIconView(
                     rect.set(left, h * (1f - level), left + barW, h)
                     canvas.drawRoundRect(rect, barW / 3f, barW / 3f, paint)
                 }
-                if (animating) postInvalidateDelayed(70L)
+                // ~6 fps is enough to read as "moving" and keeps the screen mostly idle (Sony test F1).
+                if (animating && isShown) postInvalidateDelayed(BARS_FRAME_MS)
             }
             Status.DOWNLOADED -> {
                 paint.style = Paint.Style.FILL
@@ -520,5 +626,9 @@ internal class MeloStatusIconView(
                 paint.color = tint
             }
         }
+    }
+
+    private companion object {
+        const val BARS_FRAME_MS = 160L
     }
 }

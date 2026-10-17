@@ -444,25 +444,49 @@ internal class MeloCarScreen(
         }
         listStatus.text = listOfNotNull(if (online) null else "Mất kết nối", "Trang ${page + 1}/$pages").joinToString(" · ")
         listStatus.setTextColor(if (online) p.textSecondary else p.warning)
-        rows.removeAllViews()
-        if (snap.showingSources) renderSources(snap) else renderSongs(snap)
+        if (snap.showingSources) {
+            rows.removeAllViews()
+            renderSources(snap)
+        } else {
+            renderSongs(snap)
+        }
+    }
+
+    /** Five rows built once; a page turn only rebinds them (Sony test F3: no view creation per tap). */
+    private val holders = List(MeloCarPolicy.ROWS_PER_PAGE) { c.songRowHolder() }
+    private val emptySongs = c.text("", s.titleText, p.textSecondary, maxLines = 3)
+    private val songBox = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        addView(emptySongs, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        holders.forEachIndexed { i, h ->
+            addView(h.view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, s.rowHeight).apply {
+                if (i < holders.size - 1) bottomMargin = s.gap
+            })
+        }
     }
 
     private fun renderSongs(snap: Snapshot) {
+        if (rows.childCount != 1 || rows.getChildAt(0) !== songBox) {
+            rows.removeAllViews()
+            rows.addView(songBox, matchWrap())
+        }
         val per = MeloCarPolicy.ROWS_PER_PAGE
         val start = page * per
         val shown = MeloCarPolicy.pageItems(snap.rows, page, per)
-        if (shown.isEmpty()) {
-            rows.addView(c.text(snap.note ?: "Không có bài nào", s.titleText, p.textSecondary, maxLines = 3), matchWrap())
-            return
-        }
-        shown.forEachIndexed { i, row ->
+        emptySongs.visibility = if (shown.isEmpty()) View.VISIBLE else View.GONE
+        if (shown.isEmpty()) emptySongs.text = snap.note ?: "Không có bài nào"
+        holders.forEachIndexed { i, holder ->
+            val row = shown.getOrNull(i)
+            if (row == null) {
+                holder.view.visibility = View.GONE
+                return@forEachIndexed
+            }
             val index = start + i
             val playing = row.songKey == snap.playingKey
             val dimmed = MeloCarPolicy.isOfflineDimmed(online, row.downloaded)
             val status = MeloCompactPolicy.rowStatus(row.downloaded, row.downloadingPercent, playing)
             val quality = MeloComponentPolicy.qualityLabel(MeloComponentPolicy.formatOf(null, row.filename), null, null, null)
-            val v = c.songRow(
+            holder.bind(
                 SongRowModel(row.title, row.sourceTitle, row.durationSeconds, status, quality, row.downloadingPercent, row.art, index + 1),
                 onClick = {
                     if (dimmed) Toast.makeText(context, "Mất kết nối – chỉ phát được bài đã tải", Toast.LENGTH_SHORT).show()
@@ -470,10 +494,8 @@ internal class MeloCarScreen(
                 },
                 onLongClick = { host.openSongMenu(index, rows) }
             )
-            v.alpha = if (dimmed) 0.4f else 1f
-            rows.addView(v, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, s.rowHeight).apply {
-                if (i < shown.size - 1) bottomMargin = s.gap
-            })
+            holder.view.alpha = if (dimmed) 0.4f else 1f
+            holder.view.visibility = View.VISIBLE
         }
     }
 

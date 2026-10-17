@@ -222,7 +222,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         addView(c.chip("EQ", false) {
             Toast.makeText(activity, "EQ sắp có trong bản sau", Toast.LENGTH_SHORT).show()
         }.apply { contentDescription = "Bộ chỉnh âm, sắp có" })
-        sleep = c.chip("⏾ Hẹn giờ", false) { showSleepMenu(sleep) }.apply { contentDescription = "Hẹn giờ tắt nhạc" }
+        sleep = c.chip("Hẹn giờ", false) { showSleepMenu(sleep) }.apply { contentDescription = "Hẹn giờ tắt nhạc" }
         addView(sleep)
     }
 
@@ -291,7 +291,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         val now = host.nowPlaying()
         renderNow(now)
         val (deadline, endOfTrack) = host.sleepTimer()
-        sleep.text = MeloNowPlayingPolicy.sleepLabel(deadline, endOfTrack, SystemClock.elapsedRealtime())
+        sleep.show(MeloNowPlayingPolicy.sleepLabel(deadline, endOfTrack, SystemClock.elapsedRealtime()))
         if (now?.songKey != currentKey) {
             currentKey = now?.songKey
             peaksKey = null
@@ -299,30 +299,36 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
             coverFromFile = null
             waveform.setPeaks(null)
             reloadQueue()
-        } else if (++tick % 5 == 0) {
+        } else if (now?.downloadNote?.startsWith("Đã tải") == false && ++tick % 5 == 0) {
+            // Only while the current song is still downloading does a queue row change by itself.
             reloadQueue()
         }
         if (now != null && peaksKey != now.songKey && !analysing) startAnalysis(now)
     }
 
+    /** Setting the same text still re-lays out a TextView; the 1 s tick must not do that. */
+    private fun TextView.show(value: CharSequence) {
+        if (text?.toString() != value.toString()) text = value
+    }
+
     private fun renderNow(now: NowPlaying?) {
         if (now == null) {
-            title.text = "Chưa phát bài nào"
-            source.text = ""
-            quality.text = ""
-            time.text = ""
+            title.show("Chưa phát bài nào")
+            source.show("")
+            quality.show("")
+            time.show("")
             waveform.setProgress(0f)
-            play.text = "▶"
+            play.show("▶")
             showArt(null, null, "♪")
             return
         }
-        title.text = now.title
-        source.text = now.sourceTitle.orEmpty()
+        title.show(now.title)
+        source.show(now.sourceTitle.orEmpty())
         val q = host.qualityLabel(fileBitDepth)
-        quality.text = listOfNotNull(q, now.downloadNote?.takeUnless { it.startsWith("Đã tải") }).joinToString(" · ")
+        quality.show(listOfNotNull(q, now.downloadNote?.takeUnless { it.startsWith("Đã tải") }).joinToString(" · "))
         waveform.setProgress(if (now.durationMs > 0L) now.positionMs.toFloat() / now.durationMs else 0f)
-        time.text = MeloComponentPolicy.progressText((now.positionMs / 1000).toInt(), (now.durationMs / 1000).toInt())
-        play.text = if (now.playing) "❚❚" else "▶"
+        time.show(MeloComponentPolicy.progressText((now.positionMs / 1000).toInt(), (now.durationMs / 1000).toInt()))
+        play.show(if (now.playing) "❚❚" else "▶")
         play.contentDescription = if (now.playing) "Dừng" else "Phát"
         styleToggle(shuffle, now.shuffle, if (now.shuffle) "⇄ Đảo: bật" else "⇄ Đảo")
         styleToggle(repeat, now.repeatLabel != "tắt", "↻ Lặp: ${now.repeatLabel}")
@@ -331,6 +337,9 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
     }
 
     private fun styleToggle(chip: TextView, on: Boolean, label: String) {
+        val state = "$on|$label"
+        if (chip.tag == state) return
+        chip.tag = state
         chip.text = label
         chip.setTextColor(if (on) p.onAccent else p.text)
         chip.background = if (on) c.pill(p.accent) else c.pill(p.surfaceRaised, p.border)

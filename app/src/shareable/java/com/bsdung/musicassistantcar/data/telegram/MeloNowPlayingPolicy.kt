@@ -51,14 +51,14 @@ internal object MeloNowPlayingPolicy {
     fun sleepDeadline(option: SleepOption, nowElapsedMs: Long): Long? =
         if (option.isTimed) nowElapsedMs + option.minutes * 60_000L else null
 
-    /** "⏾ 14:59" while counting, "⏾ Hết bài" when stopping at the end of the track, "⏾ Hẹn giờ" otherwise. */
+    /** "Hẹn giờ 14:59" while counting, "Dừng hết bài" at the end of the track, "Hẹn giờ" otherwise. Plain text: the moon glyph is missing from some Android fonts (Sony Android 12). */
     fun sleepLabel(deadlineElapsedMs: Long?, endOfTrack: Boolean, nowElapsedMs: Long): String = when {
-        endOfTrack -> "⏾ Hết bài"
+        endOfTrack -> "Dừng hết bài"
         deadlineElapsedMs != null && deadlineElapsedMs > nowElapsedMs -> {
             val left = (deadlineElapsedMs - nowElapsedMs + 999) / 1000
-            "⏾ " + String.format(java.util.Locale.US, "%d:%02d", left / 60, left % 60)
+            "Hẹn giờ " + String.format(java.util.Locale.US, "%d:%02d", left / 60, left % 60)
         }
-        else -> "⏾ Hẹn giờ"
+        else -> "Hẹn giờ"
     }
 
     fun seekTarget(positionMs: Long, durationMs: Long, deltaMs: Long): Long =
