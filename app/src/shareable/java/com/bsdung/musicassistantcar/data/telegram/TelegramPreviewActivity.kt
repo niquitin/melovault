@@ -39,6 +39,7 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.util.Base64
 import android.view.View
+import android.view.ViewGroup
 import android.widget.AbsListView
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -197,6 +198,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var adapter: ArrayAdapter<String>
     private lateinit var sourcesAdapter: ArrayAdapter<String>
     private var visibleSourceIds: List<Long> = emptyList()
+    /** Same rows as [visibleSourceIds] with their counts, for the Gọn layout's Telegram page. */
+    private var visibleSourceCounts: List<Pair<Long, Int>> = emptyList()
     private var browseSources = false
     private var selectedChatId: Long? = null
     private val sourceNames = java.util.concurrent.ConcurrentHashMap<Long, String>()
@@ -243,6 +246,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private val playlistStore by lazy { TelegramSavedPlaylistStore(noBackupFilesDir) }
     private var favoriteIds: List<Long> = emptyList()
     private var playlistMode = false
+    // Gọn layout (docs/ui-spec.md step 4): a view layer over the unchanged legacy tree.
+    private lateinit var outerRoot: FrameLayout
+    private var compactScreen: MeloCompactScreen? = null
+    private var compactLayer: View? = null
+    private var compactLayerKey: String? = null
+    private var compactRefreshPosted = false
     private var authEpoch: Long = 0L
     private var tdlibParametersSent = false
     @Volatile private var nativeClientId = 0
@@ -318,6 +327,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         if (fullWasShowing) showFullPlayer()
         if (queueWasShowing) showUpcomingQueue()
+        applyCompactMode()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -397,6 +407,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Picks up a changed "Bố cục Gọn" setting when returning from Cài đặt giao diện.
+        applyCompactMode()
         if (auth.isReady()) {
             val user = library.authorizedUser()?.value ?: 0L
             if (user > 0L && songs.isEmpty()) {
@@ -420,6 +432,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 if (isPlaying) mainRoot.post(miniPlayerProgressTick)
                 else mainRoot.removeCallbacks(miniPlayerProgressTick)
             }
+            compactScreen?.onPlaybackChanged()
         }
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             val titleText = mediaItem?.mediaMetadata?.title ?: "Chọn một bài hát để bắt đầu"
@@ -442,6 +455,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             if (currentSongIndex >= 0 && auth.isReady()) {
                 prefetchNextCachedNeighbor()
             }
+            compactScreen?.onPlaybackChanged()
         }
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_ENDED) {
@@ -449,6 +463,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
             updateMiniPlayerProgress()
             updateCockpitPlayer()
+            compactScreen?.onPlaybackChanged()
         }
     }
 
@@ -621,6 +636,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         override fun run() {
             updateMiniPlayerProgress()
             updateCockpitPlayer()
+            compactScreen?.onPlaybackChanged()
             if (player?.isPlaying == true) {
                 if (::mainRoot.isInitialized) mainRoot.postDelayed(this, 1000L)
             }
@@ -2269,57 +2285,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     view: AbsListView?, firstVisibleItem: Int,
                     visibleItemCount: Int, totalItemCount: Int
                 ) {
-                    if (filterOnlyDownloaded && !(allChatsMode && browseSources && !playlistMode) &&
-                        firstVisibleItem + visibleItemCount >= totalItemCount - 20 && totalItemCount > 0 &&
-                        shownSongs.size < offlineGroups.size) {
-                        val more = offlineGroups.drop(shownSongs.size).take(200).map { offlineRepresentative(it) }
-                        offlineVisibleLimit += more.size
-                        shownSongs = shownSongs + more
-                        this@TelegramPreviewActivity.adapter.addAll(more.map { TelegramSongDisplayPolicy.label(it.title, it.filename) })
-                    }
-                    if (!filterOnlyDownloaded && allChatsMode && !browseSources && !playlistMode &&
-                        firstVisibleItem + visibleItemCount >= totalItemCount - 20 &&
-                        totalItemCount > 0 && !isLoadingMoreSongs) {
-                        val userId = library.authorizedUser()?.value ?: 0L
-                        val db = libraryDb
-                        if (db != null && userId > 0L) {
-                            if (shownSongs.size < totalCountForCurrentView) {
-                                isLoadingMoreSongs = true
-                                val nextOffset = shownSongs.size
-                                val currentGen = uiQueryGeneration.get()
-                                val q = songFilter.text?.toString()?.trim().orEmpty().takeIf { it.isNotBlank() }
-                                val currentChat = selectedChatId
-                                executeOnDb {
-                                    val count = db.getSongCount(userId, chatId = currentChat, searchQuery = q)
-                                    val more = if (nextOffset < count) {
-                                        db.getSongs(userId, chatId = currentChat, searchQuery = q, offset = nextOffset, limit = 200)
-                                    } else emptyList()
-                                    val mapped = more.map {
-                                        Song(
-                                            it.fileId, it.title, it.filename, it.songKey, it.chatId, it.fileSize,
-                                            rawMessageId = it.messageId,
-                                            performer = it.performer,
-                                            durationSeconds = it.durationSeconds,
-                                            sourceTitle = it.sourceTitle
-                                        )
-                                    }
-                                    runOnUiThread {
-                                        if (uiQueryGeneration.get() == currentGen &&
-                                            shownSongs.size == nextOffset &&
-                                            allChatsMode && !browseSources && !playlistMode &&
-                                            mapped.isNotEmpty() && !isDestroyed) {
-                                            totalCountForCurrentView = count
-                                            shownSongs = shownSongs + mapped
-                                            this@TelegramPreviewActivity.adapter.addAll(
-                                                mapped.map { TelegramSongDisplayPolicy.label(it.title, it.filename) }
-                                            )
-                                            updateSyncHeaderSubtitle()
-                                        }
-                                        isLoadingMoreSongs = false
-                                    }
-                                }
-                            }
-                        }
+                    if (firstVisibleItem + visibleItemCount >= totalItemCount - 20 && totalItemCount > 0) {
+                        loadMoreSongsIfNeeded()
                     }
                 }
             })
@@ -2609,6 +2576,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
         }
         tracks.adapter = adapter
+        // The Gọn layout mirrors whatever the legacy list shows; coalesce bursts of clear/addAll.
+        val compactObserver = object : android.database.DataSetObserver() {
+            override fun onChanged() = scheduleCompactLibraryRefresh()
+            override fun onInvalidated() = scheduleCompactLibraryRefresh()
+        }
+        adapter.registerDataSetObserver(compactObserver)
+        sourcesAdapter.registerDataSetObserver(compactObserver)
         tracks.onItemClickListener = android.widget.AdapterView.OnItemClickListener {
                 _, _, position, _ ->
             if (::songFilter.isInitialized && songFilter.hasFocus()) {
@@ -2844,8 +2818,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 -1, dp(35)).apply { bottomMargin = dp(5) })
         }
         authControls.visibility = View.GONE
-        setContentView(root)
+        // Outer frame only so the Gọn layout can sit on top; the legacy tree is unchanged inside it.
+        outerRoot = FrameLayout(this).apply {
+            addView(root, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+        setContentView(outerRoot)
         applyResponsiveLibraryUi()
+        applyCompactMode()
     }
 
     private fun showLibraryOverflow(anchor: View) {
@@ -3125,30 +3104,40 @@ class TelegramPreviewActivity : AppCompatActivity() {
         tracks.post { if (!isDestroyed) tracks.setSelectionFromTop(firstVisible, firstOffset) }
     }
 
+    /** Progressive-download line for the current track; null when it is not a streamed Telegram file. */
+    private fun currentDownloadNote(): String? {
+        val uri = player?.currentMediaItem?.localConfiguration?.uri
+        val fileId = uri?.let(TelegramProgressiveCache::fileId) ?: return null
+        val loaded = TelegramProgressiveCache.readyBytes(fileId)
+        val total = TelegramProgressiveCache.totalBytes(fileId)
+        val complete = TelegramProgressiveCache.isComplete(fileId)
+        return when {
+            complete -> "Đã tải đầy đủ · Có thể nghe offline"
+            total > 0L -> String.format(java.util.Locale.US,
+                "Telegram · Đã nhận %.1f / %.1f MB · %d%%",
+                loaded / 1_000_000.0, total / 1_000_000.0,
+                (loaded * 100 / total).coerceIn(0, 100))
+            else -> String.format(java.util.Locale.US,
+                "Telegram · Đang đệm %.1f MB", loaded / 1_000_000.0)
+        }
+    }
+
+    /** Download percent of the streamed current track, or null when complete / not streaming. */
+    private fun currentDownloadPercent(): Int? {
+        val uri = player?.currentMediaItem?.localConfiguration?.uri
+        val fileId = uri?.let(TelegramProgressiveCache::fileId) ?: return null
+        if (TelegramProgressiveCache.isComplete(fileId)) return null
+        return MeloCompactPolicy.progressPercent(
+            TelegramProgressiveCache.readyBytes(fileId), TelegramProgressiveCache.totalBytes(fileId)
+        )
+    }
+
     private fun showFullPlayer() {
         val dialog = fullPlayer ?: NowPlayingFullScreenDialog(
             this,
             themeTokens = { themeTokens },
             media = { player },
-            downloadProgress = {
-                val uri = player?.currentMediaItem?.localConfiguration?.uri
-                val fileId = uri?.let(TelegramProgressiveCache::fileId)
-                if (fileId == null) null
-                else {
-                    val loaded = TelegramProgressiveCache.readyBytes(fileId)
-                    val total = TelegramProgressiveCache.totalBytes(fileId)
-                    val complete = TelegramProgressiveCache.isComplete(fileId)
-                    when {
-                        complete -> "Đã tải đầy đủ · Có thể nghe offline"
-                        total > 0L -> String.format(java.util.Locale.US,
-                            "Telegram · Đã nhận %.1f / %.1f MB · %d%%",
-                            loaded / 1_000_000.0, total / 1_000_000.0,
-                            (loaded * 100 / total).coerceIn(0, 100))
-                        else -> String.format(java.util.Locale.US,
-                            "Telegram · Đang đệm %.1f MB", loaded / 1_000_000.0)
-                    }
-                }
-            },
+            downloadProgress = { currentDownloadNote() },
             source = {
                 val itemId = currentTelegramMessageId()
                 val chat = songs.firstOrNull { it.messageId == itemId }?.chatId
@@ -3584,6 +3573,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         filteredSources.map { it.chatId to it.trackCount }
                     }
                     visibleSourceIds = display.map { it.first }
+                    visibleSourceCounts = display
+                    scheduleCompactLibraryRefresh()
 
                     if (currentSourceDisplayMode == TelegramVaultBentoPolicy.SourceDisplayMode.BENTO) {
                         tracks.visibility = View.GONE
@@ -3712,6 +3703,322 @@ class TelegramPreviewActivity : AppCompatActivity() {
         updatePlaylistButtons()
         refreshSongRows()
         showMessage("Playlist cá nhân: ${favoriteIds.size} bài đã lưu.")
+    }
+
+    // ---- Gọn layout host ---------------------------------------------------------------------
+
+    /** Shows the Gọn layer when the setting/screen asks for it and the account is verified. */
+    private fun applyCompactMode() {
+        if (!::outerRoot.isInitialized || !::mainRoot.isInitialized || isDestroyed) return
+        val prefs = getSharedPreferences(MeloScreenPolicy.PREFS_NAME, Context.MODE_PRIVATE)
+        val setting = MeloCompactPolicy.loadSetting(prefs)
+        val display = MeloUiLabActivity.realMeasurements(this).display
+        val wanted = MeloCompactPolicy.shouldUseCompact(setting, display.widthDp, display.heightDp, auth.isReady())
+        if (!wanted) {
+            detachCompact()
+            return
+        }
+        val key = "${setting.key}:${display.widthPx}x${display.heightPx}:${display.densityDpi}:${display.fontScale}"
+        if (compactScreen != null && compactLayerKey == key) {
+            scheduleCompactLibraryRefresh()
+            return
+        }
+        detachCompact()
+        if (MeloCompactPolicy.needsDefaultDownloadedFilter(MeloCompactPolicy.defaultApplied(prefs))) {
+            MeloCompactPolicy.markDefaultApplied(prefs)
+            playlistMode = false
+            browseSources = false
+            filterOnlyDownloaded = true
+            updateFilterChipsUi()
+            updatePlaylistButtons()
+            refreshSongRows()
+        }
+        val emulate = setting == MeloCompactPolicy.CompactSetting.EMULATE_SHANLING
+        val spec = if (emulate) MeloScreenPolicy.Emulation.SHANLING_M3_ULTRA.spec() ?: display else display
+        val frameContext = if (emulate) MeloEmulation.emulatedContext(this, spec) else this
+        val sizes = MeloDesignTokens.sizes(MeloDesignTokens.Profile.COMPACT, spec.density, spec.fontScale, spec.physicalPpi)
+        val screen = MeloCompactScreen(frameContext, sizes, compactHost, onBackPressedDispatcher)
+        val layer: View = if (emulate) {
+            MeloEmulation.FrameHost(this, frameContext, spec, MeloDesignTokens.PALETTE.background).also {
+                it.frame.addView(screen.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+            }.root
+        } else {
+            screen.view.also { v ->
+                ViewCompat.setOnApplyWindowInsetsListener(v) { view, insets ->
+                    val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+                    val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+                    view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+                    insets
+                }
+            }
+        }
+        // The layer is opaque and takes every touch; the legacy tree keeps running underneath.
+        layer.isClickable = true
+        outerRoot.addView(layer, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        mainRoot.visibility = View.INVISIBLE
+        compactScreen = screen
+        compactLayer = layer
+        compactLayerKey = key
+        screen.attach()
+        ViewCompat.requestApplyInsets(layer)
+    }
+
+    private fun detachCompact() {
+        compactScreen?.detach()
+        compactLayer?.let { if (::outerRoot.isInitialized) outerRoot.removeView(it) }
+        compactScreen = null
+        compactLayer = null
+        compactLayerKey = null
+        if (::mainRoot.isInitialized) mainRoot.visibility = View.VISIBLE
+    }
+
+    private fun scheduleCompactLibraryRefresh() {
+        if (compactScreen == null || compactRefreshPosted || !::mainRoot.isInitialized) return
+        compactRefreshPosted = true
+        mainRoot.post {
+            compactRefreshPosted = false
+            if (!isDestroyed) compactScreen?.onLibraryChanged()
+        }
+    }
+
+    private fun songIsDownloaded(song: Song): Boolean {
+        if (filterOnlyDownloaded) return true
+        val local = cachedSongPaths[song.messageId]?.let { File(it) } ?: return false
+        return local.isFile && TelegramAccountStoragePolicy.isOwnedFile(filesRoot, local)
+    }
+
+    private fun sourceTitleOf(chatId: Long): String = sourceNames[chatId] ?: "Nguồn Telegram $chatId"
+
+    /** Same row action as the legacy list: grouped offline copies open the chooser. */
+    private fun playShownSong(index: Int) {
+        val group = offlineGroups.getOrNull(index).takeIf { filterOnlyDownloaded }
+        if (group != null && group.entries.size > 1) showOfflineVersions(group)
+        else shownSongs.getOrNull(index)?.let { downloadAndPlay(it) }
+    }
+
+    private val compactHost = object : MeloCompactScreen.Host {
+        override fun snapshot(): MeloCompactScreen.Snapshot {
+            val showingSources = allChatsMode && browseSources && !playlistMode
+            val mode = when {
+                playlistMode -> MeloCompactPolicy.Mode.PLAYLIST
+                filterOnlyDownloaded -> MeloCompactPolicy.Mode.DOWNLOADED
+                else -> MeloCompactPolicy.Mode.ALL
+            }
+            val playingKey = currentTelegramMessageId()
+            val downloadingPercent = playingKey?.let { currentDownloadPercent() }
+            val rows = if (showingSources) emptyList() else shownSongs.map { song ->
+                MeloCompactScreen.Row(
+                    title = TelegramSongDisplayPolicy.label(song.title, song.filename),
+                    sourceTitle = song.sourceTitle ?: sourceNames[song.chatId],
+                    filename = song.filename,
+                    durationSeconds = song.durationSeconds,
+                    songKey = song.messageId,
+                    downloaded = songIsDownloaded(song),
+                    downloadingPercent = if (song.messageId == playingKey) downloadingPercent else null,
+                    art = thumbnailCache.get(song.messageId)
+                )
+            }
+            val sources = visibleSourceCounts.map { (chatId, count) ->
+                MeloCompactScreen.SourceRow(chatId, if (chatId == 0L) "Tất cả nguồn" else sourceTitleOf(chatId), count)
+            }
+            val total = when {
+                showingSources -> null
+                filterOnlyDownloaded -> offlineGroups.size
+                playlistMode -> shownSongs.size
+                else -> totalCountForCurrentView
+            }
+            val sourceTitle = when {
+                playlistMode -> null
+                !allChatsMode -> "Saved Messages"
+                else -> selectedChatId?.let { sourceTitleOf(it) }
+            }
+            return MeloCompactScreen.Snapshot(
+                showingSources = showingSources,
+                mode = mode,
+                rows = rows,
+                sources = sources,
+                total = total,
+                sourceTitle = sourceTitle,
+                playingKey = playingKey,
+                query = songFilter.text?.toString().orEmpty(),
+                note = offlineSummary.takeIf { filterOnlyDownloaded && !showingSources }
+            )
+        }
+
+        override fun setMode(mode: MeloCompactPolicy.Mode) {
+            if (!auth.isReady()) return
+            when (mode) {
+                MeloCompactPolicy.Mode.ALL -> { playlistMode = false; filterOnlyDownloaded = false; browseSources = false }
+                MeloCompactPolicy.Mode.DOWNLOADED -> { playlistMode = false; filterOnlyDownloaded = true; browseSources = false }
+                MeloCompactPolicy.Mode.PLAYLIST -> { playlistMode = true; browseSources = false; selectedChatId = null }
+            }
+            updateFilterChipsUi()
+            updatePlaylistButtons()
+            refreshSongRows()
+        }
+
+        override fun showSources() {
+            if (!auth.isReady()) return
+            browseSources = true
+            selectedChatId = null
+            playlistMode = false
+            songFilter.text?.clear()
+            updatePlaylistButtons()
+            refreshSongRows()
+        }
+
+        override fun openSource(chatId: Long?) {
+            if (!auth.isReady()) return
+            selectedChatId = chatId
+            browseSources = false
+            playlistMode = false
+            songFilter.text?.clear()
+            updatePlaylistButtons()
+            refreshSongRows()
+        }
+
+        override fun setQuery(query: String) {
+            if (songFilter.text?.toString() != query) songFilter.setText(query)
+        }
+
+        override fun loadMore() = loadMoreSongsIfNeeded()
+
+        override fun playAt(index: Int) = playShownSong(index)
+
+        override fun openSongMenu(index: Int, anchor: View) {
+            val group = offlineGroups.getOrNull(index).takeIf { filterOnlyDownloaded }
+            if (group != null && group.entries.size > 1) showOfflineVersions(group, anchor)
+            else shownSongs.getOrNull(index)?.let { showSongOptionsMenu(it, songIsDownloaded(it), anchor) }
+        }
+
+        override fun nowPlaying(): MeloCompactScreen.NowPlaying? {
+            val controller = player ?: return null
+            val item = controller.currentMediaItem ?: return null
+            val key = currentTelegramMessageId()
+            val song = key?.let { k ->
+                shownSongs.firstOrNull { it.messageId == k } ?: queueSongOrder.firstOrNull { it.messageId == k }
+                    ?: songs.firstOrNull { it.messageId == k }
+            }
+            val duration = controller.duration.takeIf { it != C.TIME_UNSET && it > 0L } ?: 0L
+            return MeloCompactScreen.NowPlaying(
+                songKey = key,
+                title = item.mediaMetadata.title?.toString()?.takeIf { it.isNotBlank() }
+                    ?: song?.let { TelegramSongDisplayPolicy.label(it.title, it.filename) } ?: "Đang phát",
+                sourceTitle = song?.let { it.sourceTitle ?: sourceNames[it.chatId] },
+                filename = song?.filename,
+                positionMs = controller.currentPosition.coerceAtLeast(0L),
+                durationMs = duration,
+                playing = controller.isPlaying,
+                art = key?.let { thumbnailCache.get(it) },
+                favorite = key != null && key in favoriteIds,
+                shuffle = controller.shuffleModeEnabled,
+                repeatLabel = when (controller.repeatMode) {
+                    Player.REPEAT_MODE_ALL -> "tất cả"
+                    Player.REPEAT_MODE_ONE -> "một bài"
+                    else -> "tắt"
+                },
+                downloadNote = currentDownloadNote()
+            )
+        }
+
+        override fun playPause() {
+            player?.let { controller ->
+                if (controller.currentMediaItem != null) {
+                    if (controller.isPlaying) controller.pause() else controller.play()
+                }
+            }
+        }
+
+        override fun next() = playAdjacent(1)
+
+        override fun previous() = playAdjacent(-1)
+
+        override fun seekTo(positionMs: Long) {
+            player?.seekTo(positionMs.coerceAtLeast(0L))
+            compactScreen?.onPlaybackChanged()
+        }
+
+        override fun toggleFavorite() = toggleCurrentFavorite()
+
+        override fun toggleShuffle() {
+            player?.let {
+                it.shuffleModeEnabled = !it.shuffleModeEnabled
+                updateCockpitPlayer()
+            }
+        }
+
+        override fun cycleRepeat() {
+            player?.let {
+                it.repeatMode = when (it.repeatMode) {
+                    Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                    Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                    else -> Player.REPEAT_MODE_OFF
+                }
+                updateCockpitPlayer()
+            }
+        }
+
+        override fun openQueue() = showUpcomingQueue()
+
+        override fun openLegacyOverflow(anchor: View) = showLibraryOverflow(anchor)
+
+        override fun openUiLab() {
+            startActivity(Intent(this@TelegramPreviewActivity, MeloUiLabActivity::class.java)
+                .putExtra(MeloUiLabActivity.EXTRA_SONG_COUNT, totalCountForCurrentView))
+        }
+    }
+
+    /** Next page of the visible list; callers decide the list is near its end. */
+    private fun loadMoreSongsIfNeeded() {
+        if (filterOnlyDownloaded && !(allChatsMode && browseSources && !playlistMode) &&
+            shownSongs.size < offlineGroups.size) {
+            val more = offlineGroups.drop(shownSongs.size).take(200).map { offlineRepresentative(it) }
+            offlineVisibleLimit += more.size
+            shownSongs = shownSongs + more
+            adapter.addAll(more.map { TelegramSongDisplayPolicy.label(it.title, it.filename) })
+        }
+        if (!filterOnlyDownloaded && allChatsMode && !browseSources && !playlistMode && !isLoadingMoreSongs) {
+            val userId = library.authorizedUser()?.value ?: 0L
+            val db = libraryDb
+            if (db != null && userId > 0L) {
+                if (shownSongs.size < totalCountForCurrentView) {
+                    isLoadingMoreSongs = true
+                    val nextOffset = shownSongs.size
+                    val currentGen = uiQueryGeneration.get()
+                    val q = songFilter.text?.toString()?.trim().orEmpty().takeIf { it.isNotBlank() }
+                    val currentChat = selectedChatId
+                    executeOnDb {
+                        val count = db.getSongCount(userId, chatId = currentChat, searchQuery = q)
+                        val more = if (nextOffset < count) {
+                            db.getSongs(userId, chatId = currentChat, searchQuery = q, offset = nextOffset, limit = 200)
+                        } else emptyList()
+                        val mapped = more.map {
+                            Song(
+                                it.fileId, it.title, it.filename, it.songKey, it.chatId, it.fileSize,
+                                rawMessageId = it.messageId,
+                                performer = it.performer,
+                                durationSeconds = it.durationSeconds,
+                                sourceTitle = it.sourceTitle
+                            )
+                        }
+                        runOnUiThread {
+                            if (uiQueryGeneration.get() == currentGen &&
+                                shownSongs.size == nextOffset &&
+                                allChatsMode && !browseSources && !playlistMode &&
+                                mapped.isNotEmpty() && !isDestroyed) {
+                                totalCountForCurrentView = count
+                                shownSongs = shownSongs + mapped
+                                adapter.addAll(
+                                    mapped.map { TelegramSongDisplayPolicy.label(it.title, it.filename) }
+                                )
+                                updateSyncHeaderSubtitle()
+                            }
+                            isLoadingMoreSongs = false
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private fun playAdjacent(delta: Int) {
@@ -4071,6 +4378,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         authControls.visibility = View.GONE
                         restorePlayingQueueIfAny(verified.value)
                         applyResponsiveLibraryUi()
+                        applyCompactMode()
                     }
                     loadDatabaseIndex(verified.value) {
                         scanAllTelegramAudio(browseAfter = false, incremental = true)
@@ -5056,6 +5364,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun logoutUser() {
         if (!auth.isReady()) return
+        detachCompact()
         autoRecoveryPolicy.reset()
         setNavigationCollapsed(false)
         clearPendingQrLink()
@@ -5094,6 +5403,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        detachCompact()
         if (::mainRoot.isInitialized) mainRoot.removeCallbacks(miniPlayerProgressTick)
         fullPlayer?.dismiss()
         fullPlayer = null

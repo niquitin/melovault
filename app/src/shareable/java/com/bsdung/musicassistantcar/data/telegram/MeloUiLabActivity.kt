@@ -127,6 +127,20 @@ class MeloUiLabActivity : AppCompatActivity() {
             "Mở màn này trên S25 Ultra và Y700 (cầm dọc và ngang), bấm \"Sao chép số đo\" rồi gửi lại để chốt ngưỡng bố cục."
         ))
 
+        content.addView(components.sectionTitle("Bố cục Gọn (Shanling M3 Ultra)"))
+        content.addView(note(
+            "Thư viện, Telegram và Đang phát rút gọn cho máy nhỏ, dùng nhạc thật của bạn. " +
+                "\"Thử trong khung Shanling\" vẽ bản Gọn đúng 768 × 1280 điểm ảnh trên máy này. " +
+                "Chỉ hiện sau khi đã đăng nhập Telegram. Quay lại màn chính để thấy thay đổi."
+        ))
+        val compactSetting = MeloCompactPolicy.loadSetting(prefs)
+        MeloCompactPolicy.CompactSetting.entries.forEach { setting ->
+            content.addView(choiceRow(setting.displayName, setting == compactSetting) {
+                MeloCompactPolicy.saveSetting(prefs, setting)
+                render()
+            })
+        }
+
         content.addView(components.sectionTitle("Giả lập thiết bị (thử nghiệm)"))
         content.addView(note(
             "Vẽ giao diện mới trong khung đúng số điểm ảnh và mật độ của máy được chọn. " +
