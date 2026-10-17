@@ -30,7 +30,7 @@ Nếu working tree bẩn bất ngờ, branch lạ, hoặc có agent khác (Codex
 .\gradlew.bat :app:assembleShareableRelease --console=plain
 git diff --check
 ```
-Mốc hiện tại (HEAD 83b66c1): mỗi biến thể 1.029 passed, 21 skipped, 0 failed. Skipped không tính là pass. Build trên Ni có Telegram API ID 0 là bình thường; build PASS không có nghĩa APK dùng được.
+Mốc hiện tại (HEAD 83b66c1, giữ nguyên sau bump b490ded): mỗi biến thể 1.029 passed, 21 skipped, 0 failed. Skipped không tính là pass. Build trên Ni có Telegram API ID 0 là bình thường; build PASS không có nghĩa APK dùng được.
 
 ## Stack
 Kotlin, Java/JVM 17 (Gradle chạy bằng JDK 21), Gradle 8.13, AGP 8.13.0, Kotlin 2.2.10, compileSdk/targetSdk 36, minSdk 26. Một module `:app`, flavor `personal` / `shareable` (`app.melovault.player`). Media3 1.11.1, WorkManager, SQLite tự viết DAO, TDLib JNI/JSON, JUnit4.
@@ -53,5 +53,7 @@ Test JVM trên Ni → commit → Git bundle delta + SHA256 → import vào clone
 
 ## Trạng thái và việc tiếp theo
 - Branch `feature/e93-03d-y700-offline-cockpit`. Mốc an toàn: tag `pre-claude-migration` (= 83b66c1, code E9.3-03D, chưa QA thiết bị).
-- Việc kế tiếp (chỉ làm khi chủ dự án yêu cầu): P1 bump riêng flavor shareable trong `app/build.gradle` lên versionCode 86 / versionName `0.6.65-beta`, commit riêng, test 2 biến thể. Xem mục 8 của `HANDOFF.md` cho P2–P7.
+- P1 đã xong: commit `b490ded` bump shareable lên vc86 / `0.6.65-beta`; test sau bump giữ mốc 1.029 passed / 21 skipped / 0 failed mỗi biến thể.
+- Việc kế tiếp (chỉ làm khi chủ dự án yêu cầu): P2 tạo Git bundle delta `83b66c1..HEAD` + SHA256 để import vào clone cô lập trên Tiny. Xem mục 8 của `HANDOFF.md` cho P2–P7.
+- Commit trên Ni: máy chưa có git identity; dùng `git -c user.name="Claude Code" -c user.email="noreply@anthropic.com" commit ...` (không sửa git config), giống cách Codex dùng identity riêng.
 - Kết thúc mỗi phần việc: cập nhật mục "Đang làm dở" và "Việc làm tiếp theo" trong `HANDOFF.md`, cập nhật file này nếu có quy ước mới, rồi commit.

@@ -165,7 +165,7 @@ Mã này đã import vào Tiny standalone clone C:\Bots\MeloVault-E93D-IsolatedQ
 
 **BLOCKER bắt buộc:** Tiny build trial từ isolated clone tạo APK 30.210.458 bytes, SHA256 0B507D40A48142C3F88700AB40117AEAA6F9540E72E6F390ED24435885540976 và signer SHA256 eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8; **APK NÀY KHÔNG ĐƯỢC CÀI** vì vẫn vc85 0.6.64-beta + build thiếu Telegram API config, mặc dù test/build PASS.
 
-**Next checkpoint đã giao:** Trên Ni Codex **chỉ** bump shareable flavor trong app/build.gradle versionCode 85 -> 86, versionName 0.6.64 -> 0.6.65 (vẫn suffix -beta), tạo commit riêng; không đổi Personal/backend. **[CẦN XÁC NHẬN]** có agent nào hoàn thành việc bump sau lúc file được viết hay chưa; kiểm tra HEAD/diff live trước khi làm lại.
+**P1 ĐÃ XONG trên Ni (17/10/2026, Claude Code):** commit b490ded4531f5b9baf884d83bb9f8118ee11adc8 `chore(shareable): bump Beta 86 versionCode 86 / 0.6.65-beta`, chỉ đổi 2 dòng flavor shareable trong app/build.gradle (Personal vc61/0.6.40, applicationId, signing giữ nguyên). Test JVM Ni sau bump: Debug và Release mỗi biến thể 1.050 tests, 1.029 passed, 21 skipped, 0 failed; git diff --check sạch. **Chưa** build APK, chưa tạo bundle, chưa chuyển sang Tiny. Bundle delta P2 phải tính từ 83b66c1 (HEAD hiện có trên Tiny clone) tới HEAD mới trên Ni. [CẦN XÁC NHẬN] vc86/0.6.65-beta trong APK thật chỉ kiểm được khi build trên Tiny (P3).
 
 ### Chưa làm / chưa nghiệm thu
 - QA native Sony và nghiệm thu Y700 thực cho E9.3-03D; chưa phát hành Beta86 hợp lệ.
@@ -206,7 +206,7 @@ Workaround: dùng Beta85 owner-only đã cài làm rollback; mọi thay đổi l
 ## 8. Việc làm tiếp theo theo thứ tự ưu tiên
 
 1. **P0 — Kiểm tra trạng thái live.** git HEAD/branch/status trên Ni và Tiny, các agent/process đang chạy, tài liệu handoff. Nếu đã có commit vc86, đừng bump lại; nếu source dirty hoặc branch khác thì dừng để đối chiếu. Chặn trial APK vc85 thiếu auth.
-2. **P1 — Bump Beta86 trên Ni.** Sửa riêng app/build.gradle shareable: versionCode 86; versionName 0.6.65; suffix -beta. Giữ Personal. Commit riêng và chạy ít nhất 2 biến thể test, diff-check. Không đưa Telegram credentials sang Ni.
+2. **P1 — Bump Beta86 trên Ni. [ĐÃ XONG — b490ded]** Sửa riêng app/build.gradle shareable: versionCode 86; versionName 0.6.65; suffix -beta. Giữ Personal. Commit riêng và chạy ít nhất 2 biến thể test, diff-check. Không đưa Telegram credentials sang Ni.
 3. **P2 — Chuyển commit mới sang Tiny clone cô lập.** Git delta bundle từ đúng HEAD trước đó, verify SHA256/prerequisite, import vào C:\Bots\MeloVault-E93D-IsolatedQA; giữ nguyên C:\Bots\MeloVault-E91-Shareable Beta85 và Stable.
 4. **P3 — Build Tiny hợp lệ.** Dùng local cấu hình Telegram hợp lệ được cấp và giữ **chỉ trên Tiny** ngoài Git; không in/lộ raw ID/hash. Test Debug+Release, assembleShareableRelease; verify package app.melovault.player, vc86 / 0.6.65-beta, signer Preview cũ, SHA256, privacy/manifest. Lưu đường dẫn APK riêng, không overwrite.
 5. **P4 — Sony QA tại chỗ** sau APK hợp lệ: adb install -r (không uninstall/pm clear). Test nhạc đã tải nằm sau 200 bài, grouping/chooser từng nguồn, queue/playlist/favorite, playback giữ trạng thái, source Bento, Cockpit ngang và tất cả action phía trên taskbar, IME/insets, sự mượt khi sync 30k bài. Ảnh/video và báo cáo không tiết lộ private Telegram data. Restore mọi WM/density/rotation Sony đã thay.
