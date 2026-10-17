@@ -54,6 +54,7 @@ Test JVM trên Ni → commit → Git bundle delta + SHA256 → import vào clone
 ## Trạng thái và việc tiếp theo
 - Branch `feature/e93-03d-y700-offline-cockpit`. Mốc an toàn: tag `pre-claude-migration` (= 83b66c1, code E9.3-03D, chưa QA thiết bị).
 - P1 đã xong: commit `b490ded` bump shareable lên vc86 / `0.6.65-beta`; test sau bump giữ mốc 1.029 passed / 21 skipped / 0 failed mỗi biến thể.
-- Việc kế tiếp (chỉ làm khi chủ dự án yêu cầu): P2 tạo Git bundle delta `83b66c1..HEAD` + SHA256 để import vào clone cô lập trên Tiny. Xem mục 8 của `HANDOFF.md` cho P2–P7.
+- P2 phía Ni đã xong: bundle `D:\Bots\_transfer\MeloVault_E93_03D_Beta86_83b66c1-f2eae36_delta_20261017.bundle` (SHA256 `527991A3…B764C`, đủ giá trị trong HANDOFF.md và file `.sha256` cạnh bundle). Bundle tạo bằng `git bundle create <file> <tiny-HEAD>..<branch>`, rồi `git bundle verify` + sidecar `.sha256`; không ghi đè bundle cũ.
+- Việc kế tiếp (chỉ làm khi chủ dự án yêu cầu): import bundle vào clone cô lập trên Tiny (P2 phía Tiny), rồi P3 build có Telegram config. Xem mục 8 của `HANDOFF.md`.
 - Commit trên Ni: máy chưa có git identity; dùng `git -c user.name="Claude Code" -c user.email="noreply@anthropic.com" commit ...` (không sửa git config), giống cách Codex dùng identity riêng.
 - Kết thúc mỗi phần việc: cập nhật mục "Đang làm dở" và "Việc làm tiếp theo" trong `HANDOFF.md`, cập nhật file này nếu có quy ước mới, rồi commit.
