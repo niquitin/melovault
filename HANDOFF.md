@@ -191,6 +191,7 @@ Mã này đã import vào Tiny standalone clone C:\Bots\MeloVault-E93D-IsolatedQ
 - Commit bump riêng: shareable versionCode 87 / 0.6.66-beta.
 - Test Ni sau bump: Debug và Release mỗi biến thể 1.084 tests, 1.063 passed, 21 skipped, 0 failed (+30 test mới MeloDesignTokensTest, MeloScreenPolicyTest, MeloComponentPolicyTest). assembleShareableDebug trên Ni BUILD SUCCESSFUL (APK Ni thiếu Telegram config, không cài).
 - Chưa làm: bước 4–8 của đặc tả; chưa đưa token/thành phần vào màn hiện có. [CẦN XÁC NHẬN] ngưỡng bố cục chờ số đo thật S25 Ultra + Y700 từ màn Thông tin màn hình; xdpi thật của FYT (nếu firmware báo sai, app tạm dùng mật độ Android và ghi chú trên màn).
+- Bundle Beta87 trên Ni: D:\Bots\_transfer\MeloVault_Beta87_dbafe3e-bae696c_delta_20261017.bundle, 94.592 bytes, SHA256 0F250AF48BF1A121095B737A9A69F44FC802F46738561BFE6EAE6052EAE784B4 (sidecar `.sha256`; sha256sum và certutil khớp; `git bundle verify` OK). Prerequisite dbafe3ee627947d116188654ad4de568ae7cb3bd (HEAD clone cô lập Tiny theo QA_REPORT_Beta86_dbafe3e); ref feature/e93-03d-y700-offline-cockpit → bae696cf185f0c26b334d0e917c3585c0f748185, gồm 7 commit 5dc992d..bae696c. Commit docs ghi dòng này nằm sau bae696c, không có trong bundle.
 - **Gate cài Beta87 lên Y700:** chỉ hướng dẫn cài đè (`adb install -r`, không bao giờ gỡ app) khi SHA-256 chứng chỉ ký của APK Beta87 build trên Tiny TRÙNG với Beta86 đang cài (eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8), so bằng `apksigner verify --print-certs`. Khác khóa → dừng, báo chủ dự án.
 
 ### Chưa làm / chưa nghiệm thu
