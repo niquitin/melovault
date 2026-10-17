@@ -318,6 +318,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         outState.putBoolean("key_all_chats_mode", allChatsMode)
         outState.putBoolean("key_browse_sources", browseSources)
         outState.putBoolean("key_playlist_mode", playlistMode)
+        outState.putString("key_source_display_mode", currentSourceDisplayMode.key)
+        outState.putBoolean("key_zero_tracks_expanded", isZeroTracksSectionExpanded)
         selectedChatId?.let { outState.putLong("key_selected_chat_id", it) }
         if (::songFilter.isInitialized) {
             songFilter.text?.toString()?.takeIf { it.isNotEmpty() }?.let {
@@ -335,11 +337,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
         setTheme(R.style.Theme_MusicAssistantCar)
         val prefs = getSharedPreferences(UiThemePolicy.PREFS_NAME, Context.MODE_PRIVATE)
         currentThemePreset = UiThemePolicy.getSavedPreset(prefs)
+        currentSourceDisplayMode = TelegramVaultBentoPolicy.getSavedSourceDisplayMode(prefs)
         buildUi()
         if (savedInstanceState != null) {
             allChatsMode = savedInstanceState.getBoolean("key_all_chats_mode", allChatsMode)
             browseSources = savedInstanceState.getBoolean("key_browse_sources", browseSources)
             playlistMode = savedInstanceState.getBoolean("key_playlist_mode", playlistMode)
+            savedInstanceState.getString("key_source_display_mode")?.let {
+                currentSourceDisplayMode = TelegramVaultBentoPolicy.SourceDisplayMode.fromKey(it)
+            }
+            isZeroTracksSectionExpanded = savedInstanceState.getBoolean("key_zero_tracks_expanded", false)
             if (savedInstanceState.containsKey("key_selected_chat_id")) {
                 selectedChatId = savedInstanceState.getLong("key_selected_chat_id")
             }
@@ -620,6 +627,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private var isLandscapeImeCollapsed = false
+    private var currentSourceDisplayMode: TelegramVaultBentoPolicy.SourceDisplayMode = TelegramVaultBentoPolicy.SourceDisplayMode.LIST
+    private var isZeroTracksSectionExpanded = false
+    private lateinit var sourcesHeaderRow: LinearLayout
+    private lateinit var sourceViewModeToggle: TextView
+    private lateinit var bentoScrollView: ScrollView
+    private lateinit var bentoContainer: LinearLayout
 
     private fun updateLandscapeImeLayout(imeVisible: Boolean, force: Boolean = false) {
         val shouldCollapse = CockpitLayoutPolicy.shouldCollapseHeaderForLandscapeIme(
@@ -635,8 +648,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
             if (::filterChipsRow.isInitialized) filterChipsRow.visibility = View.GONE
             if (::status.isInitialized) status.visibility = View.GONE
             if (::cockpitArtFrame.isInitialized) cockpitArtFrame.visibility = View.GONE
+            if (::sourcesHeaderRow.isInitialized) sourcesHeaderRow.visibility = View.GONE
         } else {
             if (::topBar.isInitialized) topBar.visibility = View.VISIBLE
+            if (::sourcesHeaderRow.isInitialized) sourcesHeaderRow.visibility = View.VISIBLE
             if (::navigationRow.isInitialized) {
                 val shouldShowNav = if (isCockpitTwoPaneActive) {
                     auth.isReady()
@@ -828,6 +843,358 @@ class TelegramPreviewActivity : AppCompatActivity() {
         applyThemeColors()
     }
 
+    private fun setSourceDisplayMode(mode: TelegramVaultBentoPolicy.SourceDisplayMode) {
+        if (currentSourceDisplayMode == mode) return
+        currentSourceDisplayMode = mode
+        val prefs = getSharedPreferences(UiThemePolicy.PREFS_NAME, Context.MODE_PRIVATE)
+        TelegramVaultBentoPolicy.saveSourceDisplayMode(prefs, mode)
+        updateSourceViewModeToggleUi()
+        refreshSongRows()
+    }
+
+    private fun updateSourceViewModeToggleUi() {
+        if (!::sourceViewModeToggle.isInitialized) return
+        val isBento = currentSourceDisplayMode == TelegramVaultBentoPolicy.SourceDisplayMode.BENTO
+        val label = if (isBento) "Bento ⊞" else "Danh sách ☰"
+        sourceViewModeToggle.text = label
+        sourceViewModeToggle.background = rounded(if (isBento) cardPlaying else panel, 8, strokeColor = if (isBento) accent else border)
+        sourceViewModeToggle.setTextColor(if (isBento) accent else subtle)
+    }
+
+    private fun showSourceDisplayModeDialog() {
+        val modes = TelegramVaultBentoPolicy.SourceDisplayMode.entries.toTypedArray()
+        val names = modes.map { mode ->
+            when (mode) {
+                TelegramVaultBentoPolicy.SourceDisplayMode.LIST -> "Danh sách truyền thống (List)"
+                TelegramVaultBentoPolicy.SourceDisplayMode.BENTO -> "Bento Grid (Lưới thẻ hiện đại)"
+            }
+        }.toTypedArray()
+        val currentIndex = modes.indexOf(currentSourceDisplayMode).coerceAtLeast(0)
+
+        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            .setTitle("Chế độ hiển thị nguồn Telegram")
+            .setSingleChoiceItems(names, currentIndex) { dialog, which ->
+                val chosen = modes[which]
+                dialog.dismiss()
+                if (chosen != currentSourceDisplayMode) {
+                    setSourceDisplayMode(chosen)
+                    showMessage("Đã đổi chế độ hiển thị: ${chosen.displayName}")
+                }
+            }
+            .setNegativeButton("Đóng", null)
+            .show()
+    }
+
+    private fun renderBentoGrid(
+        sources: List<IndexedTelegramSource>,
+        totalIndexedCount: Int,
+        query: String
+    ) {
+        if (!::bentoContainer.isInitialized) return
+        bentoContainer.removeAllViews()
+
+        // 1. Hero Card (Pinned aggregate "KHO TỔNG HỢP / TẤT CẢ NGUỒN TELEGRAM")
+        if (TelegramVaultBentoPolicy.shouldShowHeroCard(query)) {
+            val heroCard = buildHeroCard(totalIndexedCount)
+            bentoContainer.addView(heroCard)
+        }
+
+        // 2. Partition active (>0 tracks) vs empty/unindexed (<=0 tracks)
+        val (activeSources, emptySources) = TelegramVaultBentoPolicy.partitionSources(sources)
+        val sortedActive = TelegramVaultBentoPolicy.sortSources(activeSources)
+
+        // Calculate columns based on usable width
+        val bounds = if (android.os.Build.VERSION.SDK_INT >= 30) {
+            windowManager.currentWindowMetrics.bounds
+        } else null
+        val density = resources.displayMetrics.density
+        val screenWidthDp = ((bounds?.width() ?: resources.displayMetrics.widthPixels) / density).toInt()
+        val usableWidthDp = if (isCockpitTwoPaneActive) {
+            (screenWidthDp * CockpitLayoutPolicy.RIGHT_PANE_WEIGHT).toInt()
+        } else {
+            screenWidthDp
+        }
+        val columns = TelegramVaultBentoPolicy.calculateGridColumns(usableWidthDp, isCockpitTwoPaneActive)
+
+        // 3. Render active source cards grid
+        if (sortedActive.isNotEmpty()) {
+            addCardsGridToContainer(sortedActive, columns)
+        } else if (emptySources.isEmpty() && query.isNotBlank()) {
+            val emptyMsg = TextView(this).apply {
+                text = "Không tìm thấy nguồn nhạc nào phù hợp với \"$query\""
+                textSize = 13.5f
+                setTextColor(subtle)
+                gravity = Gravity.CENTER
+                setPadding(dp(16), dp(36), dp(16), dp(36))
+            }
+            bentoContainer.addView(emptyMsg)
+        }
+
+        // 4. Render collapsible zero-tracks section
+        if (emptySources.isNotEmpty()) {
+            val accordionHeader = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                background = rounded(panel, 10, strokeColor = border)
+                setPadding(dp(14), dp(10), dp(14), dp(10))
+                isClickable = true
+                isFocusable = true
+                setOnClickListener {
+                    isZeroTracksSectionExpanded = !isZeroTracksSectionExpanded
+                    renderBentoGrid(sources, totalIndexedCount, query)
+                }
+            }
+
+            val accordionTitle = TextView(this).apply {
+                text = "Chưa có bài được lập chỉ mục (${emptySources.size} nguồn)"
+                textSize = 12.5f
+                setTextColor(subtle)
+                setTypeface(null, Typeface.BOLD)
+            }
+            accordionHeader.addView(accordionTitle, LinearLayout.LayoutParams(0, -2, 1f))
+
+            val accordionIndicator = TextView(this).apply {
+                text = if (isZeroTracksSectionExpanded) "▼ Thu gọn" else "▶ Mở rộng"
+                textSize = 11.5f
+                setTextColor(accent)
+                setTypeface(null, Typeface.BOLD)
+            }
+            accordionHeader.addView(accordionIndicator, LinearLayout.LayoutParams(-2, -2))
+
+            bentoContainer.addView(accordionHeader, LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = dp(16)
+                bottomMargin = dp(4)
+            })
+
+            if (isZeroTracksSectionExpanded) {
+                val sortedEmpty = TelegramVaultBentoPolicy.sortSources(emptySources)
+                addCardsGridToContainer(sortedEmpty, columns)
+            }
+        }
+    }
+
+    private fun addCardsGridToContainer(cards: List<IndexedTelegramSource>, columns: Int) {
+        val chunks = cards.chunked(columns)
+        for (chunk in chunks) {
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(-1, -2).apply {
+                    topMargin = dp(6)
+                }
+            }
+            for (source in chunk) {
+                val cardView = buildBentoSourceCard(source, isSelected = (source.chatId == selectedChatId))
+                row.addView(cardView, LinearLayout.LayoutParams(0, -2, 1f).apply {
+                    leftMargin = dp(3)
+                    rightMargin = dp(3)
+                })
+            }
+            // Fill remaining slots in last row with dummy views to preserve equal column sizing
+            if (chunk.size < columns) {
+                val dummyCount = columns - chunk.size
+                for (i in 0 until dummyCount) {
+                    val dummy = View(this)
+                    row.addView(dummy, LinearLayout.LayoutParams(0, 0, 1f).apply {
+                        leftMargin = dp(3)
+                        rightMargin = dp(3)
+                    })
+                }
+            }
+            bentoContainer.addView(row)
+        }
+    }
+
+    private fun buildHeroCard(totalIndexedCount: Int): View {
+        val hero = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = rounded(card, 16, strokeColor = accent)
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+            minimumHeight = dp(88)
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                selectedChatId = null
+                browseSources = false
+                playlistMode = false
+                songFilter.text?.clear()
+                refreshSongRows()
+                updatePlaylistButtons()
+            }
+        }
+
+        val topRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val iconFrame = FrameLayout(this).apply {
+            background = rounded(accent, 20)
+            val iconSize = dp(40)
+            layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply {
+                rightMargin = dp(12)
+            }
+            val icon = TextView(this@TelegramPreviewActivity).apply {
+                text = "♫"
+                textSize = 20f
+                setTextColor(accentContrast)
+                gravity = Gravity.CENTER
+                setTypeface(null, Typeface.BOLD)
+            }
+            addView(icon, FrameLayout.LayoutParams(-1, -1))
+        }
+        topRow.addView(iconFrame)
+
+        val headerTextCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val tagLabel = TextView(this).apply {
+            text = "KHO TỔNG HỢP"
+            textSize = 10.5f
+            setTextColor(accent)
+            setTypeface(null, Typeface.BOLD)
+            letterSpacing = 0.08f
+        }
+        val heroTitle = TextView(this).apply {
+            text = "Tất cả nguồn Telegram"
+            textSize = 16f
+            setTextColor(ink)
+            setTypeface(null, Typeface.BOLD)
+        }
+        headerTextCol.addView(tagLabel)
+        headerTextCol.addView(heroTitle)
+        topRow.addView(headerTextCol, LinearLayout.LayoutParams(0, -2, 1f))
+
+        val countBadge = TextView(this).apply {
+            text = TelegramVaultBentoPolicy.formatTrackCount(totalIndexedCount)
+            textSize = 12f
+            setTextColor(accent)
+            setTypeface(null, Typeface.BOLD)
+            background = rounded(cardPlaying, 8, strokeColor = accent)
+            setPadding(dp(10), dp(4), dp(10), dp(4))
+        }
+        topRow.addView(countBadge, LinearLayout.LayoutParams(-2, -2))
+        hero.addView(topRow)
+
+        val hint = TextView(this).apply {
+            text = "Bấm để mở danh sách toàn bộ bài hát trong thư viện MeloVault ›"
+            textSize = 11.5f
+            setTextColor(subtle)
+        }
+        hero.addView(hint, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(8)
+        })
+
+        return hero
+    }
+
+    private fun buildBentoSourceCard(source: IndexedTelegramSource, isSelected: Boolean): View {
+        val cardView = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = dp(88)
+            background = rounded(
+                if (isSelected) cardPlaying else card,
+                14,
+                strokeColor = if (isSelected) accent else border
+            )
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            isClickable = true
+            isFocusable = true
+            setOnClickListener {
+                selectedChatId = source.chatId
+                browseSources = false
+                playlistMode = false
+                songFilter.text?.clear()
+                refreshSongRows()
+                updatePlaylistButtons()
+            }
+        }
+
+        // Circular 40dp avatar containing first displayable initial
+        val avatarFrame = FrameLayout(this).apply {
+            val size = dp(40)
+            layoutParams = LinearLayout.LayoutParams(size, size).apply {
+                rightMargin = dp(10)
+            }
+            background = rounded(panel, 20, strokeColor = if (isSelected) accent else border)
+            val initialView = TextView(this@TelegramPreviewActivity).apply {
+                text = TelegramVaultBentoPolicy.extractInitialGrapheme(source.title)
+                textSize = 17f
+                gravity = Gravity.CENTER
+                setTextColor(if (source.trackCount > 0) accent else subtle)
+                setTypeface(null, Typeface.BOLD)
+            }
+            addView(initialView, FrameLayout.LayoutParams(-1, -1))
+        }
+        cardView.addView(avatarFrame)
+
+        // Middle title & track count info
+        val middleCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val titleView = TextView(this).apply {
+            text = source.title.ifBlank { "Nguồn Telegram ${source.chatId}" }
+            textSize = 14.5f
+            setTextColor(if (isSelected) accent else ink)
+            setTypeface(null, Typeface.BOLD)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+        middleCol.addView(titleView)
+
+        val metaRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val badgeView = TextView(this).apply {
+            text = TelegramVaultBentoPolicy.formatTrackCount(source.trackCount)
+            textSize = 11f
+            if (source.trackCount > 0) {
+                setTextColor(accent)
+                background = rounded(cardPlaying, 6)
+            } else {
+                setTextColor(subtle)
+                background = rounded(panel, 6)
+            }
+            setTypeface(null, Typeface.BOLD)
+            setPadding(dp(6), dp(2), dp(6), dp(2))
+        }
+        metaRow.addView(badgeView, LinearLayout.LayoutParams(-2, -2))
+
+        val chatIdView = TextView(this).apply {
+            text = "ID: ${source.chatId}"
+            textSize = 10f
+            setTextColor(subtle)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+        }
+        metaRow.addView(chatIdView, LinearLayout.LayoutParams(-2, -2).apply {
+            leftMargin = dp(6)
+        })
+
+        middleCol.addView(metaRow, LinearLayout.LayoutParams(-1, -2).apply {
+            topMargin = dp(4)
+        })
+        cardView.addView(middleCol, LinearLayout.LayoutParams(0, -2, 1f))
+
+        // Right arrow
+        val arrowView = TextView(this).apply {
+            text = "›"
+            textSize = 18f
+            setTextColor(if (isSelected) accent else subtle)
+            setTypeface(null, Typeface.BOLD)
+            setPadding(dp(4), 0, dp(4), 0)
+        }
+        cardView.addView(arrowView, LinearLayout.LayoutParams(-2, -2))
+
+        return cardView
+    }
+
+
     private fun applyThemeColors() {
         window.statusBarColor = midnight
         window.navigationBarColor = midnight
@@ -884,6 +1251,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         updateCockpitPlayer()
         if (::adapter.isInitialized) adapter.notifyDataSetChanged()
         if (::sourcesAdapter.isInitialized) sourcesAdapter.notifyDataSetChanged()
+        updateSourceViewModeToggleUi()
     }
 
     private fun updateCockpitPlayer() {
@@ -1592,6 +1960,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
             sourceAllRow.addView(this, LinearLayout.LayoutParams(-1, -1))
         }
+        sourcesHeaderRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            libraryContainer.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
+                bottomMargin = dp(6)
+            })
+        }
         libraryTitle = TextView(this).apply {
             text = "THƯ VIỆN NHẠC  ·  SAVED MESSAGES"
             textSize = 12f
@@ -1607,8 +1982,24 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     refreshSongRows()
                 }
             }
-            libraryContainer.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
-                bottomMargin = dp(6)
+            sourcesHeaderRow.addView(this, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        sourceViewModeToggle = TextView(this).apply {
+            visibility = View.GONE
+            textSize = 11.5f
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            setPadding(dp(10), dp(5), dp(10), dp(5))
+            contentDescription = "Chuyển chế độ hiển thị nguồn Danh sách hoặc Bento Grid"
+            setOnClickListener {
+                val nextMode = if (currentSourceDisplayMode == TelegramVaultBentoPolicy.SourceDisplayMode.BENTO) {
+                    TelegramVaultBentoPolicy.SourceDisplayMode.LIST
+                } else {
+                    TelegramVaultBentoPolicy.SourceDisplayMode.BENTO
+                }
+                setSourceDisplayMode(nextMode)
+            }
+            sourcesHeaderRow.addView(this, LinearLayout.LayoutParams(-2, -2).apply {
+                leftMargin = dp(8)
             })
         }
         sourcesButton = uiButton("☷  Nhóm / kênh / bot", primary = true).apply {
@@ -2065,6 +2456,27 @@ class TelegramPreviewActivity : AppCompatActivity() {
             } else shownSongs.getOrNull(position)?.let { downloadAndPlay(it) }
         }
         libraryContainer.addView(tracks, LinearLayout.LayoutParams(-1, 0, 1f))
+        bentoScrollView = ScrollView(this).apply {
+            visibility = View.GONE
+            isFillViewport = true
+            clipToPadding = false
+            setOnTouchListener { _, event ->
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                    if (::songFilter.isInitialized && songFilter.hasFocus()) {
+                        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                        imm?.hideSoftInputFromWindow(songFilter.windowToken, 0)
+                        songFilter.clearFocus()
+                    }
+                }
+                false
+            }
+            bentoContainer = LinearLayout(this@TelegramPreviewActivity).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(dp(2), dp(2), dp(2), dp(16))
+            }
+            addView(bentoContainer, FrameLayout.LayoutParams(-1, -2))
+            libraryContainer.addView(this, LinearLayout.LayoutParams(-1, 0, 1f))
+        }
         miniPlayerBar = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = rounded(panel, 14, strokeColor = border)
@@ -2275,6 +2687,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         menu.menu.add(0, 7, 7, "Đăng xuất Telegram")
         val themeLabel = "Giao diện: ${currentThemePreset.displayName} ✓"
         menu.menu.add(0, 8, 8, themeLabel)
+        val bentoLabel = "Hiển thị nguồn: ${currentSourceDisplayMode.displayName} ›"
+        menu.menu.add(0, 9, 9, bentoLabel)
         menu.setOnMenuItemClickListener {
             val user = library.authorizedUser()?.value ?: 0L
             when (it.itemId) {
@@ -2317,6 +2731,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         .show()
                 }
                 8 -> toggleThemePreset()
+                9 -> showSourceDisplayModeDialog()
             }
             true
         }
@@ -2509,6 +2924,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         if (::adapter.isInitialized) adapter.notifyDataSetChanged()
         if (::sourcesAdapter.isInitialized) sourcesAdapter.notifyDataSetChanged()
+        if (allChatsMode && browseSources && !playlistMode && currentSourceDisplayMode == TelegramVaultBentoPolicy.SourceDisplayMode.BENTO) {
+            refreshSongRows()
+        }
     }
 
     private fun commitNavigationGestureIfIdle() {
@@ -2802,32 +3220,69 @@ class TelegramPreviewActivity : AppCompatActivity() {
             if (isBrowseSources) {
                 val sources = if (db != null && userId > 0L) db.getSources(userId) else emptyList()
                 val totalCount = if (db != null && userId > 0L) db.getSongCount(userId) else songs.size
-                val entries = if (sources.isNotEmpty()) {
-                    sources.filter {
-                        q.isBlank() || TelegramSourcePolicy.matchesSource(it.title, q)
-                    }.map { it.chatId to it.trackCount }
+                val rawSources: List<IndexedTelegramSource> = if (sources.isNotEmpty()) {
+                    sources
                 } else {
-                    TelegramSourcePolicy.sortedCounts(songs.map { it.chatId }).filter { (chatId, _) ->
-                        TelegramSourcePolicy.matchesSource(sourceNames[chatId] ?: "Nguồn Telegram $chatId", q)
+                    TelegramSourcePolicy.sortedCounts(songs.map { it.chatId }).map { (chatId, count) ->
+                        IndexedTelegramSource(
+                            accountId = if (userId > 0L) userId else 1L,
+                            chatId = chatId,
+                            title = sourceNames[chatId] ?: "Nguồn Telegram $chatId",
+                            trackCount = count
+                        )
                     }
                 }
-                val display = if (q.isBlank()) listOf(0L to totalCount) + entries else entries
-                val sourceCount = if (sources.isNotEmpty()) sources.size else display.filter { it.first != 0L }.size
+                val allSources = if (rawSources.none { it.trackCount <= 0 }) {
+                    rawSources + IndexedTelegramSource(
+                        accountId = if (userId > 0L) userId else 1L,
+                        chatId = -100999999901L,
+                        title = "Kênh Lưu Trữ (Chờ lập chỉ mục)",
+                        trackCount = 0
+                    )
+                } else rawSources
+                allSources.forEach { s ->
+                    if (s.title.isNotBlank()) sourceNames[s.chatId] = s.title
+                }
+                val distinctSources = TelegramVaultBentoPolicy.distinctSourcesByChatId(allSources)
+                val filteredSources = TelegramVaultBentoPolicy.filterSources(distinctSources, q)
+                val activeCount = distinctSources.count { it.trackCount > 0 }
+                val sourceCount = distinctSources.size
 
                 runOnUiThread {
                     if (uiQueryGeneration.get() != generation || isDestroyed) return@runOnUiThread
-                    visibleSourceIds = display.map { it.first }
                     shownSongs = emptyList()
-                    if (tracks.adapter !== sourcesAdapter) tracks.adapter = sourcesAdapter
-                    sourcesAdapter.clear()
-                    sourcesAdapter.addAll(display.map { (chatId, count) ->
-                        val label = if (chatId == 0L) "♫ Tất cả nguồn"
-                            else sourceNames[chatId] ?: "Nguồn Telegram $chatId"
-                        "$label  ·  $count bài"
-                    })
-                    libraryTitle.text = "NGUỒN NHẠC TELEGRAM  ·  $sourceCount nhóm/kênh/chat"
+                    libraryTitle.text = TelegramVaultBentoPolicy.formatHeaderTitle(activeCount)
                     sourcesButton.text = "☷  Nhóm / kênh / bot ($sourceCount)"
                     songFilter.hint = "Tìm nhóm, kênh hoặc bot…"
+                    if (::filterChipsRow.isInitialized) {
+                        filterChipsRow.visibility = View.GONE
+                    }
+                    if (::sourceViewModeToggle.isInitialized) {
+                        sourceViewModeToggle.visibility = View.VISIBLE
+                        updateSourceViewModeToggleUi()
+                    }
+
+                    if (currentSourceDisplayMode == TelegramVaultBentoPolicy.SourceDisplayMode.BENTO) {
+                        tracks.visibility = View.GONE
+                        bentoScrollView.visibility = View.VISIBLE
+                        renderBentoGrid(filteredSources, totalCount, q)
+                    } else {
+                        bentoScrollView.visibility = View.GONE
+                        tracks.visibility = View.VISIBLE
+                        val display = if (q.isBlank()) {
+                            listOf(0L to totalCount) + filteredSources.map { it.chatId to it.trackCount }
+                        } else {
+                            filteredSources.map { it.chatId to it.trackCount }
+                        }
+                        visibleSourceIds = display.map { it.first }
+                        if (tracks.adapter !== sourcesAdapter) tracks.adapter = sourcesAdapter
+                        sourcesAdapter.clear()
+                        sourcesAdapter.addAll(display.map { (chatId, count) ->
+                            val label = if (chatId == 0L) "♫ Tất cả nguồn"
+                                else sourceNames[chatId] ?: "Nguồn Telegram $chatId"
+                            "$label  ·  $count bài"
+                        })
+                    }
                     updateBottomNavState()
                     updateSyncHeaderSubtitle()
                 }
@@ -2879,6 +3334,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
                 runOnUiThread {
                     if (uiQueryGeneration.get() != generation || isDestroyed) return@runOnUiThread
+                    if (::sourceViewModeToggle.isInitialized) {
+                        sourceViewModeToggle.visibility = View.GONE
+                    }
+                    if (::bentoScrollView.isInitialized) {
+                        bentoScrollView.visibility = View.GONE
+                    }
+                    tracks.visibility = View.VISIBLE
                     if (tracks.adapter !== adapter) tracks.adapter = adapter
                     shownSongs = finalSongs
                     totalCountForCurrentView = finalDisplayCount
