@@ -59,6 +59,7 @@ Test JVM trên Ni → commit → Git bundle delta + SHA256 → import vào clone
 - Hai APK cùng vc86 chỉ phân biệt bằng SHA256 → bản phát hành sau phải bump versionCode ≥ 87.
 - Giao diện mới theo `docs/ui-spec.md`: bước 1–3 code xong ở Beta87 (vc87 `0.6.66-beta`), file `Melo*.kt`; chưa build Tiny/QA. Màn mới dùng `MeloDesignTokens` + `MeloComponents` (kích thước px từ hồ sơ), không sửa màn cũ.
 - Cài Beta87 lên Y700 chỉ khi SHA-256 cert ký trùng Beta86 (`eecd3df7…ce8`); khác thì dừng. Không bao giờ gỡ app.
-- Việc kế tiếp (chỉ làm khi chủ dự án yêu cầu): build Beta87 trên Tiny, rồi bước 4 (bản Gọn Shanling). Xem mục 5 và 8 của `HANDOFF.md`.
+- APK Beta87 đã build + verify trên Tiny (SHA256 `2D8E621D…71EE`, signer trùng Beta86). Build trên Tiny chạy qua Desktop Commander, máy `DESKTOP-HNP4GVR` = Tiny, chỉ trong clone cô lập + `C:Bots_qa_temp`.
+- Việc kế tiếp (chỉ làm khi chủ dự án yêu cầu): chờ kết quả thử Y700 + số đo, rồi bước 4 (bản Gọn Shanling). Xem mục 5 và 8 của `HANDOFF.md`.
 - Commit trên Ni: máy chưa có git identity; dùng `git -c user.name="Claude Code" -c user.email="noreply@anthropic.com" commit ...` (không sửa git config), giống cách Codex dùng identity riêng.
 - Kết thúc mỗi phần việc: cập nhật mục "Đang làm dở" và "Việc làm tiếp theo" trong `HANDOFF.md`, cập nhật file này nếu có quy ước mới, rồi commit.
