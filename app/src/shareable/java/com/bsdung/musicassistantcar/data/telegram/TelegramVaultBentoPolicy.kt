@@ -7,12 +7,13 @@ import java.util.Locale
  * Policy and layout rules for Theme 03: Telegram Vault Bento Grid.
  *
  * Provides responsive column calculation, source filtering, hero card logic,
- * and user display mode persistence (List vs. Bento Grid).
+ * zero-track source filtering, and user display mode persistence (List vs. Bento Grid).
  * Designed for deterministic execution in both Android runtime and JVM unit tests.
  */
 object TelegramVaultBentoPolicy {
 
     const val KEY_SOURCE_DISPLAY_MODE = "source_display_mode"
+    const val KEY_HIDE_ZERO_TRACK_SOURCES = "hide_zero_track_sources"
     const val MIN_CARD_WIDTH_DP = 240
 
     enum class SourceDisplayMode(val key: String, val displayName: String) {
@@ -39,16 +40,18 @@ object TelegramVaultBentoPolicy {
     }
 
     /**
-     * Filters Telegram sources by title, case-insensitive.
-     * When query is blank, all sources are returned.
+     * Filters Telegram sources by title, case-insensitive, with optional hiding of zero-track channels.
+     * When query is blank and hideZero is false, all sources are returned.
      */
     fun filterSources(
         sources: List<IndexedTelegramSource>,
-        query: String
+        query: String,
+        hideZero: Boolean = false
     ): List<IndexedTelegramSource> {
-        if (query.isBlank()) return sources
+        val nonZeroSources = if (hideZero) sources.filter { it.trackCount > 0 } else sources
+        if (query.isBlank()) return nonZeroSources
         val clean = query.trim()
-        return sources.filter { it.title.contains(clean, ignoreCase = true) }
+        return nonZeroSources.filter { it.title.contains(clean, ignoreCase = true) }
     }
 
     /**
@@ -87,11 +90,27 @@ object TelegramVaultBentoPolicy {
     }
 
     /**
-     * Formats header subtitle with source count and total indexed track count.
+     * Formats header subtitle with source count, total indexed track count, and optional sync status.
      */
-    fun formatHeaderSubtitle(sourceCount: Int, totalIndexedTracks: Int): String {
+    fun formatHeaderSubtitle(sourceCount: Int, totalIndexedTracks: Int, isSyncing: Boolean = false): String {
         val formattedTracks = String.format(Locale.US, "%,d", totalIndexedTracks)
-        return "$sourceCount nguồn  ·  $formattedTracks bài  ·  Đã đồng bộ"
+        val syncLabel = if (isSyncing) "Đang đồng bộ…" else "Đã đồng bộ"
+        return "$sourceCount nguồn  ·  $formattedTracks bài  ·  $syncLabel"
+    }
+
+    /**
+     * Formats grounded source card subtitle based on Telegram chat/source type.
+     * Replaces technical internal chat IDs with human-readable channel types.
+     */
+    fun formatSourceSubtitle(type: String?): String {
+        return when (type?.lowercase(Locale.ROOT)) {
+            "channel", "broadcast" -> "Kênh Telegram"
+            "supergroup", "basicgroup", "group" -> "Nhóm Telegram"
+            "privatechannel", "privatesupergroup" -> "Kênh riêng tư"
+            "bot" -> "Bot Telegram"
+            "user", "saved_messages" -> "Chat Telegram"
+            else -> "Kênh / Nhóm Telegram"
+        }
     }
 
     /**
@@ -140,5 +159,18 @@ object TelegramVaultBentoPolicy {
     fun saveSourceDisplayMode(prefs: SharedPreferences, mode: SourceDisplayMode) {
         prefs.edit().putString(KEY_SOURCE_DISPLAY_MODE, mode.key).apply()
     }
-}
 
+    /**
+     * Reads saved preference for hiding zero-track Telegram sources. Default is false (show all).
+     */
+    fun getSavedHideZeroSources(prefs: SharedPreferences): Boolean {
+        return prefs.getBoolean(KEY_HIDE_ZERO_TRACK_SOURCES, false)
+    }
+
+    /**
+     * Persists preference for hiding zero-track Telegram sources.
+     */
+    fun saveHideZeroSources(prefs: SharedPreferences, hide: Boolean) {
+        prefs.edit().putBoolean(KEY_HIDE_ZERO_TRACK_SOURCES, hide).apply()
+    }
+}

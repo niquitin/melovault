@@ -1,5 +1,6 @@
 package com.bsdung.musicassistantcar.data.telegram
 
+import com.bsdung.musicassistantcar.test.FakeSharedPreferences
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -89,6 +90,33 @@ class TelegramVaultBentoPolicyTest {
         assertTrue(filtered.isEmpty())
     }
 
+    @Test
+    fun filterSources_hideZeroTrue_excludesZeroTrackSources() {
+        val sources = listOf(
+            IndexedTelegramSource(accountId = 1L, chatId = 101L, title = "Channel With Music", trackCount = 42),
+            IndexedTelegramSource(accountId = 1L, chatId = 102L, title = "Empty Pending Channel", trackCount = 0),
+            IndexedTelegramSource(accountId = 1L, chatId = 103L, title = "Negative Count Channel", trackCount = -1)
+        )
+        val visible = TelegramVaultBentoPolicy.filterSources(sources, query = "", hideZero = true)
+        assertEquals(1, visible.size)
+        assertEquals(101L, visible[0].chatId)
+
+        val all = TelegramVaultBentoPolicy.filterSources(sources, query = "", hideZero = false)
+        assertEquals(3, all.size)
+    }
+
+    @Test
+    fun filterSources_hideZeroTrueWithQuery_filtersBothSimultaneously() {
+        val sources = listOf(
+            IndexedTelegramSource(accountId = 1L, chatId = 101L, title = "Acoustic Pop Hits", trackCount = 50),
+            IndexedTelegramSource(accountId = 1L, chatId = 102L, title = "Acoustic Unindexed", trackCount = 0),
+            IndexedTelegramSource(accountId = 1L, chatId = 103L, title = "EDM Club", trackCount = 80)
+        )
+        val filtered = TelegramVaultBentoPolicy.filterSources(sources, query = "acoustic", hideZero = true)
+        assertEquals(1, filtered.size)
+        assertEquals(101L, filtered[0].chatId)
+    }
+
     // ── Source Partitioning (Active vs. Zero Tracks) ─────────────────────────
 
     @Test
@@ -108,7 +136,7 @@ class TelegramVaultBentoPolicyTest {
         assertEquals(listOf(102L, 104L), empty.map { it.chatId })
     }
 
-    // ── Deduplication by Stable Chat ID ──────────────────────────────────────
+    // ── Deduplication by Stable Chat ID & Real Source Truthfulness ───────────
 
     @Test
     fun distinctSourcesByChatId_resolvesDuplicatesByChatIdKeepingHighestCount() {
@@ -137,6 +165,44 @@ class TelegramVaultBentoPolicyTest {
         assertEquals(setOf(401L, 402L), distinct.map { it.chatId }.toSet())
     }
 
+    @Test
+    fun distinctSources_withAll29PositiveRealChannels_hasZeroEmptySourcesAndNoFakeSource() {
+        // Replicates real-world state of Sony device: 29 real Telegram channels with positive track counts
+        val real29Sources = (1..29).map { idx ->
+            IndexedTelegramSource(
+                accountId = 1L,
+                chatId = -100100000000L - idx,
+                title = "Telegram Channel #$idx",
+                trackCount = 50 + idx * 10
+            )
+        }
+        val distinct = TelegramVaultBentoPolicy.distinctSourcesByChatId(real29Sources)
+        assertEquals(29, distinct.size)
+
+        // Partition: emptySources MUST be 0, never artificially seeded with fake channels
+        val (active, empty) = TelegramVaultBentoPolicy.partitionSources(distinct)
+        assertEquals(29, active.size)
+        assertEquals(0, empty.size)
+
+        // Verify that the artificial chatId -100999999901 is NOT present
+        assertFalse(distinct.any { it.chatId == -100999999901L })
+    }
+
+    @Test
+    fun distinctSources_withGenuineZeroSongChannel_preservesRealEmptySource() {
+        val sources = listOf(
+            IndexedTelegramSource(accountId = 1L, chatId = -100111L, title = "Active Channel", trackCount = 40),
+            IndexedTelegramSource(accountId = 1L, chatId = -100222L, title = "Real Empty Group", trackCount = 0)
+        )
+        val distinct = TelegramVaultBentoPolicy.distinctSourcesByChatId(sources)
+        assertEquals(2, distinct.size)
+
+        val (active, empty) = TelegramVaultBentoPolicy.partitionSources(distinct)
+        assertEquals(1, active.size)
+        assertEquals(1, empty.size)
+        assertEquals(-100222L, empty[0].chatId)
+    }
+
     // ── Formatting and Truthful Labels ───────────────────────────────────────
 
     @Test
@@ -156,9 +222,25 @@ class TelegramVaultBentoPolicyTest {
     }
 
     @Test
-    fun formatHeaderSubtitle_combinesSourceCountAndTotalTracks() {
-        val subtitle = TelegramVaultBentoPolicy.formatHeaderSubtitle(sourceCount = 29, totalIndexedTracks = 25067)
-        assertEquals("29 nguồn  ·  25,067 bài  ·  Đã đồng bộ", subtitle)
+    fun formatHeaderSubtitle_combinesSourceCountAndTotalTracksTruthfully() {
+        val subtitleSynced = TelegramVaultBentoPolicy.formatHeaderSubtitle(sourceCount = 29, totalIndexedTracks = 25067, isSyncing = false)
+        assertEquals("29 nguồn  ·  25,067 bài  ·  Đã đồng bộ", subtitleSynced)
+
+        val subtitleSyncing = TelegramVaultBentoPolicy.formatHeaderSubtitle(sourceCount = 29, totalIndexedTracks = 25067, isSyncing = true)
+        assertEquals("29 nguồn  ·  25,067 bài  ·  Đang đồng bộ…", subtitleSyncing)
+    }
+
+    @Test
+    fun formatSourceSubtitle_mapsChannelTypesTruthfully() {
+        assertEquals("Kênh Telegram", TelegramVaultBentoPolicy.formatSourceSubtitle("channel"))
+        assertEquals("Kênh Telegram", TelegramVaultBentoPolicy.formatSourceSubtitle("broadcast"))
+        assertEquals("Nhóm Telegram", TelegramVaultBentoPolicy.formatSourceSubtitle("supergroup"))
+        assertEquals("Nhóm Telegram", TelegramVaultBentoPolicy.formatSourceSubtitle("group"))
+        assertEquals("Kênh riêng tư", TelegramVaultBentoPolicy.formatSourceSubtitle("privatechannel"))
+        assertEquals("Bot Telegram", TelegramVaultBentoPolicy.formatSourceSubtitle("bot"))
+        assertEquals("Chat Telegram", TelegramVaultBentoPolicy.formatSourceSubtitle("user"))
+        assertEquals("Kênh / Nhóm Telegram", TelegramVaultBentoPolicy.formatSourceSubtitle("unknown"))
+        assertEquals("Kênh / Nhóm Telegram", TelegramVaultBentoPolicy.formatSourceSubtitle(null))
     }
 
     @Test
@@ -208,5 +290,25 @@ class TelegramVaultBentoPolicyTest {
         assertEquals(TelegramVaultBentoPolicy.SourceDisplayMode.LIST, TelegramVaultBentoPolicy.SourceDisplayMode.fromKey("unknown"))
         assertEquals(TelegramVaultBentoPolicy.SourceDisplayMode.BENTO, TelegramVaultBentoPolicy.SourceDisplayMode.fromKey("bento"))
     }
-}
 
+    // ── Hide Zero-Track Sources Persistence Tests ────────────────────────────
+
+    @Test
+    fun hideZeroSources_defaultsToFalse() {
+        val prefs = FakeSharedPreferences()
+        val hide = TelegramVaultBentoPolicy.getSavedHideZeroSources(prefs)
+        assertFalse(hide)
+    }
+
+    @Test
+    fun hideZeroSources_persistsTrueValue() {
+        val prefs = FakeSharedPreferences()
+        TelegramVaultBentoPolicy.saveHideZeroSources(prefs, true)
+        val hide = TelegramVaultBentoPolicy.getSavedHideZeroSources(prefs)
+        assertTrue(hide)
+
+        TelegramVaultBentoPolicy.saveHideZeroSources(prefs, false)
+        val unhide = TelegramVaultBentoPolicy.getSavedHideZeroSources(prefs)
+        assertFalse(unhide)
+    }
+}
