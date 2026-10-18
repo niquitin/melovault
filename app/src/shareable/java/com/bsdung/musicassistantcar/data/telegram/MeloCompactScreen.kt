@@ -175,11 +175,11 @@ internal class MeloCompactScreen(
 
         override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
             val snap = snapshot ?: return View(context)
-            return if (snap.showingSources) sourceRow(snap.sources[position]) else songRow(snap, snap.rows[position])
+            return if (snap.showingSources) sourceRow(snap.sources[position]) else songRow(snap, snap.rows[position], position)
         }
     }
 
-    private fun songRow(snap: Snapshot, row: Row): View {
+    private fun songRow(snap: Snapshot, row: Row, position: Int): View {
         val playing = row.songKey == snap.playingKey
         val status = MeloCompactPolicy.rowStatus(row.downloaded, row.downloadingPercent, playing, snap.paused)
         val quality = MeloComponentPolicy.qualityLabel(MeloComponentPolicy.formatOf(null, row.filename), null, null, null)
@@ -192,7 +192,7 @@ internal class MeloCompactScreen(
             qualityLabel = quality,
             progressPercent = row.downloadingPercent,
             art = row.art
-        )).also { unclickable(it) }
+        )).also { unclickable(it, position) }
     }
 
     private fun sourceRow(source: SourceRow): View = LinearLayout(context).apply {
@@ -211,14 +211,17 @@ internal class MeloCompactScreen(
         contentDescription = "${source.title}, ${source.count} bài"
     }
 
-    private fun unclickable(v: View) {
+    private fun unclickable(v: View, position: Int = -1) {
+        // Only the song row's ⋮ stays clickable (opens the song menu); the rest is driven by the ListView.
+        if (position >= 0 && v.tag == MELO_SONG_ROW_MORE_TAG) {
+            v.setOnClickListener { host.openSongMenu(position, v) }
+            v.isFocusable = false
+            return
+        }
         v.isClickable = false
         v.isLongClickable = false
         v.isFocusable = false
-        if (v is ViewGroup) {
-            // A clickable child (the row's ⋮) would steal the ListView row click; long press opens the same menu.
-            for (i in 0 until v.childCount) unclickable(v.getChildAt(i))
-        }
+        if (v is ViewGroup) for (i in 0 until v.childCount) unclickable(v.getChildAt(i), position)
     }
 
     // ---- Search ----------------------------------------------------------------------------

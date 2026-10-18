@@ -4352,6 +4352,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
             queueSongOrder.getOrNull(index)?.let { downloadAndPlay(it) }
         }
 
+        override fun openQueueSongMenu(index: Int, anchor: View) {
+            queueSongOrder.getOrNull(index)?.let { showSongOptionsMenu(it, songIsDownloaded(it), anchor) }
+        }
+
         override fun qualityLabel(bitDepth: Int?): String? {
             val groups = player?.currentTracks?.groups ?: return null
             val key = currentTelegramMessageId()

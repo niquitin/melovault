@@ -70,6 +70,8 @@ internal interface MeloScreenHost {
     /** Current playback queue in play order (the service's authoritative order). */
     fun queue(): List<QueueItem>
     fun playQueueAt(index: Int)
+    /** Same song menu as the library rows, for the queue song at [index]. */
+    fun openQueueSongMenu(index: Int, anchor: View)
     /** Real decoder format of the current track; [bitDepth] from the file when known. */
     fun qualityLabel(bitDepth: Int?): String?
     /** The fully downloaded, account-owned file of the current track, or null. */

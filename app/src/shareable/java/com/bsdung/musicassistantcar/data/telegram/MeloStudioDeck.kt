@@ -204,6 +204,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
             dividerHeight = s.gap / 2
             setSelector(android.R.color.transparent)
             setOnItemClickListener { _, _, position, _ -> host.playQueueAt(position) }
+            setOnItemLongClickListener { _, v, position, _ -> host.openQueueSongMenu(position, v); true }
         }
         queueList = list
         right.addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -433,13 +434,15 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
 
     private fun queueRow(item: QueueItem, index: Int): View {
         val status = MeloNowPlayingPolicy.queueStatus(item.songKey == currentKey, item.downloaded, item.downloadingPercent)
-        return c.songRow(SongRowModel(
+        var row: View? = null
+        row = c.songRow(SongRowModel(
             title = "${index + 1}. ${item.title}",
             sourceTitle = item.sourceTitle,
             durationSeconds = item.durationSeconds,
             status = status,
             progressPercent = item.downloadingPercent
-        ))
+        ), onMore = { row?.let { host.openQueueSongMenu(index, it) } })
+        return row
     }
 
     private inner class QueueAdapter : BaseAdapter() {
@@ -447,14 +450,20 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         override fun getItem(position: Int): Any = queue[position]
         override fun getItemId(position: Int): Long = queue[position].songKey
         override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View =
-            queueRow(queue[position], position).also { unclickable(it) }
+            queueRow(queue[position], position).also { unclickable(it, position) }
     }
 
-    private fun unclickable(v: View) {
+    /** The ListView drives the row (tap = play, long press = menu); only the ⋮ stays clickable. */
+    private fun unclickable(v: View, position: Int) {
+        if (v.tag == MELO_SONG_ROW_MORE_TAG) {
+            v.setOnClickListener { host.openQueueSongMenu(position, v) }
+            v.isFocusable = false
+            return
+        }
         v.isClickable = false
         v.isLongClickable = false
         v.isFocusable = false
-        if (v is ViewGroup) for (i in 0 until v.childCount) unclickable(v.getChildAt(i))
+        if (v is ViewGroup) for (i in 0 until v.childCount) unclickable(v.getChildAt(i), position)
     }
 
     private fun showSleepMenu(anchor: View) {
