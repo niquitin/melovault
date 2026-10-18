@@ -79,6 +79,9 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
     private var artKey: Any? = null
     private var tick = 0
     private var scrolledFor: Long? = null
+    private var fitScroll: ScrollView? = null
+    private var fitColumn: LinearLayout? = null
+    private var fitPosted = false
 
     private val update = object : Runnable {
         override fun run() {
@@ -202,13 +205,27 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         queueList = list
         right.addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         row.addView(right, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 55f))
-        row.addOnLayoutChangeListener { _, _, t, _, b, _, ot, _, ob ->
-            if (b - t != ob - ot) {
-                val leftWidth = left.width.takeIf { it > 0 } ?: ((row.width - s.screenMargin * 3) * 45 / 100)
-                sizeArt(minOf(leftWidth, ((b - t) * 0.42f).toInt()))
-            }
+        fitScroll = left
+        fitColumn = player
+        row.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or_, ob ->
+            if (b - t != ob - ot || r - l != or_ - ol) requestArtFit()
         }
         return row
+    }
+
+    /** Cover = the column height minus every other row, so the controls never fall below the screen. */
+    private fun requestArtFit() {
+        val scroll = fitScroll ?: return
+        if (fitPosted) return
+        fitPosted = true
+        scroll.post {
+            fitPosted = false
+            val column = fitColumn ?: return@post
+            val w = scroll.width
+            val h = scroll.height
+            if (w <= 0 || h <= 0) return@post
+            sizeArt(MeloNowPlayingPolicy.artSide(w, h, MeloArtFit.restHeight(column, artHost, w), s.rowArt))
+        }
     }
 
     private fun topBar(): View = LinearLayout(activity).apply {
@@ -269,7 +286,9 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
 
     private fun sizeArt(side: Int) {
         if (side <= 0) return
-        artHost.layoutParams = (artHost.layoutParams as LinearLayout.LayoutParams).apply {
+        val current = artHost.layoutParams as LinearLayout.LayoutParams
+        if (current.width == side && current.height == side) return
+        artHost.layoutParams = current.apply {
             width = side
             height = side
             topMargin = s.gap
@@ -307,13 +326,15 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
     }
 
     /** Setting the same text still re-lays out a TextView; the 1 s tick must not do that. */
-    private fun TextView.show(value: CharSequence) {
-        if (text?.toString() != value.toString()) text = value
+    private fun TextView.show(value: CharSequence): Boolean {
+        if (text?.toString() == value.toString()) return false
+        text = value
+        return true
     }
 
     private fun renderNow(now: NowPlaying?) {
         if (now == null) {
-            title.show("Chưa phát bài nào")
+            if (title.show("Chưa phát bài nào")) requestArtFit()
             source.show("")
             quality.show("")
             time.show("")
@@ -322,7 +343,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
             showArt(null, null, "♪")
             return
         }
-        title.show(now.title)
+        if (title.show(now.title)) requestArtFit()
         source.show(now.sourceTitle.orEmpty())
         val q = host.qualityLabel(fileBitDepth)
         quality.show(listOfNotNull(q, now.downloadNote?.takeUnless { it.startsWith("Đã tải") }).joinToString(" · "))

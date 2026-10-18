@@ -6,6 +6,7 @@ import com.bsdung.musicassistantcar.data.telegram.MeloNowPlayingPolicy.NowPlayin
 import com.bsdung.musicassistantcar.data.telegram.MeloNowPlayingPolicy.SleepOption
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -65,6 +66,38 @@ class MeloNowPlayingPolicyTest {
         assertEquals(0f, MeloNowPlayingPolicy.seekFraction(-5f, 100f), 0.0001f)
         assertEquals(1f, MeloNowPlayingPolicy.seekFraction(150f, 100f), 0.0001f)
         assertEquals(0f, MeloNowPlayingPolicy.seekFraction(5f, 0f), 0.0001f)
+    }
+
+    @Test
+    fun artTakesWhatTheOtherRowsLeave() {
+        // Y700-like column: 800 wide, 750 high, 360 of text and buttons -> 390 cover
+        assertEquals(390, MeloNowPlayingPolicy.artSide(800, 750, 360, 56))
+        // Sony landscape: 330 wide, 380 high, 340 rest -> 40 would be too small -> minimum
+        assertEquals(56, MeloNowPlayingPolicy.artSide(330, 380, 340, 56))
+    }
+
+    @Test
+    fun extrasStackOnlyWhenOneRowOverflows() {
+        val widths = listOf(100, 110, 100, 140)
+        assertTrue(MeloNowPlayingPolicy.extrasStacked(400, widths, 8))   // 450 + 32 > 400
+        assertFalse(MeloNowPlayingPolicy.extrasStacked(482, widths, 8))  // exactly fits
+        assertFalse(MeloNowPlayingPolicy.extrasStacked(800, widths, 8))
+        assertFalse(MeloNowPlayingPolicy.extrasStacked(0, emptyList(), 8))
+    }
+
+    @Test
+    fun artIsNeverWiderThanTheColumn() {
+        assertEquals(300, MeloNowPlayingPolicy.artSide(300, 1200, 100, 56))
+    }
+
+    @Test
+    fun artFallsBackToMinimumOnNonsense() {
+        assertEquals(56, MeloNowPlayingPolicy.artSide(300, 0, 0, 56))
+        assertEquals(56, MeloNowPlayingPolicy.artSide(300, -50, 20, 56))
+        assertEquals(56, MeloNowPlayingPolicy.artSide(0, 800, 100, 56))
+        // a negative rest is treated as 0
+        assertEquals(300, MeloNowPlayingPolicy.artSide(300, 800, -40, 56))
+        assertEquals(0, MeloNowPlayingPolicy.artSide(300, 10, 20, -5))
     }
 
     @Test

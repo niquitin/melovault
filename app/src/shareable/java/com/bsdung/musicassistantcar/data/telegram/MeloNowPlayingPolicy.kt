@@ -85,6 +85,20 @@ internal object MeloNowPlayingPolicy {
         return out
     }
 
+    /**
+     * Side of the square cover: what is left of the column height after everything else
+     * ([restHeightPx]), never wider than the column, never below [minSidePx] (a very low
+     * screen then scrolls instead of shrinking the cover to nothing).
+     */
+    fun artSide(availableWidthPx: Int, availableHeightPx: Int, restHeightPx: Int, minSidePx: Int): Int {
+        val room = availableHeightPx - restHeightPx.coerceAtLeast(0)
+        return minOf(room, availableWidthPx).coerceAtLeast(minSidePx.coerceAtLeast(0))
+    }
+
+    /** The Đảo / Lặp / Lưu / Hàng đợi chips go on two rows when one row would overflow the column. */
+    fun extrasStacked(availableWidthPx: Int, chipWidthsPx: List<Int>, gapPx: Int): Boolean =
+        chipWidthsPx.isNotEmpty() && chipWidthsPx.sum() + gapPx * chipWidthsPx.size > availableWidthPx
+
     /** Touch position to 0..1 over the bar, which starts and ends [inset] px inside the view. */
     fun seekFraction(x: Float, width: Float, inset: Float = 0f): Float {
         val span = width - 2f * inset.coerceAtLeast(0f)

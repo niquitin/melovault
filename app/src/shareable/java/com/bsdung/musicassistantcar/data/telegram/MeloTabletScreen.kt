@@ -57,6 +57,14 @@ internal class MeloTabletScreen(
     private lateinit var shuffle: TextView
     private lateinit var repeat: TextView
     private lateinit var favorite: TextView
+    private lateinit var queueChip: TextView
+    private lateinit var playerScroll: ScrollView
+    private lateinit var playerColumn: LinearLayout
+    private val extrasBox = LinearLayout(context)
+    private val extrasRow1 = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+    private val extrasRow2 = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+    private var extrasStacked = false
+    private var fitPosted = false
     // Left slot: the big player, or the channel list + mini player while one channel is open.
     private val leftSlot = FrameLayout(context)
     private lateinit var playerPane: View
@@ -187,20 +195,59 @@ internal class MeloTabletScreen(
         })
         column.addView(transport, matchWrap().apply { topMargin = s.gap * 2 })
 
-        val extras = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
         shuffle = c.chip("⇄ Đảo", false) { host.toggleShuffle(); onPlaybackChanged() }
         repeat = c.chip("↻ Lặp", false) { host.cycleRepeat(); onPlaybackChanged() }
         favorite = c.chip("☆ Lưu", false) { host.toggleFavorite(); onPlaybackChanged() }
-        listOf(shuffle, repeat, favorite, c.chip("☰ Hàng đợi", false) { host.openQueue() }).forEach { extras.addView(it) }
-        column.addView(android.widget.HorizontalScrollView(context).apply {
-            isHorizontalScrollBarEnabled = false
-            addView(extras)
+        queueChip = c.chip("☰ Hàng đợi", false) { host.openQueue() }
+        column.addView(extrasBox.apply {
+            orientation = LinearLayout.VERTICAL
+            addView(extrasRow1, matchWrap())
+            addView(extrasRow2, matchWrap().apply { topMargin = s.gap })
         }, matchWrap().apply { topMargin = s.gap * 2 })
+        arrangeExtras(false)
         scroll.addView(column)
+        playerScroll = scroll
+        playerColumn = column
         scroll.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or_, ob ->
-            if (r - l != or_ - ol || b - t != ob - ot) sizeArt(minOf(r - l, ((b - t) * 0.55f).toInt()))
+            if (r - l != or_ - ol || b - t != ob - ot) requestArtFit()
         }
         return scroll
+    }
+
+    // ---- Cover size and chip rows follow the height the other rows leave ---------------------
+
+    /** One row of chips, or two when the column is too narrow for all four. */
+    private fun arrangeExtras(stacked: Boolean) {
+        if (extrasStacked == stacked && extrasRow1.childCount > 0) return
+        extrasStacked = stacked
+        extrasRow1.removeAllViews()
+        extrasRow2.removeAllViews()
+        val chips = listOf(shuffle, repeat, favorite, queueChip)
+        chips.forEachIndexed { i, chip -> (if (stacked && i >= 2) extrasRow2 else extrasRow1).addView(chip) }
+        extrasRow2.visibility = if (stacked) View.VISIBLE else View.GONE
+    }
+
+    private fun requestArtFit() {
+        if (fitPosted) return
+        fitPosted = true
+        playerScroll.post {
+            fitPosted = false
+            fitArt()
+        }
+    }
+
+    private fun fitArt() {
+        val w = playerScroll.width
+        val h = playerScroll.height
+        if (w <= 0 || h <= 0) return
+        val unspecified = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        val widths = listOf(shuffle, repeat, favorite, queueChip).map { chip ->
+            chip.measure(unspecified, unspecified)
+            chip.measuredWidth
+        }
+        arrangeExtras(MeloNowPlayingPolicy.extrasStacked(w - playerColumn.paddingLeft - playerColumn.paddingRight, widths, s.gap))
+        val rest = MeloArtFit.restHeight(playerColumn, artHost, w)
+        sizeArt(MeloNowPlayingPolicy.artSide(w, h, rest, s.rowArt))
     }
 
     // ---- Quick channel switch (left slot while a channel is open) -----------------------------
@@ -329,17 +376,20 @@ internal class MeloTabletScreen(
         artHost.addView(c.artView(art, sourceTitle, songTitle, artSide).apply { layoutParams = FrameLayout.LayoutParams(artSide, artSide) })
     }
 
-    private fun TextView.show(value: CharSequence) {
-        if (text?.toString() != value.toString()) text = value
+    private fun TextView.show(value: CharSequence): Boolean {
+        if (text?.toString() == value.toString()) return false
+        text = value
+        return true
     }
 
-    private fun toggleStyle(chip: TextView, on: Boolean, label: String) {
+    private fun toggleStyle(chip: TextView, on: Boolean, label: String): Boolean {
         val state = "$on|$label"
-        if (chip.tag == state) return
+        if (chip.tag == state) return false
         chip.tag = state
         chip.text = label
         chip.setTextColor(if (on) p.onAccent else p.text)
         chip.background = if (on) c.pill(p.accent) else c.pill(p.surfaceRaised, p.border)
+        return true
     }
 
     fun onLibraryChanged() {
@@ -354,27 +404,29 @@ internal class MeloTabletScreen(
 
     fun onPlaybackChanged() {
         val now: NowPlaying? = host.nowPlaying()
+        var relayout: Boolean
         if (now == null) {
-            title.show("Chọn một bài để phát")
-            source.show("")
+            relayout = title.show("Chọn một bài để phát")
+            relayout = source.show("") or relayout
             quality.show("")
             time.show("")
             bar.setProgress(0f)
             play.show("▶")
             showArt(null, null, "♪")
         } else {
-            title.show(now.title)
-            source.show(now.sourceTitle.orEmpty())
+            relayout = title.show(now.title)
+            relayout = source.show(now.sourceTitle.orEmpty()) or relayout
             quality.show(listOfNotNull(host.qualityLabel(null), now.downloadNote?.takeUnless { it.startsWith("Đã tải") }).joinToString(" · "))
             bar.setProgress(if (now.durationMs > 0L) now.positionMs.toFloat() / now.durationMs else 0f)
             time.show(MeloComponentPolicy.progressText((now.positionMs / 1000).toInt(), (now.durationMs / 1000).toInt()))
             play.show(if (now.playing) "❚❚" else "▶")
             play.contentDescription = if (now.playing) "Dừng" else "Phát"
-            toggleStyle(shuffle, now.shuffle, if (now.shuffle) "⇄ Đảo: bật" else "⇄ Đảo")
-            toggleStyle(repeat, now.repeatLabel != "tắt", "↻ Lặp: ${now.repeatLabel}")
-            toggleStyle(favorite, now.favorite, if (now.favorite) "★ Đã lưu" else "☆ Lưu")
+            relayout = toggleStyle(shuffle, now.shuffle, if (now.shuffle) "⇄ Đảo: bật" else "⇄ Đảo") or relayout
+            relayout = toggleStyle(repeat, now.repeatLabel != "tắt", "↻ Lặp: ${now.repeatLabel}") or relayout
+            relayout = toggleStyle(favorite, now.favorite, if (now.favorite) "★ Đã lưu" else "☆ Lưu") or relayout
             showArt(now.art, now.sourceTitle, now.title)
         }
+        if (relayout && ::playerScroll.isInitialized) requestArtFit()
         updateMini(now)
         pane.onPlaybackChanged(now?.songKey)
     }
