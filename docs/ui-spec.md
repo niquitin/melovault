@@ -179,7 +179,7 @@ Mọi vùng bấm vẫn tối thiểu 48dp. Trên Shanling, nút vật lý của
 
 **Thanh tìm kiếm**: chữ gợi ý hiện tổng số bài (“Tìm trong 27.971 bài hát…”), nút bộ lọc ở cuối; tìm ngay khi gõ, không dấu vẫn ra (gõ “su thanh hoa” ra “Sử Thanh Hóa”).
 
-**Thẻ nguồn nhạc** (học từ MeloWave): đầu màn Thư viện có một hàng thẻ, mỗi nguồn một thẻ gồm biểu tượng, tên nguồn, số bài và số bài đã tải: Telegram (27.971 bài · đã tải 412) · Nhạc trên máy · Google Drive (khi mở rộng sau này). Bấm thẻ = lọc danh sách theo nguồn đó. Nguồn chưa kết nối thì không hiện thẻ (không hiện thẻ “0 bài”). Thẻ cao 88dp, cuộn ngang, thu gọn khi cuộn danh sách xuống. Trên Shanling không đặt hàng thẻ trong Thư viện để dành chỗ cho danh sách; chọn nguồn qua menu ☰. Car Mode dùng lưới thẻ lớn trong màn Telegram như đã mô tả.
+**Thẻ nguồn nhạc** (học từ MeloWave): đầu màn Thư viện có một hàng thẻ, mỗi nguồn một thẻ gồm biểu tượng, tên nguồn, số bài và số bài đã tải: Telegram (27.971 bài · đã tải 412) · Nhạc trên máy · Google Drive (khi mở rộng sau này). Bấm thẻ = lọc danh sách theo nguồn đó. Nguồn chưa kết nối thì không hiện thẻ (không hiện thẻ “0 bài”). Thẻ cao 88dp, cuộn ngang, thu gọn khi cuộn danh sách xuống. Đã làm ở Beta108: hôm nay chỉ có thẻ Telegram (Nhạc trên máy và Google Drive chưa có dữ liệu trong Shareable nên không hiện); trên Hai khung ngang hàng thẻ chỉ hiện khi cửa sổ cao ≥ 560dp (ngưỡng tạm, chờ QA Y700). Trên Shanling không đặt hàng thẻ trong Thư viện để dành chỗ cho danh sách; chọn nguồn qua menu ☰. Car Mode dùng lưới thẻ lớn trong màn Telegram như đã mô tả.
 
 **Thanh điều hướng**: khi dọc, nằm trong Thanh đáy gộp (2 tab trên Shanling, 4 tab trên điện thoại và tablet dọc). Khi ngang và Car Mode, là cột dọc bên trái: Thư viện · Telegram · Playlist · Đang phát.
 
