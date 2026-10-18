@@ -24,3 +24,9 @@
 - Xác nhận APK dùng để test có package/version/signature khớp và Telegram API config hợp lệ. Nếu mismatch, dừng, KHÔNG uninstall/pm clear.
 - Sonnet tạo docs/plans/da-tai-khi-mo-app-bao-cao.md ghi commit/test/ảnh hoặc nêu lý do chưa test. ChatGPT kiểm tra screenshot, chạy lại test/build nếu có commit mới và hỏi bác sĩ 3–6 thao tác.
 - Chưa được hợp nhất/chốt PASS tính năng Beta109 hay khởi động phiên Opus tiếp theo trước khi chủ dự án chốt.
+
+## Cập nhật ADB — 18/10/2026 23:30 (+07)
+- Sau khi chủ dự án bật USB debugging, ChatGPT độc lập xác nhận trên Ni: adb devices -l thấy serial 30313860180939 trạng thái device, manufacturer Shanling, model Shanling M3 Ultra, Android 10; package cài hiện tại app.melovault.player vc107/0.6.86-beta.
+- Chứng chỉ APK đang cài có SHA-256 eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8, khớp chứng chỉ APK candidate Beta109 từ Tiny: C:\Bots\_qa_temp\Beta109_9a1f129\MeloVault-Owner-Beta-v0.6.88-b109-0cf7285.apk, SHA-256 file 7989C5F9C298C41FC4F3F9C6D2F145A4B3663B7A35B5418DD4E83EFFC2465C3B. Candidate là vc109/0.6.88-beta; Telegram config Tiny hiện có ID khác zero và hash không rỗng, nhưng CHƯA chứng minh API thực sự đăng nhập/phát được.
+- Blocker ADB đã hết. Vẫn BLOCKED — CHỜ CÀI THỬ AN TOÀN, ẢNH SHANLING VÀ BÁC SĨ NGHIỆM THU. CHƯA chạy adb install -r, CHƯA có ảnh Shanling Beta109 và không sửa dữ liệu.
+- Sony qua Tiny đã cài vc109 nhưng không thay thế Shanling. Sonnet tiếp tục QA trên chính TASK_ID: lệnh duy nhất adb install -r sau khi xác minh an toàn; ảnh và báo cáo tại docs/plans; ChatGPT nghiệm thu và chủ dự án xác nhận thao tác trước PASS.

@@ -17,7 +17,7 @@ Chủ sở hữu phê duyệt quy trình ngày 18/10/2026. **ChatGPT duy nhất 
 
 ## C. Luật cài máy và bảo vệ dữ liệu
 - Dùng adb devices -l trên **Ni** cho Shanling; adb devices -l trên **Tiny** cho Sony. Mỗi lần truy vấn model/manufacturer bằng adb -s SERIAL shell getprop.
-- Ni: Windows USB nhận Shanling M3 Ultra, nhưng ADB chưa nhận (18/10/2026); **serial ADB chưa xác minh**. Không dùng ID PnP thay ADB serial.
+- Ni: **ADB xác minh thành công** Shanling M3 Ultra Android 10, serial **30313860180939**, trạng thái device (18/10/2026 23:30 +07). Thiết bị đang cài MeloVault vc107 khi kiểm; mã USB PnP không thay thế ADB serial. Trước mỗi phiên phải kiểm tra lại adb devices -l và getprop. Việc ADB sẵn sàng KHÔNG có nghĩa Beta109 đã được cài/QA hay chủ dự án đã nghiệm thu.
 - Tiny: Sony Xperia XQ-AS52, serial QV725WEQ54 được xác minh qua ADB (18/10/2026).
 - Sonnet cài DEBUG APK lên Shanling **chỉ khi hợp lệ**: đúng package, không downgrade versionCode, cert khớp, Telegram config khả dụng nếu test TDLib, thiết bị authorized. Lệnh duy nhất **adb -s SERIAL install -r PATH**. Cấm adb uninstall, pm clear, xoá app data, TDLib cache/session, đăng xuất Telegram. Signature mismatch → dừng báo chủ dự án, không tự gỡ cài lại. Ni APK thiếu Telegram API ID không phải bản để test Telegram.
 - Mở màn hình đúng plan, thao tác và dùng adb -s SERIAL exec-out screencap -p. Trên Windows khi xuất PNG nhị phân dùng cmd /c với dấu > trỏ vào docs/plans/artifacts/<TASK_ID>/; ghi đường dẫn ảnh vào report, đối chiếu PNG đọc được và đảm bảo không chứa bí mật/PII nếu muốn chia sẻ. Artifacts folder không commit.
