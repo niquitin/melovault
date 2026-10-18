@@ -31,6 +31,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -284,6 +285,30 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var mutedMessages = false
     private var nativeReceiver: ((JSONObject) -> Unit)? = null
 
+    // Android 13+: the playback notification (lock screen, watch and headset controls) needs this
+    // permission. Asked once after sign-in, with an explanation; a refusal is final.
+    private val notificationPermissionResult = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* granted or not, nothing else depends on it */ }
+
+    private fun maybeAskNotificationPermission() {
+        val prefs = getSharedPreferences(MeloScreenPolicy.PREFS_NAME, Context.MODE_PRIVATE)
+        val granted = Build.VERSION.SDK_INT < MeloMediaControlPolicy.NOTIFICATION_PERMISSION_SDK ||
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!MeloMediaControlPolicy.shouldAskNotificationPermission(
+                Build.VERSION.SDK_INT, granted, MeloMediaControlPolicy.notificationAsked(prefs), auth.isReady())) return
+        MeloMediaControlPolicy.markNotificationAsked(prefs)
+        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            .setTitle("Cho phép thông báo phát nhạc?")
+            .setMessage("Thông báo giúp điều khiển nhạc từ màn hình khoá, đồng hồ và tai nghe Bluetooth. " +
+                "Bạn có thể đổi lại trong Cài đặt Android.")
+            .setNegativeButton("Không", null)
+            .setPositiveButton("Cho phép") { _, _ ->
+                notificationPermissionResult.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+            .show()
+    }
+
     // Car Mode voice search: the spoken text only fills the search field; nothing is stored.
     private var voiceSearchCallback: ((String) -> Unit)? = null
     private val voiceSearchResult = registerForActivityResult(
@@ -522,11 +547,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }, ContextCompat.getMainExecutor(this))
     }
 
-    private fun mediaItem(uri: Uri, title: String, mediaId: String): MediaItem =
+    private fun mediaItem(uri: Uri, title: String, mediaId: String, artist: String? = null): MediaItem =
         MediaItem.Builder()
             .setMediaId(mediaId)
             .setUri(uri)
-            .setMediaMetadata(MediaMetadata.Builder().setTitle(title).build())
+            .setMediaMetadata(MediaMetadata.Builder().setTitle(title)
+                .setArtist(MeloMediaControlPolicy.fallbackArtist(artist)).build())
             .build()
 
     private fun enqueuePlayback(uri: Uri, title: String) {
@@ -547,7 +573,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     ShareablePlaybackService.QueueTrack(
                         entry.messageId, entry.fileId, entry.title,
                         cachedSongPaths[entry.messageId], entry.filename,
-                        entry.chatId, entry.expectedSize, entry.genuineMessageId
+                        entry.chatId, entry.expectedSize, entry.genuineMessageId,
+                        MeloMediaControlPolicy.fallbackArtist(entry.sourceTitle ?: sourceNames[entry.chatId])
                     )
                 }
             )
@@ -557,7 +584,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val selected = queueSongOrder.indexOfFirst { it.messageId == song.messageId }
         if (selected < 0) {
             enqueueItems(listOf(mediaItem(Uri.fromFile(target), song.title,
-                "telegram:${song.messageId}")), 0)
+                "telegram:${song.messageId}", song.sourceTitle ?: sourceNames[song.chatId])), 0)
             return
         }
         fun playableAt(index: Int): MediaItem? {
@@ -568,7 +595,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 cachedSongPaths.remove(item.messageId)
                 return null
             }
-            return mediaItem(Uri.fromFile(file), item.title, "telegram:${item.messageId}")
+            return mediaItem(Uri.fromFile(file), item.title, "telegram:${item.messageId}", item.sourceTitle ?: sourceNames[item.chatId])
         }
         val orderIds = queueSongOrder.map { it.messageId }
         val indices = TelegramContiguousQueuePolicy.indices(orderIds, song.messageId) {
@@ -580,7 +607,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         val contiguous = indices.mapNotNull { index ->
             if (index == selected) mediaItem(Uri.fromFile(target), song.title,
-                "telegram:${song.messageId}")
+                "telegram:${song.messageId}", song.sourceTitle ?: sourceNames[song.chatId])
             else playableAt(index)
         }
         enqueueItems(contiguous, indices.indexOf(selected).coerceAtLeast(0))
@@ -599,7 +626,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     ShareablePlaybackService.QueueTrack(
                         entry.messageId, entry.fileId, entry.title,
                         cachedSongPaths[entry.messageId], entry.filename,
-                        entry.chatId, entry.expectedSize, entry.genuineMessageId
+                        entry.chatId, entry.expectedSize, entry.genuineMessageId,
+                        MeloMediaControlPolicy.fallbackArtist(entry.sourceTitle ?: sourceNames[entry.chatId])
                     )
                 }
             )
@@ -610,7 +638,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             ) } ?: "mp3"
         val progressive = mediaItem(
             TelegramProgressiveCache.makeUri(song.fileId, ext),
-            song.title, "telegram:${song.messageId}"
+            song.title, "telegram:${song.messageId}", song.sourceTitle ?: sourceNames[song.chatId]
         )
         enqueueItems(listOf(progressive), 0)
     }
@@ -4371,7 +4399,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     ShareablePlaybackService.QueueTrack(
                         entry.messageId, entry.fileId, entry.title,
                         cachedSongPaths[entry.messageId], entry.filename,
-                        entry.chatId, entry.expectedSize, entry.genuineMessageId
+                        entry.chatId, entry.expectedSize, entry.genuineMessageId,
+                        MeloMediaControlPolicy.fallbackArtist(entry.sourceTitle ?: sourceNames[entry.chatId])
                     )
                 }
             )
@@ -4664,6 +4693,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         restorePlayingQueueIfAny(verified.value)
                         applyResponsiveLibraryUi()
                         applyMeloLayer()
+                        maybeAskNotificationPermission()
                     }
                     loadDatabaseIndex(verified.value) {
                         scanAllTelegramAudio(browseAfter = false, incremental = true)
@@ -5515,7 +5545,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         if (target.isFile && TelegramAccountStoragePolicy.isOwnedFile(filesRoot, target)) {
             controller.addMediaItem(
                 (controller.currentMediaItemIndex + 1).coerceAtMost(controller.mediaItemCount),
-                mediaItem(Uri.fromFile(target), song.title, mediaId)
+                mediaItem(Uri.fromFile(target), song.title, mediaId, song.sourceTitle ?: sourceNames[song.chatId])
             )
         }
     }
