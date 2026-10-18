@@ -217,6 +217,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
     @Volatile private var telegramLibraryTotal: Int? = null
     /** Offline groups of the last finished whole-library scan (no channel, search or playlist); memory only. */
     private var downloadedLibraryTotal: Int? = null
+    /** Background refresh of [downloadedLibraryTotal] (docs/plans/da-tai-khi-mo-app.md); main thread unless noted. */
+    private var downloadedCountUser = 0L
+    private var downloadedCountStoredAtMs: Long? = null
+    private var downloadedCountDone = false
+    private var downloadedCountScheduled = false
+    private var downloadedCountRetries = 0
+    @Volatile private var uiForeground = false
+    /** Bump to cancel a running background count (user opened Đã tải, started a song, left the app). */
+    private val downloadedCountGeneration = java.util.concurrent.atomic.AtomicLong(0L)
     private var browseSources = false
     private var selectedChatId: Long? = null
     private val sourceNames = java.util.concurrent.ConcurrentHashMap<Long, String>()
@@ -483,8 +492,17 @@ class TelegramPreviewActivity : AppCompatActivity() {
         initNative()
     }
 
+    override fun onPause() {
+        uiForeground = false
+        downloadedCountGeneration.incrementAndGet()
+        mainHandler.removeCallbacks(downloadedCountStart)
+        downloadedCountScheduled = false
+        super.onPause()
+    }
+
     override fun onResume() {
         super.onResume()
+        uiForeground = true
         // Picks up a changed "Bố cục Gọn" setting when returning from Cài đặt giao diện.
         applyMeloLayer()
         if (auth.isReady()) {
@@ -504,6 +522,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             showMessage("Không phát được tệp âm thanh (Media3 mã ${error.errorCode}).")
         }
         override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (isPlaying) downloadedCountGeneration.incrementAndGet()
             if (::playPause.isInitialized) playPause.text = if (isPlaying) "Ⅱ" else "▶"
             updateCockpitPlayer()
             if (::mainRoot.isInitialized) {
@@ -3485,6 +3504,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     ) {
         val sortForScan = activeSort()
         val root = filesRoot
+        downloadedCountGeneration.incrementAndGet() // the Đã tải chip scan replaces any background count
         val cancelled = { uiQueryGeneration.get() != generation || isDestroyed ||
             Thread.currentThread().isInterrupted || !auth.isReady() || library.authorizedUser()?.value != account }
         offlineSummary = "Đang kiểm tra tệp offline trên toàn bộ thư viện…"
@@ -3502,6 +3522,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         offlineGroups = groups
                         if (snapshot.finished && chat == null && query.isBlank() && !playlist) {
                             downloadedLibraryTotal = groups.size
+                            storeDownloadedCount(account, groups.size)
                             scheduleMeloLibraryRefresh()
                         }
                         snapshot.entries.forEach { cachedSongPaths[it.song.songKey] = it.path }
@@ -3588,6 +3609,139 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
         } finally {
             requests.forEach { (_, tag, future) -> pendingOffline.remove(tag, future) }
+        }
+    }
+
+    /** Main thread. Remembers the whole-library count of this account (numbers only, no names or paths). */
+    private fun storeDownloadedCount(account: Long, count: Int) {
+        val now = System.currentTimeMillis()
+        downloadedCountStoredAtMs = now
+        downloadedCountDone = true
+        getSharedPreferences(MeloDownloadedCountPolicy.PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putInt(MeloDownloadedCountPolicy.valueKey(account), count)
+            .putLong(MeloDownloadedCountPolicy.timeKey(account), now)
+            .apply()
+    }
+
+    /** Main thread. Logout / account switch: forget the number and any pending background count. */
+    private fun clearDownloadedCount() {
+        downloadedLibraryTotal = null
+        downloadedCountStoredAtMs = null
+        downloadedCountUser = 0L
+        downloadedCountDone = false
+        downloadedCountScheduled = false
+        downloadedCountRetries = 0
+        downloadedCountGeneration.incrementAndGet()
+        mainHandler.removeCallbacks(downloadedCountStart)
+        runCatching {
+            getSharedPreferences(MeloDownloadedCountPolicy.PREFS_NAME, Context.MODE_PRIVATE).edit().clear().apply()
+        }
+    }
+
+    /**
+     * Main thread, once the library total is known: show the remembered count right away, then
+     * (after a short delay, only when idle) refresh it with one background scan.
+     */
+    private fun startDownloadedCountFlow(userId: Long) {
+        if (userId <= 0L || isDestroyed) return
+        if (downloadedCountUser != userId) {
+            downloadedCountUser = userId
+            downloadedCountDone = false
+            downloadedCountRetries = 0
+            downloadedCountStoredAtMs = null
+            val prefs = getSharedPreferences(MeloDownloadedCountPolicy.PREFS_NAME, Context.MODE_PRIVATE)
+            executeOnDb {
+                val stored = if (prefs.contains(MeloDownloadedCountPolicy.valueKey(userId))) {
+                    MeloDownloadedCountPolicy.Stored(
+                        userId, prefs.getInt(MeloDownloadedCountPolicy.valueKey(userId), -1),
+                        prefs.getLong(MeloDownloadedCountPolicy.timeKey(userId), 0L)
+                    )
+                } else null
+                runOnUiThread {
+                    if (isDestroyed || library.authorizedUser()?.value != userId || downloadedCountUser != userId) return@runOnUiThread
+                    val shown = MeloDownloadedCountPolicy.displayValue(userId, stored, downloadedLibraryTotal)
+                    if (shown != null && downloadedLibraryTotal == null) {
+                        downloadedLibraryTotal = shown
+                        downloadedCountStoredAtMs = stored?.atMs
+                        scheduleMeloLibraryRefresh()
+                    }
+                    scheduleDownloadedCount()
+                }
+            }
+            return
+        }
+        scheduleDownloadedCount()
+    }
+
+    private fun scheduleDownloadedCount() {
+        if (downloadedCountDone || downloadedCountScheduled) return
+        downloadedCountScheduled = true
+        mainHandler.postDelayed(downloadedCountStart, MeloDownloadedCountPolicy.START_DELAY_MS)
+    }
+
+    private val downloadedCountStart: Runnable = Runnable {
+        downloadedCountScheduled = false
+        val userId = library.authorizedUser()?.value ?: 0L
+        if (isDestroyed || userId <= 0L || downloadedCountUser != userId) return@Runnable
+        val db = libraryDb
+        val state = MeloDownloadedCountPolicy.ScanState(
+            loggedIn = auth.isReady(),
+            hasSongs = (telegramLibraryTotal ?: 0) > 0 && db != null,
+            syncing = globalScanLoading || syncCoordinator?.isBusy() == true,
+            playingOrOpening = player?.isPlaying == true || playFeedback != null,
+            powerSave = (getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager)?.isPowerSaveMode == true,
+            foreground = uiForeground,
+            alreadyScannedThisProcess = downloadedCountDone,
+            storedAgeMs = MeloDownloadedCountPolicy.storedAge(System.currentTimeMillis(), downloadedCountStoredAtMs)
+        )
+        val decision = MeloDownloadedCountPolicy.decide(state)
+        if (decision != MeloDownloadedCountPolicy.Decision.SCAN || db == null) {
+            android.util.Log.w("MeloVaultCount", "stage=skip reason=${decision.logReason}")
+            // Busy right now (sync / playing): look again a few times, never forever.
+            val transient = decision == MeloDownloadedCountPolicy.Decision.SYNCING ||
+                decision == MeloDownloadedCountPolicy.Decision.PLAYING_OR_OPENING
+            if (transient && downloadedCountRetries < 5) {
+                downloadedCountRetries++
+                downloadedCountScheduled = true
+                mainHandler.postDelayed(downloadedCountStart, 60_000L)
+            }
+            return@Runnable
+        }
+        runDownloadedCountScan(userId, db)
+    }
+
+    /** Counts offline groups of the whole library without touching any screen state. */
+    private fun runDownloadedCountScan(userId: Long, db: TelegramLibraryDao) {
+        val generation = downloadedCountGeneration.incrementAndGet()
+        val root = filesRoot
+        val cancelled = { downloadedCountGeneration.get() != generation || isDestroyed ||
+            Thread.currentThread().isInterrupted || !uiForeground || !auth.isReady() ||
+            library.authorizedUser()?.value != userId }
+        val startedAt = android.os.SystemClock.elapsedRealtime()
+        android.util.Log.w("MeloVaultCount", "stage=start total=${telegramLibraryTotal ?: -1}")
+        offlineExecutor.execute {
+            try {
+                val snapshot = TelegramOfflineLibrary.scan(userId, root,
+                    page = { offset, limit -> db.getSongs(userId, offset = offset, limit = limit) },
+                    resolve = { rows -> resolveOfflineBatch(rows, -generation, cancelled) },
+                    cancelled = cancelled, progress = { })
+                val elapsed = android.os.SystemClock.elapsedRealtime() - startedAt
+                if (snapshot == null || !snapshot.finished || cancelled()) {
+                    android.util.Log.w("MeloVaultCount", "stage=cancelled elapsedMs=$elapsed")
+                    return@execute
+                }
+                val count = TelegramOfflineLibrary.groups(snapshot.entries).size
+                android.util.Log.w("MeloVaultCount",
+                    "stage=done groups=$count checked=${snapshot.checked} unknown=${snapshot.unknown} elapsedMs=$elapsed")
+                runOnUiThread {
+                    if (cancelled()) return@runOnUiThread
+                    downloadedLibraryTotal = count
+                    storeDownloadedCount(userId, count)
+                    scheduleMeloLibraryRefresh()
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("MeloVaultCount", "stage=error type=${e.javaClass.simpleName}")
+            }
         }
     }
 
@@ -4746,6 +4900,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val next = stage?.let { TelegramPlayFeedbackPolicy.PlayStatus(it, songKey, text) }
         if (next == null && playFeedback?.songKey != songKey) return // a stale answer for an older tap
         if (next == playFeedback) return
+        if (next != null) downloadedCountGeneration.incrementAndGet() // a tapped song beats the background count
         playFeedback = next
         scheduleMeloLibraryRefresh()
     }
@@ -5149,7 +5304,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     meloChannelRows = emptyList()
                     meloChannelsRequested = false
                     telegramLibraryTotal = null
-                    downloadedLibraryTotal = null
+                    clearDownloadedCount()
                     requestedSourceNames.clear()
                     sourcesAdapter.clear()
                     tracks.adapter = adapter
@@ -5492,6 +5647,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 if (!isDestroyed && library.authorizedUser()?.value == userId) {
                     telegramLibraryTotal = dbCount
                     scheduleMeloLibraryRefresh()
+                    startDownloadedCountFlow(userId)
                 }
                 if (!isDestroyed && autoRecoveryPolicy.shouldAutoRecover(
                         auth.isReady(), allChatsMode, globalScanLoading, dbCount, userId
@@ -6043,7 +6199,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         meloChannelRows = emptyList()
         meloChannelsRequested = false
         telegramLibraryTotal = null
-        downloadedLibraryTotal = null
+        clearDownloadedCount()
         requestedSourceNames.clear()
         openDocument.isEnabled = false
         logout.isEnabled = false
