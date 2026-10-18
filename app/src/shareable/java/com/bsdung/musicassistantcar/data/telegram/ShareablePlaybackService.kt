@@ -9,6 +9,7 @@ import android.os.SystemClock
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -33,6 +34,7 @@ class ShareablePlaybackService : MediaSessionService() {
         val chatId: Long = 0L,
         val expectedSize: Long = -1L,
         val rawMessageId: Long = 0L,
+        val artist: String? = null,
     ) {
         val genuineMessageId: Long get() = if (rawMessageId > 0L) rawMessageId else messageId
     }
@@ -88,8 +90,98 @@ class ShareablePlaybackService : MediaSessionService() {
     private var pendingAttempt = 0
     private var pendingRequestTag: String? = null
     private var queueGeneration = 0L
+    private var sessionPlayer: NextAwarePlayer? = null
+    /** Message id of the song a user press on Next asked for; lifts the prefetch gates for it only. */
+    private var userNextMessageId: Long? = null
     private var sleepDeadline: Long? = null
     private var sleepAtEndOfTrack = false
+
+    /**
+     * The player the MediaSession (lock screen, notification, headset, Bluetooth, steering
+     * wheel, physical keys) talks to. ExoPlayer only skips to songs already in its list, so a
+     * Next press with the following song still in Telegram did nothing and the controller's
+     * Next button was disabled. This wrapper keeps Next available and starts that song.
+     */
+    private inner class NextAwarePlayer(player: ExoPlayer) : ForwardingPlayer(player) {
+        private val observers = mutableListOf<Player.Listener>()
+
+        override fun addListener(listener: Player.Listener) {
+            observers.add(listener)
+            super.addListener(listener)
+        }
+
+        override fun removeListener(listener: Player.Listener) {
+            observers.remove(listener)
+            super.removeListener(listener)
+        }
+
+        private fun queuedNext(): Boolean = nextTrackNotLoaded() != null
+
+        override fun getAvailableCommands(): Player.Commands {
+            val base = super.getAvailableCommands()
+            if (base.contains(Player.COMMAND_SEEK_TO_NEXT) || !queuedNext()) return base
+            return base.buildUpon()
+                .addAll(Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
+                .build()
+        }
+
+        override fun isCommandAvailable(command: Int): Boolean =
+            availableCommands.contains(command)
+
+        override fun hasNextMediaItem(): Boolean =
+            MeloMediaControlPolicy.nextAvailable(super.hasNextMediaItem(), queuedNext())
+
+        override fun seekToNext() = seekToNextMediaItem()
+
+        override fun seekToNextMediaItem() {
+            if (super.hasNextMediaItem()) super.seekToNextMediaItem() else playNextNow()
+        }
+
+        /** The queue or the current song changed: tell controllers whether Next is available. */
+        fun refreshCommands() {
+            val commands = availableCommands
+            observers.toList().forEach { it.onAvailableCommandsChanged(commands) }
+        }
+    }
+
+    private fun mayDownload(next: QueueTrack): Boolean = MeloMediaControlPolicy.mayDownloadNext(
+        userNextMessageId == next.messageId, prefetchAllowed(), ShareableTdlibOwner.uiIsAttached())
+
+    /** The song after the current one in the queue when it is not in the player's list yet. */
+    private fun nextTrackNotLoaded(): QueueTrack? {
+        val next = nextTrack() ?: return null
+        val player = exoPlayer ?: return null
+        val loaded = (0 until player.mediaItemCount).any { player.getMediaItemAt(it).mediaId == "telegram:${next.messageId}" }
+        return if (loaded) null else next
+    }
+
+    /**
+     * Play the next queued song right now (Next key, or the track ended with nothing loaded):
+     * cached file -> insert and skip; otherwise resolve it, stream it progressively like the
+     * library screen does, and skip as soon as it is queued.
+     */
+    private fun playNextNow() {
+        val player = exoPlayer ?: return
+        val next = nextTrack() ?: return
+        val mediaId = "telegram:${next.messageId}"
+        val loadedIndex = (0 until player.mediaItemCount).firstOrNull { player.getMediaItemAt(it).mediaId == mediaId }
+        if (loadedIndex != null) {
+            player.seekToDefaultPosition(loadedIndex)
+            player.play()
+            return
+        }
+        val root = allowedRoot ?: return
+        val cached = next.cachedPath?.let { File(it) }
+        if (cached != null && cached.isFile && TelegramAccountStoragePolicy.isOwnedFile(root, cached)) {
+            insertNext(next, cached)
+            player.seekToNextMediaItem()
+            player.play()
+            return
+        }
+        userNextMessageId = next.messageId
+        clearPending()
+        startDownload(next, 1)
+    }
     private val sleepRunnable = Runnable {
         sleepDeadline = null
         exoPlayer?.pause()
@@ -130,6 +222,7 @@ class ShareablePlaybackService : MediaSessionService() {
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 requestNextIfMissing()
+                sessionPlayer?.refreshCommands()
             }
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 // "Hết bài này" is a one-shot: after pausing at the end, normal play resumes.
@@ -138,7 +231,15 @@ class ShareablePlaybackService : MediaSessionService() {
                     sleepAtEndOfTrack = false
                 }
             }
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                // Screen off / headset: the track ended and the next one was never loaded.
+                if (playbackState == Player.STATE_ENDED && MeloMediaControlPolicy.shouldContinueAfterEnd(
+                        ShareableTdlibOwner.uiIsAttached(), sleepAtEndOfTrack, nextTrackNotLoaded() != null)) {
+                    playNextNow()
+                }
+            }
         })
+        sessionPlayer = NextAwarePlayer(player)
 
         val intent = Intent(this, TelegramPreviewActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -147,7 +248,7 @@ class ShareablePlaybackService : MediaSessionService() {
                 PendingIntent.FLAG_IMMUTABLE
             } else 0
         val launch = PendingIntent.getActivity(this, 0, intent, flags)
-        mediaSession = MediaSession.Builder(this, player)
+        mediaSession = MediaSession.Builder(this, sessionPlayer ?: player)
             .setSessionActivity(launch)
             .build()
         ShareableTdlibOwner.bindPlayback { event ->
@@ -194,6 +295,7 @@ class ShareablePlaybackService : MediaSessionService() {
         expectedAccount = accountId
         allowedRoot = root.canonicalFile
         queueTracks = ordered.toList()
+        sessionPlayer?.refreshCommands()
     }
 
     private fun clearPending() {
@@ -209,6 +311,7 @@ class ShareablePlaybackService : MediaSessionService() {
         expectedAccount = null
         allowedRoot = null
         queueTracks = emptyList()
+        sessionPlayer?.refreshCommands()
     }
 
     private fun nextTrack(): QueueTrack? {
@@ -250,7 +353,7 @@ class ShareablePlaybackService : MediaSessionService() {
     }
 
     private fun startDownload(next: QueueTrack, attempt: Int) {
-        if (!prefetchAllowed() || ShareableTdlibOwner.uiIsAttached() ||
+        if (!mayDownload(next) ||
             nextTrack()?.messageId != next.messageId ||
             expectedAccount != ShareableTdlibOwner.authorizedAccount()) return
         val generation = queueGeneration
@@ -294,7 +397,7 @@ class ShareablePlaybackService : MediaSessionService() {
         main.postDelayed({
             if (queueGeneration == generation &&
                 pendingDownloadId == null &&
-                !ShareableTdlibOwner.uiIsAttached() &&
+                mayDownload(next) &&
                 nextTrack()?.messageId == next.messageId) {
                 startDownload(next, attempt + 1)
             }
@@ -326,16 +429,22 @@ class ShareablePlaybackService : MediaSessionService() {
                         TelegramAccountStoragePolicy.isOwnedFile(root, local)) {
                         clearPending()
                         insertNext(next.copy(fileId = parsed.freshFileId), local)
+                        if (userNextMessageId == next.messageId) {
+                            userNextMessageId = null
+                            exoPlayer?.seekToNextMediaItem()
+                            exoPlayer?.play()
+                        }
                     } else {
                         val freshId = parsed.freshFileId
                         val generation = queueGeneration
+                        val userAsked = userNextMessageId == next.messageId
                         val downloadTag = "background:download:$freshId:$generation:$pendingAttempt"
                         pendingDownloadId = freshId
                         pendingRequestTag = downloadTag
                         val sent = runCatching {
                             ShareableTdlibOwner.send("downloadFile", downloadTag) {
                                 it.put("file_id", freshId)
-                                it.put("priority", 4)
+                                it.put("priority", if (userAsked) 32 else 4)
                                 it.put("offset", 0)
                                 it.put("limit", 0)
                                 it.put("synchronous", false)
@@ -343,6 +452,8 @@ class ShareablePlaybackService : MediaSessionService() {
                         }.isSuccess
                         if (!sent) {
                             retryOrStop(next, pendingAttempt, generation)
+                        } else if (userAsked) {
+                            startProgressiveNext(next.copy(fileId = freshId), parsed.size)
                         }
                     }
                 }
@@ -377,6 +488,11 @@ class ShareablePlaybackService : MediaSessionService() {
         insertNext(next.copy(fileId = id), target)
     }
 
+    private fun metadataFor(next: QueueTrack): MediaMetadata = MediaMetadata.Builder()
+        .setTitle(next.title)
+        .setArtist(MeloMediaControlPolicy.fallbackArtist(next.artist))
+        .build()
+
     private fun insertNext(next: QueueTrack, local: File) {
         val player = exoPlayer ?: return
         val mediaId = "telegram:${next.messageId}"
@@ -386,11 +502,38 @@ class ShareablePlaybackService : MediaSessionService() {
         val item = MediaItem.Builder()
             .setMediaId(mediaId)
             .setUri(android.net.Uri.fromFile(local))
-            .setMediaMetadata(MediaMetadata.Builder().setTitle(next.title).build())
+            .setMediaMetadata(metadataFor(next))
             .build()
         player.addMediaItem(
             (player.currentMediaItemIndex + 1).coerceIn(0, player.mediaItemCount), item
         )
+        sessionPlayer?.refreshCommands()
+    }
+
+    /**
+     * Next was pressed and the song is still downloading: play it from the growing private file
+     * (same source the library screen uses) without waiting for the whole mix.
+     */
+    private fun startProgressiveNext(next: QueueTrack, size: Long) {
+        val player = exoPlayer ?: return
+        val account = expectedAccount ?: return
+        val root = allowedRoot ?: return
+        if (!TelegramProgressiveCache.begin(account, root, next.fileId, if (size > 0L) size else next.expectedSize)) return
+        val mediaId = "telegram:${next.messageId}"
+        if ((0 until player.mediaItemCount).none { player.getMediaItemAt(it).mediaId == mediaId }) {
+            val ext = next.filename.substringAfterLast('.', "mp3").lowercase()
+                .takeIf { it in setOf("mp3", "flac", "wav", "m4a", "ogg", "opus", "aac") } ?: "mp3"
+            val item = MediaItem.Builder()
+                .setMediaId(mediaId)
+                .setUri(TelegramProgressiveCache.makeUri(next.fileId, ext))
+                .setMediaMetadata(metadataFor(next))
+                .build()
+            player.addMediaItem((player.currentMediaItemIndex + 1).coerceIn(0, player.mediaItemCount), item)
+        }
+        userNextMessageId = null
+        player.seekToNextMediaItem()
+        player.prepare()
+        player.play()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
