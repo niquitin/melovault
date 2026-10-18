@@ -20,6 +20,7 @@ import java.io.OutputStream
 import java.net.ServerSocket
 import java.net.Socket
 import java.util.concurrent.Callable
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.Executors
@@ -177,6 +178,8 @@ class AudioStreamingNetworkRecoveryTest {
         var socketFailed = false
         try {
             while (totalRead < payloadSize) {
+                // Everything before the cutoff is consumed; let the server reset the socket now.
+                if (totalRead >= dropOffset) audioServer.markClientDrained(trackPath)
                 val n = source.read(receivedData, totalRead, payloadSize - totalRead)
                 if (n <= 0) {
                     if (totalRead < payloadSize) socketFailed = true
@@ -246,6 +249,7 @@ class AudioStreamingNetworkRecoveryTest {
         var totalRead = 0
         try {
             while (totalRead < payloadSize) {
+                if (totalRead >= cutoffOffset) audioServer.markClientDrained(trackPath)
                 val n = source.read(receivedData, totalRead, payloadSize - totalRead)
                 if (n <= 0) break
                 totalRead += n
@@ -453,6 +457,10 @@ class AudioStreamingNetworkRecoveryTest {
      * - HTTP 206 Partial Content / Range header processing
      */
     private class ResilientAudioServer : AutoCloseable {
+        private companion object {
+            const val SEVER_GATE_TIMEOUT_MS = 10_000L
+        }
+
         private val serverSocket = ServerSocket(0)
         val port = serverSocket.localPort
         @Volatile private var running = true
@@ -467,6 +475,7 @@ class AudioStreamingNetworkRecoveryTest {
         private val requestedRanges = ConcurrentHashMap<String, CopyOnWriteArrayList<String>>()
         private val socketCutoffs = ConcurrentHashMap<String, Int>()
         private val outageDelays = ConcurrentHashMap<String, Long>()
+        private val severGates = ConcurrentHashMap<String, CountDownLatch>()
 
         init {
             val listenerThread = Thread({
@@ -492,12 +501,20 @@ class AudioStreamingNetworkRecoveryTest {
         }
 
         fun forceSocketCloseAfterBytes(path: String, byteCount: Int) {
+            severGates[path] = CountDownLatch(1)
             socketCutoffs[path] = byteCount
+        }
+
+        /** Tell the server the client has read every byte up to the cutoff, so the RST may be sent. */
+        fun markClientDrained(path: String) {
+            severGates[path]?.countDown()
         }
 
         fun clearSocketFault(path: String) {
             socketCutoffs.remove(path)
             socketCutoffs.remove(path.substringBefore('?'))
+            severGates.remove(path)
+            severGates.remove(path.substringBefore('?'))
             outageDelays.remove(path)
             outageDelays.remove(path.substringBefore('?'))
         }
@@ -551,6 +568,7 @@ class AudioStreamingNetworkRecoveryTest {
                     val payload = payloads[rawPath] ?: payloads[basePath] ?: ByteArray(64 * 1024)
                     val totalLen = payload.size.toLong()
                     val cutoff = socketCutoffs[rawPath] ?: socketCutoffs[basePath] ?: -1
+                    val severGate = severGates[rawPath] ?: severGates[basePath]
 
                     if (rangeHeader != null && rangeHeader.startsWith("bytes=", ignoreCase = true)) {
                         val rangeVal = rangeHeader.removePrefix("bytes=").trim()
@@ -571,7 +589,7 @@ class AudioStreamingNetworkRecoveryTest {
                             "Content-Length: $contentLen\r\n" +
                             "Connection: close\r\n\r\n"
                         output.write(header.toByteArray(Charsets.US_ASCII))
-                        writeBytesWithFault(s, output, payload, start.toInt(), contentLen.toInt(), cutoff)
+                        writeBytesWithFault(s, output, payload, start.toInt(), contentLen.toInt(), cutoff, severGate)
                         output.flush()
                     } else {
                         val header = "HTTP/1.1 200 OK\r\n" +
@@ -580,7 +598,7 @@ class AudioStreamingNetworkRecoveryTest {
                             "Content-Length: $totalLen\r\n" +
                             "Connection: close\r\n\r\n"
                         output.write(header.toByteArray(Charsets.US_ASCII))
-                        writeBytesWithFault(s, output, payload, 0, payload.size, cutoff)
+                        writeBytesWithFault(s, output, payload, 0, payload.size, cutoff, severGate)
                         output.flush()
                     }
                 }
@@ -589,15 +607,13 @@ class AudioStreamingNetworkRecoveryTest {
             }
         }
 
-        private fun writeBytesWithFault(socket: Socket, out: OutputStream, data: ByteArray, start: Int, length: Int, cutoff: Int) {
+        private fun writeBytesWithFault(socket: Socket, out: OutputStream, data: ByteArray, start: Int, length: Int, cutoff: Int, severGate: CountDownLatch?) {
             val chunkSize = 8192
             var written = 0
             while (written < length) {
                 val currentOffset = start + written
                 if (cutoff >= 0 && currentOffset >= cutoff) {
-                    try { Thread.sleep(100) } catch (_: InterruptedException) {}
-                    socket.setSoLinger(true, 0)
-                    socket.close()
+                    severAfterClientDrained(socket, out, severGate)
                     throw IOException("Simulated network socket abrupt disconnect at offset $currentOffset")
                 }
                 var toWrite = minOf(chunkSize, length - written)
@@ -610,12 +626,24 @@ class AudioStreamingNetworkRecoveryTest {
                     written += toWrite
                 }
                 if (cutoff >= 0 && (start + written) >= cutoff) {
-                    try { Thread.sleep(100) } catch (_: InterruptedException) {}
-                    socket.setSoLinger(true, 0)
-                    socket.close()
+                    severAfterClientDrained(socket, out, severGate)
                     throw IOException("Simulated network socket abrupt disconnect at offset ${start + written}")
                 }
             }
+        }
+
+        /**
+         * Sever the connection with a RST, but only after the test client reports it has consumed every
+         * byte sent so far (markClientDrained). A RST makes the OS drop bytes the client has not read
+         * yet, so a fixed sleep before the RST made the byte count the client saw depend on how fast it
+         * drained its socket (slow on a cold machine). A FIN instead would not do: the JDK client then
+         * sees a clean EOF rather than an IOException. The gate wait is bounded as a fallback.
+         */
+        private fun severAfterClientDrained(socket: Socket, out: OutputStream, severGate: CountDownLatch?) {
+            runCatching { out.flush() }
+            try { severGate?.await(SEVER_GATE_TIMEOUT_MS, TimeUnit.MILLISECONDS) } catch (_: InterruptedException) {}
+            runCatching { socket.setSoLinger(true, 0) }
+            runCatching { socket.close() }
         }
 
         override fun close() {
