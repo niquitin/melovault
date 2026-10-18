@@ -17,3 +17,10 @@ Mỗi phiên làm đúng 1 việc: tạo `docs/plans/<việc>.md` (mục tiêu, 
 - Nguyên nhân: server giả lập của test RST socket sau `sleep(100)` ở offset cắt; RST làm OS vứt byte client chưa đọc, nên số byte client nhận (`totalRead`, dòng 194) phụ thuộc tốc độ client (Tiny chạy lần đầu chậm hơn → < 128 KB). Tái hiện được trên Ni bằng cách cho client chờ 400 ms.
 - Sửa: server chờ cổng `CountDownLatch` (client gọi `markClientDrained` khi đã đọc hết byte trước điểm cắt; chờ tối đa 10 s) rồi mới RST. Không dùng FIN vì JDK client sẽ thấy EOF sạch thay vì IOException (cache tưởng bài chỉ dài 128 KB). Assertion giữ nguyên, không skip.
 - Kiểm: 5 lần liên tiếp Debug + 5 lần Release xanh (6/6 test) trên Ni và trên clone cô lập Tiny (ngay sau fast-forward, lần đầu); xanh cả khi cố ý làm client chậm 400 ms. Full suite Ni: 1.132 tests, 21 skipped, 0 failed ở cả hai biến thể.
+
+## 5. ~~Đổi kênh nhanh ở Hai khung + dòng "Các kênh chưa có nhạc (N)"~~ — ĐÃ LÀM ở Beta99 (18/10/2026, `edfe86f`)
+- Theo `docs/plans/doi-kenh-nhanh.md`, không đổi schema. Sony QA OK (Hai khung ngang). Chờ chủ dự án QA Y700 ngang và S25 ngang. Dòng "Các kênh chưa có nhạc" CHƯA kiểm trên thiết bị vì tài khoản Sony không có kênh 0 bài (29/29 kênh có bài) — nên thử ở máy nào có kênh 0 bài.
+- Ngoài phạm vi, còn lại nếu muốn: đổi kênh nhanh ở Điện thoại/Tablet dọc; ghim/đổi thứ tự kênh; ảnh đại diện kênh; số bài đã tải theo kênh.
+
+## 6. Chip Mixset theo thời lượng
+- Chip "Mixset" hiện chỉ lọc theo tên (từ khóa). Làm lọc theo thời lượng (bài dài) cần quyết định ngưỡng và có thể thêm truy vấn/chỉ mục → viết plan trước, có thể phải duyệt nếu đổi schema.
