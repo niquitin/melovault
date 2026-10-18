@@ -76,6 +76,7 @@ internal class MeloTabletScreen(
     private var quickRows: List<MeloScreenHost.SourceRow> = emptyList()
     private var quickOpenId: Long? = null
     private var quickShown = false
+    private var quickScrolledId: Long? = null
     private val miniArtHost = FrameLayout(context)
     private val miniTitle = c.text("Chọn một bài để phát", s.titleText, p.text, bold = true, maxLines = 1)
     private lateinit var miniPlay: TextView
@@ -349,13 +350,18 @@ internal class MeloTabletScreen(
                 quickAdapter.notifyDataSetChanged()
             }
             val index = MeloLibraryPolicy.quickSwitchIndex(rows, snap.selectedChatId)
-            if (index >= 0 && (!wasShown || selectionChanged)) {
+            // The channel list can arrive after the pane is shown (new screen after a rotation or font change).
+            if (index >= 0 && quickScrolledId != snap.selectedChatId) {
+                val force = !wasShown || quickScrolledId == null
+                quickScrolledId = snap.selectedChatId
                 quickList.post {
-                    if (!wasShown || index < quickList.firstVisiblePosition || index > quickList.lastVisiblePosition) {
+                    if (force || index < quickList.firstVisiblePosition || index > quickList.lastVisiblePosition) {
                         quickList.setSelectionFromTop(index, MeloLibraryPolicy.quickSwitchOffset(quickList.height, s.rowHeight))
                     }
                 }
             }
+        } else {
+            quickScrolledId = null
         }
         quickShown = show
         quickPane.visibility = if (show) View.VISIBLE else View.GONE

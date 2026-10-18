@@ -170,7 +170,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
             setPadding(s.screenMargin, 0, s.screenMargin, s.screenMargin)
         }
         column.addView(topBar(), matchWrap())
-        column.addView(artHost, LinearLayout.LayoutParams(0, 0).apply { gravity = Gravity.CENTER_HORIZONTAL })
+        column.addView(artHost, LinearLayout.LayoutParams(0, 0).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = s.gap })
         addPlayerBody(column)
         column.addView(c.spacer(s.gap * 3))
         column.addView(queueHeader(), matchWrap())
@@ -192,7 +192,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         val left = ScrollView(activity).apply { isFillViewport = true }
         val player = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         player.addView(topBar(), matchWrap())
-        player.addView(artHost, LinearLayout.LayoutParams(0, 0).apply { gravity = Gravity.CENTER_HORIZONTAL })
+        player.addView(artHost, LinearLayout.LayoutParams(0, 0).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = s.gap })
         addPlayerBody(player)
         left.addView(player)
         row.addView(left, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 45f).apply { marginEnd = s.screenMargin })
