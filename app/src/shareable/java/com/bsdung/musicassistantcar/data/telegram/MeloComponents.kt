@@ -358,6 +358,46 @@ internal class MeloComponents(
             if (onClick != null) setOnClickListener { onClick() }
         }
 
+    /**
+     * Library source card: round letter badge + name + "25.104 bài · đã tải 57". Selected = soft
+     * accent fill and accent border. The badge is a letter, not an emoji (emoji break on Android 12).
+     */
+    fun sourceCard(card: MeloSourceCardPolicy.Card, heightPx: Int, onClick: () -> Unit): View {
+        val badgeSize = (heightPx * 0.46f).toInt()
+        val badge = TextView(context).apply {
+            text = MeloSourceCardPolicy.badgeOf(card.kind)
+            gravity = Gravity.CENTER
+            setTextSize(TypedValue.COMPLEX_UNIT_PX, badgeSize * 0.5f)
+            setTextColor(palette.onAccent)
+            typeface = Typeface.DEFAULT_BOLD
+            includeFontPadding = false
+            background = pill(palette.accent)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        val labels = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(text(card.title, sizes.titleText, palette.text, bold = true))
+            addView(text(card.detail, sizes.secondaryText, palette.textSecondary).apply {
+                setPadding(0, sizes.gap / 2, 0, 0)
+            })
+        }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = heightPx
+            setPadding(sizes.gap * 2, sizes.gap, sizes.gap * 2, sizes.gap)
+            background = if (card.selected) roundedBackground(palette.accentSoft, stroke = palette.accent)
+            else roundedBackground(palette.surface, stroke = palette.border)
+            isClickable = true
+            isFocusable = true
+            contentDescription = card.contentDescription
+            addView(badge, LinearLayout.LayoutParams(badgeSize, badgeSize).apply { marginEnd = sizes.gap * 2 })
+            addView(labels, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            setOnClickListener { onClick() }
+        }
+    }
+
     /** Horizontally scrolling single-choice chip row. */
     fun chipRow(labels: List<String>, selectedIndex: Int, onSelect: ((Int) -> Unit)? = null): HorizontalScrollView {
         val strip = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }

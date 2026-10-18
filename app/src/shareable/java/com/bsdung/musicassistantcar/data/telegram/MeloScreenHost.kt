@@ -45,6 +45,8 @@ internal interface MeloScreenHost {
     fun syncSubtitle(): String?
     /** Offline groups found by the last scan, null while unknown. */
     fun downloadedCount(): Int?
+    /** Library-wide numbers per connected source; never narrowed by chip, channel or search. */
+    fun sourceSummaries(): List<MeloSourceCardPolicy.Source>
     fun hideZeroSources(): Boolean
     fun toggleHideZeroSources()
     fun rescan()

@@ -213,6 +213,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
     /** All channels (unfiltered by search / hide-zero) for the two-pane quick switch; main thread only. */
     private var meloChannelRows: List<MeloScreenHost.SourceRow> = emptyList()
     private var meloChannelsRequested = false
+    /** Whole-library song count (unfiltered `getSongCount`); null until the DB answered. Main thread. */
+    @Volatile private var telegramLibraryTotal: Int? = null
+    /** Offline groups of the last finished whole-library scan (no channel, search or playlist); memory only. */
+    private var downloadedLibraryTotal: Int? = null
     private var browseSources = false
     private var selectedChatId: Long? = null
     private val sourceNames = java.util.concurrent.ConcurrentHashMap<Long, String>()
@@ -3496,6 +3500,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     runOnUiThread {
                         if (cancelled()) return@runOnUiThread
                         offlineGroups = groups
+                        if (snapshot.finished && chat == null && query.isBlank() && !playlist) {
+                            downloadedLibraryTotal = groups.size
+                            scheduleMeloLibraryRefresh()
+                        }
                         snapshot.entries.forEach { cachedSongPaths[it.song.songKey] = it.path }
                         shownSongs = groups.take(offlineVisibleLimit).map { offlineRepresentative(it) }
                         totalCountForCurrentView = groups.size
@@ -3664,6 +3672,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     visibleSourceCounts = display
                     meloChannelRows = meloChannelRowsOf(distinctSources)
                     meloChannelsRequested = true
+                    if (db != null && userId > 0L) telegramLibraryTotal = totalCount
                     scheduleMeloLibraryRefresh()
 
                     if (currentSourceDisplayMode == TelegramVaultBentoPolicy.SourceDisplayMode.BENTO) {
@@ -4314,6 +4323,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
             syncSubtitleText()
 
         override fun downloadedCount(): Int? = offlineGroups.size.takeIf { offlineSummary != null }
+
+        override fun sourceSummaries(): List<MeloSourceCardPolicy.Source> =
+            listOf(MeloSourceCardPolicy.Source(MeloSourceCardPolicy.Kind.TELEGRAM, telegramLibraryTotal, downloadedLibraryTotal))
 
         override fun hideZeroSources(): Boolean = this@TelegramPreviewActivity.hideZeroSources
 
@@ -5136,6 +5148,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     sourceNames.clear()
                     meloChannelRows = emptyList()
                     meloChannelsRequested = false
+                    telegramLibraryTotal = null
+                    downloadedLibraryTotal = null
                     requestedSourceNames.clear()
                     sourcesAdapter.clear()
                     tracks.adapter = adapter
@@ -5415,6 +5429,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 if (!auth.isReady() || library.authorizedUser()?.value != userId || isDestroyed) return@runOnUiThread
                 meloChannelRows = meloChannelRowsOf(sources)
                 meloChannelsRequested = true
+                telegramLibraryTotal = count
+                scheduleMeloLibraryRefresh()
                 if (count > 0) {
                     totalCountForCurrentView = count
                     songs.clear()
@@ -5473,6 +5489,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val db = getOrInitDatabase(userId)
             val dbCount = db.getSongCount(userId)
             runOnUiThread {
+                if (!isDestroyed && library.authorizedUser()?.value == userId) {
+                    telegramLibraryTotal = dbCount
+                    scheduleMeloLibraryRefresh()
+                }
                 if (!isDestroyed && autoRecoveryPolicy.shouldAutoRecover(
                         auth.isReady(), allChatsMode, globalScanLoading, dbCount, userId
                     )) {
@@ -6022,6 +6042,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         sourceNames.clear()
         meloChannelRows = emptyList()
         meloChannelsRequested = false
+        telegramLibraryTotal = null
+        downloadedLibraryTotal = null
         requestedSourceNames.clear()
         openDocument.isEnabled = false
         logout.isEnabled = false

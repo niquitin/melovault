@@ -52,6 +52,14 @@ internal class MeloLibraryPane(
     private val header = LinearLayout(context)
     private val headerChips = LinearLayout(context)
     private var headerStacked = false
+    /** Source cards between the group title and the list; folds away with the owner's title row. */
+    private val sourceCardsHolder = HorizontalScrollView(context).apply {
+        isHorizontalScrollBarEnabled = false
+        visibility = View.GONE
+    }
+    private var sourceCards: List<MeloSourceCardPolicy.Card> = emptyList()
+    private var sourceCardsKey: String? = null
+    private var sourceRowVisible = false
     private val note = c.text("", s.secondaryText, p.textSecondary, maxLines = 2)
     private val list = ListView(context)
     private val listFrame = FrameLayout(context)
@@ -104,6 +112,12 @@ internal class MeloLibraryPane(
             addOnLayoutChangeListener { _, l, _, r, _, ol, _, or_, _ -> if (r - l != or_ - ol) post { fitHeader() } }
         }
         view.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        sourceCardsHolder.addOnLayoutChangeListener { _, l, _, r, _, ol, _, or_, _ ->
+            if (r - l != or_ - ol && sourceRowVisible) sourceCardsHolder.post { buildSourceCards() }
+        }
+        view.addView(sourceCardsHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = s.gap
+        })
         view.addView(note, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = s.gap / 2
         })
@@ -132,6 +146,7 @@ internal class MeloLibraryPane(
                     if (next != collapsed) {
                         collapsed = next
                         onHeaderCollapse(next)
+                        applySourceCardsVisibility()
                     }
                 }
             })
@@ -156,6 +171,7 @@ internal class MeloLibraryPane(
         if (collapsed) {
             collapsed = false
             onHeaderCollapse(false)
+            applySourceCardsVisibility()
         }
         lastScrollKey = 0
         pendingTopReset = true
@@ -173,6 +189,7 @@ internal class MeloLibraryPane(
         }
         searchField.hint = if (snap.showingSources) "Tìm nhóm, kênh hoặc bot…" else MeloComponentPolicy.searchHint(snap.total)
         renderChips(snap)
+        renderSourceCards(snap)
         header.post { fitHeader() }
         if (snap.showingSources) {
             groupTitle.text = "Telegram · ${MeloComponentPolicy.formatCount(snap.sources.count { it.chatId != 0L })} nguồn"
@@ -290,6 +307,46 @@ internal class MeloLibraryPane(
             isHorizontalScrollBarEnabled = false
             addView(strip)
         })
+    }
+
+    // ---- Source cards -------------------------------------------------------------------------
+
+    private fun renderSourceCards(snap: Snapshot) {
+        val selected = MeloSourceCardPolicy.selectedKind(snap.selectedChatId, snap.showingSources)
+        val cards = MeloSourceCardPolicy.cards(host.sourceSummaries(), selected)
+        sourceRowVisible = MeloSourceCardPolicy.rowVisible(
+            layer, snap.showingSources, snap.mode, context.resources.configuration.screenHeightDp, cards.size
+        )
+        applySourceCardsVisibility()
+        if (!sourceRowVisible) return
+        val key = cards.joinToString("|") { "${it.kind}:${it.detail}:${it.selected}" }
+        if (key == sourceCardsKey) return
+        sourceCardsKey = key
+        sourceCards = cards
+        buildSourceCards()
+    }
+
+    private fun applySourceCardsVisibility() {
+        sourceCardsHolder.visibility = if (sourceRowVisible && !collapsed) View.VISIBLE else View.GONE
+    }
+
+    /** Needs the pane width, so it also runs again once the holder has been laid out or resized. */
+    private fun buildSourceCards() {
+        val width = sourceCardsHolder.width
+        if (width <= 0 || sourceCards.isEmpty()) return
+        val density = context.resources.displayMetrics.density
+        val minCard = ((if (s.profile == MeloDesignTokens.Profile.TABLET) 240 else 200) * density).toInt()
+        val cardWidth = MeloSourceCardPolicy.cardWidthPx(width, sourceCards.size, minCard, s.gap)
+        val strip = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        sourceCards.forEachIndexed { i, card ->
+            strip.addView(c.sourceCard(card, (88 * density).toInt()) {
+                if (!card.selected && card.kind == MeloSourceCardPolicy.Kind.TELEGRAM) host.openSource(null)
+            }, LinearLayout.LayoutParams(cardWidth, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                if (i < sourceCards.size - 1) marginEnd = s.gap
+            })
+        }
+        sourceCardsHolder.removeAllViews()
+        sourceCardsHolder.addView(strip)
     }
 
     private fun onChip(chip: MeloLibraryPolicy.Chip) {
