@@ -38,14 +38,14 @@ Test mốc Beta99: mỗi biến thể 1.178 tests, 1.157 passed, 21 skipped (**[
 ## 6. Bug / rủi ro đang mở
 - **Test mạng flaky: ĐÃ SỬA** (commit `9597332`, chỉ đổi test; không nằm trong APK Beta95 vì không bump/build). Nguyên nhân: RST sau sleep 100 ms làm mất byte client chưa đọc; server test nay chờ client báo đã đọc xong rồi mới RST. 5 lần Debug + 5 lần Release xanh trên Ni và Tiny. Chi tiết: `docs/plans/BACKLOG.md` mục 4. Clone Tiny đã ff tới `9597332`.
 - **Chưa kiểm trên thiết bị thật [CẦN XÁC NHẬN]:** nút vật lý Shanling khi tắt màn; nút vô lăng FYT (xdpi firmware, bàn phím tiếng Việt, nhận giọng nói); tai nghe/đồng hồ BT; màn khoá S25 (Android 17, cần quyền thông báo); vuốt app khỏi recents; tự sang bài khi hết bài lúc tắt màn; tốc độ phân tích sóng âm và native heap khi quét offline trên Shanling 3GB; lưới 3 cột Hai khung trên Y700; IME ngang, fontScale > 1.
-- Studio Deck: núm thanh tua tròn ở vị trí 0 bị cắt nửa khi chưa có sóng âm (nhỏ).
+- **QA Y700 ngang b99 (chủ dự án, 18/10/2026): 5 lỗi → kế hoạch `docs/plans/sua-bo-cuc-y700.md`.** (1) Kênh "Kênh Nhạc Sưu Tầm Những Năm Về Trước" (761 bài, mỗi tệp ~580 MB) bấm bài không phản ứng trên Y700; Sony KHÔNG tái hiện (phát được ở dọc, Hai khung, sau đổi kênh nhanh); chắc chắn: mọi thông báo/lỗi của đường phát chỉ ghi vào dòng `status` của giao diện cũ (bị lớp Melo che) và không có log → nguyên nhân gốc [CẦN XÁC NHẬN] bằng log Y700. (2) Cột trái Đang phát/khung trình phát tràn (Sony ngang tái hiện). (3) Núm tua ở 0 bị cắt nửa (Sony tái hiện). (4) Dòng bài đầu bị cắt khi mở kênh, (5) tên kênh dài chồng "Mới nhất/Phát hết": Sony chưa tái hiện [CẦN XÁC NHẬN]. Phụ: nút ⋮ trên dòng bài màn mới phát bài thay vì mở menu.
 - Tìm không dấu: ĐÃ LÀM ở Beta96; A–Z: ĐÃ LÀM ở Beta97 (xem mục 5, còn các mục [CẦN XÁC NHẬN] ở đó).
 - Thiếu so với đặc tả bước 7: chip Mixset theo thời lượng (đổi kênh nhanh + dòng "Các kênh chưa có nhạc" đã làm ở Beta99).
 - Sự cố đã biết khi test Sony: BACK thừa thoát app làm cú bấm sau rơi vào launcher Sony; script phải kiểm app ở tiền cảnh trước mỗi bước.
 - Release ký bằng debug key; 21 test skipped; chưa kiểm đa tài khoản end-to-end; chưa sẵn sàng public/FYT.
 
 ## 7. Việc tiếp theo
-Xem `docs/plans/BACKLOG.md` (EQ, chip Mixset). Đổi kênh nhanh + kênh chưa có nhạc đã làm (Beta99), chờ chủ dự án QA Y700/S25 ngang. A–Z đã làm (Beta97), đang chờ chủ dự án QA Y700/S25. Đăng nhập theo bước đã làm (Beta98), chờ chủ dự án thử trên M3. Mỗi phiên làm đúng một việc theo `docs/plans/<việc>.md`. Theme 04 và FYT chỉ làm khi chủ dự án giao; Drive/OneDrive là workstream riêng.
+**Việc kế tiếp: thực hiện `docs/plans/sua-bo-cuc-y700.md`** (5 lỗi QA Y700 b99, bản dự kiến b100 / `0.6.79-beta`). Sau đó xem `docs/plans/BACKLOG.md` (EQ, chip Mixset). Đổi kênh nhanh + kênh chưa có nhạc đã làm (Beta99), chờ chủ dự án QA Y700/S25 ngang. A–Z đã làm (Beta97), đang chờ chủ dự án QA Y700/S25. Đăng nhập theo bước đã làm (Beta98), chờ chủ dự án thử trên M3. Mỗi phiên làm đúng một việc theo `docs/plans/<việc>.md`. Theme 04 và FYT chỉ làm khi chủ dự án giao; Drive/OneDrive là workstream riêng.
 - Tìm không dấu: đã thực hiện (Beta96). Chủ dự án đã QA Y700: OK (18/10/2026). Nếu sau này tìm chậm thì thêm debounce 200 ms (ngoài phạm vi phiên này).
 
 ## 8. Nguồn tài liệu
