@@ -5838,7 +5838,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         nowPlayingTitle.text = song.title
         showMessage("Đang kiểm tra tệp Telegram: ${song.title}…")
         setPlayFeedback(TelegramPlayFeedbackPolicy.Stage.RESOLVING, song.messageId, TelegramPlayFeedbackPolicy.RESOLVING_TEXT)
-        android.util.Log.i("MeloVaultPlay", "stage=resolve chat=$effectiveChatId msg=$rawMsgId")
+        android.util.Log.w("MeloVaultPlay", "stage=resolve chat=$effectiveChatId msg=$rawMsgId")
 
         resolveTelegramMessage(effectiveChatId, rawMsgId) { result ->
             if (!auth.isReady() || isDestroyed) return@resolveTelegramMessage
@@ -5851,7 +5851,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
                 is TelegramAudioResolverPolicy.Result.Resolved -> {
                     val freshId = result.freshFileId
-                    android.util.Log.i("MeloVaultPlay",
+                    android.util.Log.w("MeloVaultPlay",
                         "stage=parsed chat=$effectiveChatId msg=$rawMsgId size=${result.size} completed=${result.isDownloadingCompleted}")
                     val resolvedSong = song.copy(
                         fileId = freshId,
@@ -5903,13 +5903,17 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         nowPlayingTitle.text = song.title
                         showMessage("Đang đệm nhạc qua Telegram: ${song.title}")
                         setPlayFeedback(TelegramPlayFeedbackPolicy.Stage.BUFFERING, song.messageId, TelegramPlayFeedbackPolicy.BUFFERING_TEXT)
-                        android.util.Log.i("MeloVaultPlay", "stage=begin chat=$effectiveChatId msg=$rawMsgId size=${resolvedSong.expectedSize}")
+                        android.util.Log.w("MeloVaultPlay", "stage=begin chat=$effectiveChatId msg=$rawMsgId size=${resolvedSong.expectedSize}")
                         mainHandler.postDelayed({
                             if (!isDestroyed && downloadWaiting == freshId) {
-                                android.util.Log.i("MeloVaultPlay",
-                                    "stage=download_10s msg=$rawMsgId ready=${TelegramProgressiveCache.readyBytes(freshId)} total=${TelegramProgressiveCache.totalBytes(freshId)}")
+                                val ready = TelegramProgressiveCache.readyBytes(freshId)
+                                android.util.Log.w("MeloVaultPlay",
+                                    "stage=download_stall_check msg=$rawMsgId ready=$ready total=${TelegramProgressiveCache.totalBytes(freshId)}")
+                                if (TelegramPlayFeedbackPolicy.stalled(ready) && meloLayer != null && !isFinishing) {
+                                    android.widget.Toast.makeText(this, TelegramPlayFeedbackPolicy.STALL_TEXT, android.widget.Toast.LENGTH_LONG).show()
+                                }
                             }
-                        }, 10_000L)
+                        }, TelegramPlayFeedbackPolicy.STALL_SECONDS * 1000L)
                         enqueueProgressivePlayback(resolvedSong)
                         try {
                             send("downloadFile", "download:$freshId") {

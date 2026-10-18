@@ -55,6 +55,14 @@ class TelegramPlayFeedbackPolicyTest {
     }
 
     @Test
+    fun stallMessageAppearsOnlyWhenNoBytesArrived() {
+        assertTrue(TelegramPlayFeedbackPolicy.stalled(0L))
+        assertTrue(TelegramPlayFeedbackPolicy.stalled(-1L))
+        assertFalse(TelegramPlayFeedbackPolicy.stalled(1L))
+        assertTrue(TelegramPlayFeedbackPolicy.STALL_TEXT.contains("15 giây"))
+    }
+
+    @Test
     fun downloadErrorSentence() {
         assertEquals("Không tải được bài này (mã 406)", TelegramPlayFeedbackPolicy.downloadErrorText(406))
         assertEquals("Không tải được bài này", TelegramPlayFeedbackPolicy.downloadErrorText(null))

@@ -24,6 +24,12 @@ internal object TelegramPlayFeedbackPolicy {
     const val CACHE_MESSAGE = "Không tạo được bộ đệm nhạc của tài khoản Telegram."
     const val DOWNLOAD_START_MESSAGE = "Không thể tải bài này."
 
+    /** The file was found but Telegram sent no audio bytes this long after the download started. */
+    const val STALL_SECONDS = 15
+    const val STALL_TEXT = "Telegram chưa gửi dữ liệu nhạc sau $STALL_SECONDS giây. Kiểm tra mạng hoặc thử lại sau."
+
+    fun stalled(readyBytes: Long): Boolean = readyBytes <= 0L
+
     /** The row of the song being opened shows "Đang mở…" only until it becomes the playing song. */
     fun opening(status: PlayStatus?, rowSongKey: Long, rowIsPlaying: Boolean): Boolean =
         status != null && !rowIsPlaying && status.songKey == rowSongKey
