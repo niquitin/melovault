@@ -127,6 +127,20 @@ class MeloUiLabActivity : AppCompatActivity() {
             "Mở màn này trên S25 Ultra và Y700 (cầm dọc và ngang), bấm \"Sao chép số đo\" rồi gửi lại để chốt ngưỡng bố cục."
         ))
 
+        content.addView(components.sectionTitle("Thư viện"))
+        content.addView(note(
+            "Mới: Điện thoại dọc (S25), Tablet dọc và Hai khung ngang (Y700) theo đặc tả — đầu trang gọn, chip lọc, " +
+                "\"Phát hết\", lưới kênh Telegram. Chọn \"Cũ\" để quay về Cockpit / Portrait trước đây. " +
+                "Bản Gọn và Car Mode giữ màn riêng."
+        ))
+        val libraryStyle = MeloLibraryPolicy.loadStyle(prefs)
+        MeloLibraryPolicy.LibraryStyle.entries.forEach { style ->
+            content.addView(choiceRow(style.displayName, style == libraryStyle) {
+                MeloLibraryPolicy.saveStyle(prefs, style)
+                render()
+            })
+        }
+
         content.addView(components.sectionTitle("Màn Đang phát"))
         content.addView(note(
             "Studio Deck: ảnh bìa lớn, sóng âm thật của bài đã tải để tua, −30s / +60s, hẹn giờ tắt, " +

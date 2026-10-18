@@ -252,6 +252,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var outerRoot: FrameLayout
     private var compactScreen: MeloCompactScreen? = null
     private var carScreen: MeloCarScreen? = null
+    private var phoneScreen: MeloPhoneScreen? = null
+    private var tabletScreen: MeloTabletScreen? = null
     private var meloLayer: View? = null
     private var meloLayerKey: String? = null
     private var carPromptShown = false
@@ -743,6 +745,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
         mainRoot.setPadding(computed.left, computed.top, computed.right, computed.bottom)
     }
 
+    private fun syncSubtitleText(): String? =
+        if (::syncSubtitle.isInitialized) syncSubtitle.text?.toString()?.takeIf { it.isNotBlank() } else null
+
     private fun updateSyncHeaderSubtitle() {
         if (!::syncSubtitle.isInitialized) return
         if (filterOnlyDownloaded && offlineSummary != null && !(allChatsMode && browseSources && !playlistMode)) {
@@ -768,6 +773,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             selectedSourceTitle = selectedChatId?.let { sourceNames[it] }
         )
         syncSubtitle.text = text
+        scheduleMeloLibraryRefresh()
     }
 
     private fun bindSongThumbnail(
@@ -3747,7 +3753,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun applyMeloLayer() {
         if (!::outerRoot.isInitialized || !::mainRoot.isInitialized || isDestroyed) return
         val prefs = getSharedPreferences(MeloScreenPolicy.PREFS_NAME, Context.MODE_PRIVATE)
-        val display = MeloUiLabActivity.realMeasurements(this).display
+        val measured = MeloUiLabActivity.realMeasurements(this)
+        val display = measured.display
         val carSetting = MeloCarPolicy.loadSetting(prefs)
         if (MeloCarPolicy.shouldUseCar(carSetting, auth.isReady())) {
             showCarLayer(carSetting, display)
@@ -3757,7 +3764,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val setting = MeloCompactPolicy.loadSetting(prefs)
         val wanted = MeloCompactPolicy.shouldUseCompact(setting, display.widthDp, display.heightDp, auth.isReady())
         if (!wanted) {
-            detachMeloLayer()
+            showNewLayer(prefs, measured)
             return
         }
         val key = "compact:${setting.key}:${display.widthPx}x${display.heightPx}:${display.densityDpi}:${display.fontScale}"
@@ -3800,6 +3807,56 @@ class TelegramPreviewActivity : AppCompatActivity() {
         ViewCompat.requestApplyInsets(layer)
     }
 
+    /**
+     * Điện thoại dọc / Tablet dọc / Hai khung (ui-spec step 7) over the legacy tree, chosen from
+     * the current window size; null result (legacy style, Gọn, not signed in) removes the layer.
+     */
+    private fun showNewLayer(prefs: android.content.SharedPreferences, measured: MeloUiLabActivity.Measurements) {
+        val display = measured.display
+        val layout = MeloScreenPolicy.chooseLayout(measured.windowWidthDp, measured.windowHeightDp, carMode = false)
+        val layer = MeloLibraryPolicy.newLayer(MeloLibraryPolicy.loadStyle(prefs), layout, auth.isReady())
+        if (layer == null) {
+            detachMeloLayer()
+            return
+        }
+        val key = "new:$layer:${measured.windowWidthPx}x${measured.windowHeightPx}:${display.densityDpi}:${display.fontScale}"
+        if ((phoneScreen != null || tabletScreen != null) && meloLayerKey == key) {
+            scheduleMeloLibraryRefresh()
+            return
+        }
+        detachMeloLayer()
+        val sizes = MeloDesignTokens.sizes(
+            MeloLibraryPolicy.profileFor(measured.smallestWidthDp), display.density, display.fontScale, display.physicalPpi)
+        val view: View
+        if (layer == MeloLibraryPolicy.NewLayer.TWO_PANE) {
+            val screen = MeloTabletScreen(this, sizes, meloHost, onBackPressedDispatcher)
+            tabletScreen = screen
+            view = screen.view
+            installLayerInsets(view)
+            addMeloLayer(view, key)
+            screen.attach()
+        } else {
+            val screen = MeloPhoneScreen(this, sizes, layer, meloHost, onBackPressedDispatcher)
+            phoneScreen = screen
+            view = screen.view
+            installLayerInsets(view)
+            addMeloLayer(view, key)
+            screen.attach()
+        }
+        ViewCompat.requestApplyInsets(view)
+    }
+
+    /** System bars and keyboard are added to the screen's own padding instead of replacing it. */
+    private fun installLayerInsets(view: View) {
+        val base = intArrayOf(view.paddingLeft, view.paddingTop, view.paddingRight, view.paddingBottom)
+        ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            v.setPadding(base[0] + bars.left, base[1] + bars.top, base[2] + bars.right, base[3] + maxOf(bars.bottom, ime.bottom))
+            insets
+        }
+    }
+
     /** Car Mode at the panel's real pixels, full screen; emulated FYT frames for testing on a tablet. */
     private fun showCarLayer(setting: MeloCarPolicy.CarSetting, display: MeloScreenPolicy.DisplaySpec) {
         val key = "car:${setting.key}:${display.widthPx}x${display.heightPx}:${display.densityDpi}"
@@ -3840,9 +3897,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val wasCar = carScreen != null
         compactScreen?.detach()
         carScreen?.detach()
+        phoneScreen?.detach()
+        tabletScreen?.detach()
         meloLayer?.let { if (::outerRoot.isInitialized) outerRoot.removeView(it) }
         compactScreen = null
         carScreen = null
+        phoneScreen = null
+        tabletScreen = null
         meloLayer = null
         meloLayerKey = null
         if (wasCar) setCarFullscreen(false)
@@ -3884,13 +3945,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun scheduleMeloLibraryRefresh() {
-        if ((compactScreen == null && carScreen == null) || compactRefreshPosted || !::mainRoot.isInitialized) return
+        if ((compactScreen == null && carScreen == null && phoneScreen == null && tabletScreen == null) || compactRefreshPosted || !::mainRoot.isInitialized) return
         compactRefreshPosted = true
         mainRoot.post {
             compactRefreshPosted = false
             if (!isDestroyed) {
                 compactScreen?.onLibraryChanged()
                 carScreen?.onLibraryChanged()
+                phoneScreen?.onLibraryChanged()
+                tabletScreen?.onLibraryChanged()
             }
         }
     }
@@ -3898,6 +3961,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun notifyMeloPlayback() {
         compactScreen?.onPlaybackChanged()
         carScreen?.onPlaybackChanged()
+        phoneScreen?.onPlaybackChanged()
+        tabletScreen?.onPlaybackChanged()
     }
 
     private fun songIsDownloaded(song: Song): Boolean {
@@ -4092,6 +4157,36 @@ class TelegramPreviewActivity : AppCompatActivity() {
             return runCatching { voiceSearchResult.launch(voiceSearchIntent()) }
                 .onFailure { voiceSearchCallback = null }
                 .isSuccess
+        }
+
+        override fun playAll(shuffle: Boolean) {
+            if (shownSongs.isEmpty()) return
+            // Same path as tapping the first row: the queue is the list on screen.
+            if (shuffle) player?.shuffleModeEnabled = true
+            playShownSong(0)
+        }
+
+        override fun openNowPlaying() = showFullPlayer()
+
+        override fun syncSubtitle(): String? =
+            syncSubtitleText()
+
+        override fun downloadedCount(): Int? = offlineGroups.size.takeIf { offlineSummary != null }
+
+        override fun hideZeroSources(): Boolean = this@TelegramPreviewActivity.hideZeroSources
+
+        override fun toggleHideZeroSources() {
+            hideZeroSources = !hideZeroSources
+            val prefs = getSharedPreferences(UiThemePolicy.PREFS_NAME, Context.MODE_PRIVATE)
+            TelegramVaultBentoPolicy.saveHideZeroSources(prefs, hideZeroSources)
+            updateHideZeroSourcesToggleUi()
+            refreshSongRows()
+        }
+
+        override fun rescan() {
+            if (!auth.isReady()) return
+            autoRecoveryPolicy.onManualScanRequested()
+            scanAllTelegramAudio(browseAfter = false, incremental = true)
         }
 
         override fun queue(): List<MeloScreenHost.QueueItem> {
