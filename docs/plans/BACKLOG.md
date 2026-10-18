@@ -5,6 +5,7 @@ Mỗi phiên làm đúng 1 việc: tạo `docs/plans/<việc>.md` (mục tiêu, 
 ## 1. Thanh A–Z (Thư viện)
 - Thiếu so với đặc tả bước 7. Cần sắp theo tên trong DB (có thể đụng truy vấn/chỉ mục, hỏi duyệt nếu đổi schema), rồi thanh chữ cái trong `MeloLibraryPane` (Điện thoại/Tablet; Car không có A–Z).
 - Chưa kiểm được lưới 3 cột Hai khung trên Y700 thật.
+- Kế hoạch `docs/plans/a-z.md` (18/10/2026): nút Sắp xếp Mới nhất / Tên A–Z (mặc định Mới nhất), xếp theo cột `search_key` có sẵn, không đổi schema; Điện thoại + Tablet. Chưa làm.
 
 ## 2. EQ
 - Nút EQ ở Studio Deck hiện ghi "Sắp có". Cần quyết định phạm vi (EQ ExoPlayer/AudioEffect, bit-perfect, DSP FYT) trước khi code. Không đổi ExoPlayer/MediaSession khi chưa có plan.
