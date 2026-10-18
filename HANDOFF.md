@@ -14,7 +14,7 @@
 
 Kotlin/JVM 17, Gradle 8.13, AGP 8.13.0, Kotlin 2.2.10, compileSdk/targetSdk 36, minSdk 26, một module `:app`. Android Views/AppCompat (không Compose). Media3 1.11.1, WorkManager 2.9.1, SQLite DAO tự viết, TDLib JNI/JSON (revision binary **[CẦN XÁC NHẬN]**), JUnit4.
 
-Test mốc Beta95: mỗi biến thể 1.132 tests, 1.111 passed, 21 skipped (**[CẦN XÁC NHẬN]** lý do), 0 failed. Release ký bằng chữ ký Preview cũ (debug config), signer SHA-256 `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8`.
+Test mốc Beta96: mỗi biến thể 1.145 tests, 1.124 passed, 21 skipped (**[CẦN XÁC NHẬN]** lý do), 0 failed. Release ký bằng chữ ký Preview cũ (debug config), signer SHA-256 `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8`.
 
 ## 3. Kiến trúc
 - Code Shareable: `app/src/shareable/java/com/bsdung/musicassistantcar/data/telegram/`; test JVM `app/src/test/java/.../data/telegram/`.
@@ -28,7 +28,8 @@ Test mốc Beta95: mỗi biến thể 1.132 tests, 1.111 passed, 21 skipped (**[
 1. Shareable/Personal tách package + backend. 2. TDLib user client, không Bot API. 3. getMe + epoch + file theo tài khoản. 4. Khóa (account, chat, message), fileId theo phiên. 5. SQLite + checkpoint + paging. 6. Media3 + TDLib progressive DataSource. 7. Không dedup phá hủy. 8. Theme mặc định Portrait Edge-to-Edge Pro #3DDC97; Theme 02 Cockpit, Theme 03 Bento đã chốt (Beta86). 9. WindowInsets một lần, đo khung thật. 10. Ni code, Tiny QA qua bundle có SHA256. 11. Gate: test JVM → commit → bundle → Tiny build → verify signer → Sony QA → Drive riêng → chủ dự án QA Y700. 12. Y700 không đo thêm; S25 Ultra (384×832dp) dọc = Điện thoại, ngang ≥600dp luôn Hai khung. 13. Hai APK cùng vc86 chỉ phân biệt bằng SHA256 → mọi bản sau bump versionCode.
 
 ## 5. Bản mới nhất
-**Beta95** = bản mới nhất trên Drive: commit `9c2c521`, vc95 / `0.6.74-beta`, SHA256 `8C07116077287F63FA43F4FD88C44A1FE203A05AE3561DBE34BA3797D888E0AF`, signer `eecd3df7…ce8`; Drive `H:\My Drive\MeloVault-Owner-Beta-v0.6.74-b95-Y700-REVIEW` (b94 bị thay thế, không dùng). HEAD Ni sau đó chỉ thêm commit docs (`77121c7`). Sony đã QA bước 8: Bài kế khi tắt màn với bài streaming chạy trong 8 s. Beta86 (vc86, SHA256 `B5F9C261…523F`) là bản đã chốt và là rollback; hạ version có thể bị Android đòi gỡ app → KHÔNG gỡ, hỏi chủ dự án.
+**Beta96** = bản mới nhất trên Drive: commit `858ab12`, vc96 / `0.6.75-beta`, SHA256 `895DDAE752229B871AF9B4492ACC91E8A3343002E09693689FDF492B1C524623`, signer `eecd3df7…ce8` (đã kiểm), Drive `H:My DriveMeloVault-Owner-Beta-v0.6.75-b96-Y700-REVIEW`. Tính năng: **tìm không dấu** (DB v1→v2, cột `search_key`). Test Ni và Tiny: mỗi biến thể 1.145 tests, 21 skipped, 0 failed. Đo trên Ni (JDBC, 28.000 bài tổng hợp): điền lại 194 ms, tìm tối đa 21 ms. **Sony đã cài đè b95→b96** (không gỡ/xóa dữ liệu): 25.093→25.102 bài là do đồng bộ thêm, không mất; tìm "nhac nuoc" ra 149 bài, đảo thứ tự ra 149, "vanhjb" ra 1, "lu lan" ra 16 (đã khớp tên file/kênh không dấu), từ lạ ra 0; mở lại app vẫn đúng, chip Chillout ra 372 bài, không ANR/crash. **Chưa kiểm [CẦN XÁC NHẬN]:** gõ có dấu (adb không gõ được Unicode), tìm theo tên ca sĩ, chế độ Playlist/một nguồn/màn Melo điện thoại, thời gian nâng cấp lần đầu (dòng log `MeloVaultDb` không thấy trong logcat dù cột `search_key` đã hoạt động; chưa rõ vì sao), Y700 với ~28.000 bài. Hạ phiên bản: Android không cho cài versionCode thấp đè lên nên không viết `onDowngrade`. Bản cũ nhất bên dưới là lịch sử.
+**Beta95** (bản trước): commit `9c2c521`, vc95 / `0.6.74-beta`, SHA256 `8C07116077287F63FA43F4FD88C44A1FE203A05AE3561DBE34BA3797D888E0AF`, signer `eecd3df7…ce8`; Drive `H:\My Drive\MeloVault-Owner-Beta-v0.6.74-b95-Y700-REVIEW` (b94 bị thay thế, không dùng). HEAD Ni sau đó chỉ thêm commit docs (`77121c7`). Sony đã QA bước 8: Bài kế khi tắt màn với bài streaming chạy trong 8 s. Beta86 (vc86, SHA256 `B5F9C261…523F`) là bản đã chốt và là rollback; hạ version có thể bị Android đòi gỡ app → KHÔNG gỡ, hỏi chủ dự án.
 
 Đặc tả `docs/ui-spec.md` 8 bước đã hoàn tất về code.
 
@@ -36,14 +37,14 @@ Test mốc Beta95: mỗi biến thể 1.132 tests, 1.111 passed, 21 skipped (**[
 - **Test mạng flaky: ĐÃ SỬA** (commit `9597332`, chỉ đổi test; không nằm trong APK Beta95 vì không bump/build). Nguyên nhân: RST sau sleep 100 ms làm mất byte client chưa đọc; server test nay chờ client báo đã đọc xong rồi mới RST. 5 lần Debug + 5 lần Release xanh trên Ni và Tiny. Chi tiết: `docs/plans/BACKLOG.md` mục 4. Clone Tiny đã ff tới `9597332`.
 - **Chưa kiểm trên thiết bị thật [CẦN XÁC NHẬN]:** nút vật lý Shanling khi tắt màn; nút vô lăng FYT (xdpi firmware, bàn phím tiếng Việt, nhận giọng nói); tai nghe/đồng hồ BT; màn khoá S25 (Android 17, cần quyền thông báo); vuốt app khỏi recents; tự sang bài khi hết bài lúc tắt màn; tốc độ phân tích sóng âm và native heap khi quét offline trên Shanling 3GB; lưới 3 cột Hai khung trên Y700; IME ngang, fontScale > 1.
 - Studio Deck: núm thanh tua tròn ở vị trí 0 bị cắt nửa khi chưa có sóng âm (nhỏ).
-- Tìm kiếm phân biệt dấu (DB dùng `LIKE`): "su thanh hoa" không ra "Sử Thanh Hóa".
+- Tìm không dấu: ĐÃ LÀM ở Beta96 (xem mục 5); còn các mục [CẦN XÁC NHẬN] ở đó.
 - Thiếu so với đặc tả bước 7: A–Z, đổi kênh nhanh ở khung trái Hai khung, dòng "Các kênh chưa có nhạc (N)", chip Mixset theo thời lượng.
 - Sự cố đã biết khi test Sony: BACK thừa thoát app làm cú bấm sau rơi vào launcher Sony; script phải kiểm app ở tiền cảnh trước mỗi bước.
 - Release ký bằng debug key; 21 test skipped; chưa kiểm đa tài khoản end-to-end; chưa sẵn sàng public/FYT.
 
 ## 7. Việc tiếp theo
 Xem `docs/plans/BACKLOG.md` (A–Z, EQ, tìm không dấu). Mỗi phiên làm đúng một việc theo `docs/plans/<việc>.md`. Theme 04 và FYT chỉ làm khi chủ dự án giao; Drive/OneDrive là workstream riêng.
-- Tìm không dấu: kế hoạch `docs/plans/tim-khong-dau.md` (18/10/2026) — thêm cột `search_key`, DB v1→v2 bằng `ALTER TABLE ADD COLUMN` + điền lại trong giao dịch `onUpgrade`, không mất dữ liệu. **Chờ chủ dự án duyệt đổi schema** trước khi thực hiện.
+- Tìm không dấu: đã thực hiện (Beta96). Việc kế tiếp: chủ dự án QA Y700; nếu tìm chậm thì thêm debounce 200 ms (ngoài phạm vi phiên này).
 
 ## 8. Nguồn tài liệu
 Ưu tiên: Git + source > test XML/build vừa chạy > QA thiết bị có artifact > HANDOFF này > `docs/history/` và các tài liệu E9/E91 ở thư mục gốc (chỉ là lịch sử). Báo cáo QA từng bản nằm trên Tiny dưới `C:\Bots\_qa_temp\` (ảnh chứa tên bài riêng tư, chỉ giữ local); handoff cũ ở `D:\Bots\_handoff\MeloVault\`.
