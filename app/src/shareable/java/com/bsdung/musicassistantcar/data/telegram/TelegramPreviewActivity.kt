@@ -210,6 +210,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var visibleSourceIds: List<Long> = emptyList()
     /** Same rows as [visibleSourceIds] with their counts, for the Gọn layout's Telegram page. */
     private var visibleSourceCounts: List<Pair<Long, Int>> = emptyList()
+    /** All channels (unfiltered by search / hide-zero) for the two-pane quick switch; main thread only. */
+    private var meloChannelRows: List<MeloScreenHost.SourceRow> = emptyList()
+    private var meloChannelsRequested = false
     private var browseSources = false
     private var selectedChatId: Long? = null
     private val sourceNames = java.util.concurrent.ConcurrentHashMap<Long, String>()
@@ -3656,6 +3659,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     }
                     visibleSourceIds = display.map { it.first }
                     visibleSourceCounts = display
+                    meloChannelRows = meloChannelRowsOf(distinctSources)
+                    meloChannelsRequested = true
                     scheduleMeloLibraryRefresh()
 
                     if (currentSourceDisplayMode == TelegramVaultBentoPolicy.SourceDisplayMode.BENTO) {
@@ -4022,6 +4027,30 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun sourceTitleOf(chatId: Long): String = sourceNames[chatId] ?: "Nguồn Telegram $chatId"
 
+    /** Merged by chat, most songs first, without the "all sources" entry. Main thread (reads [sourceNames]). */
+    private fun meloChannelRowsOf(sources: List<IndexedTelegramSource>): List<MeloScreenHost.SourceRow> =
+        TelegramVaultBentoPolicy.distinctSourcesByChatId(sources)
+            .filter { it.chatId != 0L }
+            .map { MeloScreenHost.SourceRow(it.chatId, sourceTitleOf(it.chatId), it.trackCount) }
+
+    /** One-time background load of the channel list when a screen asks before any list was built. */
+    private fun requestMeloChannels() {
+        if (meloChannelsRequested) return
+        val userId = library.authorizedUser()?.value ?: return
+        val db = libraryDb ?: return
+        if (userId <= 0L) return
+        meloChannelsRequested = true
+        executeOnDb {
+            val sources = db.getSources(userId)
+            for (src in sources) sourceNames[src.chatId] = src.title
+            runOnUiThread {
+                if (isDestroyed || library.authorizedUser()?.value != userId) return@runOnUiThread
+                meloChannelRows = meloChannelRowsOf(sources)
+                scheduleMeloLibraryRefresh()
+            }
+        }
+    }
+
     /** Same row action as the legacy list: grouped offline copies open the chooser. */
     private fun playShownSong(index: Int) {
         val group = offlineGroups.getOrNull(index).takeIf { filterOnlyDownloaded }
@@ -4078,8 +4107,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 query = songFilter.text?.toString().orEmpty(),
                 note = offlineSummary.takeIf { filterOnlyDownloaded && !showingSources },
                 sort = sort,
-                letterFloor = letterFloor.takeIf { sort == SongSort.NAME }
+                letterFloor = letterFloor.takeIf { sort == SongSort.NAME },
+                selectedChatId = selectedChatId.takeIf { allChatsMode && !playlistMode }
             )
+        }
+
+        override fun channels(): List<MeloScreenHost.SourceRow> {
+            if (meloChannelRows.isEmpty()) requestMeloChannels()
+            return meloChannelRows
         }
 
         override fun sort(): SongSort = activeSort()
@@ -5026,6 +5061,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     globalSearch.isEnabled = false
                     sourcesButton.isEnabled = false
                     sourceNames.clear()
+                    meloChannelRows = emptyList()
+                    meloChannelsRequested = false
                     requestedSourceNames.clear()
                     sourcesAdapter.clear()
                     tracks.adapter = adapter
@@ -5303,6 +5340,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val initialSongs = if (count > 0) db.getSongs(userId, offset = 0, limit = 200) else emptyList()
             runOnUiThread {
                 if (!auth.isReady() || library.authorizedUser()?.value != userId || isDestroyed) return@runOnUiThread
+                meloChannelRows = meloChannelRowsOf(sources)
+                meloChannelsRequested = true
                 if (count > 0) {
                     totalCountForCurrentView = count
                     songs.clear()
@@ -5342,7 +5381,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 sourceNames[src.chatId] = src.title
             }
             runOnUiThread {
-                if (allChatsMode && browseSources && !isDestroyed) {
+                if (isDestroyed) return@runOnUiThread
+                if (library.authorizedUser()?.value == userId) {
+                    meloChannelRows = meloChannelRowsOf(sources)
+                    meloChannelsRequested = true
+                    scheduleMeloLibraryRefresh()
+                }
+                if (allChatsMode && browseSources) {
                     refreshSongRows()
                 }
             }
@@ -5880,6 +5925,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         globalSearch.isEnabled = false
         sourcesButton.isEnabled = false
         sourceNames.clear()
+        meloChannelRows = emptyList()
+        meloChannelsRequested = false
         requestedSourceNames.clear()
         openDocument.isEnabled = false
         logout.isEnabled = false

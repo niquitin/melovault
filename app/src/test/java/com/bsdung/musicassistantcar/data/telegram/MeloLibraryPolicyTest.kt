@@ -111,4 +111,51 @@ class MeloLibraryPolicyTest {
         assertTrue(MeloLibraryPolicy.playAllEnabled(1))
         assertFalse(MeloLibraryPolicy.playAllEnabled(0))
     }
+
+    private fun src(id: Long, count: Int) = MeloScreenHost.SourceRow(id, "K$id", count)
+
+    @Test
+    fun splitSourcesSeparatesEmptyChannelsAndDropsAllEntry() {
+        val (full, empty) = MeloLibraryPolicy.splitSources(listOf(src(0, 99), src(1, 5), src(2, 0), src(3, 7), src(4, -2)))
+        assertEquals(listOf(1L, 3L), full.map { it.chatId })
+        assertEquals(listOf(2L, 4L), empty.map { it.chatId })
+    }
+
+    @Test
+    fun splitSourcesEdgeCases() {
+        assertEquals(emptyList<MeloScreenHost.SourceRow>() to emptyList<MeloScreenHost.SourceRow>(), MeloLibraryPolicy.splitSources(emptyList()))
+        val (full, empty) = MeloLibraryPolicy.splitSources(listOf(src(1, 0), src(2, 0)))
+        assertTrue(full.isEmpty())
+        assertEquals(2, empty.size)
+    }
+
+    @Test
+    fun emptySourcesLabelFoldsAndFormats() {
+        assertNull(MeloLibraryPolicy.emptySourcesLabel(0, false))
+        assertNull(MeloLibraryPolicy.emptySourcesLabel(0, true))
+        assertEquals("▸ Các kênh chưa có nhạc (3)", MeloLibraryPolicy.emptySourcesLabel(3, false))
+        assertEquals("▾ Các kênh chưa có nhạc (3)", MeloLibraryPolicy.emptySourcesLabel(3, true))
+        assertEquals("▸ Các kênh chưa có nhạc (1.234)", MeloLibraryPolicy.emptySourcesLabel(1234, false))
+    }
+
+    @Test
+    fun quickSwitchOnlyOnTwoPaneWithOneChannelOpen() {
+        assertTrue(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.ALL, 7L))
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, true, Mode.ALL, 7L))
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.ALL, null))
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.PLAYLIST, 7L))
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.DOWNLOADED, 7L))
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.PHONE_PORTRAIT, false, Mode.ALL, 7L))
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TABLET_PORTRAIT, false, Mode.ALL, 7L))
+    }
+
+    @Test
+    fun quickSwitchRowsAndIndex() {
+        val rows = MeloLibraryPolicy.quickSwitchRows(listOf(src(0, 10), src(5, 9), src(6, 0), src(8, 3)))
+        assertEquals(listOf(5L, 8L), rows.map { it.chatId })
+        assertEquals(1, MeloLibraryPolicy.quickSwitchIndex(rows, 8L))
+        assertEquals(-1, MeloLibraryPolicy.quickSwitchIndex(rows, 6L))
+        assertEquals(-1, MeloLibraryPolicy.quickSwitchIndex(rows, null))
+        assertEquals(-1, MeloLibraryPolicy.quickSwitchIndex(emptyList(), 5L))
+    }
 }

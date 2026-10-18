@@ -49,6 +49,30 @@ internal object MeloLibraryPolicy {
         NewLayer.PHONE_PORTRAIT, NewLayer.TABLET_PORTRAIT -> 2
     }
 
+    /**
+     * Source grid split: channels with songs (grid) and channels without (folded row). The
+     * "Kho tổng hợp" entry (chatId 0) belongs to neither; order is kept; counts <= 0 are empty.
+     */
+    fun splitSources(sources: List<MeloScreenHost.SourceRow>): Pair<List<MeloScreenHost.SourceRow>, List<MeloScreenHost.SourceRow>> =
+        sources.filter { it.chatId != 0L }.partition { it.count > 0 }
+
+    /** "▸ Các kênh chưa có nhạc (3)" / "▾ …" when open; null when there is no such channel. */
+    fun emptySourcesLabel(count: Int, expanded: Boolean): String? =
+        if (count <= 0) null
+        else (if (expanded) "▾ " else "▸ ") + "Các kênh chưa có nhạc (${MeloComponentPolicy.formatCount(count)})"
+
+    /** Two-pane left pane turns into the channel list only while one specific channel is open. */
+    fun quickSwitchVisible(layer: NewLayer, showingSources: Boolean, mode: Mode, selectedChatId: Long?): Boolean =
+        layer == NewLayer.TWO_PANE && !showingSources && mode == Mode.ALL && selectedChatId != null
+
+    /** Channels offered for the quick switch: only those with songs, original (grid) order. */
+    fun quickSwitchRows(channels: List<MeloScreenHost.SourceRow>): List<MeloScreenHost.SourceRow> =
+        channels.filter { it.chatId != 0L && it.count > 0 }
+
+    /** Position of the open channel in [rows], -1 when it is not there. */
+    fun quickSwitchIndex(rows: List<MeloScreenHost.SourceRow>, selectedChatId: Long?): Int =
+        if (selectedChatId == null) -1 else rows.indexOfFirst { it.chatId == selectedChatId }
+
     /** Tablet portrait gets Previous on the mini player; phones keep Play and Next only (spec). */
     fun miniPlayerShowsPrevious(layer: NewLayer): Boolean = layer == NewLayer.TABLET_PORTRAIT
 

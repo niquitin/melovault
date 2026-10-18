@@ -77,6 +77,7 @@ internal class MeloLibraryPane(
     private var lastScrollKey = 0
     private var playAllWhenLoaded = false
     private var groupKey: String? = null
+    private var emptyExpanded = false
 
     init {
         searchHolder.addView(searchBar)
@@ -286,7 +287,7 @@ internal class MeloLibraryPane(
     private fun renderSources(snap: Snapshot) {
         sourcesBox.removeAllViews()
         val all = snap.sources.firstOrNull { it.chatId == 0L }
-        val channels = snap.sources.filter { it.chatId != 0L }
+        val (channels, emptyChannels) = MeloLibraryPolicy.splitSources(snap.sources)
         sourcesBox.addView(heroCard(all?.count ?: snap.total))
         val tools = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -297,7 +298,7 @@ internal class MeloLibraryPane(
         })
         tools.addView(c.chip("Quét lại", false) { host.rescan() })
         sourcesBox.addView(tools)
-        if (channels.isEmpty()) {
+        if (channels.isEmpty() && emptyChannels.isEmpty()) {
             sourcesBox.addView(c.text("Chưa có nguồn nào. Bấm Quét lại để đồng bộ.", s.secondaryText, p.textSecondary, maxLines = 2))
             return
         }
@@ -315,6 +316,37 @@ internal class MeloLibraryPane(
             sourcesBox.addView(line, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 bottomMargin = s.gap
             })
+        }
+        addEmptyChannelsRow(emptyChannels)
+    }
+
+    /** Folded "Các kênh chưa có nhạc (N)" row; open it to list the names, each still opens its channel. */
+    private fun addEmptyChannelsRow(emptyChannels: List<SourceRow>) {
+        val label = MeloLibraryPolicy.emptySourcesLabel(emptyChannels.size, emptyExpanded) ?: return
+        val header = c.text(label, s.titleText, p.text, bold = true).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = s.minTouch
+            isClickable = true
+            isFocusable = true
+            contentDescription = label
+            setOnClickListener {
+                emptyExpanded = !emptyExpanded
+                snapshot?.let(::renderSources)
+            }
+        }
+        sourcesBox.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        if (!emptyExpanded) return
+        emptyChannels.forEach { source ->
+            val row = c.text(source.title, s.secondaryText, p.textSecondary, maxLines = 1).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                minimumHeight = s.minTouch
+                setPadding(s.gap * 2, 0, s.gap, 0)
+                isClickable = true
+                isFocusable = true
+                contentDescription = "${source.title}, chưa có nhạc"
+                setOnClickListener { host.openSource(source.chatId) }
+            }
+            sourcesBox.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
     }
 

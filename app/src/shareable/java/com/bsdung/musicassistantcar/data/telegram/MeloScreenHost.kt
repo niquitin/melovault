@@ -46,6 +46,12 @@ internal interface MeloScreenHost {
     fun toggleHideZeroSources()
     fun rescan()
 
+    /**
+     * Every channel with its song count (most songs first), not narrowed by the search box and
+     * without the "all sources" entry; empty while the first load is pending.
+     */
+    fun channels(): List<SourceRow>
+
     /** Sort of the list on screen (always NEWEST on screens without the A–Z bar). */
     fun sort(): SongSort
     fun setSort(sort: SongSort)
@@ -107,7 +113,9 @@ internal interface MeloScreenHost {
         val query: String,
         val note: String?,
         val sort: SongSort = SongSort.NEWEST,
-        val letterFloor: String? = null
+        val letterFloor: String? = null,
+        /** The channel open in the list, null for all sources, Saved Messages or Playlist. */
+        val selectedChatId: Long? = null
     )
 
     data class NowPlaying(
