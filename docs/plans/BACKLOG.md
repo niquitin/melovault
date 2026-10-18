@@ -29,4 +29,5 @@ Mỗi phiên làm đúng 1 việc: tạo `docs/plans/<việc>.md` (mục tiêu, 
 - Theo `docs/plans/sua-bo-cuc-y700.md`: lỗi 1 phần A (phản hồi khi bấm bài, log `MeloVaultPlay`, nhắc sau 15 s nếu Telegram không gửi dữ liệu), lỗi 3 (núm tua), lỗi 2 (ảnh bìa theo chiều cao còn lại + dạng gọn khi màn thấp + hàng Đảo/Lặp/Lưu/Hàng đợi xuống 2 dòng khi hẹp), lỗi 4 (về đầu danh sách khi đổi nhóm; cuộn khung đổi kênh), lỗi 5 (tiêu đề nhóm xuống dòng riêng khi hẹp, nút chip không xuống dòng). Sony QA OK; chờ chủ dự án QA Y700.
 - **Lỗi 1 phần B (nguyên nhân gốc kênh "Sưu Tầm Những Năm Về Trước" trên Y700) chưa sửa — cần ảnh/log từ Y700 sau khi cài b100.**
 - Nút ⋮ trên dòng bài màn Melo (MeloLibraryPane): ĐÃ SỬA ở Beta102 (18/10/2026, 5e24661); chờ chủ dự án QA Y700. Chưa sửa ở danh sách Gọn (Shanling) và dòng hàng đợi trong Đang phát (⋮ ở đó vẫn không làm gì khi bấm).
-- Còn lại: mini player khi tạm dừng dòng bài vẫn ghi "Đang phát"; chính sách tải trước với tệp rất lớn (cần chủ dự án quyết ngưỡng).
+- Mini player/dòng bài khi tạm dừng ghi "Đang phát": ĐÃ SỬA ở Beta103 (18/10/2026, f2223a4) cho danh sách Melo; còn dòng hàng đợi trong Đang phát và UI cũ chưa đổi; chờ chủ dự án QA Y700.
+- Còn lại: chính sách tải trước với tệp rất lớn (cần chủ dự án quyết ngưỡng).
