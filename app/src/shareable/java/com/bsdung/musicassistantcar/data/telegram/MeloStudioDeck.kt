@@ -291,11 +291,15 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         })
         column.addView(transport, matchWrap().apply { topMargin = s.gap * 2 })
 
-        val extras = extrasRow.apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_HORIZONTAL }
+        val extras = extrasRow.apply { orientation = LinearLayout.HORIZONTAL }
         shuffle = c.chip("⇄ Đảo", false) { host.toggleShuffle(); refresh() }
         repeat = c.chip("↻ Lặp", false) { host.cycleRepeat(); refresh() }
         favorite = c.chip("☆ Lưu", false) { host.toggleFavorite(); refresh() }
-        listOf(shuffle, repeat, favorite).forEach { extras.addView(it) }
+        listOf(shuffle, repeat, favorite).forEachIndexed { i, chip ->
+            // Equal cells across the whole width, label centred.
+            chip.layoutParams = LinearLayout.LayoutParams(0, s.minTouch, 1f).apply { marginEnd = if (i == 2) 0 else s.gap }
+            extras.addView(chip)
+        }
         column.addView(extras, matchWrap().apply { topMargin = s.gap * 2 })
     }
 

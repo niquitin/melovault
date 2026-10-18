@@ -85,10 +85,19 @@ class MeloNowPlayingPolicyTest {
     }
 
     @Test
-    fun extrasStackOnlyWhenOneRowOverflows() {
+    fun repeatChipLabelStaysShort() {
+        assertEquals("↻ Lặp", MeloNowPlayingPolicy.repeatChipLabel("tắt"))
+        assertEquals("↻ Lặp", MeloNowPlayingPolicy.repeatChipLabel("tất cả"))
+        assertEquals("↻ Lặp 1", MeloNowPlayingPolicy.repeatChipLabel("một bài"))
+    }
+
+    @Test
+    fun extrasStackOnlyWhenTheWidestLabelDoesNotFitAQuarter() {
         val widths = listOf(100, 110, 100, 140)
-        assertTrue(MeloNowPlayingPolicy.extrasStacked(400, widths, 8))   // 450 + 32 > 400
-        assertFalse(MeloNowPlayingPolicy.extrasStacked(482, widths, 8))  // exactly fits
+        // four equal cells of (available - 3 gaps) / 4 must hold the widest label (140)
+        assertTrue(MeloNowPlayingPolicy.extrasStacked(400, widths, 8))   // cell 94
+        assertTrue(MeloNowPlayingPolicy.extrasStacked(583, widths, 8))   // cell 139
+        assertFalse(MeloNowPlayingPolicy.extrasStacked(584, widths, 8))  // cell 140 fits
         assertFalse(MeloNowPlayingPolicy.extrasStacked(800, widths, 8))
         assertFalse(MeloNowPlayingPolicy.extrasStacked(0, emptyList(), 8))
     }

@@ -202,6 +202,7 @@ internal class MeloTabletScreen(
         repeat = c.chip("↻ Lặp", false) { host.cycleRepeat(); onPlaybackChanged() }
         favorite = c.chip("☆ Lưu", false) { host.toggleFavorite(); onPlaybackChanged() }
         queueChip = c.chip("☰ Hàng đợi", false) { host.openQueue() }
+        listOf(shuffle, repeat, favorite, queueChip).forEach { it.setPadding(s.gap / 2, 0, s.gap / 2, 0) }
         column.addView(extrasBox.apply {
             orientation = LinearLayout.VERTICAL
             addView(extrasRow1, matchWrap())
@@ -226,7 +227,13 @@ internal class MeloTabletScreen(
         extrasRow1.removeAllViews()
         extrasRow2.removeAllViews()
         val chips = listOf(shuffle, repeat, favorite, queueChip)
-        chips.forEachIndexed { i, chip -> (if (stacked && i >= 2) extrasRow2 else extrasRow1).addView(chip) }
+        chips.forEachIndexed { i, chip ->
+            val row = if (stacked && i >= 2) extrasRow2 else extrasRow1
+            val last = if (stacked) i % 2 == 1 else i == chips.lastIndex
+            // Equal cells across the whole width, label centred.
+            chip.layoutParams = LinearLayout.LayoutParams(0, s.minTouch, 1f).apply { marginEnd = if (last) 0 else s.gap }
+            row.addView(chip)
+        }
         extrasRow2.visibility = if (stacked) View.VISIBLE else View.GONE
     }
 
@@ -447,9 +454,12 @@ internal class MeloTabletScreen(
             time.show(MeloComponentPolicy.progressText((now.positionMs / 1000).toInt(), (now.durationMs / 1000).toInt()))
             play.show(if (now.playing) "❚❚" else "▶")
             play.contentDescription = if (now.playing) "Dừng" else "Phát"
-            relayout = toggleStyle(shuffle, now.shuffle, if (now.shuffle) "⇄ Đảo: bật" else "⇄ Đảo") or relayout
-            relayout = toggleStyle(repeat, now.repeatLabel != "tắt", "↻ Lặp: ${now.repeatLabel}") or relayout
-            relayout = toggleStyle(favorite, now.favorite, if (now.favorite) "★ Đã lưu" else "☆ Lưu") or relayout
+            relayout = toggleStyle(shuffle, now.shuffle, "⇄ Đảo") or relayout
+            relayout = toggleStyle(repeat, now.repeatLabel != "tắt", MeloNowPlayingPolicy.repeatChipLabel(now.repeatLabel)) or relayout
+            relayout = toggleStyle(favorite, now.favorite, if (now.favorite) "★ Lưu" else "☆ Lưu") or relayout
+            shuffle.contentDescription = if (now.shuffle) "Đảo bài: bật" else "Đảo bài: tắt"
+            repeat.contentDescription = "Lặp: ${now.repeatLabel}"
+            favorite.contentDescription = if (now.favorite) "Đã lưu bài" else "Lưu bài"
             showArt(now.art, now.sourceTitle, now.title)
         }
         if (relayout && ::playerScroll.isInitialized) requestArtFit()

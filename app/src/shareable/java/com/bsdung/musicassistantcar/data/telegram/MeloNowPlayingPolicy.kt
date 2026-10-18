@@ -99,9 +99,18 @@ internal object MeloNowPlayingPolicy {
     fun playerTight(availableHeightPx: Int, restHeightPx: Int, minSidePx: Int): Boolean =
         availableHeightPx > 0 && availableHeightPx - restHeightPx.coerceAtLeast(0) < minSidePx
 
-    /** The Đảo / Lặp / Lưu / Hàng đợi chips go on two rows when one row would overflow the column. */
-    fun extrasStacked(availableWidthPx: Int, chipWidthsPx: List<Int>, gapPx: Int): Boolean =
-        chipWidthsPx.isNotEmpty() && chipWidthsPx.sum() + gapPx * chipWidthsPx.size > availableWidthPx
+    /** Short label so four chips fit one row: the repeat state shows by colour, only "một bài" adds a digit. */
+    fun repeatChipLabel(repeatLabel: String): String = if (repeatLabel == "một bài") "↻ Lặp 1" else "↻ Lặp"
+
+    /**
+     * The Đảo / Lặp / Lưu / Hàng đợi chips share the width equally; two rows of two when the
+     * widest label would not fit in a quarter of the column.
+     */
+    fun extrasStacked(availableWidthPx: Int, chipWidthsPx: List<Int>, gapPx: Int): Boolean {
+        if (chipWidthsPx.isEmpty()) return false
+        val cell = (availableWidthPx - gapPx * (chipWidthsPx.size - 1)) / chipWidthsPx.size
+        return chipWidthsPx.max() > cell
+    }
 
     /** Touch position to 0..1 over the bar, which starts and ends [inset] px inside the view. */
     fun seekFraction(x: Float, width: Float, inset: Float = 0f): Float {
