@@ -8,6 +8,16 @@ Trả lời chủ dự án bằng tiếng Việt. Ứng dụng nghe nhạc Andro
 - Commit nhỏ, đúng phạm vi: `fix(shareable): ...` / `feat(...)` / `docs: ...`. Chạy test Debug + Release và `git diff --check` trước khi commit. Ni chưa có git identity: `git -c user.name="Claude Code" -c user.email="noreply@anthropic.com" commit ...` (không sửa config).
 - Điều chưa chắc ghi **[CẦN XÁC NHẬN]**. Không tuyên bố "đã xong/đã chạy" khi chưa test trên thiết bị; unit test xanh ≠ nghiệm thu.
 
+## Kết thúc mỗi phiên: báo cáo cho chủ dự án (bắt buộc)
+Chủ dự án không biết lập trình. Câu trả lời cuối của MỌI phiên phải có mục **"Đề xuất cho anh"**, viết bằng tiếng Việt thường, không thuật ngữ code, gồm đúng 4 phần:
+1. **Vừa xong:** 1–2 câu, kết quả nhìn thấy được trên app (không kể tên file/hàm).
+2. **Anh cần làm:** việc cụ thể trên máy (cài bản nào từ thư mục Drive nào, bấm thử gì, chụp gì gửi lại), hoặc "Không cần làm gì".
+3. **Việc nên làm tiếp:** đề xuất 1 việc (lấy từ `docs/plans/BACKLOG.md` hoặc lỗi vừa phát hiện), lý do 1 câu.
+4. **Câu lệnh cho phiên tiếp theo:** ghi rõ model và chế độ, rồi một khối lệnh để anh dán nguyên văn:
+   - Việc nhỏ, đã rõ cách làm → **Sonnet 5.5 · Trung bình · Tự động**, lệnh thực thi trực tiếp.
+   - Việc đụng dữ liệu/DB/schema, kiến trúc, hoặc chưa rõ cách làm → **Opus 5.5 · Trung bình · Kế hoạch**, lệnh yêu cầu viết `docs/plans/<việc>.md` (file sửa, bước làm, test, cách kiểm trên Sony, tiêu chí đạt), không sửa code, commit rồi dừng. Phiên sau đó dùng **Sonnet 5.5 · Trung bình · Tự động** với lệnh "Thực hiện docs/plans/<việc>.md…".
+   Nhắc anh: mỗi việc mở phiên MỚI (nút Mới), không nhắn tiếp phiên cũ.
+
 ## Máy
 - **Ni**: repo `D:\Bots\MeloVault-E91-Shareable`, nơi viết code.
 - **Tiny** (Desktop Commander `DESKTOP-HNP4GVR`, ổ `T:` trên Ni): chỉ build/QA trong clone cô lập `C:\Bots\MeloVault-E93D-IsolatedQA` và `C:\Bots\_qa_temp\Beta<code>_<sha>\`. Code sang Tiny bằng Git bundle + SHA256, không chép thư mục, không sửa qua `T:`.
