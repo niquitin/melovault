@@ -274,6 +274,9 @@ class ShareablePlaybackService : MediaSessionService() {
                     }
                 }
             } else if ((kind == "file" && tag.startsWith("background:")) ||
+                // getMessage answers with a "message"; without this the resolve step never arrived
+                // and neither background prefetch nor a Next press could start the next song.
+                (kind == "message" && tag.startsWith("background:resolve:")) ||
                 kind == "updateFile" ||
                 (kind == "error" && tag.startsWith("background:"))) {
                 main.post { acceptBackgroundEvent(event) }
