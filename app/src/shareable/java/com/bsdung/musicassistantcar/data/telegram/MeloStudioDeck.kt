@@ -82,6 +82,9 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
     private var fitScroll: ScrollView? = null
     private var fitColumn: LinearLayout? = null
     private var fitPosted = false
+    private var playerTight = false
+    private val transportRow = LinearLayout(activity)
+    private val extrasRow = LinearLayout(activity)
 
     private val update = object : Runnable {
         override fun run() {
@@ -213,6 +216,19 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         return row
     }
 
+    /** Low window (a phone on its side): no quality line, shorter waveform, half the gaps, so the buttons stay on screen. */
+    private fun applyTight(tight: Boolean) {
+        if (tight == playerTight) return
+        playerTight = tight
+        quality.visibility = if (tight) View.GONE else View.VISIBLE
+        val top = if (tight) s.gap else s.gap * 2
+        listOf<View>(title, waveform, transportRow, extrasRow).forEach { v ->
+            (v.layoutParams as LinearLayout.LayoutParams).topMargin = top
+            v.requestLayout()
+        }
+        (waveform.layoutParams as LinearLayout.LayoutParams).height = if (tight) s.minTouch else s.minTouch * 3 / 2
+    }
+
     /** Cover = the column height minus every other row, so the controls never fall below the screen. */
     private fun requestArtFit() {
         val scroll = fitScroll ?: return
@@ -224,7 +240,13 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
             val w = scroll.width
             val h = scroll.height
             if (w <= 0 || h <= 0) return@post
-            sizeArt(MeloNowPlayingPolicy.artSide(w, h, MeloArtFit.restHeight(column, artHost, w), s.rowArt))
+            applyTight(false)
+            var rest = MeloArtFit.restHeight(column, artHost, w)
+            if (MeloNowPlayingPolicy.playerTight(h, rest, s.rowArt)) {
+                applyTight(true)
+                rest = MeloArtFit.restHeight(column, artHost, w)
+            }
+            sizeArt(MeloNowPlayingPolicy.artSide(w, h, rest, s.rowArt))
         }
     }
 
@@ -252,7 +274,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         })
         column.addView(time.apply { gravity = Gravity.END }, matchWrap())
 
-        val transport = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val transport = transportRow.apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         fun small(label: String, description: String, action: () -> Unit) =
             c.iconButton(label, description) { action() }.apply {
                 setTextSize(TypedValue.COMPLEX_UNIT_PX, s.secondaryText)
@@ -269,7 +291,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         })
         column.addView(transport, matchWrap().apply { topMargin = s.gap * 2 })
 
-        val extras = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_HORIZONTAL }
+        val extras = extrasRow.apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_HORIZONTAL }
         shuffle = c.chip("⇄ Đảo", false) { host.toggleShuffle(); refresh() }
         repeat = c.chip("↻ Lặp", false) { host.cycleRepeat(); refresh() }
         favorite = c.chip("☆ Lưu", false) { host.toggleFavorite(); refresh() }

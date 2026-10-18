@@ -61,6 +61,8 @@ internal class MeloTabletScreen(
     private lateinit var playerScroll: ScrollView
     private lateinit var playerColumn: LinearLayout
     private val extrasBox = LinearLayout(context)
+    private val transportRow = LinearLayout(context)
+    private var playerTight = false
     private val extrasRow1 = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
     private val extrasRow2 = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
     private var extrasStacked = false
@@ -183,7 +185,7 @@ internal class MeloTabletScreen(
         column.addView(bar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, s.minTouch).apply { topMargin = s.gap * 2 })
         column.addView(time.apply { gravity = Gravity.END }, matchWrap())
 
-        val transport = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val transport = transportRow.apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         transport.addView(c.iconButton("⏮", "Bài trước") { host.previous() }.apply {
             layoutParams = LinearLayout.LayoutParams(0, s.minTouch, 1f).apply { marginEnd = s.gap }
         })
@@ -246,8 +248,26 @@ internal class MeloTabletScreen(
             chip.measuredWidth
         }
         arrangeExtras(MeloNowPlayingPolicy.extrasStacked(w - playerColumn.paddingLeft - playerColumn.paddingRight, widths, s.gap))
-        val rest = MeloArtFit.restHeight(playerColumn, artHost, w)
+        applyTight(false)
+        var rest = MeloArtFit.restHeight(playerColumn, artHost, w)
+        if (MeloNowPlayingPolicy.playerTight(h, rest, s.rowArt)) {
+            applyTight(true)
+            rest = MeloArtFit.restHeight(playerColumn, artHost, w)
+        }
         sizeArt(MeloNowPlayingPolicy.artSide(w, h, rest, s.rowArt))
+    }
+
+    /** Low window (a phone on its side): one-line title, no quality line, half the gaps, so the buttons stay on screen. */
+    private fun applyTight(tight: Boolean) {
+        if (tight == playerTight) return
+        playerTight = tight
+        title.maxLines = if (tight) 1 else 2
+        quality.visibility = if (tight) View.GONE else View.VISIBLE
+        val top = if (tight) s.gap else s.gap * 2
+        listOf<View>(title, bar, transportRow, extrasBox).forEach { v ->
+            (v.layoutParams as LinearLayout.LayoutParams).topMargin = top
+            v.requestLayout()
+        }
     }
 
     // ---- Quick channel switch (left slot while a channel is open) -----------------------------

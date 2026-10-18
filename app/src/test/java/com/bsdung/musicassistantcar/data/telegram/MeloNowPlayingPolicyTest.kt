@@ -77,6 +77,14 @@ class MeloNowPlayingPolicyTest {
     }
 
     @Test
+    fun playerGoesCompactOnlyWhenTheSmallestCoverDoesNotFit() {
+        assertTrue(MeloNowPlayingPolicy.playerTight(380, 340, 56))   // 40 left < 56
+        assertFalse(MeloNowPlayingPolicy.playerTight(400, 340, 56))  // exactly 60 left
+        assertFalse(MeloNowPlayingPolicy.playerTight(750, 360, 56))
+        assertFalse(MeloNowPlayingPolicy.playerTight(0, 360, 56))    // not laid out yet
+    }
+
+    @Test
     fun extrasStackOnlyWhenOneRowOverflows() {
         val widths = listOf(100, 110, 100, 140)
         assertTrue(MeloNowPlayingPolicy.extrasStacked(400, widths, 8))   // 450 + 32 > 400

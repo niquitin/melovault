@@ -95,6 +95,10 @@ internal object MeloNowPlayingPolicy {
         return minOf(room, availableWidthPx).coerceAtLeast(minSidePx.coerceAtLeast(0))
     }
 
+    /** Not even the smallest cover fits above the controls: the column falls back to its compact form. */
+    fun playerTight(availableHeightPx: Int, restHeightPx: Int, minSidePx: Int): Boolean =
+        availableHeightPx > 0 && availableHeightPx - restHeightPx.coerceAtLeast(0) < minSidePx
+
     /** The Đảo / Lặp / Lưu / Hàng đợi chips go on two rows when one row would overflow the column. */
     fun extrasStacked(availableWidthPx: Int, chipWidthsPx: List<Int>, gapPx: Int): Boolean =
         chipWidthsPx.isNotEmpty() && chipWidthsPx.sum() + gapPx * chipWidthsPx.size > availableWidthPx
