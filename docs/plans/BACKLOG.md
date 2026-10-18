@@ -2,10 +2,9 @@
 
 Mỗi phiên làm đúng 1 việc: tạo `docs/plans/<việc>.md` (mục tiêu, phạm vi, file đụng, test, tiêu chí xong), làm, cập nhật `HANDOFF.md`, dừng. Việc đổi schema DB phải được chủ dự án duyệt trước.
 
-## 1. Thanh A–Z (Thư viện)
-- Thiếu so với đặc tả bước 7. Cần sắp theo tên trong DB (có thể đụng truy vấn/chỉ mục, hỏi duyệt nếu đổi schema), rồi thanh chữ cái trong `MeloLibraryPane` (Điện thoại/Tablet; Car không có A–Z).
-- Chưa kiểm được lưới 3 cột Hai khung trên Y700 thật.
-- Kế hoạch `docs/plans/a-z.md` (18/10/2026): nút Sắp xếp Mới nhất / Tên A–Z (mặc định Mới nhất), xếp theo cột `search_key` có sẵn, không đổi schema; Điện thoại + Tablet. Chưa làm.
+## 1. ~~Thanh A–Z (Thư viện)~~ — ĐÃ LÀM ở Beta97 (18/10/2026, `cfaa993` + `5ebd7dd`)
+- Theo `docs/plans/a-z.md`: chip Mới nhất / Tên A–Z, thanh chữ cái, không đổi schema. Sony QA OK; chờ chủ dự án QA Y700 (dọc + Hai khung ngang) và S25. Lưới 3 cột Hai khung trên Y700 vẫn chưa kiểm.
+- Còn lại nếu cần: nhóm "…" cho chữ ngoài Latin; chỉ mục `(account_id, is_deleted, search_key)` chỉ khi đo thấy chậm (đổi schema → phải duyệt).
 
 ## 2. EQ
 - Nút EQ ở Studio Deck hiện ghi "Sắp có". Cần quyết định phạm vi (EQ ExoPlayer/AudioEffect, bit-perfect, DSP FYT) trước khi code. Không đổi ExoPlayer/MediaSession khi chưa có plan.
