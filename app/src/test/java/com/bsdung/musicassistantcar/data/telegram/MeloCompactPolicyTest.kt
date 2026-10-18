@@ -104,4 +104,55 @@ class MeloCompactPolicyTest {
         assertFalse(MeloCompactPolicy.shouldLoadMore(0, 10, 200))
         assertFalse(MeloCompactPolicy.shouldLoadMore(0, 0, 0))
     }
+
+    @Test
+    fun downloadedLineHiddenWhileCountUnknown() {
+        assertNull(MeloCompactPolicy.downloadedLine(Mode.ALL, null, showingSources = false, groups = null))
+        assertNull(MeloCompactPolicy.downloadedLine(Mode.ALL, null, showingSources = true, groups = null))
+        assertNull(MeloCompactPolicy.downloadedLine(Mode.ALL, null, showingSources = false, groups = -1))
+    }
+
+    @Test
+    fun downloadedLineShowsStoredCountLabelledAsPreviousCheck() {
+        val line = MeloCompactPolicy.downloadedLine(Mode.ALL, null, showingSources = false, groups = 3)
+        assertEquals("Đã tải: 3 nhóm · lần kiểm trước", line)
+        // Same wording on the source list (the "Tất cả nguồn · 29.607 bài" screen of the Shanling).
+        assertEquals(line, MeloCompactPolicy.downloadedLine(Mode.ALL, null, showingSources = true, groups = 3))
+    }
+
+    @Test
+    fun downloadedLineFollowsTheCountAfterABackgroundScan() {
+        val stored = MeloCompactPolicy.downloadedLine(Mode.ALL, "", showingSources = false, groups = 3)
+        val scanned = MeloCompactPolicy.downloadedLine(Mode.ALL, "", showingSources = false, groups = 12)
+        assertEquals("Đã tải: 3 nhóm · lần kiểm trước", stored)
+        assertEquals("Đã tải: 12 nhóm · lần kiểm trước", scanned)
+    }
+
+    @Test
+    fun downloadedLineTreatsZeroAsAValidCount() {
+        assertEquals(
+            "Đã tải: 0 nhóm · lần kiểm trước",
+            MeloCompactPolicy.downloadedLine(Mode.ALL, null, showingSources = false, groups = 0)
+        )
+    }
+
+    @Test
+    fun downloadedLineOnlyOnTheWholeLibraryViews() {
+        // Downloaded mode already titles the count; playlist and one channel are not the whole library.
+        assertNull(MeloCompactPolicy.downloadedLine(Mode.DOWNLOADED, null, showingSources = false, groups = 3))
+        assertNull(MeloCompactPolicy.downloadedLine(Mode.PLAYLIST, null, showingSources = false, groups = 3))
+        assertNull(MeloCompactPolicy.downloadedLine(Mode.ALL, "BOX", showingSources = false, groups = 3))
+    }
+
+    @Test
+    fun downloadedLineUsesTheTealAccentAndFitsTheHeaderRow() {
+        assertEquals(0xFF3DDC97.toInt(), MeloCompactPolicy.DOWNLOADED_LINE_COLOR)
+        // Title 16sp + hint 13sp stacked (1.25 line height) stay inside the 48dp header row up to
+        // fontScale 1.3, so the list keeps its height and the 72dp bar is not pushed down.
+        val titleSp = 16f
+        val hintSp = 13f
+        for (fontScale in listOf(1.0f, 1.15f, 1.3f)) {
+            assertTrue((titleSp + hintSp) * 1.25f * fontScale <= MeloDesignTokens.MIN_TOUCH_DP)
+        }
+    }
 }

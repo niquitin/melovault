@@ -58,6 +58,22 @@ internal object MeloCompactPolicy {
         return if (count != null && count >= 0) "$prefix$name · ${MeloComponentPolicy.formatCount(count)} bài" else "$prefix$name"
     }
 
+    /** Teal of the one-line "Đã tải" hint under the Gọn title (docs/plans/da-tai-khi-mo-app.md rework). */
+    const val DOWNLOADED_LINE_COLOR: Int = 0xFF3DDC97.toInt()
+
+    /**
+     * One hint line under the Gọn title with the offline group count kept in the activity
+     * (`downloadedLibraryTotal`). It is the whole-library figure, so it shows only on the
+     * all-sources library and source list. Null while the count is unknown: no made-up number; 0 is valid.
+     * The wording stays true for a stored figure and for a fresh scan alike ("lần kiểm trước" = the last check).
+     */
+    fun downloadedLine(mode: Mode, sourceTitle: String?, showingSources: Boolean, groups: Int?): String? {
+        if (groups == null || groups < 0) return null
+        val wholeLibrary = showingSources || (mode == Mode.ALL && sourceTitle.isNullOrBlank())
+        if (!wholeLibrary) return null
+        return "Đã tải: ${MeloComponentPolicy.formatCount(groups)} nhóm · lần kiểm trước"
+    }
+
     /** [playing] = this row is the current song; [paused] = the player is paused (not just buffering). */
     fun rowStatus(downloaded: Boolean, downloadingPercent: Int?, playing: Boolean, paused: Boolean = false): Status = when {
         playing && paused -> Status.PAUSED

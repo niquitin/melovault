@@ -49,6 +49,7 @@ internal class MeloCompactScreen(
     private val libraryPage = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     private val title = c.text("", s.titleText, p.text, bold = true)
     private val note = c.text("", s.secondaryText, p.textSecondary, maxLines = 2)
+    private val downloadedLine = c.text("", s.secondaryText, MeloCompactPolicy.DOWNLOADED_LINE_COLOR)
     private val list = ListView(context)
     private val adapter = RowsAdapter()
     private val bar = MeloBottomBar(context, c, host, onTab = ::onBarTab, onOpenNowPlaying = ::openNowPlaying)
@@ -119,8 +120,13 @@ internal class MeloCompactScreen(
         gravity = Gravity.CENTER_VERTICAL
         minimumHeight = s.minTouch
         addView(flat(c.iconButton("☰", "Menu") { showMainMenu(this) }))
-        addView(title.apply {
+        // The hint sits under the title inside the 48dp header row, so it costs no list height.
+        addView(LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+            addView(title, matchWrap())
+            addView(downloadedLine.apply { visibility = View.GONE }, matchWrap())
         })
         addView(flat(c.iconButton("⌕", "Tìm kiếm") { toggleSearch() }))
         lateinit var more: View
@@ -143,6 +149,11 @@ internal class MeloCompactScreen(
         } else {
             MeloCompactPolicy.headerTitle(snap.mode, snap.sourceTitle, snap.total)
         }
+        val downloaded = MeloCompactPolicy.downloadedLine(
+            snap.mode, snap.sourceTitle, snap.showingSources, host.sourceSummaries().firstOrNull()?.downloaded
+        )
+        downloadedLine.text = downloaded.orEmpty()
+        downloadedLine.visibility = if (downloaded == null) View.GONE else View.VISIBLE
         note.text = snap.note.orEmpty()
         note.visibility = if (snap.note.isNullOrBlank()) View.GONE else View.VISIBLE
         backCallback.isEnabled = nowPage != null || searchBar.visibility == View.VISIBLE ||
