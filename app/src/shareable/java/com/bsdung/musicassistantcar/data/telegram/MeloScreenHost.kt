@@ -17,6 +17,9 @@ internal interface MeloScreenHost {
     fun setQuery(query: String)
     fun loadMore()
     fun playAt(index: Int)
+
+    /** The song just tapped while it is still being opened ("Đang mở…"), null otherwise. */
+    fun playStatus(): TelegramPlayFeedbackPolicy.PlayStatus?
     fun openSongMenu(index: Int, anchor: View)
     fun nowPlaying(): NowPlaying?
     fun playPause()

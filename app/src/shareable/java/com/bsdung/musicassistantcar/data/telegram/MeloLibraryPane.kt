@@ -267,7 +267,12 @@ internal class MeloLibraryPane(
         override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
             val snap = snapshot ?: return View(context)
             val row = snap.rows.getOrNull(position) ?: return View(context)
-            val status = MeloCompactPolicy.rowStatus(row.downloaded, row.downloadingPercent, row.songKey == snap.playingKey)
+            val playing = row.songKey == snap.playingKey
+            val status = if (TelegramPlayFeedbackPolicy.opening(host.playStatus(), row.songKey, playing)) {
+                MeloComponentPolicy.Status.OPENING
+            } else {
+                MeloCompactPolicy.rowStatus(row.downloaded, row.downloadingPercent, playing)
+            }
             val quality = MeloComponentPolicy.qualityLabel(MeloComponentPolicy.formatOf(null, row.filename), null, null, null)
             return c.songRow(
                 SongRowModel(row.title, row.sourceTitle, row.durationSeconds, status, quality, row.downloadingPercent, row.art)

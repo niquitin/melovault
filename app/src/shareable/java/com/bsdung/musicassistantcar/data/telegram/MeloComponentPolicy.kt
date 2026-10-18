@@ -9,7 +9,7 @@ import java.util.Locale
  */
 internal object MeloComponentPolicy {
 
-    enum class Status { PLAYING, DOWNLOADED, DOWNLOADING, TELEGRAM, ERROR }
+    enum class Status { PLAYING, DOWNLOADED, DOWNLOADING, TELEGRAM, ERROR, OPENING }
 
     enum class ColorRole { ACCENT, SECONDARY, WARNING }
 
@@ -36,6 +36,7 @@ internal object MeloComponentPolicy {
             )
             Status.TELEGRAM -> StatusPresentation(status, "Telegram · Chưa tải", ColorRole.SECONDARY, highlightRow = false)
             Status.ERROR -> StatusPresentation(status, "Tải lỗi – bấm thử lại", ColorRole.WARNING, highlightRow = false)
+            Status.OPENING -> StatusPresentation(status, TelegramPlayFeedbackPolicy.RESOLVING_TEXT, ColorRole.ACCENT, highlightRow = false)
         }
 
     private val LOSSLESS = setOf("FLAC", "WAV", "ALAC", "AIFF", "APE")

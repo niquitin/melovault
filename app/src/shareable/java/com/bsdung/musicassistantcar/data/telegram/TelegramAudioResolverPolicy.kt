@@ -24,7 +24,8 @@ internal object TelegramAudioResolverPolicy {
             val mimeType: String?,
         ) : Result()
 
-        data class Error(val message: String) : Result()
+        /** [code] is the TDLib error code when TDLib refused the request, null for the app's own errors. */
+        data class Error(val message: String, val code: Int? = null) : Result()
     }
 
     private val AUDIO_EXTENSIONS = setOf(

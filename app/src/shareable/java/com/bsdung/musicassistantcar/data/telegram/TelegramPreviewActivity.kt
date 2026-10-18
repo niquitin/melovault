@@ -4013,6 +4013,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun notifyMeloPlayback() {
+        // Once the tapped song is the player's current item its row shows "Đang phát" by itself.
+        playFeedback?.let { if (it.songKey == currentTelegramMessageId()) setPlayFeedback(null, it.songKey) }
         compactScreen?.onPlaybackChanged()
         carScreen?.onPlaybackChanged()
         phoneScreen?.onPlaybackChanged()
@@ -4201,6 +4203,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         override fun loadMore() = loadMoreSongsIfNeeded()
 
         override fun playAt(index: Int) = playShownSong(index)
+
+        override fun playStatus(): TelegramPlayFeedbackPolicy.PlayStatus? = playFeedback
 
         override fun openSongMenu(index: Int, anchor: View) {
             val group = offlineGroups.getOrNull(index).takeIf { filterOnlyDownloaded }
@@ -4691,6 +4695,25 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private val pendingMessageResolutions =
         java.util.concurrent.ConcurrentHashMap<String, (TelegramAudioResolverPolicy.Result) -> Unit>()
     private var currentDownloadingSong: Song? = null
+    private var playFeedback: TelegramPlayFeedbackPolicy.PlayStatus? = null
+
+    /** Main thread. Row state for the Melo list; the legacy `status` line keeps its own text. */
+    private fun setPlayFeedback(stage: TelegramPlayFeedbackPolicy.Stage?, songKey: Long, text: String = "") {
+        val next = stage?.let { TelegramPlayFeedbackPolicy.PlayStatus(it, songKey, text) }
+        if (next == null && playFeedback?.songKey != songKey) return // a stale answer for an older tap
+        if (next == playFeedback) return
+        playFeedback = next
+        scheduleMeloLibraryRefresh()
+    }
+
+    /** Failure of a tapped song: short Toast on the Melo screens (the legacy status line is hidden under them). */
+    private fun reportPlayError(songKey: Long, message: String?, code: Int?, chatId: Long, messageId: Long) {
+        setPlayFeedback(null, songKey)
+        android.util.Log.w("MeloVaultPlay", "stage=error chat=$chatId msg=$messageId reason=${TelegramPlayFeedbackPolicy.logReason(message, code)}")
+        if (meloLayer != null && !isFinishing && !isDestroyed) {
+            android.widget.Toast.makeText(this, TelegramPlayFeedbackPolicy.errorText(message, code), android.widget.Toast.LENGTH_LONG).show()
+        }
+    }
 
     private fun resolveTelegramMessage(
         chatId: Long,
@@ -4698,7 +4721,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         callback: (TelegramAudioResolverPolicy.Result) -> Unit
     ) {
         if (!auth.isReady()) {
-            callback(TelegramAudioResolverPolicy.Result.Error("Phiên Telegram chưa sẵn sàng"))
+            callback(TelegramAudioResolverPolicy.Result.Error(TelegramPlayFeedbackPolicy.NOT_READY_MESSAGE))
             return
         }
         val reqId = resolveRequestCounter.incrementAndGet()
@@ -4713,10 +4736,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 val timedOutCb = pendingMessageResolutions.remove(tag)
                 if (timedOutCb != null) {
                     runOnUiThread {
-                        timedOutCb(TelegramAudioResolverPolicy.Result.Error("Quá thời gian kết nối tới máy chủ Telegram"))
+                        timedOutCb(TelegramAudioResolverPolicy.Result.Error(TelegramPlayFeedbackPolicy.TIMEOUT_MESSAGE))
                     }
                 }
-            }, 12000L)
+            }, TelegramPlayFeedbackPolicy.RESOLVE_TIMEOUT_SECONDS * 1000L)
         } catch (e: Exception) {
             pendingMessageResolutions.remove(tag)
             callback(TelegramAudioResolverPolicy.Result.Error("Lỗi gửi yêu cầu tới Telegram: ${e.message}"))
@@ -4741,11 +4764,29 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     val errMsg = result.optString("message").ifBlank {
                         "Không tìm thấy tin nhắn trên Telegram (mã ${result.optInt("code")})"
                     }
-                    runOnUiThread { cb(TelegramAudioResolverPolicy.Result.Error(errMsg)) }
+                    val errCode = result.optInt("code")
+                    runOnUiThread { cb(TelegramAudioResolverPolicy.Result.Error(errMsg, errCode.takeIf { it > 0 })) }
                 }
                 return
             }
             if (tag.startsWith("sourceName:")) return
+            if (tag.startsWith("download:")) {
+                val failedId = tag.removePrefix("download:").toIntOrNull()
+                val code = result.optInt("code")
+                android.util.Log.w("MeloVaultPlay", "stage=download_error code=$code current=${failedId != null && failedId == downloadWaiting}")
+                if (failedId != null && failedId == downloadWaiting) {
+                    TelegramProgressiveCache.stop(failedId)
+                    downloadWaiting = null
+                    currentDownloadingSong = null
+                    runOnUiThread {
+                        showMessage(TelegramPlayFeedbackPolicy.downloadErrorText(code))
+                        if (meloLayer != null && !isFinishing && !isDestroyed) {
+                            android.widget.Toast.makeText(this, TelegramPlayFeedbackPolicy.downloadErrorText(code), android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
+                }
+                return
+            }
             if (tag.startsWith("sync:")) {
                 processSyncError(result, tag)
                 return
@@ -5775,7 +5816,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val effectiveChatId = if (song.chatId != 0L) song.chatId else (savedChatId.takeIf { it != 0L } ?: (library.authorizedUser()?.value ?: 0L))
         val rawMsgId = song.genuineMessageId
         if (effectiveChatId == 0L || rawMsgId <= 0L) {
-            showMessage("Không xác định được nguồn Telegram của bài hát.")
+            showMessage(TelegramPlayFeedbackPolicy.NO_SOURCE_MESSAGE)
+            reportPlayError(song.messageId, TelegramPlayFeedbackPolicy.NO_SOURCE_MESSAGE, null, effectiveChatId, rawMsgId)
             return
         }
 
@@ -5795,6 +5837,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         currentSongIndex = songs.indexOfFirst { it.messageId == song.messageId }
         nowPlayingTitle.text = song.title
         showMessage("Đang kiểm tra tệp Telegram: ${song.title}…")
+        setPlayFeedback(TelegramPlayFeedbackPolicy.Stage.RESOLVING, song.messageId, TelegramPlayFeedbackPolicy.RESOLVING_TEXT)
+        android.util.Log.i("MeloVaultPlay", "stage=resolve chat=$effectiveChatId msg=$rawMsgId")
 
         resolveTelegramMessage(effectiveChatId, rawMsgId) { result ->
             if (!auth.isReady() || isDestroyed) return@resolveTelegramMessage
@@ -5803,9 +5847,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     downloadWaiting = null
                     currentDownloadingSong = null
                     showMessage("Không thể phát bài: ${result.message}")
+                    reportPlayError(song.messageId, result.message, result.code, effectiveChatId, rawMsgId)
                 }
                 is TelegramAudioResolverPolicy.Result.Resolved -> {
                     val freshId = result.freshFileId
+                    android.util.Log.i("MeloVaultPlay",
+                        "stage=parsed chat=$effectiveChatId msg=$rawMsgId size=${result.size} completed=${result.isDownloadingCompleted}")
                     val resolvedSong = song.copy(
                         fileId = freshId,
                         expectedSize = if (result.size > 0L) result.size else song.expectedSize
@@ -5836,22 +5883,33 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         nowPlayingTitle.text = song.title
                         enqueueTelegramPlayback(resolvedSong, localFile)
                         showMessage("Đang phát: ${song.title}")
+                        setPlayFeedback(null, song.messageId)
                     } else {
                         val account = library.authorizedUser()?.value
                         if (account == null || account <= 0L) {
                             showMessage("Phiên Telegram chưa sẵn sàng.")
+                            reportPlayError(song.messageId, TelegramPlayFeedbackPolicy.NOT_READY_MESSAGE, null, effectiveChatId, rawMsgId)
                             return@resolveTelegramMessage
                         }
                         if (!TelegramProgressiveCache.begin(
                                 account, filesRoot, freshId, resolvedSong.expectedSize
                             )) {
-                            showMessage("Không tạo được bộ đệm nhạc của tài khoản Telegram.")
+                            showMessage(TelegramPlayFeedbackPolicy.CACHE_MESSAGE)
+                            reportPlayError(song.messageId, TelegramPlayFeedbackPolicy.CACHE_MESSAGE, null, effectiveChatId, rawMsgId)
                             return@resolveTelegramMessage
                         }
                         downloadWaiting = freshId
                         currentDownloadingSong = resolvedSong
                         nowPlayingTitle.text = song.title
                         showMessage("Đang đệm nhạc qua Telegram: ${song.title}")
+                        setPlayFeedback(TelegramPlayFeedbackPolicy.Stage.BUFFERING, song.messageId, TelegramPlayFeedbackPolicy.BUFFERING_TEXT)
+                        android.util.Log.i("MeloVaultPlay", "stage=begin chat=$effectiveChatId msg=$rawMsgId size=${resolvedSong.expectedSize}")
+                        mainHandler.postDelayed({
+                            if (!isDestroyed && downloadWaiting == freshId) {
+                                android.util.Log.i("MeloVaultPlay",
+                                    "stage=download_10s msg=$rawMsgId ready=${TelegramProgressiveCache.readyBytes(freshId)} total=${TelegramProgressiveCache.totalBytes(freshId)}")
+                            }
+                        }, 10_000L)
                         enqueueProgressivePlayback(resolvedSong)
                         try {
                             send("downloadFile", "download:$freshId") {
@@ -5865,7 +5923,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                             TelegramProgressiveCache.stop(freshId)
                             downloadWaiting = null
                             currentDownloadingSong = null
-                            showMessage("Không thể tải bài này.")
+                            showMessage(TelegramPlayFeedbackPolicy.DOWNLOAD_START_MESSAGE)
+                            reportPlayError(song.messageId, TelegramPlayFeedbackPolicy.DOWNLOAD_START_MESSAGE, null, effectiveChatId, rawMsgId)
                         }
                     }
                 }

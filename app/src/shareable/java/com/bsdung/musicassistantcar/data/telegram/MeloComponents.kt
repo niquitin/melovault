@@ -593,7 +593,7 @@ internal class MeloStatusIconView(
                 canvas.drawPath(path, paint)
                 paint.color = tint
             }
-            Status.DOWNLOADING -> {
+            Status.DOWNLOADING, Status.OPENING -> {
                 paint.style = Paint.Style.STROKE
                 paint.strokeWidth = stroke
                 paint.strokeCap = Paint.Cap.ROUND
