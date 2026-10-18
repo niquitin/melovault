@@ -85,9 +85,18 @@ internal object MeloNowPlayingPolicy {
         return out
     }
 
-    fun seekFraction(x: Float, width: Float): Float {
-        if (width <= 0f) return 0f
-        return (x / width).coerceIn(0f, 1f)
+    /** Touch position to 0..1 over the bar, which starts and ends [inset] px inside the view. */
+    fun seekFraction(x: Float, width: Float, inset: Float = 0f): Float {
+        val span = width - 2f * inset.coerceAtLeast(0f)
+        if (span <= 0f) return 0f
+        return ((x - inset.coerceAtLeast(0f)) / span).coerceIn(0f, 1f)
+    }
+
+    /** Knob centre for [fraction]: [inset] at 0, width - [inset] at 1, so the knob is never clipped. */
+    fun knobCenter(fraction: Float, width: Float, inset: Float): Float {
+        val i = inset.coerceAtLeast(0f)
+        val span = (width - 2f * i).coerceAtLeast(0f)
+        return i + span * fraction.coerceIn(0f, 1f)
     }
 
     /** Derived data only; scoped by account so a different login never reuses another's file. */

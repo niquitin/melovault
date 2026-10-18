@@ -46,7 +46,7 @@ internal class MeloWaveformView(
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        val f = MeloNowPlayingPolicy.seekFraction(event.x, width.toFloat())
+        val f = MeloNowPlayingPolicy.seekFraction(event.x, width.toFloat(), inset())
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 dragging = true
@@ -69,35 +69,43 @@ internal class MeloWaveformView(
 
     override fun performClick(): Boolean = super.performClick()
 
+    private fun barThickness(): Float = maxOf(4f, height / 6f)
+
+    /** Knob radius; the bar starts and ends this far inside the view so the knob is never clipped. */
+    private fun inset(): Float = barThickness() * 1.4f
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val w = width.toFloat()
         val h = height.toFloat()
         if (w <= 0f || h <= 0f) return
         val shown = if (dragging) dragFraction else progress
+        val inset = inset()
+        val knobX = MeloNowPlayingPolicy.knobCenter(shown, w, inset)
         val bars = peaks
         if (bars == null) {
-            val barH = maxOf(4f, h / 6f)
+            val barH = barThickness()
             val top = (h - barH) / 2f
             paint.color = track
-            rect.set(0f, top, w, top + barH)
+            rect.set(inset, top, w - inset, top + barH)
             canvas.drawRoundRect(rect, barH / 2, barH / 2, paint)
             paint.color = accent
-            rect.set(0f, top, w * shown, top + barH)
+            rect.set(inset, top, knobX, top + barH)
             canvas.drawRoundRect(rect, barH / 2, barH / 2, paint)
-            canvas.drawCircle(w * shown, h / 2f, barH * 1.4f, paint)
+            canvas.drawCircle(knobX, h / 2f, inset, paint)
             return
         }
-        val slot = w / bars.size
+        val span = (w - 2f * inset).coerceAtLeast(1f)
+        val slot = span / bars.size
         val barW = maxOf(1f, slot * 0.6f)
         bars.forEachIndexed { i, value ->
             val barH = maxOf(2f, value * h * 0.92f)
-            val left = i * slot + (slot - barW) / 2f
+            val left = inset + i * slot + (slot - barW) / 2f
             paint.color = if ((i + 0.5f) / bars.size <= shown) accent else track
             rect.set(left, (h - barH) / 2f, left + barW, (h + barH) / 2f)
             canvas.drawRoundRect(rect, barW / 2, barW / 2, paint)
         }
         paint.color = accent
-        canvas.drawRect(w * shown - 1.5f, 0f, w * shown + 1.5f, h, paint)
+        canvas.drawRect(knobX - 1.5f, 0f, knobX + 1.5f, h, paint)
     }
 }

@@ -68,6 +68,43 @@ class MeloNowPlayingPolicyTest {
     }
 
     @Test
+    fun seekFractionWithInsetMapsTheBarNotTheView() {
+        assertEquals(0f, MeloNowPlayingPolicy.seekFraction(0f, 100f, 10f), 0.0001f)
+        assertEquals(0f, MeloNowPlayingPolicy.seekFraction(10f, 100f, 10f), 0.0001f)
+        assertEquals(1f, MeloNowPlayingPolicy.seekFraction(90f, 100f, 10f), 0.0001f)
+        assertEquals(1f, MeloNowPlayingPolicy.seekFraction(100f, 100f, 10f), 0.0001f)
+        assertEquals(0.5f, MeloNowPlayingPolicy.seekFraction(50f, 100f, 10f), 0.0001f)
+        assertEquals(0.25f, MeloNowPlayingPolicy.seekFraction(30f, 100f, 10f), 0.0001f)
+    }
+
+    @Test
+    fun seekFractionNeverDividesByZero() {
+        assertEquals(0f, MeloNowPlayingPolicy.seekFraction(5f, 20f, 10f), 0.0001f)
+        assertEquals(0f, MeloNowPlayingPolicy.seekFraction(5f, 10f, 10f), 0.0001f)
+        assertEquals(0f, MeloNowPlayingPolicy.seekFraction(5f, 0f, 3f), 0.0001f)
+        assertEquals(0.5f, MeloNowPlayingPolicy.seekFraction(50f, 100f, -4f), 0.0001f)
+    }
+
+    @Test
+    fun knobStaysInsideTheViewAtBothEnds() {
+        assertEquals(10f, MeloNowPlayingPolicy.knobCenter(0f, 100f, 10f), 0.0001f)
+        assertEquals(90f, MeloNowPlayingPolicy.knobCenter(1f, 100f, 10f), 0.0001f)
+        assertEquals(50f, MeloNowPlayingPolicy.knobCenter(0.5f, 100f, 10f), 0.0001f)
+        assertEquals(10f, MeloNowPlayingPolicy.knobCenter(-1f, 100f, 10f), 0.0001f)
+        assertEquals(90f, MeloNowPlayingPolicy.knobCenter(2f, 100f, 10f), 0.0001f)
+        // a view narrower than the knob keeps the knob at the inset instead of going negative
+        assertEquals(10f, MeloNowPlayingPolicy.knobCenter(0.7f, 15f, 10f), 0.0001f)
+    }
+
+    @Test
+    fun touchAndKnobAgree() {
+        for (f in listOf(0f, 0.2f, 0.5f, 0.9f, 1f)) {
+            val x = MeloNowPlayingPolicy.knobCenter(f, 240f, 12f)
+            assertEquals(f, MeloNowPlayingPolicy.seekFraction(x, 240f, 12f), 0.0001f)
+        }
+    }
+
+    @Test
     fun waveformCacheIsAccountScoped() {
         val a = MeloNowPlayingPolicy.waveformCacheName(1, 42, 9_000_000)
         val b = MeloNowPlayingPolicy.waveformCacheName(2, 42, 9_000_000)
