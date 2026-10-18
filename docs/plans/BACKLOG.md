@@ -25,6 +25,8 @@ Mỗi phiên làm đúng 1 việc: tạo `docs/plans/<việc>.md` (mục tiêu, 
 ## 6. Chip Mixset theo thời lượng
 - Chip "Mixset" hiện chỉ lọc theo tên (từ khóa). Làm lọc theo thời lượng (bài dài) cần quyết định ngưỡng và có thể thêm truy vấn/chỉ mục → viết plan trước, có thể phải duyệt nếu đổi schema.
 
+## 0. Thanh đáy gộp — Phần A ĐÃ LÀM ở Beta106 (18/10/2026, `fd729a0` + `633ce37`); Phần B (hàng viên chất lượng) và Phần C (thẻ nguồn) còn lại, xem `docs/plans/thanh-day-gop-melowave.md`; chờ chủ dự án QA Shanling
+
 ## 7. Sửa 5 lỗi QA Y700 b99 — ĐÃ LÀM ở Beta100 (18/10/2026, `18bce8b`), còn phần B của lỗi 1
 - Theo `docs/plans/sua-bo-cuc-y700.md`: lỗi 1 phần A (phản hồi khi bấm bài, log `MeloVaultPlay`, nhắc sau 15 s nếu Telegram không gửi dữ liệu), lỗi 3 (núm tua), lỗi 2 (ảnh bìa theo chiều cao còn lại + dạng gọn khi màn thấp + hàng Đảo/Lặp/Lưu/Hàng đợi xuống 2 dòng khi hẹp), lỗi 4 (về đầu danh sách khi đổi nhóm; cuộn khung đổi kênh), lỗi 5 (tiêu đề nhóm xuống dòng riêng khi hẹp, nút chip không xuống dòng). Sony QA OK; chờ chủ dự án QA Y700.
 - **Lỗi 1 phần B (nguyên nhân gốc kênh "Sưu Tầm Những Năm Về Trước" trên Y700) chưa sửa — cần ảnh/log từ Y700 sau khi cài b100.**
