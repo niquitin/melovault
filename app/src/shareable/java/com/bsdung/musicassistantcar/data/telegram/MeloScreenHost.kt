@@ -33,6 +33,19 @@ internal interface MeloScreenHost {
     /** Starts speech input; false when this device has no speech recognizer. */
     fun startVoiceSearch(onText: (String) -> Unit): Boolean
 
+    // ---- Library screens (Điện thoại / Tablet / Hai khung) ---------------------------------
+
+    /** "Phát hết": plays the group on screen from its first loaded song; [shuffle] turns shuffle on first. */
+    fun playAll(shuffle: Boolean)
+    fun openNowPlaying()
+    /** The same sync line the legacy header shows (real counts), or null when there is none. */
+    fun syncSubtitle(): String?
+    /** Offline groups found by the last scan, null while unknown. */
+    fun downloadedCount(): Int?
+    fun hideZeroSources(): Boolean
+    fun toggleHideZeroSources()
+    fun rescan()
+
     // ---- Studio Deck (Now Playing) --------------------------------------------------------
 
     /** Current playback queue in play order (the service's authoritative order). */

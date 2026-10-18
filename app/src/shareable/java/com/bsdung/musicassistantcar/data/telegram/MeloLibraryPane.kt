@@ -1,0 +1,294 @@
+package com.bsdung.musicassistantcar.data.telegram
+
+import android.content.Context
+import android.graphics.Typeface
+import android.os.Handler
+import android.os.Looper
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.widget.AbsListView
+import android.widget.BaseAdapter
+import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
+import android.widget.LinearLayout
+import android.widget.ListView
+import android.widget.ScrollView
+import android.widget.TextView
+import com.bsdung.musicassistantcar.data.telegram.MeloCompactPolicy.Mode
+import com.bsdung.musicassistantcar.data.telegram.MeloComponents.SongRowModel
+import com.bsdung.musicassistantcar.data.telegram.MeloLibraryPolicy.NewLayer
+import com.bsdung.musicassistantcar.data.telegram.MeloScreenHost.Snapshot
+import com.bsdung.musicassistantcar.data.telegram.MeloScreenHost.SourceRow
+
+/**
+ * The library column shared by the Điện thoại / Tablet dọc screen and the right pane of the
+ * Hai khung screen: search, chips, group title with "Phát hết", song list or Telegram source
+ * grid. Pure view layer over [MeloScreenHost].
+ */
+internal class MeloLibraryPane(
+    private val context: Context,
+    private val c: MeloComponents,
+    private val host: MeloScreenHost,
+    private val layer: NewLayer,
+    /** Called while the list scrolls: true when the owner should fold its title row away. */
+    private val onHeaderCollapse: (Boolean) -> Unit = {}
+) {
+    private val s = c.sizes
+    private val p = c.palette
+    private val handler = Handler(Looper.getMainLooper())
+
+    val view: LinearLayout = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+
+    private val searchHolder = FrameLayout(context)
+    private val chipHolder = FrameLayout(context)
+    private val groupTitle = c.text("", s.titleText, p.text, bold = true)
+    private val playAll = c.chip("▶ Phát hết", true) { host.playAll(false) }
+    private val note = c.text("", s.secondaryText, p.textSecondary, maxLines = 2)
+    private val list = ListView(context)
+    private val adapter = RowsAdapter()
+    private val sourcesScroll = ScrollView(context)
+    private val sourcesBox = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+    private val searchBar = c.searchBar(null, onQuery = ::queueQuery)
+    private val searchField: EditText get() = searchBar.getChildAt(1) as EditText
+
+    private var snapshot: Snapshot? = null
+    private var chipKey: String? = null
+    private var lastQuery = ""
+    private var pendingQuery: Runnable? = null
+    private var collapsed = false
+    private var lastScrollKey = 0
+    private var playAllWhenLoaded = false
+
+    init {
+        searchHolder.addView(searchBar)
+        view.addView(searchHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        view.addView(chipHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = s.gap
+        })
+        val header = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, s.gap, 0, s.gap / 2)
+            addView(groupTitle, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(playAll)
+        }
+        view.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        view.addView(note, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = s.gap / 2
+        })
+        list.apply {
+            adapter = this@MeloLibraryPane.adapter
+            divider = null
+            dividerHeight = s.gap / 2
+            setSelector(android.R.color.transparent)
+            setOnItemClickListener { _, _, position, _ -> snapshot?.takeIf { !it.showingSources && position in it.rows.indices }?.let { host.playAt(position) } }
+            setOnItemLongClickListener { _, v, position, _ ->
+                if (snapshot?.showingSources == false) host.openSongMenu(position, v)
+                true
+            }
+            setOnScrollListener(object : AbsListView.OnScrollListener {
+                override fun onScrollStateChanged(v: AbsListView?, state: Int) = Unit
+                override fun onScroll(v: AbsListView?, first: Int, visible: Int, total: Int) {
+                    val snap = snapshot ?: return
+                    if (snap.showingSources) return
+                    if (MeloCompactPolicy.shouldLoadMore(first, visible, total)) host.loadMore()
+                    val key = first * (s.rowHeight + s.gap / 2) - (getChildAt(0)?.top ?: 0)
+                    val next = MeloLibraryPolicy.headerCollapsed(collapsed, key - lastScrollKey, first)
+                    lastScrollKey = key
+                    if (next != collapsed) {
+                        collapsed = next
+                        onHeaderCollapse(next)
+                    }
+                }
+            })
+        }
+        sourcesScroll.addView(sourcesBox, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        view.addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        view.addView(sourcesScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+    }
+
+    fun detach() {
+        pendingQuery?.let(handler::removeCallbacks)
+        handler.removeCallbacksAndMessages(null)
+    }
+
+    fun onLibraryChanged() {
+        val snap = host.snapshot()
+        snapshot = snap
+        searchField.hint = if (snap.showingSources) "Tìm nhóm, kênh hoặc bot…" else MeloComponentPolicy.searchHint(snap.total)
+        renderChips(snap)
+        if (snap.showingSources) {
+            groupTitle.text = "Telegram · ${MeloComponentPolicy.formatCount(snap.sources.count { it.chatId != 0L })} nguồn"
+            playAll.visibility = View.GONE
+            note.visibility = View.GONE
+            list.visibility = View.GONE
+            sourcesScroll.visibility = View.VISIBLE
+            renderSources(snap)
+        } else {
+            groupTitle.text = MeloCompactPolicy.headerTitle(snap.mode, snap.sourceTitle, snap.total)
+            playAll.visibility = View.VISIBLE
+            playAll.isEnabled = MeloLibraryPolicy.playAllEnabled(snap.rows.size)
+            playAll.alpha = if (playAll.isEnabled) 1f else 0.4f
+            note.text = snap.note.orEmpty()
+            note.visibility = if (snap.note.isNullOrBlank()) View.GONE else View.VISIBLE
+            sourcesScroll.visibility = View.GONE
+            list.visibility = View.VISIBLE
+            adapter.notifyDataSetChanged()
+            if (playAllWhenLoaded && snap.rows.isNotEmpty()) {
+                playAllWhenLoaded = false
+                host.playAll(true)
+            }
+        }
+    }
+
+    /** Playing-row highlight follows track changes. */
+    fun onPlaybackChanged(playingKey: Long?) {
+        if (snapshot != null && snapshot?.playingKey != playingKey) onLibraryChanged()
+    }
+
+    // ---- Search and chips ---------------------------------------------------------------------
+
+    private fun queueQuery(query: String) {
+        pendingQuery?.let(handler::removeCallbacks)
+        val task = Runnable {
+            if (query != lastQuery) {
+                lastQuery = query
+                host.setQuery(query)
+            }
+        }
+        pendingQuery = task
+        handler.postDelayed(task, 250L)
+    }
+
+    private fun renderChips(snap: Snapshot) {
+        if (snap.showingSources) {
+            chipHolder.visibility = View.GONE
+            return
+        }
+        chipHolder.visibility = View.VISIBLE
+        val downloaded = host.downloadedCount()
+        val chips = MeloLibraryPolicy.chips(downloaded)
+        val selected = MeloLibraryPolicy.selectedChip(snap.mode, snap.query, downloaded)
+        val key = chips.joinToString("|") { it.label } + "#" + selected
+        if (key == chipKey) return
+        chipKey = key
+        chipHolder.removeAllViews()
+        val strip = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        chips.forEachIndexed { i, chip ->
+            strip.addView(c.chip(chip.label, i == selected) { onChip(chip) })
+        }
+        chipHolder.addView(HorizontalScrollView(context).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(strip)
+        })
+    }
+
+    private fun onChip(chip: MeloLibraryPolicy.Chip) {
+        val query = MeloLibraryPolicy.queryFor(chip)
+        if (chip.mode != null) host.setMode(chip.mode)
+        lastQuery = query
+        if (searchField.text.toString() != query) searchField.setText(query)
+        host.setQuery(query)
+    }
+
+    // ---- Song list ------------------------------------------------------------------------------
+
+    private inner class RowsAdapter : BaseAdapter() {
+        override fun getCount(): Int = snapshot?.takeIf { !it.showingSources }?.rows?.size ?: 0
+        override fun getItem(position: Int): Any? = null
+        override fun getItemId(position: Int): Long = position.toLong()
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+            val snap = snapshot ?: return View(context)
+            val row = snap.rows.getOrNull(position) ?: return View(context)
+            val status = MeloCompactPolicy.rowStatus(row.downloaded, row.downloadingPercent, row.songKey == snap.playingKey)
+            val quality = MeloComponentPolicy.qualityLabel(MeloComponentPolicy.formatOf(null, row.filename), null, null, null)
+            return c.songRow(
+                SongRowModel(row.title, row.sourceTitle, row.durationSeconds, status, quality, row.downloadingPercent, row.art)
+            ).also { unclickable(it) }
+        }
+    }
+
+    private fun unclickable(v: View) {
+        v.isClickable = false
+        v.isLongClickable = false
+        v.isFocusable = false
+        if (v is ViewGroup) for (i in 0 until v.childCount) unclickable(v.getChildAt(i))
+    }
+
+    // ---- Telegram sources ---------------------------------------------------------------------
+
+    private fun renderSources(snap: Snapshot) {
+        sourcesBox.removeAllViews()
+        val all = snap.sources.firstOrNull { it.chatId == 0L }
+        val channels = snap.sources.filter { it.chatId != 0L }
+        sourcesBox.addView(heroCard(all?.count ?: snap.total))
+        val tools = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, s.gap, 0, s.gap)
+        }
+        tools.addView(c.chip(if (host.hideZeroSources()) "Hiện kênh 0 bài" else "Ẩn kênh 0 bài", host.hideZeroSources()) {
+            host.toggleHideZeroSources()
+        })
+        tools.addView(c.chip("Quét lại", false) { host.rescan() })
+        sourcesBox.addView(tools)
+        if (channels.isEmpty()) {
+            sourcesBox.addView(c.text("Chưa có nguồn nào. Bấm Quét lại để đồng bộ.", s.secondaryText, p.textSecondary, maxLines = 2))
+            return
+        }
+        val columns = MeloLibraryPolicy.sourceColumns(layer)
+        channels.chunked(columns).forEach { rowItems ->
+            val line = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+            rowItems.forEachIndexed { i, source ->
+                line.addView(sourceCard(source), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    if (i < columns - 1) marginEnd = s.gap
+                })
+            }
+            repeat(columns - rowItems.size) {
+                line.addView(View(context), LinearLayout.LayoutParams(0, 1, 1f).apply { marginStart = s.gap })
+            }
+            sourcesBox.addView(line, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = s.gap
+            })
+        }
+    }
+
+    /** "Kho tổng hợp": total songs, a button to open everything and one to shuffle-play it. */
+    private fun heroCard(total: Int?): View = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        background = c.roundedBackground(p.accentSoft, stroke = p.accent)
+        setPadding(s.gap * 2, s.gap * 2, s.gap * 2, s.gap * 2)
+        addView(c.text("Kho tổng hợp", s.titleText, p.text, bold = true))
+        val downloaded = host.downloadedCount()
+        val detail = listOfNotNull(
+            total?.let { "${MeloComponentPolicy.formatCount(it)} bài" },
+            downloaded?.let { "${MeloComponentPolicy.formatCount(it)} đã tải" }
+        ).joinToString(" · ")
+        if (detail.isNotEmpty()) addView(c.text(detail, s.secondaryText, p.textSecondary).apply { setPadding(0, s.gap / 2, 0, s.gap) })
+        val buttons = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        buttons.addView(c.chip("Mở tất cả", false) { host.openSource(null) })
+        buttons.addView(c.chip("⇄ Phát ngẫu nhiên", true) {
+            playAllWhenLoaded = true
+            host.openSource(null)
+            host.setMode(Mode.ALL)
+        })
+        addView(buttons)
+    }
+
+    private fun sourceCard(source: SourceRow): View = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        minimumHeight = s.rowHeight
+        gravity = Gravity.CENTER_VERTICAL
+        setPadding(s.gap * 2, s.gap, s.gap * 2, s.gap)
+        background = c.roundedBackground(p.surface, stroke = p.border)
+        isClickable = true
+        isFocusable = true
+        contentDescription = "${source.title}, ${source.count} bài"
+        addView(c.text(source.title, s.titleText, p.text, bold = true, maxLines = 2))
+        addView(c.text(if (source.count > 0) "${MeloComponentPolicy.formatCount(source.count)} bài" else "Chưa có nhạc",
+            s.secondaryText, p.textSecondary).apply { setPadding(0, s.gap / 2, 0, 0) })
+        setOnClickListener { host.openSource(source.chatId) }
+    }
+}

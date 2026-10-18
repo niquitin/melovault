@@ -1,0 +1,256 @@
+package com.bsdung.musicassistantcar.data.telegram
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Typeface
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.OnBackPressedDispatcher
+import com.bsdung.musicassistantcar.data.telegram.MeloCompactPolicy.Mode
+import com.bsdung.musicassistantcar.data.telegram.MeloDesignTokens.Sizes
+import com.bsdung.musicassistantcar.data.telegram.MeloLibraryPolicy.NewLayer
+import com.bsdung.musicassistantcar.data.telegram.MeloScreenHost.NowPlaying
+
+/**
+ * Hai khung ngang (docs/ui-spec.md step 7): navigation column (80dp), player pane (~40%)
+ * and library pane (~60%). The player pane scrolls when the window is short (a phone turned
+ * sideways is only about 384dp tall).
+ */
+internal class MeloTabletScreen(
+    private val context: Context,
+    sizes: Sizes,
+    private val host: MeloScreenHost,
+    private val backDispatcher: OnBackPressedDispatcher
+) {
+    private val c = MeloComponents(context, sizes)
+    private val s = c.sizes
+    private val p = c.palette
+
+    val view: LinearLayout = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        setBackgroundColor(p.background)
+        setPadding(0, s.gap, s.screenMargin, s.gap)
+    }
+
+    private val navColumn = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+    private val navItems = mutableMapOf<NavItem, LinearLayout>()
+    private val syncLine = c.text("", s.secondaryText, p.textSecondary, maxLines = 2)
+    private val pane = MeloLibraryPane(context, c, host, NewLayer.TWO_PANE)
+
+    // Player pane parts.
+    private val artHost = FrameLayout(context)
+    private val title = c.text("Chọn một bài để phát", s.playerTitleText, p.text, bold = true, maxLines = 2)
+    private val source = c.text("", s.titleText, p.textSecondary, maxLines = 1)
+    private val quality = c.text("", s.secondaryText, p.accent, maxLines = 1)
+    private val time = c.text("", s.secondaryText, p.textSecondary)
+    private val bar: MeloWaveformView
+    private lateinit var play: TextView
+    private lateinit var shuffle: TextView
+    private lateinit var repeat: TextView
+    private lateinit var favorite: TextView
+    private var snapshot: MeloScreenHost.Snapshot? = null
+    private var lastArt: Bitmap? = null
+    private var artKey: Any? = null
+    private var artSide = 0
+
+    private enum class NavItem(val icon: String, val label: String) {
+        LIBRARY("♫", "Thư viện"), TELEGRAM("☷", "Telegram"), PLAYLIST("☆", "Playlist"), NOW("▶", "Đang phát"), SETTINGS("⚙", "Cài đặt")
+    }
+
+    private val backCallback = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            val snap = snapshot
+            if (snap != null && !snap.showingSources && snap.sourceTitle != null) host.showSources()
+            else { isEnabled = false; backDispatcher.onBackPressed() }
+        }
+    }
+
+    init {
+        bar = MeloWaveformView(context, p.accent, p.border) { fraction ->
+            val dur = host.nowPlaying()?.durationMs ?: 0L
+            if (dur > 0L) host.seekTo((dur * fraction).toLong())
+        }
+        buildNav()
+        view.addView(navColumn, LinearLayout.LayoutParams(s.minTouch * 80 / 48, ViewGroup.LayoutParams.MATCH_PARENT))
+        view.addView(buildPlayerPane(), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 40f).apply { marginEnd = s.screenMargin })
+        val right = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        right.addView(syncLine, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            bottomMargin = s.gap
+        })
+        right.addView(pane.view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        view.addView(right, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 60f))
+    }
+
+    fun attach() {
+        backDispatcher.addCallback(backCallback)
+        onLibraryChanged()
+        onPlaybackChanged()
+    }
+
+    fun detach() {
+        backCallback.remove()
+        pane.detach()
+    }
+
+    // ---- Navigation column -------------------------------------------------------------------
+
+    private fun buildNav() {
+        NavItem.entries.forEach { item ->
+            val button = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+                isClickable = true
+                isFocusable = true
+                contentDescription = item.label
+                addView(c.text(item.icon, s.titleText * 1.3f, p.text).apply { gravity = Gravity.CENTER })
+                addView(c.text(item.label, s.secondaryText * 0.85f, p.text).apply { gravity = Gravity.CENTER })
+                setOnClickListener { onNav(item) }
+            }
+            navItems[item] = button
+            navColumn.addView(button, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+                bottomMargin = s.gap / 2
+                marginStart = s.gap / 2
+                marginEnd = s.gap
+            })
+        }
+    }
+
+    private fun onNav(item: NavItem) {
+        when (item) {
+            NavItem.LIBRARY -> { host.openSource(null); host.setMode(Mode.ALL) }
+            NavItem.TELEGRAM -> host.showSources()
+            NavItem.PLAYLIST -> host.setMode(Mode.PLAYLIST)
+            NavItem.NOW -> host.openNowPlaying()
+            NavItem.SETTINGS -> host.openUiLab()
+        }
+    }
+
+    private fun renderNav(snap: MeloScreenHost.Snapshot) {
+        val active = when {
+            snap.showingSources -> NavItem.TELEGRAM
+            snap.mode == Mode.PLAYLIST -> NavItem.PLAYLIST
+            else -> NavItem.LIBRARY
+        }
+        navItems.forEach { (item, button) ->
+            val on = item == active
+            button.background = if (on) c.roundedBackground(p.accentSoft, stroke = p.accent) else null
+            for (i in 0 until button.childCount) (button.getChildAt(i) as? TextView)?.setTextColor(if (on) p.accent else p.text)
+        }
+    }
+
+    // ---- Player pane -----------------------------------------------------------------------------
+
+    private fun buildPlayerPane(): View {
+        val scroll = ScrollView(context).apply { isFillViewport = true; isVerticalScrollBarEnabled = false }
+        val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        column.addView(artHost, LinearLayout.LayoutParams(0, 0).apply { gravity = Gravity.CENTER_HORIZONTAL })
+        column.addView(title, matchWrap().apply { topMargin = s.gap * 2 })
+        column.addView(source, matchWrap().apply { topMargin = s.gap / 2 })
+        column.addView(quality, matchWrap().apply { topMargin = s.gap / 2 })
+        column.addView(bar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, s.minTouch).apply { topMargin = s.gap * 2 })
+        column.addView(time.apply { gravity = Gravity.END }, matchWrap())
+
+        val transport = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        transport.addView(c.iconButton("⏮", "Bài trước") { host.previous() }.apply {
+            layoutParams = LinearLayout.LayoutParams(0, s.minTouch, 1f).apply { marginEnd = s.gap }
+        })
+        play = c.iconButton("▶", "Phát", primary = true, width = s.playButtonWidth, height = s.playButtonHeight) { host.playPause() }
+            .apply { layoutParams = LinearLayout.LayoutParams(s.playButtonWidth, s.playButtonHeight).apply { marginEnd = s.gap } }
+        transport.addView(play)
+        transport.addView(c.iconButton("⏭", "Bài kế") { host.next() }.apply {
+            layoutParams = LinearLayout.LayoutParams(0, s.minTouch, 1f)
+        })
+        column.addView(transport, matchWrap().apply { topMargin = s.gap * 2 })
+
+        val extras = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        shuffle = c.chip("⇄ Đảo", false) { host.toggleShuffle(); onPlaybackChanged() }
+        repeat = c.chip("↻ Lặp", false) { host.cycleRepeat(); onPlaybackChanged() }
+        favorite = c.chip("☆ Lưu", false) { host.toggleFavorite(); onPlaybackChanged() }
+        listOf(shuffle, repeat, favorite, c.chip("☰ Hàng đợi", false) { host.openQueue() }).forEach { extras.addView(it) }
+        column.addView(android.widget.HorizontalScrollView(context).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(extras)
+        }, matchWrap().apply { topMargin = s.gap * 2 })
+        scroll.addView(column)
+        scroll.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or_, ob ->
+            if (r - l != or_ - ol || b - t != ob - ot) sizeArt(minOf(r - l, ((b - t) * 0.55f).toInt()))
+        }
+        return scroll
+    }
+
+    private fun matchWrap() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+
+    private fun sizeArt(side: Int) {
+        val value = side.coerceAtLeast(s.rowArt)
+        if (value == artSide) return
+        artSide = value
+        artHost.layoutParams = (artHost.layoutParams as LinearLayout.LayoutParams).apply { width = value; height = value }
+        artKey = null
+        artHost.requestLayout()
+        onPlaybackChanged()
+    }
+
+    private fun showArt(art: Bitmap?, sourceTitle: String?, songTitle: String) {
+        if (artSide <= 0) return
+        val key = Triple(art, songTitle, artSide)
+        if (key == artKey) return
+        artKey = key
+        artHost.removeAllViews()
+        artHost.addView(c.artView(art, sourceTitle, songTitle, artSide).apply { layoutParams = FrameLayout.LayoutParams(artSide, artSide) })
+    }
+
+    private fun TextView.show(value: CharSequence) {
+        if (text?.toString() != value.toString()) text = value
+    }
+
+    private fun toggleStyle(chip: TextView, on: Boolean, label: String) {
+        val state = "$on|$label"
+        if (chip.tag == state) return
+        chip.tag = state
+        chip.text = label
+        chip.setTextColor(if (on) p.onAccent else p.text)
+        chip.background = if (on) c.pill(p.accent) else c.pill(p.surfaceRaised, p.border)
+    }
+
+    fun onLibraryChanged() {
+        val snap = host.snapshot()
+        snapshot = snap
+        syncLine.show("☁ " + MeloLibraryPolicy.syncLine(host.syncSubtitle(), snap.total, false))
+        backCallback.isEnabled = !snap.showingSources && snap.sourceTitle != null
+        renderNav(snap)
+        pane.onLibraryChanged()
+    }
+
+    fun onPlaybackChanged() {
+        val now: NowPlaying? = host.nowPlaying()
+        if (now == null) {
+            title.show("Chọn một bài để phát")
+            source.show("")
+            quality.show("")
+            time.show("")
+            bar.setProgress(0f)
+            play.show("▶")
+            showArt(null, null, "♪")
+        } else {
+            title.show(now.title)
+            source.show(now.sourceTitle.orEmpty())
+            quality.show(listOfNotNull(host.qualityLabel(null), now.downloadNote?.takeUnless { it.startsWith("Đã tải") }).joinToString(" · "))
+            bar.setProgress(if (now.durationMs > 0L) now.positionMs.toFloat() / now.durationMs else 0f)
+            time.show(MeloComponentPolicy.progressText((now.positionMs / 1000).toInt(), (now.durationMs / 1000).toInt()))
+            play.show(if (now.playing) "❚❚" else "▶")
+            play.contentDescription = if (now.playing) "Dừng" else "Phát"
+            toggleStyle(shuffle, now.shuffle, if (now.shuffle) "⇄ Đảo: bật" else "⇄ Đảo")
+            toggleStyle(repeat, now.repeatLabel != "tắt", "↻ Lặp: ${now.repeatLabel}")
+            toggleStyle(favorite, now.favorite, if (now.favorite) "★ Đã lưu" else "☆ Lưu")
+            showArt(now.art, now.sourceTitle, now.title)
+        }
+        pane.onPlaybackChanged(now?.songKey)
+    }
+}
