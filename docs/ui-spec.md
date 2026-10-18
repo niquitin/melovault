@@ -115,7 +115,7 @@ Hệ quả: cửa sổ thật cao 574dp (không phải 640dp), và khi bàn phí
 | Thanh đáy gộp | 72dp |
 | Cộng | 568dp / 574dp |
 
-Đã đối chiếu (Beta106, 18/10/2026): trong khung thử Shanling 384×640dp (Cài đặt giao diện) danh sách Gọn thấy 9 dòng 56dp sát nhau + thanh đáy 72dp, nên cửa sổ 574dp vẫn đủ 8 dòng (574 − 48 − 72 − 2 = 452 ≥ 448). Danh sách Gọn không dùng đường kẻ 4dp (chỉ vừa 7 dòng): dòng sát nhau, nền thụt 1dp trên/dưới để vẫn thấy khoảng cách 2dp. Chiều cao cửa sổ thật trên Shanling (574dp hay 604dp) vẫn **[CẦN XÁC NHẬN]** bằng "Sao chép số đo" trên máy thật. Theo số đo thật, 1dp ≈ 0,2mm nên nút 48dp ≈ 9,5mm, bấm thoải mái. Không làm nút nhỏ hơn 48dp.
+Đã đối chiếu (Beta106, 18/10/2026): trong khung thử Shanling 384×640dp (Cài đặt giao diện) danh sách Gọn thấy 9 dòng 56dp sát nhau + thanh đáy 72dp, nên cửa sổ 574dp vẫn đủ 8 dòng (574 − 48 − 72 − 2 = 452 ≥ 448). Danh sách Gọn không dùng đường kẻ 4dp (chỉ vừa 7 dòng): dòng sát nhau, nền thụt 1dp trên/dưới để vẫn thấy khoảng cách 2dp. Đã xác nhận trên Shanling thật (chủ dự án chụp ảnh, 18/10/2026): cửa sổ app 384 × 574dp, danh sách Gọn thấy đủ 8 dòng trên thanh đáy 72dp, phím vật lý điều khiển được. Theo số đo thật, 1dp ≈ 0,2mm nên nút 48dp ≈ 9,5mm, bấm thoải mái. Không làm nút nhỏ hơn 48dp.
 
 **FYT 7870 — tính theo pixel thật, không theo dp.** Màn rộng 282 × 176mm, nhìn từ khoảng 70cm (điện thoại khoảng 30cm), nên chữ và nút phải to gấp khoảng 2,3 lần điện thoại. Vì firmware FYT có thể đặt mật độ Android bất kỳ, Car Mode đọc mật độ vật lý thật của màn (xdpi/ydpi) và quy đổi từ milimet, nên hiển thị đúng kích thước dù firmware đặt 160 hay 240.
 
