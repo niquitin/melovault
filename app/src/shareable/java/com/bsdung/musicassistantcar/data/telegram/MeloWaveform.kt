@@ -133,6 +133,26 @@ internal object MeloWaveform {
         return peak.coerceIn(0f, 1f)
     }
 
+    /**
+     * Bit depth from the container header only (no decoding), for screens that have no waveform
+     * analysis. Null when the file is unreadable or does not state it. Runs on a background thread.
+     */
+    fun probeBitDepth(file: File): Int? {
+        if (!file.isFile) return null
+        val extractor = MediaExtractor()
+        return try {
+            extractor.setDataSource(file.path)
+            val track = (0 until extractor.trackCount).firstOrNull {
+                extractor.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+            } ?: return null
+            sourceBitDepth(extractor.getTrackFormat(track))
+        } catch (_: Exception) {
+            null
+        } finally {
+            runCatching { extractor.release() }
+        }
+    }
+
     /** Source bit depth when the container states it (often FLAC/WAV); null otherwise. */
     private fun sourceBitDepth(format: MediaFormat): Int? {
         if (format.containsKey("bits-per-sample")) {

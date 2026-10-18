@@ -4373,6 +4373,29 @@ class TelegramPreviewActivity : AppCompatActivity() {
             return null
         }
 
+        override fun qualityChips(bitDepth: Int?): List<MeloQualityChipPolicy.Chip> {
+            val controller = player ?: return emptyList()
+            val key = currentTelegramMessageId() ?: return emptyList()
+            val song = queueSongOrder.firstOrNull { it.messageId == key } ?: songs.firstOrNull { it.messageId == key }
+            var mime: String? = null
+            var sampleRate = 0
+            var bitrate = 0
+            audioTracks@ for (group in controller.currentTracks.groups) {
+                if (group.type != C.TRACK_TYPE_AUDIO) continue
+                for (i in 0 until group.length) {
+                    if (!group.isTrackSelected(i)) continue
+                    val f = group.getTrackFormat(i)
+                    mime = f.sampleMimeType
+                    sampleRate = f.sampleRate
+                    bitrate = f.bitrate
+                    break@audioTracks
+                }
+            }
+            // The size Telegram announced; a fully downloaded file is the fallback when it is unknown.
+            val size = song?.expectedSize?.takeIf { it > 0L } ?: ownedCachedFile(key)?.length() ?: -1L
+            return MeloNowPlayingPolicy.qualityChips(mime, song?.filename, sampleRate, bitrate, bitDepth, size)
+        }
+
         override fun currentLocalFile(): File? = currentTelegramMessageId()?.let { ownedCachedFile(it) }
 
         override fun accountId(): Long = library.authorizedUser()?.value ?: 0L

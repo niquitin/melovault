@@ -347,7 +347,7 @@ internal class MeloCompactScreen(
 
     /**
      * Gọn Now Playing: the first screen has only cover, title, progress and
-     * Lùi / Phát / Tiến; scrolling up reveals channel, quality and the extra actions.
+     * quality pills, Lùi / Phát / Tiến; scrolling up reveals channel and the extra actions.
      */
     private inner class NowPlayingPage {
         val root = ScrollView(context).apply {
@@ -368,7 +368,10 @@ internal class MeloCompactScreen(
         private val seek = SeekBar(context).apply { max = 1000 }
         private lateinit var play: TextView
         private val source = c.text("", s.titleText, p.text, maxLines = 2)
-        private val quality = c.text("", s.secondaryText, p.accent, maxLines = 2)
+        private val qualityChips = MeloQualityChipRow(context, c, s.minTouch * 2 / 3, centered = true).apply { visibility = View.GONE }
+        private var depthSongKey: Long? = null
+        private var depthProbed = false
+        private var fileBitDepth: Int? = null
         private val download = c.text("", s.secondaryText, p.textSecondary, maxLines = 2)
         private val shuffle = extra("⇄ Đảo") { host.toggleShuffle(); refresh() }
         private val repeat = extra("↻ Lặp") { host.cycleRepeat(); refresh() }
@@ -392,6 +395,7 @@ internal class MeloCompactScreen(
             }, matchWrap())
             first.addView(art, LinearLayout.LayoutParams(0, 0)) // sized in onLayout below
             first.addView(songTitle, matchWrap().apply { topMargin = s.gap * 2 })
+            first.addView(qualityChips, matchWrap().apply { topMargin = s.gap })
             first.addView(seek, matchWrap().apply { topMargin = s.gap * 2 })
             first.addView(time, matchWrap())
             val transport = LinearLayout(context).apply {
@@ -415,7 +419,6 @@ internal class MeloCompactScreen(
 
             column.addView(c.spacer(s.gap * 3))
             column.addView(source, matchWrap())
-            column.addView(quality, matchWrap().apply { topMargin = s.gap / 2 })
             column.addView(download, matchWrap().apply { topMargin = s.gap / 2 })
             val extras = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
             listOf(shuffle, repeat, favorite, queue).forEach {
@@ -445,7 +448,15 @@ internal class MeloCompactScreen(
             val width = root.width - s.screenMargin * 2
             val reserved = s.minTouch + s.playerTitleText.toInt() * 3 + s.minTouch + s.playButtonHeight + s.gap * 10 +
                 s.secondaryText.toInt() * 3
-            val side = minOf(width, viewportHeight - reserved).coerceAtLeast(s.rowArt)
+            // The pill row may wrap to two lines on a narrow window: measure it instead of guessing.
+            val chipsExtra = if (qualityChips.visibility == View.VISIBLE) {
+                qualityChips.measure(
+                    View.MeasureSpec.makeMeasureSpec(width.coerceAtLeast(0), View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+                )
+                qualityChips.measuredHeight + s.gap
+            } else 0
+            val side = minOf(width, viewportHeight - reserved - chipsExtra).coerceAtLeast(s.rowArt)
             art.layoutParams = LinearLayout.LayoutParams(side, side).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = s.gap }
             artShown = false
             refresh()
@@ -459,6 +470,10 @@ internal class MeloCompactScreen(
             if (now == null) {
                 songTitle.text = "Chưa phát bài nào"
                 time.text = ""
+                if (qualityChips.setChips(emptyList())) {
+                    qualityChips.visibility = View.GONE
+                    if (root.height > 0) sizeFirstBlock(root.height)
+                }
                 return
             }
             songTitle.text = now.title
@@ -479,13 +494,47 @@ internal class MeloCompactScreen(
             play.text = if (now.playing) "❚❚" else "▶"
             play.contentDescription = if (now.playing) "Dừng" else "Phát"
             source.text = now.sourceTitle?.let { "Kênh: $it" } ?: ""
-            val label = MeloComponentPolicy.qualityLabel(MeloComponentPolicy.formatOf(null, now.filename), null, null, null)
-            quality.text = label?.let { "Chất lượng: $it" } ?: ""
+            probeBitDepth(now)
+            val chips = host.qualityChips(fileBitDepth)
+            if (qualityChips.setChips(chips)) {
+                qualityChips.visibility = if (qualityChips.isEmpty) View.GONE else View.VISIBLE
+                // The first block lost or gained a row: give the cover the height that is left.
+                if (root.height > 0) sizeFirstBlock(root.height)
+            }
             download.text = now.downloadNote.orEmpty()
             shuffle.text = if (now.shuffle) "⇄ Đảo: bật" else "⇄ Đảo: tắt"
             repeat.text = "↻ Lặp: ${now.repeatLabel}"
             favorite.text = if (now.favorite) "★ Đã lưu vào Playlist" else "☆ Lưu vào Playlist"
             setTextPx(shuffle); setTextPx(repeat); setTextPx(favorite); setTextPx(queue)
+        }
+
+        /**
+         * Bit depth is only in the downloaded file's header, so a lossless song is probed once
+         * (background thread, header only) as soon as its file is complete; until then no Hi-Res claim.
+         */
+        private fun probeBitDepth(now: NowPlaying) {
+            val key = now.songKey ?: return
+            if (key != depthSongKey) {
+                depthSongKey = key
+                depthProbed = false
+                fileBitDepth = null
+            }
+            if (depthProbed) return
+            if (!MeloComponentPolicy.isLossless(MeloComponentPolicy.formatOf(null, now.filename))) {
+                depthProbed = true
+                return
+            }
+            val file = host.currentLocalFile() ?: return // not downloaded yet: try again on the next update
+            depthProbed = true
+            Thread {
+                val depth = MeloWaveform.probeBitDepth(file)
+                handler.post {
+                    if (nowPage === this@NowPlayingPage && depthSongKey == key && depth != null) {
+                        fileBitDepth = depth
+                        refresh()
+                    }
+                }
+            }.apply { isDaemon = true; name = "melo-bitdepth" }.start()
         }
 
         private fun setTextPx(v: TextView) = v.setTextSize(TypedValue.COMPLEX_UNIT_PX, s.titleText)

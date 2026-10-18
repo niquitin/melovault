@@ -79,15 +79,15 @@ internal object MeloComponentPolicy {
         format?.takeIf { it.isNotBlank() }?.let { parts.add(it) }
         bitDepth?.takeIf { it > 0 }?.let { parts.add("${it}bit") }
         sampleRateHz?.takeIf { it > 0 }?.let { parts.add(formatKhz(it)) }
-        val lossless = format != null && format.uppercase(Locale.ROOT) in LOSSLESS
-        if (!lossless) bitrateKbps?.takeIf { it > 0 }?.let { parts.add("$it kbps") }
+        if (!isLossless(format)) bitrateKbps?.takeIf { it > 0 }?.let { parts.add("$it kbps") }
         if (isHiRes(format, sampleRateHz, bitDepth)) parts.add("Hi-Res")
         return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
     }
 
+    fun isLossless(format: String?): Boolean = format != null && format.uppercase(Locale.ROOT) in LOSSLESS
+
     fun isHiRes(format: String?, sampleRateHz: Int?, bitDepth: Int?): Boolean =
-        format != null && format.uppercase(Locale.ROOT) in LOSSLESS &&
-            (bitDepth ?: 0) >= 24 && (sampleRateHz ?: 0) >= 48_000
+        isLossless(format) && (bitDepth ?: 0) >= 24 && (sampleRateHz ?: 0) >= 48_000
 
     fun formatKhz(sampleRateHz: Int): String {
         val khz = sampleRateHz / 1000.0

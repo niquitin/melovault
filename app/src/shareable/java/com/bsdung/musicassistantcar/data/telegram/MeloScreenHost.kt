@@ -74,6 +74,11 @@ internal interface MeloScreenHost {
     fun openQueueSongMenu(index: Int, anchor: View)
     /** Real decoder format of the current track; [bitDepth] from the file when known. */
     fun qualityLabel(bitDepth: Int?): String?
+    /**
+     * Quality pills of the current track (format, bit/kHz, kbps, size, Hi-Res); only the numbers
+     * that are known. Empty when nothing is known or nothing is playing.
+     */
+    fun qualityChips(bitDepth: Int?): List<MeloQualityChipPolicy.Chip>
     /** The fully downloaded, account-owned file of the current track, or null. */
     fun currentLocalFile(): java.io.File?
     fun accountId(): Long

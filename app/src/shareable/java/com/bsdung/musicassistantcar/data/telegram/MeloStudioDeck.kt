@@ -37,7 +37,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Studio Deck Now Playing (docs/ui-spec.md step 6). Portrait: big cover, title,
- * channel, real quality label, waveform scrubber, −30s / Lùi / Phát / Tiến / +60s,
+ * channel, quality pills, waveform scrubber, −30s / Lùi / Phát / Tiến / +60s,
  * Đảo / Lặp / Lưu, then the queue below. Landscape: player on the left, numbered
  * queue on the right. EQ and Hẹn giờ sit at the top (EQ is not available yet).
  */
@@ -56,7 +56,9 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
     private val artHost = FrameLayout(activity)
     private val title: TextView
     private val source: TextView
-    private val quality: TextView
+    private val qualityChips: MeloQualityChipRow
+    /** Only the download progress ("Đang tải 45%"); the quality itself is the pill row above it. */
+    private val qualityNote: TextView
     private val time: TextView
     private val waveform: MeloWaveformView
     private lateinit var play: TextView
@@ -104,7 +106,8 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         c = MeloComponents(activity, MeloDesignTokens.sizes(profile, d.density, d.fontScale, d.physicalPpi))
         title = c.text("", s.playerTitleText, p.text, bold = true, maxLines = 2)
         source = c.text("", s.titleText, p.textSecondary, maxLines = 1)
-        quality = c.text("", s.secondaryText, p.accent, maxLines = 1)
+        qualityChips = MeloQualityChipRow(activity, c, s.minTouch * 2 / 3).apply { visibility = View.GONE }
+        qualityNote = c.text("", s.secondaryText, p.accent, maxLines = 1).apply { visibility = View.GONE }
         time = c.text("", s.secondaryText, p.textSecondary)
         waveform = MeloWaveformView(activity, p.accent, p.border) { fraction ->
             val dur = host.nowPlaying()?.durationMs ?: 0L
@@ -217,11 +220,17 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         return row
     }
 
-    /** Low window (a phone on its side): no quality line, shorter waveform, half the gaps, so the buttons stay on screen. */
+    /** The pill row and the download note take no room when empty or when the window is too low. */
+    private fun updateQualityVisibility() {
+        qualityChips.visibility = if (playerTight || qualityChips.isEmpty) View.GONE else View.VISIBLE
+        qualityNote.visibility = if (playerTight || qualityNote.text.isNullOrEmpty()) View.GONE else View.VISIBLE
+    }
+
+    /** Low window (a phone on its side): no quality pills, shorter waveform, half the gaps, so the buttons stay on screen. */
     private fun applyTight(tight: Boolean) {
         if (tight == playerTight) return
         playerTight = tight
-        quality.visibility = if (tight) View.GONE else View.VISIBLE
+        updateQualityVisibility()
         val top = if (tight) s.gap else s.gap * 2
         listOf<View>(title, waveform, transportRow, extrasRow).forEach { v ->
             (v.layoutParams as LinearLayout.LayoutParams).topMargin = top
@@ -269,7 +278,8 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
     private fun addPlayerBody(column: LinearLayout) {
         column.addView(title, matchWrap().apply { topMargin = s.gap * 2 })
         column.addView(source, matchWrap().apply { topMargin = s.gap / 2 })
-        column.addView(quality, matchWrap().apply { topMargin = s.gap / 2 })
+        column.addView(qualityChips, matchWrap().apply { topMargin = s.gap })
+        column.addView(qualityNote, matchWrap().apply { topMargin = s.gap / 2 })
         column.addView(waveform, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, s.minTouch * 3 / 2).apply {
             topMargin = s.gap * 2
         })
@@ -363,7 +373,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         if (now == null) {
             if (title.show("Chưa phát bài nào")) requestArtFit()
             source.show("")
-            quality.show("")
+            showQuality(emptyList(), "")
             time.show("")
             waveform.setProgress(0f)
             play.show("▶")
@@ -372,8 +382,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         }
         if (title.show(now.title)) requestArtFit()
         source.show(now.sourceTitle.orEmpty())
-        val q = host.qualityLabel(fileBitDepth)
-        quality.show(listOfNotNull(q, now.downloadNote?.takeUnless { it.startsWith("Đã tải") }).joinToString(" · "))
+        showQuality(host.qualityChips(fileBitDepth), now.downloadNote?.takeUnless { it.startsWith("Đã tải") }.orEmpty())
         waveform.setProgress(if (now.durationMs > 0L) now.positionMs.toFloat() / now.durationMs else 0f)
         time.show(MeloComponentPolicy.progressText((now.positionMs / 1000).toInt(), (now.durationMs / 1000).toInt()))
         play.show(if (now.playing) "❚❚" else "▶")
@@ -382,6 +391,15 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         styleToggle(repeat, now.repeatLabel != "tắt", "↻ Lặp: ${now.repeatLabel}")
         styleToggle(favorite, now.favorite, if (now.favorite) "★ Đã lưu" else "☆ Lưu")
         showArt(now.art ?: coverFromFile, now.sourceTitle, now.title)
+    }
+
+    private fun showQuality(chips: List<MeloQualityChipPolicy.Chip>, note: String) {
+        val chipsChanged = qualityChips.setChips(chips)
+        val noteChanged = qualityNote.show(note)
+        if (chipsChanged || noteChanged) {
+            updateQualityVisibility()
+            requestArtFit()
+        }
     }
 
     private fun styleToggle(chip: TextView, on: Boolean, label: String) {

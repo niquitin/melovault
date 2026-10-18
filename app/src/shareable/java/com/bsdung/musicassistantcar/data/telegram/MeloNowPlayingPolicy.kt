@@ -145,6 +145,28 @@ internal object MeloNowPlayingPolicy {
         )
     }
 
+    /**
+     * Pills for the Now Playing quality row from the same raw inputs as [qualityLabel] plus the
+     * file size. Zero or negative numbers (what ExoPlayer reports when unknown) drop their pill.
+     */
+    fun qualityChips(
+        sampleMimeType: String?,
+        filename: String?,
+        sampleRateHz: Int,
+        bitrateBps: Int,
+        bitDepth: Int?,
+        sizeBytes: Long
+    ): List<MeloQualityChipPolicy.Chip> {
+        val mime = sampleMimeType?.takeUnless { it == "audio/raw" }
+        return MeloQualityChipPolicy.chips(
+            MeloComponentPolicy.formatOf(mime, filename),
+            bitDepth?.takeIf { it > 0 },
+            sampleRateHz.takeIf { it > 0 },
+            (bitrateBps / 1000).takeIf { bitrateBps > 0 },
+            sizeBytes.takeIf { it > 0L }
+        )
+    }
+
     fun queueStatus(isCurrent: Boolean, downloaded: Boolean, downloadingPercent: Int?): Status =
         MeloCompactPolicy.rowStatus(downloaded, downloadingPercent, isCurrent)
 
