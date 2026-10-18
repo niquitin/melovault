@@ -69,7 +69,7 @@ Test JVM trên Ni → commit → Git bundle delta + SHA256 → import vào clone
 - Bước 4 (bản Gọn Shanling) code xong ở Beta88 (vc88 `0.6.67-beta`): `MeloCompactScreen` là lớp view phủ lên `TelegramPreviewActivity` qua interface `MeloScreenHost`; KHÔNG tự truy vấn DB/TDLib. Bước 5 (Car Mode) ở Beta89 (`MeloCarScreen`, cùng mẫu; `applyMeloLayer()` ưu tiên Car > Gọn > cũ). Màn mới sau này đi theo cùng mẫu.
 - Y700 không đo (chủ dự án bỏ). Tìm không dấu là việc riêng, có thể cần đổi schema → phải được duyệt.
 - Bước 6 (Studio Deck) ở Beta90: `MeloStudioDeck` mở từ `showFullPlayer()` (mặc định), hẹn giờ + công tắc tải trước nằm trong `ShareablePlaybackService`. EQ chưa làm.
-- Beta91 = Beta90 + sửa hiệu năng F1–F3 (đã đo lại trên Sony). Bước 7 ở Beta92: `MeloPhoneScreen` / `MeloTabletScreen` dùng chung `MeloLibraryPane`; `applyMeloLayer()` ưu tiên Car > Gọn > Mới > cũ, "Thư viện: Cũ" quay về Cockpit/Portrait.
+- Beta93 = bản mới nhất trên Drive (Beta92 + sửa đầu trang thu gọn). Bước 7 ở Beta92: `MeloPhoneScreen` / `MeloTabletScreen` dùng chung `MeloLibraryPane`; `applyMeloLayer()` ưu tiên Car > Gọn > Mới > cũ, "Thư viện: Cũ" quay về Cockpit/Portrait.
 - Việc kế tiếp (chỉ làm khi chủ dự án yêu cầu): chủ dự án thử Beta92, rồi bước 8 (nút vật lý Shanling, màn khoá, Bluetooth). Xem mục 5 và 8 của `HANDOFF.md`.
 - Commit trên Ni: máy chưa có git identity; dùng `git -c user.name="Claude Code" -c user.email="noreply@anthropic.com" commit ...` (không sửa git config), giống cách Codex dùng identity riêng.
 - Kết thúc mỗi phần việc: cập nhật mục "Đang làm dở" và "Việc làm tiếp theo" trong `HANDOFF.md`, cập nhật file này nếu có quy ước mới, rồi commit.
