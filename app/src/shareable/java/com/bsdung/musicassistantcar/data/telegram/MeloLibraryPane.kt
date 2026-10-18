@@ -61,6 +61,7 @@ internal class MeloLibraryPane(
     private var collapsed = false
     private var lastScrollKey = 0
     private var playAllWhenLoaded = false
+    private var groupKey: String? = null
 
     init {
         searchHolder.addView(searchBar)
@@ -115,9 +116,25 @@ internal class MeloLibraryPane(
         handler.removeCallbacksAndMessages(null)
     }
 
+    /** Back at the top with the owner's title row visible, e.g. after switching group or page. */
+    private fun resetScroll() {
+        if (collapsed) {
+            collapsed = false
+            onHeaderCollapse(false)
+        }
+        lastScrollKey = 0
+        list.setSelection(0)
+        sourcesScroll.scrollTo(0, 0)
+    }
+
     fun onLibraryChanged() {
         val snap = host.snapshot()
         snapshot = snap
+        val key = "${snap.showingSources}|${snap.mode}|${snap.sourceTitle}|${snap.query}"
+        if (key != groupKey) {
+            groupKey = key
+            resetScroll()
+        }
         searchField.hint = if (snap.showingSources) "Tìm nhóm, kênh hoặc bot…" else MeloComponentPolicy.searchHint(snap.total)
         renderChips(snap)
         if (snap.showingSources) {
