@@ -332,7 +332,7 @@ internal class MeloTabletScreen(
             if (index >= 0 && (!wasShown || selectionChanged)) {
                 quickList.post {
                     if (!wasShown || index < quickList.firstVisiblePosition || index > quickList.lastVisiblePosition) {
-                        quickList.setSelectionFromTop(index, s.minTouch)
+                        quickList.setSelectionFromTop(index, MeloLibraryPolicy.quickSwitchOffset(quickList.height, s.rowHeight))
                     }
                 }
             }

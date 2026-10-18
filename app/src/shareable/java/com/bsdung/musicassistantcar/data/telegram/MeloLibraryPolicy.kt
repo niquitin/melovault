@@ -73,6 +73,20 @@ internal object MeloLibraryPolicy {
     fun quickSwitchIndex(rows: List<MeloScreenHost.SourceRow>, selectedChatId: Long?): Int =
         if (selectedChatId == null) -1 else rows.indexOfFirst { it.chatId == selectedChatId }
 
+    /**
+     * Where the open channel sits when the quick-switch list scrolls to it: a third of the list
+     * down, but always fully inside it (never above the top edge, never below the last full row).
+     */
+    fun quickSwitchOffset(listHeightPx: Int, rowHeightPx: Int): Int =
+        (listHeightPx / 3).coerceIn(0, (listHeightPx - rowHeightPx).coerceAtLeast(0))
+
+    /**
+     * A freshly opened group starts at its first row. The jump waits for rows to arrive (they
+     * load asynchronously) and never happens on the channel grid.
+     */
+    fun shouldResetTop(pending: Boolean, showingSources: Boolean, rowCount: Int): Boolean =
+        pending && !showingSources && rowCount > 0
+
     /** Tablet portrait gets Previous on the mini player; phones keep Play and Next only (spec). */
     fun miniPlayerShowsPrevious(layer: NewLayer): Boolean = layer == NewLayer.TABLET_PORTRAIT
 

@@ -78,6 +78,7 @@ internal class MeloLibraryPane(
     private var playAllWhenLoaded = false
     private var groupKey: String? = null
     private var emptyExpanded = false
+    private var pendingTopReset = false
 
     init {
         searchHolder.addView(searchBar)
@@ -148,7 +149,8 @@ internal class MeloLibraryPane(
             onHeaderCollapse(false)
         }
         lastScrollKey = 0
-        list.setSelection(0)
+        pendingTopReset = true
+        list.setSelectionFromTop(0, 0)
         sourcesScroll.scrollTo(0, 0)
     }
 
@@ -186,6 +188,11 @@ internal class MeloLibraryPane(
             list.setPadding(0, 0, if (showBar) bar.barWidthPx else 0, 0)
             if (!showBar) bar.setActive(null)
             adapter.notifyDataSetChanged()
+            if (MeloLibraryPolicy.shouldResetTop(pendingTopReset, snap.showingSources, snap.rows.size)) {
+                // The rows of the new group just arrived; the list still remembers the old group's offset.
+                pendingTopReset = false
+                list.post { list.setSelectionFromTop(0, 0) }
+            }
             if (playAllWhenLoaded && snap.rows.isNotEmpty()) {
                 playAllWhenLoaded = false
                 host.playAll(true)

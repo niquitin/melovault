@@ -150,6 +150,28 @@ class MeloLibraryPolicyTest {
     }
 
     @Test
+    fun topResetWaitsForRowsAndNeverRunsOnTheGrid() {
+        assertTrue(MeloLibraryPolicy.shouldResetTop(pending = true, showingSources = false, rowCount = 30))
+        assertFalse(MeloLibraryPolicy.shouldResetTop(pending = false, showingSources = false, rowCount = 30))
+        assertFalse(MeloLibraryPolicy.shouldResetTop(pending = true, showingSources = false, rowCount = 0))
+        assertFalse(MeloLibraryPolicy.shouldResetTop(pending = true, showingSources = true, rowCount = 30))
+    }
+
+    @Test
+    fun quickSwitchOffsetKeepsTheOpenRowInsideTheList() {
+        assertEquals(200, MeloLibraryPolicy.quickSwitchOffset(600, 80))
+        assertEquals(0, MeloLibraryPolicy.quickSwitchOffset(0, 80))
+        // short list: a third would push the row past the bottom edge
+        assertEquals(40, MeloLibraryPolicy.quickSwitchOffset(120, 80))
+        assertEquals(0, MeloLibraryPolicy.quickSwitchOffset(60, 80))
+        for (h in 0..900 step 30) {
+            val offset = MeloLibraryPolicy.quickSwitchOffset(h, 80)
+            assertTrue(offset >= 0)
+            assertTrue(h < 80 || offset + 80 <= h)
+        }
+    }
+
+    @Test
     fun quickSwitchRowsAndIndex() {
         val rows = MeloLibraryPolicy.quickSwitchRows(listOf(src(0, 10), src(5, 9), src(6, 0), src(8, 3)))
         assertEquals(listOf(5L, 8L), rows.map { it.chatId })
