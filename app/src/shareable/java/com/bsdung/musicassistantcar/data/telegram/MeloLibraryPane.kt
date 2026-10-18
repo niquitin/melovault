@@ -235,8 +235,9 @@ internal class MeloLibraryPane(
     }
 
     /** Playing-row highlight follows track changes. */
-    fun onPlaybackChanged(playingKey: Long?) {
-        if (snapshot != null && snapshot?.playingKey != playingKey) onLibraryChanged()
+    fun onPlaybackChanged(playingKey: Long?, paused: Boolean = false) {
+        val shown = snapshot ?: return
+        if (MeloCompactPolicy.rowsStale(shown.playingKey, shown.paused, playingKey, paused)) onLibraryChanged()
     }
 
     private fun onBarLetter(letter: Char, final: Boolean) {
@@ -312,7 +313,7 @@ internal class MeloLibraryPane(
             val status = if (TelegramPlayFeedbackPolicy.opening(host.playStatus(), row.songKey, playing)) {
                 MeloComponentPolicy.Status.OPENING
             } else {
-                MeloCompactPolicy.rowStatus(row.downloaded, row.downloadingPercent, playing)
+                MeloCompactPolicy.rowStatus(row.downloaded, row.downloadingPercent, playing, snap.paused)
             }
             val quality = MeloComponentPolicy.qualityLabel(MeloComponentPolicy.formatOf(null, row.filename), null, null, null)
             return c.songRow(

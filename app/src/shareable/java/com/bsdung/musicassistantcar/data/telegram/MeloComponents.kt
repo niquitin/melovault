@@ -585,6 +585,14 @@ internal class MeloStatusIconView(
                 // ~6 fps is enough to read as "moving" and keeps the screen mostly idle (Sony test F1).
                 if (animating && isShown) postInvalidateDelayed(BARS_FRAME_MS)
             }
+            Status.PAUSED -> {
+                paint.style = Paint.Style.FILL
+                val barW = w / 5f
+                rect.set(w * 0.22f, h * 0.12f, w * 0.22f + barW, h * 0.88f)
+                canvas.drawRoundRect(rect, barW / 3f, barW / 3f, paint)
+                rect.set(w * 0.78f - barW, h * 0.12f, w * 0.78f, h * 0.88f)
+                canvas.drawRoundRect(rect, barW / 3f, barW / 3f, paint)
+            }
             Status.DOWNLOADED -> {
                 paint.style = Paint.Style.FILL
                 canvas.drawCircle(w / 2f, h / 2f, minOf(w, h) / 2f, paint)

@@ -276,7 +276,9 @@ internal class MeloCarScreen(
     fun onPlaybackChanged() {
         val now = host.nowPlaying()
         renderPlayer(now)
-        if (snapshot != null && snapshot?.playingKey != now?.songKey) onLibraryChanged()
+        snapshot?.let { shown ->
+            if (MeloCompactPolicy.rowsStale(shown.playingKey, shown.paused, now?.songKey, now?.paused == true)) onLibraryChanged()
+        }
     }
 
     private fun renderPlayer(now: NowPlaying?) {
@@ -484,7 +486,7 @@ internal class MeloCarScreen(
             val index = start + i
             val playing = row.songKey == snap.playingKey
             val dimmed = MeloCarPolicy.isOfflineDimmed(online, row.downloaded)
-            val status = MeloCompactPolicy.rowStatus(row.downloaded, row.downloadingPercent, playing)
+            val status = MeloCompactPolicy.rowStatus(row.downloaded, row.downloadingPercent, playing, snap.paused)
             val quality = MeloComponentPolicy.qualityLabel(MeloComponentPolicy.formatOf(null, row.filename), null, null, null)
             holder.bind(
                 SongRowModel(row.title, row.sourceTitle, row.durationSeconds, status, quality, row.downloadingPercent, row.art, index + 1),

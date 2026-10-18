@@ -68,8 +68,23 @@ class MeloCompactPolicyTest {
     }
 
     @Test
+    fun rowsRebuildWhenSongOrPauseStateChanges() {
+        assertFalse(MeloCompactPolicy.rowsStale(7L, false, 7L, false))
+        assertTrue(MeloCompactPolicy.rowsStale(7L, false, 7L, true))
+        assertTrue(MeloCompactPolicy.rowsStale(7L, true, 7L, false))
+        assertTrue(MeloCompactPolicy.rowsStale(7L, false, 8L, false))
+        assertTrue(MeloCompactPolicy.rowsStale(null, false, 8L, false))
+        assertTrue(MeloCompactPolicy.rowsStale(7L, false, null, false))
+        // No current song: the pause flag alone is meaningless.
+        assertFalse(MeloCompactPolicy.rowsStale(null, false, null, true))
+    }
+
+    @Test
     fun rowStatusPriority() {
         assertEquals(Status.PLAYING, MeloCompactPolicy.rowStatus(downloaded = true, downloadingPercent = 40, playing = true))
+        assertEquals(Status.PAUSED, MeloCompactPolicy.rowStatus(downloaded = true, downloadingPercent = null, playing = true, paused = true))
+        // Paused only changes the current song; other rows are unaffected.
+        assertEquals(Status.DOWNLOADED, MeloCompactPolicy.rowStatus(downloaded = true, downloadingPercent = null, playing = false, paused = true))
         assertEquals(Status.DOWNLOADING, MeloCompactPolicy.rowStatus(downloaded = false, downloadingPercent = 40, playing = false))
         assertEquals(Status.DOWNLOADED, MeloCompactPolicy.rowStatus(downloaded = true, downloadingPercent = null, playing = false))
         assertEquals(Status.TELEGRAM, MeloCompactPolicy.rowStatus(downloaded = false, downloadingPercent = null, playing = false))

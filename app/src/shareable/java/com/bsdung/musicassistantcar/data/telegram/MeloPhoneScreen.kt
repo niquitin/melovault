@@ -170,6 +170,6 @@ internal class MeloPhoneScreen(
         } else {
             mini?.update((now.positionMs / 1000).toInt(), (now.durationMs / 1000).toInt(), now.playing)
         }
-        pane.onPlaybackChanged(now?.songKey)
+        pane.onPlaybackChanged(now?.songKey, now?.paused == true)
     }
 }

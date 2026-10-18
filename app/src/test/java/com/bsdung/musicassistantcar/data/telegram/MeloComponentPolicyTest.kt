@@ -34,8 +34,11 @@ class MeloComponentPolicyTest {
         for (s in Status.entries) {
             val p = MeloComponentPolicy.presentStatus(s)
             assertTrue(p.label.isNotBlank())
-            assertEquals(s == Status.PLAYING, p.highlightRow)
+            assertEquals(s == Status.PLAYING || s == Status.PAUSED, p.highlightRow)
         }
+        val paused = MeloComponentPolicy.presentStatus(Status.PAUSED)
+        assertEquals("Tạm dừng", paused.label)
+        assertEquals(ColorRole.ACCENT, paused.color)
     }
 
     @Test

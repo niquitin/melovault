@@ -464,6 +464,6 @@ internal class MeloTabletScreen(
         }
         if (relayout && ::playerScroll.isInitialized) requestArtFit()
         updateMini(now)
-        pane.onPlaybackChanged(now?.songKey)
+        pane.onPlaybackChanged(now?.songKey, now?.paused == true)
     }
 }

@@ -531,6 +531,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
             notifyMeloPlayback()
         }
+        override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+            notifyMeloPlayback()
+        }
         override fun onPlaybackStateChanged(playbackState: Int) {
             if (playbackState == Player.STATE_ENDED) {
                 playAdjacent(1)
@@ -4106,6 +4109,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 total = total,
                 sourceTitle = sourceTitle,
                 playingKey = playingKey,
+                paused = player?.let { it.currentMediaItem != null && !it.playWhenReady } == true,
                 query = songFilter.text?.toString().orEmpty(),
                 note = offlineSummary.takeIf { filterOnlyDownloaded && !showingSources },
                 sort = sort,
@@ -4238,7 +4242,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     Player.REPEAT_MODE_ONE -> "một bài"
                     else -> "tắt"
                 },
-                downloadNote = currentDownloadNote()
+                downloadNote = currentDownloadNote(),
+                paused = !controller.playWhenReady
             )
         }
 

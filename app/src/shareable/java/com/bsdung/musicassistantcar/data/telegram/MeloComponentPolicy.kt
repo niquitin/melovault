@@ -9,7 +9,7 @@ import java.util.Locale
  */
 internal object MeloComponentPolicy {
 
-    enum class Status { PLAYING, DOWNLOADED, DOWNLOADING, TELEGRAM, ERROR, OPENING }
+    enum class Status { PLAYING, PAUSED, DOWNLOADED, DOWNLOADING, TELEGRAM, ERROR, OPENING }
 
     enum class ColorRole { ACCENT, SECONDARY, WARNING }
 
@@ -24,6 +24,7 @@ internal object MeloComponentPolicy {
     fun presentStatus(status: Status, qualityLabel: String? = null, progressPercent: Int? = null): StatusPresentation =
         when (status) {
             Status.PLAYING -> StatusPresentation(status, "Đang phát", ColorRole.ACCENT, highlightRow = true)
+            Status.PAUSED -> StatusPresentation(status, "Tạm dừng", ColorRole.ACCENT, highlightRow = true)
             Status.DOWNLOADED -> StatusPresentation(
                 status,
                 listOfNotNull("Đã tải", qualityLabel?.takeIf { it.isNotBlank() }).joinToString(" · "),

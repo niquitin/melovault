@@ -58,12 +58,18 @@ internal object MeloCompactPolicy {
         return if (count != null && count >= 0) "$prefix$name · ${MeloComponentPolicy.formatCount(count)} bài" else "$prefix$name"
     }
 
-    fun rowStatus(downloaded: Boolean, downloadingPercent: Int?, playing: Boolean): Status = when {
+    /** [playing] = this row is the current song; [paused] = the player is paused (not just buffering). */
+    fun rowStatus(downloaded: Boolean, downloadingPercent: Int?, playing: Boolean, paused: Boolean = false): Status = when {
+        playing && paused -> Status.PAUSED
         playing -> Status.PLAYING
         downloadingPercent != null -> Status.DOWNLOADING
         downloaded -> Status.DOWNLOADED
         else -> Status.TELEGRAM
     }
+
+    /** The row list must be rebuilt when the current song or its play/pause state changed. */
+    fun rowsStale(shownKey: Long?, shownPaused: Boolean, nowKey: Long?, nowPaused: Boolean): Boolean =
+        shownKey != nowKey || (nowKey != null && shownPaused != nowPaused)
 
     /** Null when the total size is unknown (never a made-up percentage). */
     fun progressPercent(readyBytes: Long, totalBytes: Long): Int? {

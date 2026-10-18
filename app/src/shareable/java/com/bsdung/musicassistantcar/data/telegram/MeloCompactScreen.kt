@@ -181,7 +181,7 @@ internal class MeloCompactScreen(
 
     private fun songRow(snap: Snapshot, row: Row): View {
         val playing = row.songKey == snap.playingKey
-        val status = MeloCompactPolicy.rowStatus(row.downloaded, row.downloadingPercent, playing)
+        val status = MeloCompactPolicy.rowStatus(row.downloaded, row.downloadingPercent, playing, snap.paused)
         val quality = MeloComponentPolicy.qualityLabel(MeloComponentPolicy.formatOf(null, row.filename), null, null, null)
         // Rows are drawn by the ListView itself: the row view must not swallow clicks.
         return c.songRow(SongRowModel(
@@ -318,7 +318,9 @@ internal class MeloCompactScreen(
         }
         nowPage?.update(now)
         // The playing row highlight follows track changes without re-reading the list every tick.
-        if (snapshot != null && snapshot?.playingKey != now?.songKey) onLibraryChanged()
+        snapshot?.let { shown ->
+            if (MeloCompactPolicy.rowsStale(shown.playingKey, shown.paused, now?.songKey, now?.paused == true)) onLibraryChanged()
+        }
     }
 
     private fun openNowPlaying() {

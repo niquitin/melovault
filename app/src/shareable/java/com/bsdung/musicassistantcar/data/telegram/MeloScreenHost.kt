@@ -113,6 +113,8 @@ internal interface MeloScreenHost {
         val total: Int?,
         val sourceTitle: String?,
         val playingKey: Long?,
+        /** The current song is paused (play-when-ready off); its row says "Tạm dừng". */
+        val paused: Boolean = false,
         val query: String,
         val note: String?,
         val sort: SongSort = SongSort.NEWEST,
@@ -133,6 +135,8 @@ internal interface MeloScreenHost {
         val favorite: Boolean,
         val shuffle: Boolean,
         val repeatLabel: String,
-        val downloadNote: String?
+        val downloadNote: String?,
+        /** Paused by the user (play-when-ready off); false while merely buffering. */
+        val paused: Boolean = false
     )
 }
