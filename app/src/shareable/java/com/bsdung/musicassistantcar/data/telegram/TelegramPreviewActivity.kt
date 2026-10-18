@@ -493,6 +493,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        if (downloadedCountScheduled) android.util.Log.w("MeloVaultCount", "stage=pause_cancels_pending")
         uiForeground = false
         downloadedCountGeneration.incrementAndGet()
         mainHandler.removeCallbacks(downloadedCountStart)
@@ -3643,6 +3644,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
      * (after a short delay, only when idle) refresh it with one background scan.
      */
     private fun startDownloadedCountFlow(userId: Long) {
+        android.util.Log.w("MeloVaultCount", "stage=flow first=${downloadedCountUser != userId} done=$downloadedCountDone scheduled=$downloadedCountScheduled")
         if (userId <= 0L || isDestroyed) return
         if (downloadedCountUser != userId) {
             downloadedCountUser = userId
@@ -3675,6 +3677,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun scheduleDownloadedCount() {
         if (downloadedCountDone || downloadedCountScheduled) return
+        android.util.Log.w("MeloVaultCount", "stage=arm delayMs=${MeloDownloadedCountPolicy.START_DELAY_MS}")
         downloadedCountScheduled = true
         mainHandler.postDelayed(downloadedCountStart, MeloDownloadedCountPolicy.START_DELAY_MS)
     }
@@ -3682,7 +3685,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private val downloadedCountStart: Runnable = Runnable {
         downloadedCountScheduled = false
         val userId = library.authorizedUser()?.value ?: 0L
-        if (isDestroyed || userId <= 0L || downloadedCountUser != userId) return@Runnable
+        if (isDestroyed || userId <= 0L || downloadedCountUser != userId) {
+            android.util.Log.w("MeloVaultCount", "stage=skip reason=account_changed")
+            return@Runnable
+        }
         val db = libraryDb
         val state = MeloDownloadedCountPolicy.ScanState(
             loggedIn = auth.isReady(),
