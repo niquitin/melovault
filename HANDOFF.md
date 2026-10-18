@@ -47,7 +47,7 @@ Test mốc Beta101: mỗi biến thể 1.204 tests, 1.183 passed, 21 skipped (**
 - Release ký bằng debug key; 21 test skipped; chưa kiểm đa tài khoản end-to-end; chưa sẵn sàng public/FYT.
 
 ## 7. Việc tiếp theo
-**Việc kế tiếp: chủ dự án cài Beta101 trên Y700/S25 và QA bố cục (Đang phát, khung trái, đổi kênh, tiêu đề nhóm).** Kênh "Sưu Tầm…" đã nghe tốt trên Y700 (chủ dự án báo 18/10/2026) nên lỗi 1 phần B tạm không cần làm; nếu lỗi tái diễn thì chụp câu báo (b100+ có thông báo) rồi viết `docs/plans/sua-loi-phat-kenh-lon.md`. Sau đó xem `docs/plans/BACKLOG.md` (EQ, chip Mixset, nút ⋮ trên dòng bài). Đổi kênh nhanh (Beta99), A–Z (Beta97), đăng nhập theo bước (Beta98, chờ thử trên M3) đang chờ chủ dự án QA. Mỗi phiên làm đúng một việc theo `docs/plans/<việc>.md`. Theme 04 và FYT chỉ làm khi chủ dự án giao; Drive/OneDrive là workstream riêng.
+**Chủ dự án đã QA bố cục Beta101 trên Y700: ỔN (18/10/2026; S25 chưa báo). Việc kế tiếp: sửa nút ⋮ trên dòng bài màn Melo (bấm đang phát bài thay vì mở menu) theo BACKLOG mục 7.** Kênh "Sưu Tầm…" đã nghe tốt trên Y700 (chủ dự án báo 18/10/2026) nên lỗi 1 phần B tạm không cần làm; nếu lỗi tái diễn thì chụp câu báo (b100+ có thông báo) rồi viết `docs/plans/sua-loi-phat-kenh-lon.md`. Sau đó xem `docs/plans/BACKLOG.md` (EQ, chip Mixset, nút ⋮ trên dòng bài). Đổi kênh nhanh (Beta99), A–Z (Beta97), đăng nhập theo bước (Beta98, chờ thử trên M3) đang chờ chủ dự án QA. Mỗi phiên làm đúng một việc theo `docs/plans/<việc>.md`. Theme 04 và FYT chỉ làm khi chủ dự án giao; Drive/OneDrive là workstream riêng.
 - Tìm không dấu: đã thực hiện (Beta96). Chủ dự án đã QA Y700: OK (18/10/2026). Nếu sau này tìm chậm thì thêm debounce 200 ms (ngoài phạm vi phiên này).
 
 ## 8. Nguồn tài liệu
