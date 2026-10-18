@@ -37,6 +37,9 @@ import com.bsdung.musicassistantcar.data.telegram.MeloDesignTokens.Sizes
 import kotlin.math.abs
 import kotlin.math.sin
 
+/** Tag on the ⋮ button of a song row, so a ListView host can keep just that button clickable. */
+internal const val MELO_SONG_ROW_MORE_TAG = "melo.songrow.more"
+
 /**
  * Shared MeloVault building blocks (docs/ui-spec.md "Thành phần dùng chung").
  * Every size comes from [Sizes] in device pixels, so the same code renders the
@@ -231,6 +234,7 @@ internal class MeloComponents(
                 setTextSize(TypedValue.COMPLEX_UNIT_PX, sizes.titleText * 1.25f)
                 setTextColor(palette.textSecondary)
                 contentDescription = "Tùy chọn bài hát"
+                tag = MELO_SONG_ROW_MORE_TAG
                 isClickable = true
                 isFocusable = true
                 layoutParams = LinearLayout.LayoutParams(sizes.minTouch, sizes.minTouch)

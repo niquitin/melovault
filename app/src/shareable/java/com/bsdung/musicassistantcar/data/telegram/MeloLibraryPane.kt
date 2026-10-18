@@ -317,15 +317,24 @@ internal class MeloLibraryPane(
             val quality = MeloComponentPolicy.qualityLabel(MeloComponentPolicy.formatOf(null, row.filename), null, null, null)
             return c.songRow(
                 SongRowModel(row.title, row.sourceTitle, row.durationSeconds, status, quality, row.downloadingPercent, row.art)
-            ).also { unclickable(it) }
+            ).also { unclickable(it, position) }
         }
     }
 
-    private fun unclickable(v: View) {
+    /**
+     * Rows are driven by the ListView (tap = play, long press = menu), so the row must not
+     * swallow clicks. Only the ⋮ button stays clickable and opens the same song menu.
+     */
+    private fun unclickable(v: View, position: Int) {
+        if (v.tag == MELO_SONG_ROW_MORE_TAG) {
+            v.setOnClickListener { host.openSongMenu(position, v) }
+            v.isFocusable = false
+            return
+        }
         v.isClickable = false
         v.isLongClickable = false
         v.isFocusable = false
-        if (v is ViewGroup) for (i in 0 until v.childCount) unclickable(v.getChildAt(i))
+        if (v is ViewGroup) for (i in 0 until v.childCount) unclickable(v.getChildAt(i), position)
     }
 
     // ---- Telegram sources ---------------------------------------------------------------------
