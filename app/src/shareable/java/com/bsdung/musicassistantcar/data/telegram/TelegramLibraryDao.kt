@@ -25,14 +25,17 @@ interface TelegramLibraryDao {
 
     /**
      * Retrieves songs for an account, with optional chat filtering, accent-insensitive search over title/performer/filename,
-     * pagination, ordered by message date descending.
+     * pagination, ordered by message date descending (NEWEST) or search key (NAME).
+     * [fromKey] keeps only songs whose search key is >= it (A–Z jump).
      */
     fun getSongs(
         accountId: Long,
         chatId: Long? = null,
         searchQuery: String? = null,
         offset: Int = 0,
-        limit: Int = 100
+        limit: Int = 100,
+        sort: SongSort = SongSort.NEWEST,
+        fromKey: String? = null
     ): List<IndexedTelegramSong>
 
     /**
@@ -41,7 +44,8 @@ interface TelegramLibraryDao {
     fun getSongCount(
         accountId: Long,
         chatId: Long? = null,
-        searchQuery: String? = null
+        searchQuery: String? = null,
+        fromKey: String? = null
     ): Int
 
     /**

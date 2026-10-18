@@ -46,6 +46,16 @@ internal interface MeloScreenHost {
     fun toggleHideZeroSources()
     fun rescan()
 
+    /** Sort of the list on screen (always NEWEST on screens without the A–Z bar). */
+    fun sort(): SongSort
+    fun setSort(sort: SongSort)
+    /**
+     * Jumps to the first song whose search key is >= [lowerBound] (null = start). Returns the list
+     * index to scroll to when the whole list is in memory, or null when the list was reloaded
+     * from the database starting at that letter.
+     */
+    fun jumpToLetter(lowerBound: String?): Int?
+
     // ---- Studio Deck (Now Playing) --------------------------------------------------------
 
     /** Current playback queue in play order (the service's authoritative order). */
@@ -79,7 +89,9 @@ internal interface MeloScreenHost {
         val songKey: Long,
         val downloaded: Boolean,
         val downloadingPercent: Int?,
-        val art: Bitmap?
+        val art: Bitmap?,
+        /** Search key, only filled while sorted by name (drives the A–Z bar). */
+        val sortKey: String = ""
     )
 
     data class SourceRow(val chatId: Long, val title: String, val count: Int)
@@ -93,7 +105,9 @@ internal interface MeloScreenHost {
         val sourceTitle: String?,
         val playingKey: Long?,
         val query: String,
-        val note: String?
+        val note: String?,
+        val sort: SongSort = SongSort.NEWEST,
+        val letterFloor: String? = null
     )
 
     data class NowPlaying(

@@ -46,8 +46,23 @@ internal class MeloLibraryPane(
     private val chipHolder = FrameLayout(context)
     private val groupTitle = c.text("", s.titleText, p.text, bold = true)
     private val playAll = c.chip("▶ Phát hết", true) { host.playAll(false) }
+    private val sortChip = c.chip("↕ Mới nhất", false) {
+        host.setSort(if (host.sort() == SongSort.NAME) SongSort.NEWEST else SongSort.NAME)
+    }
     private val note = c.text("", s.secondaryText, p.textSecondary, maxLines = 2)
     private val list = ListView(context)
+    private val listFrame = FrameLayout(context)
+    private val bubble = c.text("", 36f * context.resources.displayMetrics.density, p.text, bold = true).apply {
+        gravity = Gravity.CENTER
+        visibility = View.GONE
+        background = c.roundedBackground(p.surfaceRaised, stroke = p.accent)
+    }
+    private val bar = MeloAlphabetBar(
+        context, p.textSecondary, p.accent,
+        onTouching = { ch -> bubble.visibility = if (ch == null) View.GONE else View.VISIBLE; if (ch != null) bubble.text = ch.toString() },
+        onLetter = ::onBarLetter
+    ).apply { visibility = View.GONE }
+    private var pendingJump: Runnable? = null
     private val adapter = RowsAdapter()
     private val sourcesScroll = ScrollView(context)
     private val sourcesBox = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
@@ -74,6 +89,7 @@ internal class MeloLibraryPane(
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, s.gap, 0, s.gap / 2)
             addView(groupTitle, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(sortChip)
             addView(playAll)
         }
         view.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -96,6 +112,9 @@ internal class MeloLibraryPane(
                     val snap = snapshot ?: return
                     if (snap.showingSources) return
                     if (MeloCompactPolicy.shouldLoadMore(first, visible, total)) host.loadMore()
+                    if (bar.visibility == View.VISIBLE) {
+                        snap.rows.getOrNull(first)?.sortKey?.let { bar.setActive(MeloAlphabetPolicy.letterOf(it)) }
+                    }
                     val key = first * (s.rowHeight + s.gap / 2) - (getChildAt(0)?.top ?: 0)
                     val next = MeloLibraryPolicy.headerCollapsed(collapsed, key - lastScrollKey, first)
                     lastScrollKey = key
@@ -107,11 +126,16 @@ internal class MeloLibraryPane(
             })
         }
         sourcesScroll.addView(sourcesBox, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        view.addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        listFrame.addView(list, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        listFrame.addView(bar, FrameLayout.LayoutParams(bar.barWidthPx, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END))
+        val bubbleSize = (72 * context.resources.displayMetrics.density).toInt()
+        listFrame.addView(bubble, FrameLayout.LayoutParams(bubbleSize, bubbleSize, Gravity.CENTER))
+        view.addView(listFrame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         view.addView(sourcesScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
     }
 
     fun detach() {
+    pendingJump?.let(handler::removeCallbacks)
         pendingQuery?.let(handler::removeCallbacks)
         handler.removeCallbacksAndMessages(null)
     }
@@ -130,7 +154,7 @@ internal class MeloLibraryPane(
     fun onLibraryChanged() {
         val snap = host.snapshot()
         snapshot = snap
-        val key = "${snap.showingSources}|${snap.mode}|${snap.sourceTitle}|${snap.query}"
+        val key = "${snap.showingSources}|${snap.mode}|${snap.sourceTitle}|${snap.query}|${snap.sort}|${snap.letterFloor}"
         if (key != groupKey) {
             groupKey = key
             resetScroll()
@@ -140,8 +164,9 @@ internal class MeloLibraryPane(
         if (snap.showingSources) {
             groupTitle.text = "Telegram · ${MeloComponentPolicy.formatCount(snap.sources.count { it.chatId != 0L })} nguồn"
             playAll.visibility = View.GONE
+            sortChip.visibility = View.GONE
             note.visibility = View.GONE
-            list.visibility = View.GONE
+            listFrame.visibility = View.GONE
             sourcesScroll.visibility = View.VISIBLE
             renderSources(snap)
         } else {
@@ -152,7 +177,13 @@ internal class MeloLibraryPane(
             note.text = snap.note.orEmpty()
             note.visibility = if (snap.note.isNullOrBlank()) View.GONE else View.VISIBLE
             sourcesScroll.visibility = View.GONE
-            list.visibility = View.VISIBLE
+            listFrame.visibility = View.VISIBLE
+            sortChip.visibility = View.VISIBLE
+            sortChip.text = if (snap.sort == SongSort.NAME) "↕ Tên A–Z" else "↕ Mới nhất"
+            val showBar = MeloAlphabetPolicy.barVisible(snap.sort, false, snap.total ?: snap.rows.size, snap.letterFloor != null)
+            bar.visibility = if (showBar) View.VISIBLE else View.GONE
+            list.setPadding(0, 0, if (showBar) bar.barWidthPx else 0, 0)
+            if (!showBar) bar.setActive(null)
             adapter.notifyDataSetChanged()
             if (playAllWhenLoaded && snap.rows.isNotEmpty()) {
                 playAllWhenLoaded = false
@@ -164,6 +195,20 @@ internal class MeloLibraryPane(
     /** Playing-row highlight follows track changes. */
     fun onPlaybackChanged(playingKey: Long?) {
         if (snapshot != null && snapshot?.playingKey != playingKey) onLibraryChanged()
+    }
+
+    private fun onBarLetter(letter: Char, final: Boolean) {
+        pendingJump?.let(handler::removeCallbacks)
+        val task = Runnable {
+            val index = host.jumpToLetter(MeloAlphabetPolicy.lowerBound(letter))
+            bar.setActive(letter)
+            if (index != null) {
+                onLibraryChanged()
+                list.setSelection(index)
+            }
+        }
+        pendingJump = task
+        if (final) task.run() else handler.postDelayed(task, 150L)
     }
 
     // ---- Search and chips ---------------------------------------------------------------------

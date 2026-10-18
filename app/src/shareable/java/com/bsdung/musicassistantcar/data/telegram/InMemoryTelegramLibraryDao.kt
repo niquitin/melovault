@@ -52,14 +52,20 @@ class InMemoryTelegramLibraryDao : TelegramLibraryDao {
         chatId: Long?,
         searchQuery: String?,
         offset: Int,
-        limit: Int
+        limit: Int,
+        sort: SongSort,
+        fromKey: String?
     ): List<IndexedTelegramSong> {
         return songs.values
             .asSequence()
             .filter { it.accountId == accountId && !it.isDeleted }
             .filter { chatId == null || it.chatId == chatId }
             .filter { TelegramSearchPolicy.matches(searchQuery, it) }
-            .sortedWith(compareByDescending<IndexedTelegramSong> { it.date }.thenByDescending { it.messageId }.thenByDescending { it.chatId })
+            .filter { fromKey.isNullOrEmpty() || MeloAlphabetPolicy.keyOf(it) >= fromKey }
+            .sortedWith(
+                if (sort == SongSort.NAME) MeloAlphabetPolicy.nameComparator()
+                else compareByDescending<IndexedTelegramSong> { it.date }.thenByDescending { it.messageId }.thenByDescending { it.chatId }
+            )
             .drop(offset)
             .take(limit)
             .toList()
@@ -68,13 +74,15 @@ class InMemoryTelegramLibraryDao : TelegramLibraryDao {
     override fun getSongCount(
         accountId: Long,
         chatId: Long?,
-        searchQuery: String?
+        searchQuery: String?,
+        fromKey: String?
     ): Int {
         return songs.values
             .asSequence()
             .filter { it.accountId == accountId && !it.isDeleted }
             .filter { chatId == null || it.chatId == chatId }
             .filter { TelegramSearchPolicy.matches(searchQuery, it) }
+            .filter { fromKey.isNullOrEmpty() || MeloAlphabetPolicy.keyOf(it) >= fromKey }
             .count()
     }
 

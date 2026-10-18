@@ -80,6 +80,27 @@ class TelegramSearchPerformanceTest {
             }
             println("PERF search worst_ms=$worst")
             assertTrue("search too slow: $worst", worst < 1_000)
+
+            // A–Z: name order first page, deep page, jump (search_key >= bound) and COUNT.
+            val order = "ORDER BY search_key ASC, chat_id ASC, message_id ASC"
+            fun timed(label: String, sql: String, args: List<String> = emptyList()): Long {
+                var worstMs = 0L
+                repeat(5) {
+                    val s = System.nanoTime()
+                    c.prepareStatement(sql).use { ps ->
+                        args.forEachIndexed { i, a -> ps.setString(i + 1, a) }
+                        ps.executeQuery().use { rs -> while (rs.next()) rs.getLong(1) }
+                    }
+                    worstMs = maxOf(worstMs, (System.nanoTime() - s) / 1_000_000)
+                }
+                println("PERF $label worst_ms=$worstMs")
+                return worstMs
+            }
+            val base = "SELECT * FROM telegram_songs WHERE account_id=1 AND is_deleted=0"
+            assertTrue(timed("name_first", "$base $order LIMIT 200") < 1_000)
+            assertTrue(timed("name_offset5000", "$base $order LIMIT 200 OFFSET 5000") < 1_000)
+            assertTrue(timed("name_from_m", "$base AND search_key >= ? $order LIMIT 200", listOf("m")) < 1_000)
+            assertTrue(timed("count_from_m", "SELECT COUNT(*) FROM telegram_songs WHERE account_id=1 AND is_deleted=0 AND search_key >= ?", listOf("m")) < 1_000)
         }
     }
 }

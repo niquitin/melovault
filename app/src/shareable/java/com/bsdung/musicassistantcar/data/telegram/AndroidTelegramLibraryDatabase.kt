@@ -188,7 +188,9 @@ class AndroidTelegramLibraryDatabase(
         chatId: Long?,
         searchQuery: String?,
         offset: Int,
-        limit: Int
+        limit: Int,
+        sort: SongSort,
+        fromKey: String?
     ): List<IndexedTelegramSong> {
         val db = readableDatabase
         val selectionArgs = mutableListOf<String>()
@@ -200,12 +202,21 @@ class AndroidTelegramLibraryDatabase(
             selectionArgs.add(chatId.toString())
         }
 
+        if (!fromKey.isNullOrEmpty()) {
+            selection.append(" AND ${TelegramLibrarySql.COL_SEARCH_KEY} >= ?")
+            selectionArgs.add(fromKey)
+        }
+
         TelegramSearchPolicy.whereClause(searchQuery)?.let {
             selection.append(" AND ").append(it.sql)
             selectionArgs.addAll(it.args)
         }
 
-        val orderBy = "${TelegramLibrarySql.COL_DATE} DESC, ${TelegramLibrarySql.COL_MESSAGE_ID} DESC, ${TelegramLibrarySql.COL_CHAT_ID} DESC LIMIT $limit OFFSET $offset"
+        val order = when (sort) {
+            SongSort.NEWEST -> "${TelegramLibrarySql.COL_DATE} DESC, ${TelegramLibrarySql.COL_MESSAGE_ID} DESC, ${TelegramLibrarySql.COL_CHAT_ID} DESC"
+            SongSort.NAME -> "${TelegramLibrarySql.COL_SEARCH_KEY} ASC, ${TelegramLibrarySql.COL_CHAT_ID} ASC, ${TelegramLibrarySql.COL_MESSAGE_ID} ASC"
+        }
+        val orderBy = "$order LIMIT $limit OFFSET $offset"
         val results = mutableListOf<IndexedTelegramSong>()
 
         db.query(
@@ -227,7 +238,8 @@ class AndroidTelegramLibraryDatabase(
     override fun getSongCount(
         accountId: Long,
         chatId: Long?,
-        searchQuery: String?
+        searchQuery: String?,
+        fromKey: String?
     ): Int {
         val db = readableDatabase
         val selectionArgs = mutableListOf<String>()
@@ -237,6 +249,11 @@ class AndroidTelegramLibraryDatabase(
         if (chatId != null) {
             selection.append(" AND ${TelegramLibrarySql.COL_CHAT_ID} = ?")
             selectionArgs.add(chatId.toString())
+        }
+
+        if (!fromKey.isNullOrEmpty()) {
+            selection.append(" AND ${TelegramLibrarySql.COL_SEARCH_KEY} >= ?")
+            selectionArgs.add(fromKey)
         }
 
         TelegramSearchPolicy.whereClause(searchQuery)?.let {

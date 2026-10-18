@@ -226,6 +226,18 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var offlineVisibleLimit = 200
     @Volatile private var totalCountForCurrentView: Int = 0
     private var isLoadingMoreSongs = false
+    // A–Z bar: sort choice (new layers only) and the active lower bound of the search key.
+    private var librarySortCache: SongSort? = null
+    @Volatile private var letterFloor: String? = null
+    @Volatile private var floorCountForCurrentView: Int = 0
+
+    private fun librarySort(): SongSort = librarySortCache ?: MeloAlphabetPolicy.parseSort(
+        getSharedPreferences(MeloScreenPolicy.PREFS_NAME, Context.MODE_PRIVATE).getString(MeloAlphabetPolicy.PREF_SORT, null)
+    ).also { librarySortCache = it }
+
+    /** Only the Điện thoại / Tablet / Hai khung layers sort by name; every other screen keeps Mới nhất. */
+    private fun activeSort(): SongSort =
+        if (phoneScreen != null || tabletScreen != null) librarySort() else SongSort.NEWEST
 
     private fun executeOnDb(task: () -> Unit) {
         if (isDestroyed || isFinishing) return
@@ -3461,6 +3473,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         db: TelegramLibraryDao, account: Long, chat: Long?, query: String,
         playlist: Boolean, favorites: Set<Long>, generation: Long
     ) {
+        val sortForScan = activeSort()
         val root = filesRoot
         val cancelled = { uiQueryGeneration.get() != generation || isDestroyed ||
             Thread.currentThread().isInterrupted || !auth.isReady() || library.authorizedUser()?.value != account }
@@ -3473,7 +3486,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         offlineExecutor.execute {
             try {
                 fun publish(snapshot: TelegramOfflineLibrary.Snapshot) {
-                    val groups = TelegramOfflineLibrary.groups(snapshot.entries)
+                    val groups = sortGroups(TelegramOfflineLibrary.groups(snapshot.entries), sortForScan)
                     runOnUiThread {
                         if (cancelled()) return@runOnUiThread
                         offlineGroups = groups
@@ -3579,6 +3592,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val currentChatId = selectedChatId
         val isAllChats = allChatsMode
         val currentFavIds = favoriteIds.toSet()
+        val currentSort = activeSort()
+        val currentFloor = letterFloor.takeIf { currentSort == SongSort.NAME }
 
         offlineSummary = null
         offlineGroups = emptyList()
@@ -3673,11 +3688,17 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     val filtered = if (q.isBlank()) favSongs else favSongs.filter {
                         MeloComponentPolicy.matchesSearch(q, it.title, it.performer, it.filename)
                     }
-                    Pair(filtered, filtered.size)
+                    Pair(sortSongs(filtered, currentSort), filtered.size)
                 } else if (isAllChats && db != null && userId > 0L) {
                     val filterQuery = q.takeIf { it.isNotBlank() }
                     val count = db.getSongCount(userId, chatId = currentChatId, searchQuery = filterQuery)
-                    val page = db.getSongs(userId, chatId = currentChatId, searchQuery = filterQuery, offset = 0, limit = 200)
+                    floorCountForCurrentView = if (currentFloor != null) {
+                        db.getSongCount(userId, chatId = currentChatId, searchQuery = filterQuery, fromKey = currentFloor)
+                    } else count
+                    val page = db.getSongs(
+                        userId, chatId = currentChatId, searchQuery = filterQuery, offset = 0, limit = 200,
+                        sort = currentSort, fromKey = currentFloor
+                    )
                         .map {
                             Song(
                                 it.fileId, it.title, it.filename, it.songKey, it.chatId, it.fileSize,
@@ -3693,12 +3714,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     val filtered = if (q.isBlank()) chatSongs else chatSongs.filter {
                         MeloComponentPolicy.matchesSearch(q, it.title, it.performer, it.filename)
                     }
-                    Pair(filtered, filtered.size)
+                    Pair(sortSongs(filtered, currentSort), filtered.size)
                 } else {
                     val filtered = if (q.isBlank()) songs.toList() else songs.filter {
                         MeloComponentPolicy.matchesSearch(q, it.title, it.performer, it.filename)
                     }
-                    Pair(filtered, filtered.size)
+                    Pair(sortSongs(filtered, currentSort), filtered.size)
                 }
                 val finalSongs = if (filterOnlyDownloaded) {
                     loadedSongs.filter { s ->
@@ -4018,6 +4039,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
             val playingKey = currentTelegramMessageId()
             val downloadingPercent = playingKey?.let { currentDownloadPercent() }
+            val sort = activeSort()
             val rows = if (showingSources) emptyList() else shownSongs.map { song ->
                 MeloScreenHost.Row(
                     title = TelegramSongDisplayPolicy.label(song.title, song.filename),
@@ -4027,7 +4049,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     songKey = song.messageId,
                     downloaded = songIsDownloaded(song),
                     downloadingPercent = if (song.messageId == playingKey) downloadingPercent else null,
-                    art = thumbnailCache.get(song.messageId)
+                    art = thumbnailCache.get(song.messageId),
+                    sortKey = if (sort == SongSort.NAME) MeloAlphabetPolicy.keyOf(song.title, song.performer, song.filename) else ""
                 )
             }
             val sources = visibleSourceCounts.map { (chatId, count) ->
@@ -4053,12 +4076,56 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 sourceTitle = sourceTitle,
                 playingKey = playingKey,
                 query = songFilter.text?.toString().orEmpty(),
-                note = offlineSummary.takeIf { filterOnlyDownloaded && !showingSources }
+                note = offlineSummary.takeIf { filterOnlyDownloaded && !showingSources },
+                sort = sort,
+                letterFloor = letterFloor.takeIf { sort == SongSort.NAME }
             )
+        }
+
+        override fun sort(): SongSort = activeSort()
+
+        override fun setSort(sort: SongSort) {
+            if (sort == librarySort()) return
+            librarySortCache = sort
+            getSharedPreferences(MeloScreenPolicy.PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().putString(MeloAlphabetPolicy.PREF_SORT, sort.name).apply()
+            letterFloor = null
+            offlineVisibleLimit = 200
+            refreshSongRows()
+        }
+
+        override fun jumpToLetter(lowerBound: String?): Int? {
+            if (activeSort() != SongSort.NAME) return 0
+            val dbList = allChatsMode && !browseSources && !playlistMode && !filterOnlyDownloaded &&
+                libraryDb != null && (library.authorizedUser()?.value ?: 0L) > 0L
+            if (dbList) {
+                if (letterFloor == lowerBound) return null
+                letterFloor = lowerBound
+                refreshSongRows()
+                return null
+            }
+            if (lowerBound == null) return 0
+            if (filterOnlyDownloaded) {
+                val index = MeloAlphabetPolicy.firstIndexAtOrAfter(
+                    offlineGroups.map { MeloAlphabetPolicy.keyOf(it.entries.first().song) }, lowerBound
+                ).coerceAtMost((offlineGroups.size - 1).coerceAtLeast(0))
+                if (index >= shownSongs.size) {
+                    val target = (index + 200).coerceAtMost(offlineGroups.size)
+                    offlineVisibleLimit = target
+                    shownSongs = offlineGroups.take(target).map { offlineRepresentative(it) }
+                    adapter.clear()
+                    adapter.addAll(shownSongs.map { TelegramSongDisplayPolicy.label(it.title, it.filename) })
+                }
+                return index
+            }
+            return MeloAlphabetPolicy.firstIndexAtOrAfter(
+                shownSongs.map { MeloAlphabetPolicy.keyOf(it.title, it.performer, it.filename) }, lowerBound
+            ).coerceAtMost((shownSongs.size - 1).coerceAtLeast(0))
         }
 
         override fun setMode(mode: MeloCompactPolicy.Mode) {
             if (!auth.isReady()) return
+            letterFloor = null
             when (mode) {
                 MeloCompactPolicy.Mode.ALL -> { playlistMode = false; filterOnlyDownloaded = false; browseSources = false }
                 MeloCompactPolicy.Mode.DOWNLOADED -> { playlistMode = false; filterOnlyDownloaded = true; browseSources = false }
@@ -4071,6 +4138,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
         override fun showSources() {
             if (!auth.isReady()) return
+            letterFloor = null
             browseSources = true
             selectedChatId = null
             playlistMode = false
@@ -4081,6 +4149,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
         override fun openSource(chatId: Long?) {
             if (!auth.isReady()) return
+            letterFloor = null
             selectedChatId = chatId
             browseSources = false
             playlistMode = false
@@ -4090,6 +4159,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
 
         override fun setQuery(query: String) {
+            if (songFilter.text?.toString() != query) letterFloor = null
             if (songFilter.text?.toString() != query) songFilter.setText(query)
         }
 
@@ -4282,6 +4352,18 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     /** Next page of the visible list; callers decide the list is near its end. */
+    private fun sortSongs(list: List<Song>, sort: SongSort): List<Song> =
+        if (sort != SongSort.NAME) list else list.sortedWith(
+            compareBy<Song> { MeloAlphabetPolicy.keyOf(it.title, it.performer, it.filename) }
+                .thenBy { it.chatId }.thenBy { it.messageId }
+        )
+
+    private fun sortGroups(groups: List<TelegramOfflineLibrary.Group>, sort: SongSort): List<TelegramOfflineLibrary.Group> =
+        if (sort != SongSort.NAME) groups else groups.sortedWith(
+            compareBy<TelegramOfflineLibrary.Group> { MeloAlphabetPolicy.keyOf(it.entries.first().song) }
+                .thenBy { it.entries.first().song.chatId }.thenBy { it.entries.first().song.messageId }
+        )
+
     private fun loadMoreSongsIfNeeded() {
         if (filterOnlyDownloaded && !(allChatsMode && browseSources && !playlistMode) &&
             shownSongs.size < offlineGroups.size) {
@@ -4294,7 +4376,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val userId = library.authorizedUser()?.value ?: 0L
             val db = libraryDb
             if (db != null && userId > 0L) {
-                if (shownSongs.size < totalCountForCurrentView) {
+                val sort = activeSort()
+                val floor = letterFloor.takeIf { sort == SongSort.NAME }
+                val reachable = if (floor != null) floorCountForCurrentView else totalCountForCurrentView
+                if (shownSongs.size < reachable) {
                     isLoadingMoreSongs = true
                     val nextOffset = shownSongs.size
                     val currentGen = uiQueryGeneration.get()
@@ -4302,8 +4387,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     val currentChat = selectedChatId
                     executeOnDb {
                         val count = db.getSongCount(userId, chatId = currentChat, searchQuery = q)
-                        val more = if (nextOffset < count) {
-                            db.getSongs(userId, chatId = currentChat, searchQuery = q, offset = nextOffset, limit = 200)
+                        val floorCount = if (floor != null) {
+                            db.getSongCount(userId, chatId = currentChat, searchQuery = q, fromKey = floor)
+                        } else count
+                        val more = if (nextOffset < floorCount) {
+                            db.getSongs(
+                                userId, chatId = currentChat, searchQuery = q, offset = nextOffset, limit = 200,
+                                sort = sort, fromKey = floor
+                            )
                         } else emptyList()
                         val mapped = more.map {
                             Song(
@@ -4320,6 +4411,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                                 allChatsMode && !browseSources && !playlistMode &&
                                 mapped.isNotEmpty() && !isDestroyed) {
                                 totalCountForCurrentView = count
+                                floorCountForCurrentView = floorCount
                                 shownSongs = shownSongs + mapped
                                 adapter.addAll(
                                     mapped.map { TelegramSongDisplayPolicy.label(it.title, it.filename) }
