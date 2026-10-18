@@ -90,6 +90,22 @@ Shanling M3 Ultra và FYT 7870 là hai máy dùng chính nên được tính s�
 
 Nguồn: https://en.shanling.com/article/101276 , https://m.gsmarena.com/lenovo_legion_y700_(2025)-ampp-13438.php . Mật độ vật lý tính từ độ phân giải và đường chéo.
 
+**Số đo thật Shanling M3 Ultra** (chủ dự án đo bằng màn “Cài đặt giao diện (thử nghiệm)”, 18/10/2026, Android 10, API 29, hướng dọc, cỡ chữ hệ thống ×1.00). Số đo thật thay cho các số tính sẵn ở bảng trên.
+
+| Mục | Giá trị |
+| --- | --- |
+| Độ phân giải màn | 768 × 1280 px |
+| Cửa sổ app (khi có thanh điều hướng) | 768 × 1208 px = 384 × 574dp |
+| Mật độ Android | 320 dpi (xhdpi, ×2.00) |
+| Mật độ vật lý (xdpi × ydpi) | 278.7 × 232.2 ppi |
+| Kích thước ước tính | 76 × 127 mm (~5.8") |
+| 1dp | ≈ 0.199 mm (48dp ≈ 9.5 mm) |
+| Bố cục app chọn | Gọn (máy nhỏ) |
+
+Hệ quả: cửa sổ thật cao 574dp (không phải 640dp), và khi bàn phím mở chỉ còn khoảng 360dp tính từ đỉnh cửa sổ (đã gồm đầu trang). Màn đăng nhập phải xếp vừa trong khoảng đó (xem “Màn đăng nhập Telegram” ở phần Thành phần dùng chung). Dòng “Mật độ 320 (giả định)” và “4.2"” trong bảng trên chưa đúng với máy đo được.
+
+**Màn đăng nhập Telegram** (số điện thoại → mã → mật khẩu cấp 2): mỗi bước có tiêu đề 18sp đậm, một dòng giải thích 13sp màu chữ phụ, ô nhập 48dp, chữ lỗi đỏ (#FF7A6B) ngay dưới ô (không xóa ô), nút “Tiếp tục” 48dp, hàng nút phụ 48dp. Chưa đăng nhập thì ẩn mini player và “Đăng xuất Telegram”; “Đăng nhập bằng QR” chỉ ở bước số điện thoại. Form nằm trong khung cuộn, cao tối đa bằng phần màn còn lại phía trên bàn phím.
+
 **Shanling M3 Ultra — ngân sách chiều cao** (384 × 640dp, dọc):
 
 | Phần | Chiều cao |

@@ -121,6 +121,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var note: TextView
     private lateinit var authControls: LinearLayout
+    private lateinit var loginPanel: TelegramLoginPanel
+    // Sign-in display state only: a masked phone and Telegram's own password hint, never an OTP or password.
+    private var loginEditingPhone = false
+    private var loginMaskedPhone: String? = null
+    private var loginPasswordHint: String? = null
+    private var loginResendUntilMs = 0L
+    private var loginResendAllowed = true
     private lateinit var nowPlayingTitle: TextView
     private lateinit var playPause: Button
     private var fullPlayer: NowPlayingFullScreenDialog? = null
@@ -2120,38 +2127,24 @@ class TelegramPreviewActivity : AppCompatActivity() {
             libraryContainer.addView(this, LinearLayout.LayoutParams(-1, dp(23)))
         }
         buildFilterChips()
-        authControls = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            collapsibleNavigation.addView(this, LinearLayout.LayoutParams(-1, -2).apply {
-                bottomMargin = dp(8)
-            })
-        }
-        input = EditText(this).apply {
-            hint = "Số điện thoại Telegram (+84...)"
-            setSingleLine(true)
-            inputType = InputType.TYPE_CLASS_PHONE
-            setTextColor(ink)
-            setHintTextColor(subtle)
-            textSize = 15f
-            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
-            background = rounded(panel)
-            setPadding(dp(12), dp(12), dp(12), dp(12))
-            imeOptions = EditorInfo.IME_ACTION_DONE or EditorInfo.IME_FLAG_NO_EXTRACT_UI
-            authControls.addView(this, LinearLayout.LayoutParams(-1, dp(48)))
-        }
-        submit = uiButton("Tiếp tục", primary = true).apply {
-            setOnClickListener { submitAuthentication() }
-            authControls.addView(this, LinearLayout.LayoutParams(-1, dp(46)).apply {
-                topMargin = dp(6)
-            })
-        }
-        qrLogin = uiButton("Đăng nhập bằng QR").apply {
-            isEnabled = false
-            setOnClickListener { requestQrLogin() }
-            authControls.addView(this, LinearLayout.LayoutParams(-1, dp(46)).apply {
-                topMargin = dp(6)
-            })
-        }
+        loginPanel = TelegramLoginPanel(
+            this,
+            TelegramLoginPanel.Colors(ink, subtle, accent, accentContrast, panel, border),
+            onSubmit = { submitAuthentication() },
+            onResend = { requestResendCode() },
+            onEditPhone = { loginEditingPhone = true; renderLoginStep() },
+            onBack = { onLoginBack() },
+            onQr = { requestQrLogin() }
+        )
+        authControls = loginPanel.root
+        input = loginPanel.input
+        submit = loginPanel.submit
+        qrLogin = loginPanel.qr.apply { isEnabled = false }
+        // The form scrolls when the on-screen keyboard leaves little room (small screens).
+        collapsibleNavigation.addView(
+            TelegramLoginScrollView(this).apply { addView(authControls) },
+            LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) }
+        )
         val sourceRow = LinearLayout(this).apply {
             visibility = View.GONE
             orientation = LinearLayout.HORIZONTAL
@@ -3028,6 +3021,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
         updateSyncHeaderSubtitle()
         note.visibility = if (auth.isReady() || short) View.GONE else View.VISIBLE
         collapsibleNavigation.visibility = if (auth.isReady()) View.GONE else View.VISIBLE
+        if (::logout.isInitialized) {
+            logout.visibility =
+                if (TelegramLoginStepPolicy.showLogout(auth.isReady())) View.VISIBLE else View.GONE
+        }
 
         if (shouldShowTwoPane) {
             if (::miniPlayerBar.isInitialized) miniPlayerBar.visibility = View.GONE
@@ -3052,7 +3049,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
             }
         } else {
-            if (::miniPlayerBar.isInitialized) miniPlayerBar.visibility = View.VISIBLE
+            if (::miniPlayerBar.isInitialized) {
+                miniPlayerBar.visibility =
+                    if (TelegramLoginStepPolicy.showMiniPlayer(auth.isReady())) View.VISIBLE else View.GONE
+            }
             val isEdgeProPortrait = ShortWindowLayoutPolicy.shouldUseBottomNav(currentThemePreset, pane)
             if (isEdgeProPortrait) {
                 navigationRow.visibility = View.GONE
@@ -4572,7 +4572,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun showMessage(message: String) {
         if (!isFinishing && !isDestroyed) {
-            runOnUiThread { if (!isFinishing && !isDestroyed) status.text = message }
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed) {
+                    status.text = message
+                    status.visibility = View.VISIBLE
+                }
+            }
         }
     }
 
@@ -4728,6 +4733,20 @@ class TelegramPreviewActivity : AppCompatActivity() {
             if (tag.startsWith("prefetch:")) {
                 prefetchWaiting = null
                 return // A prefetched-neighbor miss must not interrupt current audio.
+            }
+            if (tag == "auth") {
+                // Wrong code/password, expired code, bad phone: fixed sentence under the field,
+                // the typed value stays. The raw TDLib text is matched, never shown.
+                val field = TelegramLoginStepPolicy.contentFor(
+                    auth.step, null, null, loginEditingPhone
+                )?.field ?: TelegramLoginStepPolicy.Field.CODE
+                val text = TelegramLoginStepPolicy.errorFor(result.optString("message"), field)
+                runOnUiThread {
+                    loginPanel.setBusy(false)
+                    loginPanel.showError(text)
+                    updateResendButton()
+                }
+                return
             }
             // Initial parameter errors need a useful diagnosis. Raw auth errors
             // must never reveal an OTP, phone number or 2FA content in the UI.
@@ -4926,27 +4945,24 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
             "authorizationStateWaitPhoneNumber" -> {
                 clearPendingQrLink()
-                showInput(TelegramAuthStep.WAIT_PHONE_NUMBER,
-                    "Có thể đăng nhập bằng QR trên Lenovo hoặc nhập số Telegram.",
-                    InputType.TYPE_CLASS_PHONE)
+                showLoginStep(TelegramAuthStep.WAIT_PHONE_NUMBER)
                 runOnUiThread { qrLogin.isEnabled = true }
             }
-            "authorizationStateWaitCode" ->
-                showInput(TelegramAuthStep.WAIT_CODE,
-                    "Nhập mã Telegram gửi cho bạn.",
-                    InputType.TYPE_CLASS_NUMBER)
-            "authorizationStateWaitPassword" ->
-                showInput(TelegramAuthStep.WAIT_PASSWORD,
-                    "Nhập mật khẩu xác minh hai bước Telegram.",
-                    InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD)
+            "authorizationStateWaitCode" -> {
+                val info = state.optJSONObject("code_info")
+                // Keep only the masked number for display; the raw one is dropped here.
+                loginMaskedPhone = TelegramLoginStepPolicy.maskPhone(info?.optString("phone_number"))
+                startResendTimer(info?.optInt("timeout", 0) ?: 0, info?.optJSONObject("next_type") != null)
+                showLoginStep(TelegramAuthStep.WAIT_CODE)
+            }
+            "authorizationStateWaitPassword" -> {
+                loginPasswordHint = state.optString("password_hint").takeIf { it.isNotBlank() }
+                showLoginStep(TelegramAuthStep.WAIT_PASSWORD)
+            }
             "authorizationStateWaitEmailAddress" ->
-                showInput(TelegramAuthStep.WAIT_EMAIL_ADDRESS,
-                    "Nhập email xác minh mà Telegram yêu cầu.",
-                    InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS)
+                showLoginStep(TelegramAuthStep.WAIT_EMAIL_ADDRESS)
             "authorizationStateWaitEmailCode" ->
-                showInput(TelegramAuthStep.WAIT_EMAIL_CODE,
-                    "Nhập mã Telegram gửi về email.",
-                    InputType.TYPE_CLASS_NUMBER)
+                showLoginStep(TelegramAuthStep.WAIT_EMAIL_CODE)
             "authorizationStateWaitOtherDeviceConfirmation" -> {
                 auth.onNativeState(authEpoch, TelegramAuthStep.WAIT_OTHER_DEVICE_CONFIRMATION)
                 val link = state.optString("link")
@@ -4968,7 +4984,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
             "authorizationStateReady" -> {
                 clearPendingQrLink()
-                runOnUiThread { qrLogin.isEnabled = false }
+                runOnUiThread {
+                    qrLogin.isEnabled = false
+                    loginPanel.clearInput()
+                    loginMaskedPhone = null
+                    loginPasswordHint = null
+                    loginEditingPhone = false
+                    mainRoot.removeCallbacks(loginResendTick)
+                    status.visibility = View.VISIBLE
+                }
                 if (auth.onNativeState(authEpoch,
                         TelegramAuthStep.AUTHORIZED_AWAITING_GET_ME)) {
                     send("getMe", "identity")
@@ -4987,6 +5011,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 clearPendingQrLink()
                 runOnUiThread {
                     clearPlaybackSession()
+                    loginPanel.clearInput()
+                    loginMaskedPhone = null
+                    loginPasswordHint = null
+                    loginEditingPhone = false
                     tracks.adapter = adapter
                     songs.clear()
                     adapter.clear()
@@ -5013,23 +5041,76 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
     }
 
-    private fun showInput(step: TelegramAuthStep, help: String, type: Int) {
+    /** TDLib moved to a credential step: show that step's form (display only). */
+    private fun showLoginStep(step: TelegramAuthStep) {
         if (!auth.onNativeState(authEpoch, step)) return
         runOnUiThread {
-            input.text?.clear()
-            input.inputType = type
-            authControls.visibility = View.VISIBLE
-            collapsibleNavigation.visibility = View.VISIBLE
-            input.visibility = View.VISIBLE
-            submit.isEnabled = true
-            status.text = help
+            loginEditingPhone = false
+            renderLoginStep()
+        }
+    }
+
+    private fun renderLoginStep() {
+        val content = TelegramLoginStepPolicy.contentFor(
+            auth.step, loginMaskedPhone, loginPasswordHint, loginEditingPhone
+        ) ?: return
+        mainRoot.removeCallbacks(loginResendTick)
+        loginPanel.clearInput()
+        loginPanel.render(content)
+        authControls.visibility = View.VISIBLE
+        collapsibleNavigation.visibility = View.VISIBLE
+        input.visibility = View.VISIBLE
+        // Errors and progress live inside the form while signing in.
+        status.visibility = View.GONE
+        if (content.showResend) updateResendButton()
+    }
+
+    private fun onLoginBack() {
+        if (loginEditingPhone) {
+            loginEditingPhone = false
+        } else if (auth.step == TelegramAuthStep.WAIT_PASSWORD) {
+            loginEditingPhone = true
+        } else return
+        renderLoginStep()
+    }
+
+    /** Telegram's resend timer (code_info.timeout), counted down once a second. */
+    private fun startResendTimer(timeoutSeconds: Int, allowed: Boolean) {
+        loginResendAllowed = allowed
+        loginResendUntilMs = System.currentTimeMillis() + timeoutSeconds.coerceIn(0, 600) * 1000L
+    }
+
+    private fun updateResendButton() {
+        if (!::loginPanel.isInitialized || !::mainRoot.isInitialized) return
+        mainRoot.removeCallbacks(loginResendTick)
+        val left = ((loginResendUntilMs - System.currentTimeMillis() + 999L) / 1000L).toInt().coerceAtLeast(0)
+        loginPanel.setResendState(left, loginResendAllowed)
+        if (left > 0 && auth.step == TelegramAuthStep.WAIT_CODE && !loginEditingPhone) {
+            mainRoot.postDelayed(loginResendTick, 1000L)
+        }
+    }
+
+    private val loginResendTick = Runnable { updateResendButton() }
+
+    private fun requestResendCode() {
+        if (auth.step != TelegramAuthStep.WAIT_CODE || loginEditingPhone) return
+        loginPanel.showError(null)
+        try {
+            send("resendAuthenticationCode", "auth")
+            // Disabled until Telegram answers with a fresh code_info (which resets the timer).
+            startResendTimer(10, true)
+            updateResendButton()
+        } catch (_: Exception) {
+            loginPanel.showError(TelegramLoginStepPolicy.errorFor("resend", TelegramLoginStepPolicy.Field.CODE))
         }
     }
 
     private fun submitAuthentication() {
         val value = input.text?.toString()?.trim().orEmpty()
         if (value.isBlank()) return
-        val kind = when (auth.step) {
+        val kind = if (loginEditingPhone && auth.step != TelegramAuthStep.WAIT_PHONE_NUMBER) {
+            "setAuthenticationPhoneNumber"
+        } else when (auth.step) {
             TelegramAuthStep.WAIT_PHONE_NUMBER -> "setAuthenticationPhoneNumber"
             TelegramAuthStep.WAIT_CODE -> "checkAuthenticationCode"
             TelegramAuthStep.WAIT_PASSWORD -> "checkAuthenticationPassword"
@@ -5053,12 +5134,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
                             .put("code", value))
                 }
             }
-            // Never persist or print passwords, codes, phone or email.
-            input.text?.clear()
-            status.text = "Đang chờ Telegram xác thực…"
+            // Never persist or print passwords, codes, phone or email. The field keeps the
+            // value only so a wrong code or password can be corrected; it is cleared on the
+            // next step, on success and on sign-out.
+            loginPanel.showError(null)
+            loginPanel.setBusy(true)
         } catch (_: Exception) {
-            input.text?.clear()
-            showMessage("Không gửi được yêu cầu. Kiểm tra mạng và thử lại.")
+            loginPanel.setBusy(false)
+            loginPanel.showError("Không gửi được yêu cầu. Kiểm tra mạng và thử lại.")
         }
     }
 
@@ -5813,7 +5896,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         detachMeloLayer()
-        if (::mainRoot.isInitialized) mainRoot.removeCallbacks(miniPlayerProgressTick)
+        if (::mainRoot.isInitialized) {
+            mainRoot.removeCallbacks(miniPlayerProgressTick)
+            mainRoot.removeCallbacks(loginResendTick)
+        }
         fullPlayer?.dismiss()
         fullPlayer = null
         studioDeck?.dismiss()
