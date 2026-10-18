@@ -104,20 +104,18 @@ Nguồn: https://en.shanling.com/article/101276 , https://m.gsmarena.com/lenovo_
 
 Hệ quả: cửa sổ thật cao 574dp (không phải 640dp), và khi bàn phím mở chỉ còn khoảng 360dp tính từ đỉnh cửa sổ (đã gồm đầu trang). Màn đăng nhập phải xếp vừa trong khoảng đó (xem “Màn đăng nhập Telegram” ở phần Thành phần dùng chung). Dòng “Mật độ 320 (giả định)” và “4.2"” trong bảng trên chưa đúng với máy đo được.
 
-**Màn đăng nhập Telegram** (số điện thoại → mã → mật khẩu cấp 2): mỗi bước có tiêu đề 18sp đậm, một dòng giải thích 13sp màu chữ phụ, ô nhập 48dp, chữ lỗi đỏ (#FF7A6B) ngay dưới ô (không xóa ô), nút “Tiếp tục” 48dp, hàng nút phụ 48dp. Chưa đăng nhập thì ẩn mini player và “Đăng xuất Telegram”; “Đăng nhập bằng QR” chỉ ở bước số điện thoại. Form nằm trong khung cuộn, cao tối đa bằng phần màn còn lại phía trên bàn phím.
+**Màn đăng nhập Telegram** (số điện thoại → mã → mật khẩu cấp 2): mỗi bước có tiêu đề 18sp đậm, một dòng giải thích 13sp màu chữ phụ, ô nhập 48dp, chữ lỗi đỏ (#FF7A6B) ngay dưới ô (không xóa ô), nút “Tiếp tục” 48dp, hàng nút phụ 48dp. Chưa đăng nhập thì ẩn Thanh đáy gộp (trước đây là mini player) và “Đăng xuất Telegram”; “Đăng nhập bằng QR” chỉ ở bước số điện thoại. Form nằm trong khung cuộn, cao tối đa bằng phần màn còn lại phía trên bàn phím.
 
-**Shanling M3 Ultra — ngân sách chiều cao** (384 × 640dp, dọc):
+**Shanling M3 Ultra — ngân sách chiều cao** (theo số đo thật: cửa sổ app 574dp, dọc, có Thanh đáy gộp):
 
 | Phần | Chiều cao |
 | --- | --- |
-| Thanh trạng thái hệ thống | 24dp |
 | Đầu trang (☰, tên nhóm, tìm kiếm, ⋮) | 48dp |
 | Danh sách: 8 bài × 56dp | 448dp |
-| Mini player | 56dp |
-| Phím điều hướng ảo của máy (nếu có) | 48dp |
-| Cộng | 624dp / 640dp |
+| Thanh đáy gộp | 72dp |
+| Cộng | 568dp / 574dp |
 
-Trên màn này 1dp chỉ khoảng 0,14mm (nhỏ hơn chuẩn Android ~10%), nên nút bấm 48dp chỉ rộng khoảng 7mm. Không được làm nút nhỏ hơn 48dp.
+Cần đối chiếu lại: 1208px ở mật độ ×2.00 là 604dp, khác con số 574dp ghi ở trên; nếu cửa sổ thật là 604dp thì dư thêm khoảng nửa dòng. Theo số đo thật, 1dp ≈ 0,2mm nên nút 48dp ≈ 9,5mm, bấm thoải mái. Không làm nút nhỏ hơn 48dp.
 
 **FYT 7870 — tính theo pixel thật, không theo dp.** Màn rộng 282 × 176mm, nhìn từ khoảng 70cm (điện thoại khoảng 30cm), nên chữ và nút phải to gấp khoảng 2,3 lần điện thoại. Vì firmware FYT có thể đặt mật độ Android bất kỳ, Car Mode đọc mật độ vật lý thật của màn (xdpi/ydpi) và quy đổi từ milimet, nên hiển thị đúng kích thước dù firmware đặt 160 hay 240.
 
@@ -157,15 +155,33 @@ Mọi màn ghép từ cùng một bộ thành phần; chỉ cỡ và số thông
 | Còn trên Telegram | Đám mây | Telegram · Chưa tải | Chữ phụ |
 | Lỗi | Tam giác | Tải lỗi – bấm thử lại | Cảnh báo |
 
-**Mini player** (đáy màn, trên thanh điều hướng): ảnh bìa, tên bài, thanh tiến trình mảnh kèm thời gian, nút Phát/Dừng và Bài kế. Vuốt lên hoặc bấm = mở màn Đang phát.
+**Thanh đáy gộp** (thay cho mini player + thanh điều hướng dưới riêng rẽ; học từ app MeloWave, 18/10/2026). Chỉ dùng cho bố cục dọc (Gọn, Điện thoại, Tablet dọc); bố cục ngang và Car Mode giữ cột điều hướng trái và khung trình phát lớn như cũ.
 
-**Màn Đang phát** (theo Studio Deck): ảnh bìa lớn, tên bài, tên kênh, nhãn chất lượng (MP3 · 44.1 kHz · 320 kbps), thanh sóng âm để tua, hàng nút -30s / Lùi / Phát / Tiến / +60s, hàng phụ Đảo / Lặp / Lưu, góc trên có EQ và Hẹn giờ tắt. Công tắc “Tải trước bài kế” nằm trong hàng đợi.
+- Một khối duy nhất ở đáy màn, gồm từ trên xuống: thanh tiến trình mảnh 2dp sát mép trên (màu nhấn chính); một dòng tên bài · tên kênh (bấm = mở màn Đang phát, vuốt lên cũng mở); một hàng nút.
+- Hàng nút: tab bên trái · Lùi · **Phát/Dừng ở giữa, nút tròn to nhất** · Tiến · tab bên phải. Tab đang chọn có nền nhấn dịu và chữ nhấn chính.
+- Không được có chỗ điều khiển phát thứ hai trên cùng màn (không thêm thẻ “đang phát” riêng phía trên thanh đáy).
+- Khi chưa có bài nào phát: ẩn dòng tên bài và thanh tiến trình, nút Phát mờ đi.
+- Chưa đăng nhập Telegram: ẩn cả thanh (xem “Màn đăng nhập Telegram”).
+
+| Hồ sơ | Chiều cao thanh đáy | Dòng tên bài | Nút Phát | Lùi / Tiến | Tab |
+| --- | --- | --- | --- | --- | --- |
+| Gọn (Shanling) | 72dp | 18dp, chữ 13sp | tròn 52dp | 48dp | 2 tab: Thư viện · Telegram; Playlist, Đã tải, Cài đặt vào menu ☰ |
+| Điện thoại (S25) | 88dp | 22dp, chữ 14sp | tròn 60dp | 48dp | 4 tab: Thư viện · Telegram · Playlist · Đã tải (2 tab mỗi bên nút) |
+| Tablet dọc (Y700) | 96dp | 24dp, chữ 15sp | tròn 64dp | 56dp | 4 tab như điện thoại |
+
+Mọi vùng bấm vẫn tối thiểu 48dp. Trên Shanling, nút vật lý của máy cũng điều khiển Lùi / Phát / Tiến như thường.
+
+**Màn Đang phát** (theo Studio Deck): ảnh bìa lớn, tên bài, tên kênh, **hàng viên thông số chất lượng**, thanh sóng âm để tua, hàng nút -30s / Lùi / Phát / Tiến / +60s, hàng nút phụ có chữ bên dưới biểu tượng (Equalizer · Hàng đợi · Hẹn giờ · Tải về · Lưu), góc trên có menu ⋮. Công tắc “Tải trước bài kế” nằm trong hàng đợi.
+
+**Hàng viên thông số chất lượng** (học từ MeloWave): một hàng 3–4 “viên” bo tròn ngay dưới tên bài, mỗi viên có biểu tượng nhỏ + chữ: Định dạng (FLAC / MP3 / M4A) · Độ sâu bit và tần số mẫu (24bit · 96kHz; với MP3/M4A chỉ ghi tần số, ví dụ 44.1kHz) · Bitrate (320 kbps) · Dung lượng (34,2 MB). Viên cao 32dp, chữ 13sp, nền bề mặt nổi, viền nhấn dịu. Thiếu thông tin nào thì bỏ viên đó, không hiện “?” hay “0”. Viên “Hi-Res” (màu nhấn chính) chỉ hiện khi file lossless từ 24bit/48kHz trở lên. Trên Shanling hàng viên luôn hiện (máy hi-fi); trong Car Mode dùng bản rút gọn 1 dòng chữ như cũ.
 
 **Chip lọc**: Tất cả · Đã tải (số bài) · Playlist · các thể loại hay nghe (Chillout, LakHouse, Mixset >30p). Cuộn ngang khi không đủ chỗ.
 
 **Thanh tìm kiếm**: chữ gợi ý hiện tổng số bài (“Tìm trong 27.971 bài hát…”), nút bộ lọc ở cuối; tìm ngay khi gõ, không dấu vẫn ra (gõ “su thanh hoa” ra “Sử Thanh Hóa”).
 
-**Thanh điều hướng** 4 mục: Thư viện · Telegram · Playlist · Đang phát. Nằm dưới đáy khi dọc, chuyển thành cột dọc bên trái khi ngang và Car Mode.
+**Thẻ nguồn nhạc** (học từ MeloWave): đầu màn Thư viện có một hàng thẻ, mỗi nguồn một thẻ gồm biểu tượng, tên nguồn, số bài và số bài đã tải: Telegram (27.971 bài · đã tải 412) · Nhạc trên máy · Google Drive (khi mở rộng sau này). Bấm thẻ = lọc danh sách theo nguồn đó. Nguồn chưa kết nối thì không hiện thẻ (không hiện thẻ “0 bài”). Thẻ cao 88dp, cuộn ngang, thu gọn khi cuộn danh sách xuống. Trên Shanling không đặt hàng thẻ trong Thư viện để dành chỗ cho danh sách; chọn nguồn qua menu ☰. Car Mode dùng lưới thẻ lớn trong màn Telegram như đã mô tả.
+
+**Thanh điều hướng**: khi dọc, nằm trong Thanh đáy gộp (2 tab trên Shanling, 4 tab trên điện thoại và tablet dọc). Khi ngang và Car Mode, là cột dọc bên trái: Thư viện · Telegram · Playlist · Đang phát.
 
 ## Samsung S25 Ultra (máy phụ)
 
@@ -177,9 +193,9 @@ Từ trên xuống:
 2. Thanh tìm kiếm.
 3. Hàng chip lọc, cuộn ngang.
 4. Tiêu đề nhóm đang xem (ví dụ “Nhạc Lạnh – Chillout (EMI) · 77 bài”) kèm nút Phát hết.
-5. Danh sách bài, dòng cao 72dp, ảnh bìa 56dp.
-6. Mini player.
-7. Thanh điều hướng dưới.
+5. Hàng thẻ nguồn nhạc (thu gọn khi cuộn xuống).
+6. Danh sách bài, dòng cao 72dp, ảnh bìa 56dp.
+7. Thanh đáy gộp 88dp (4 tab + Lùi / Phát / Tiến).
 
 Các điểm riêng cho máy này:
 
@@ -198,9 +214,9 @@ Dùng hồ sơ Gọn: vẫn là bố cục dọc như S25 Ultra nhưng bớt th�
 | Thanh tìm kiếm | Luôn hiện | Ẩn, bấm biểu tượng mới mở |
 | Chip lọc | Cuộn ngang | Bỏ; chọn qua menu ⋮ |
 | Dòng bài hát | 2 dòng, ảnh 56dp | 1 dòng tên + biểu tượng trạng thái nhỏ, ảnh 40dp |
-| Mini player | Có | Có, cao 56dp |
-| Thanh điều hướng dưới | Có | Bỏ; chuyển vào menu ☰ góc trái |
-| Màn Đang phát | Đầy đủ | Ảnh bìa, tên bài, thanh tiến trình, 3 nút Lùi / Phát / Tiến; phần còn lại vuốt lên mới thấy |
+| Thẻ nguồn nhạc | Hàng thẻ đầu Thư viện | Bỏ; chọn nguồn qua menu ☰ |
+| Thanh đáy gộp | 88dp, 4 tab | 72dp, 2 tab (Thư viện · Telegram); mục còn lại vào menu ☰ góc trái |
+| Màn Đang phát | Đầy đủ | Ảnh bìa, tên bài, hàng viên thông số chất lượng, thanh tiến trình, 3 nút Lùi / Phát / Tiến; phần còn lại vuốt lên mới thấy |
 
 Các điểm riêng:
 
@@ -229,7 +245,7 @@ Cầm ngang dùng bố cục Hai khung; cầm dọc dùng bố cục điện tho
 
 **Cầm ngang – Đang phát**: nguyên Studio Deck — khung trái đĩa nhạc + sóng âm + nút, khung phải hàng đợi đánh số với trạng thái từng bài.
 
-**Cầm dọc**: giống S25 Ultra, nhưng màn Telegram chia lưới 2 cột thẻ, mini player rộng hơn có thêm nút Lùi.
+**Cầm dọc**: giống S25 Ultra, nhưng màn Telegram chia lưới 2 cột thẻ, Thanh đáy gộp cao 96dp.
 
 ## Màn hình ô tô FYT 7870 – Car Mode (máy dùng chính)
 
@@ -268,6 +284,12 @@ Mockup do AI vẽ nên có vài chỗ không khớp; khi code làm theo bản đ
 | Concept 4 | Chữ phụ và cột kênh quá nhỏ | Theo bảng cỡ chữ ở phần Hệ màu và chữ |
 | Concept 2 | Biểu tượng nốt nhạc thay ảnh bìa | Luôn dùng ảnh bìa; không có ảnh thì tạo ô màu kèm chữ cái đầu tên kênh |
 | Nhiều concept | Tên file dài kiểu “Zalo 0948… – Vip Chillout…” | Giữ nguyên tên gốc nhưng cắt gọn 2 dòng; sau này có thể thêm tùy chọn làm sạch tên |
+| App MeloWave (tham khảo) | Banner quảng cáo lớn chiếm ~1/4 màn chủ | Không có banner; đầu màn chỉ dành cho tìm kiếm, thẻ nguồn và danh sách |
+| App MeloWave (tham khảo) | Thẻ “đang phát” có thanh tiến trình nằm ngay trên thanh đáy cũng có nút Phát (hai chỗ điều khiển) | Chỉ một chỗ: Thanh đáy gộp |
+| App MeloWave (tham khảo) | “Nghệ sĩ chưa biết” khi thiếu thông tin | Thay bằng tên kênh Telegram hoặc tên thư mục; không hiện chữ “chưa biết” |
+| App MeloWave (tham khảo) | Thẻ “Google Drive 0 bài” khi chưa có nhạc | Ẩn nguồn chưa kết nối |
+| App MeloWave (tham khảo) | Chip và thẻ bị cắt mép đọc không ra chữ (“Th”, “Lir”) | Mục cuối phải hiện ít nhất nửa chữ, hoặc thêm vệt mờ ở mép để báo còn cuộn được |
+| App MeloWave (tham khảo) | Nút Phát nổi tròn đè lên thanh đáy | Không dùng trong Car Mode; Car Mode giữ nút vuông lớn |
 
 ## Thứ tự triển khai cho Claude Code
 
@@ -275,7 +297,7 @@ Làm từng bước, mỗi bước cài thử lên máy thật (hoặc giả l�
 
 - [ ] 1. Màn “Thông tin màn hình” và mục “Giả lập thiết bị” trong Cài đặt; đo trên S25 Ultra và Y700 để chốt ngưỡng; Shanling và FYT dùng số tính sẵn.
 - [ ] 2. Hệ màu, cỡ chữ và 4 hồ sơ (Gọn, Điện thoại, Tablet, Car Mode) thành biến dùng chung.
-- [ ] 3. Thành phần dùng chung: dòng bài hát + trạng thái, chip, thanh tìm kiếm, mini player.
+- [ ] 3. Thành phần dùng chung: dòng bài hát + trạng thái, chip, thanh tìm kiếm, **Thanh đáy gộp** (thay mini player + thanh điều hướng dưới), hàng viên thông số chất lượng, thẻ nguồn nhạc.
 - [ ] 4. Bản Gọn cho Shanling M3 Ultra (máy dùng chính): Thư viện, Telegram, Đang phát.
 - [ ] 5. Car Mode cho FYT (máy dùng chính): công tắc, bố cục theo pixel thật, nút lật trang, nút vô lăng.
 - [ ] 6. Màn Đang phát (Studio Deck) đầy đủ, dạng dọc và ngang.
