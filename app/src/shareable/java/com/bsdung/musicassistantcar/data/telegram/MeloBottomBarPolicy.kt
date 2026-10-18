@@ -34,6 +34,10 @@ internal object MeloBottomBarPolicy {
     const val PROGRESS_DP = 2
     const val MIN_TOUCH_DP = 48
 
+    /** Gọn list: rows sit edge to edge (pitch = row height); the 1dp inset on each side draws the gap. */
+    const val COMPACT_ROW_INSET_DP = 1
+    const val COMPACT_LIST_BOTTOM_PAD_DP = 2
+
     /** Null for Car Mode: it keeps its own transport and navigation column. */
     fun spec(profile: Profile): Spec? = when (profile) {
         Profile.COMPACT -> SPEC_COMPACT
@@ -98,8 +102,8 @@ internal object MeloBottomBarPolicy {
     }
 
     /** Rows that fit between the header and the bar: used to check the Shanling budget (8 rows). */
-    fun visibleRows(windowHeightDp: Int, headerDp: Int, barDp: Int, rowDp: Int, dividerDp: Int): Int {
-        val free = windowHeightDp - headerDp - barDp
+    fun visibleRows(windowHeightDp: Int, headerDp: Int, barDp: Int, rowDp: Int, dividerDp: Int, reservedDp: Int = 0): Int {
+        val free = windowHeightDp - headerDp - barDp - reservedDp
         if (free <= 0 || rowDp <= 0) return 0
         return (free + dividerDp) / (rowDp + dividerDp)
     }

@@ -89,7 +89,7 @@ internal class MeloCompactScreen(
     // ---- Library -------------------------------------------------------------------------
 
     private fun buildLibraryPage() {
-        libraryPage.setPadding(s.gap, 0, s.gap, s.gap / 2)
+        libraryPage.setPadding(s.gap, 0, s.gap, dp(MeloBottomBarPolicy.COMPACT_LIST_BOTTOM_PAD_DP))
         libraryPage.addView(header(), matchWrap())
         searchBar = c.searchBar(null, onQuery = ::queueQuery).apply { visibility = View.GONE }
         libraryPage.addView(searchBar, matchWrap().apply { bottomMargin = s.gap / 2 })
@@ -97,7 +97,7 @@ internal class MeloCompactScreen(
         list.apply {
             adapter = this@MeloCompactScreen.adapter
             divider = null
-            dividerHeight = s.gap / 2
+            dividerHeight = 0 // rows touch; see rowGap() for the visible gap
             setSelector(android.R.color.transparent)
             isVerticalScrollBarEnabled = true
             setOnItemClickListener { _, _, position, _ -> onRowClick(position) }
@@ -111,7 +111,7 @@ internal class MeloCompactScreen(
             })
         }
         libraryPage.addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        libraryPage.addView(bar.view, matchWrap().apply { topMargin = s.gap / 2 })
+        libraryPage.addView(bar.view, matchWrap())
     }
 
     private fun header(): View = LinearLayout(context).apply {
@@ -191,7 +191,7 @@ internal class MeloCompactScreen(
             qualityLabel = quality,
             progressPercent = row.downloadingPercent,
             art = row.art
-        )).also { unclickable(it, position) }
+        )).also { rowGap(it); unclickable(it, position) }
     }
 
     private fun sourceRow(source: SourceRow): View = LinearLayout(context).apply {
@@ -208,6 +208,18 @@ internal class MeloCompactScreen(
         })
         addView(c.text("${MeloComponentPolicy.formatCount(source.count)} bài", s.secondaryText, p.textSecondary))
         contentDescription = "${source.title}, ${source.count} bài"
+        rowGap(this)
+    }
+
+    private fun dp(v: Int) = (v * context.resources.displayMetrics.density).toInt()
+
+    /**
+     * Rows are 56dp edge to edge so 8 fit above the 72dp bar on the 574dp Shanling window;
+     * insetting the drawn background by 1dp on top and bottom leaves the 2dp visual gap.
+     */
+    private fun rowGap(row: View) {
+        val inset = dp(MeloBottomBarPolicy.COMPACT_ROW_INSET_DP)
+        row.background?.let { row.background = android.graphics.drawable.InsetDrawable(it, 0, inset, 0, inset) }
     }
 
     private fun unclickable(v: View, position: Int = -1) {

@@ -113,10 +113,13 @@ class MeloBottomBarPolicyTest {
     fun shanlingKeepsEightRowsAboveTheBar() {
         // docs/ui-spec.md budget: window 574dp (maybe 604dp), header 48dp, 56dp rows, bar 72dp.
         val bar = spec(Profile.COMPACT).heightDp
-        assertTrue(MeloBottomBarPolicy.visibleRows(574, 48, bar, 56, dividerDp = 0) >= 8)
-        assertTrue(MeloBottomBarPolicy.visibleRows(604, 48, bar, 56, dividerDp = 4) >= 8)
-        // Old layout (mini 56dp + gaps) kept 8 rows only without dividers, so dividers must stay slim.
-        assertEquals(8, MeloBottomBarPolicy.visibleRows(574, 48, bar, 56, dividerDp = 0))
+        val pad = MeloBottomBarPolicy.COMPACT_LIST_BOTTOM_PAD_DP
+        // The Gọn list has no divider (the row inset draws the gap), so even 574dp keeps 8 rows.
+        assertTrue(MeloBottomBarPolicy.visibleRows(574, 48, bar, 56, dividerDp = 0, reservedDp = pad) >= 8)
+        assertTrue(MeloBottomBarPolicy.visibleRows(604, 48, bar, 56, dividerDp = 0, reservedDp = pad) >= 8)
+        // With the old 4dp divider 574dp only fits 7 rows: the reason the divider was removed.
+        assertEquals(7, MeloBottomBarPolicy.visibleRows(574, 48, bar, 56, dividerDp = 4, reservedDp = 8))
+        assertEquals(8, MeloBottomBarPolicy.visibleRows(574, 48, bar, 56, dividerDp = 0, reservedDp = pad))
     }
 
     @Test
