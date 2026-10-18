@@ -5586,6 +5586,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 meloChannelsRequested = true
                 telegramLibraryTotal = count
                 scheduleMeloLibraryRefresh()
+                startDownloadedCountFlow(userId)
                 if (count > 0) {
                     totalCountForCurrentView = count
                     songs.clear()
