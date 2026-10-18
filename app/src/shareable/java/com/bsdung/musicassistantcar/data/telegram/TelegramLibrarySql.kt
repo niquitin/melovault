@@ -5,7 +5,7 @@ package com.bsdung.musicassistantcar.data.telegram
  * for MeloVault Telegram Library Index.
  */
 object TelegramLibrarySql {
-    const val DATABASE_VERSION = 1
+    const val DATABASE_VERSION = 2
 
     const val TABLE_SONGS = "telegram_songs"
     const val TABLE_SOURCES = "telegram_sources"
@@ -28,6 +28,7 @@ object TelegramLibrarySql {
     const val COL_LAST_SEEN_AT_MS = "last_seen_at_ms"
     const val COL_SOURCE_TITLE = "source_title"
     const val COL_IS_DELETED = "is_deleted"
+    const val COL_SEARCH_KEY = "search_key"
 
     // Sources column names
     const val COL_TYPE = "type"
@@ -63,6 +64,7 @@ object TelegramLibrarySql {
             $COL_LAST_SEEN_AT_MS INTEGER NOT NULL,
             $COL_SOURCE_TITLE TEXT,
             $COL_IS_DELETED INTEGER NOT NULL DEFAULT 0,
+            $COL_SEARCH_KEY TEXT NOT NULL DEFAULT '',
             PRIMARY KEY ($COL_ACCOUNT_ID, $COL_CHAT_ID, $COL_MESSAGE_ID)
         );
     """.trimIndent()
@@ -109,6 +111,15 @@ object TelegramLibrarySql {
             $COL_LAST_ERROR_MESSAGE TEXT,
             PRIMARY KEY ($COL_ACCOUNT_ID, $COL_SYNC_SCOPE)
         );
+    """.trimIndent()
+
+    /** v1 -> v2: add the accent-insensitive search column; rows are backfilled by the caller. */
+    val MIGRATE_1_TO_2_ADD_COLUMN =
+        "ALTER TABLE $TABLE_SONGS ADD COLUMN $COL_SEARCH_KEY TEXT NOT NULL DEFAULT ''"
+
+    val BACKFILL_SEARCH_KEY_UPDATE = """
+        UPDATE $TABLE_SONGS SET $COL_SEARCH_KEY = ?
+        WHERE $COL_ACCOUNT_ID = ? AND $COL_CHAT_ID = ? AND $COL_MESSAGE_ID = ?
     """.trimIndent()
 
     val ALL_CREATE_STATEMENTS = listOf(

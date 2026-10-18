@@ -37,7 +37,42 @@ class AndroidTelegramLibraryDatabase(
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Version 1 is baseline; future schema migrations go here with explicit upgrade steps.
+        // SQLiteOpenHelper wraps this in one transaction: a killed upgrade leaves version 1 intact.
+        if (oldVersion < 2) migrateToV2(db)
+    }
+
+    private fun migrateToV2(db: SQLiteDatabase) {
+        val started = System.currentTimeMillis()
+        db.execSQL(TelegramLibrarySql.MIGRATE_1_TO_2_ADD_COLUMN)
+        var rows = 0
+        val stmt = db.compileStatement(TelegramLibrarySql.BACKFILL_SEARCH_KEY_UPDATE)
+        try {
+            db.query(
+                TelegramLibrarySql.TABLE_SONGS,
+                arrayOf(
+                    TelegramLibrarySql.COL_ACCOUNT_ID, TelegramLibrarySql.COL_CHAT_ID,
+                    TelegramLibrarySql.COL_MESSAGE_ID, TelegramLibrarySql.COL_TITLE,
+                    TelegramLibrarySql.COL_PERFORMER, TelegramLibrarySql.COL_FILENAME
+                ),
+                null, null, null, null, null
+            ).use { c ->
+                while (c.moveToNext()) {
+                    val key = TelegramSearchPolicy.songSearchKey(
+                        c.getString(3), if (c.isNull(4)) null else c.getString(4), c.getString(5)
+                    )
+                    stmt.clearBindings()
+                    stmt.bindString(1, key)
+                    stmt.bindLong(2, c.getLong(0))
+                    stmt.bindLong(3, c.getLong(1))
+                    stmt.bindLong(4, c.getLong(2))
+                    stmt.executeUpdateDelete()
+                    rows++
+                }
+            }
+        } finally {
+            stmt.close()
+        }
+        android.util.Log.i("MeloVaultDb", "search_key migration v1->v2: rows=$rows ms=${System.currentTimeMillis() - started}")
     }
 
     override fun upsertSongs(songs: Collection<IndexedTelegramSong>): Int {
@@ -65,6 +100,7 @@ class AndroidTelegramLibraryDatabase(
                     put(TelegramLibrarySql.COL_LAST_SEEN_AT_MS, song.lastSeenAtMs)
                     put(TelegramLibrarySql.COL_SOURCE_TITLE, song.sourceTitle)
                     put(TelegramLibrarySql.COL_IS_DELETED, if (song.isDeleted) 1 else 0)
+                    put(TelegramLibrarySql.COL_SEARCH_KEY, TelegramSearchPolicy.songSearchKey(song.title, song.performer, song.filename))
                 }
                 val rowId = db.insertWithOnConflict(
                     TelegramLibrarySql.TABLE_SONGS,
@@ -111,6 +147,7 @@ class AndroidTelegramLibraryDatabase(
                     put(TelegramLibrarySql.COL_LAST_SEEN_AT_MS, song.lastSeenAtMs)
                     put(TelegramLibrarySql.COL_SOURCE_TITLE, song.sourceTitle)
                     put(TelegramLibrarySql.COL_IS_DELETED, if (song.isDeleted) 1 else 0)
+                    put(TelegramLibrarySql.COL_SEARCH_KEY, TelegramSearchPolicy.songSearchKey(song.title, song.performer, song.filename))
                 }
                 val rowId = db.insertWithOnConflict(
                     TelegramLibrarySql.TABLE_SONGS,
@@ -163,10 +200,9 @@ class AndroidTelegramLibraryDatabase(
             selectionArgs.add(chatId.toString())
         }
 
-        val cleanQuery = searchQuery?.trim()
-        if (!cleanQuery.isNullOrEmpty()) {
-            selection.append(" AND ${TelegramLibrarySql.COL_TITLE} LIKE ?")
-            selectionArgs.add("%$cleanQuery%")
+        TelegramSearchPolicy.whereClause(searchQuery)?.let {
+            selection.append(" AND ").append(it.sql)
+            selectionArgs.addAll(it.args)
         }
 
         val orderBy = "${TelegramLibrarySql.COL_DATE} DESC, ${TelegramLibrarySql.COL_MESSAGE_ID} DESC, ${TelegramLibrarySql.COL_CHAT_ID} DESC LIMIT $limit OFFSET $offset"
@@ -203,10 +239,9 @@ class AndroidTelegramLibraryDatabase(
             selectionArgs.add(chatId.toString())
         }
 
-        val cleanQuery = searchQuery?.trim()
-        if (!cleanQuery.isNullOrEmpty()) {
-            selection.append(" AND ${TelegramLibrarySql.COL_TITLE} LIKE ?")
-            selectionArgs.add("%$cleanQuery%")
+        TelegramSearchPolicy.whereClause(searchQuery)?.let {
+            selection.append(" AND ").append(it.sql)
+            selectionArgs.addAll(it.args)
         }
 
         db.rawQuery(

@@ -3671,7 +3671,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 val (loadedSongs, totalDisplayCount) = if (isPlaylist) {
                     val favSongs = currentFavIds.mapNotNull { id -> songs.firstOrNull { it.messageId == id } }
                     val filtered = if (q.isBlank()) favSongs else favSongs.filter {
-                        it.title.contains(q, ignoreCase = true) || it.filename.contains(q, ignoreCase = true)
+                        MeloComponentPolicy.matchesSearch(q, it.title, it.performer, it.filename)
                     }
                     Pair(filtered, filtered.size)
                 } else if (isAllChats && db != null && userId > 0L) {
@@ -3691,12 +3691,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 } else if (currentChatId != null) {
                     val chatSongs = songs.filter { it.chatId == currentChatId }
                     val filtered = if (q.isBlank()) chatSongs else chatSongs.filter {
-                        it.title.contains(q, ignoreCase = true) || it.filename.contains(q, ignoreCase = true)
+                        MeloComponentPolicy.matchesSearch(q, it.title, it.performer, it.filename)
                     }
                     Pair(filtered, filtered.size)
                 } else {
                     val filtered = if (q.isBlank()) songs.toList() else songs.filter {
-                        it.title.contains(q, ignoreCase = true) || it.filename.contains(q, ignoreCase = true)
+                        MeloComponentPolicy.matchesSearch(q, it.title, it.performer, it.filename)
                     }
                     Pair(filtered, filtered.size)
                 }

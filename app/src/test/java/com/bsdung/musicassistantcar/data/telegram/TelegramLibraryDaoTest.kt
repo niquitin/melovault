@@ -353,4 +353,16 @@ class TelegramLibraryDaoTest {
         assertNotNull(updated)
         assertEquals(9999, updated?.fileId)
     }
+
+    @Test
+    fun testAccentInsensitiveSearchAndPagination() {
+        val songs = (1..5).map { sampleSong(messageId = it.toLong(), title = "Sử Thanh Hóa $it", date = it.toLong()) } +
+            sampleSong(messageId = 9L, title = "Khac")
+        dao.upsertSongs(songs)
+        assertEquals(5, dao.getSongCount(accountId = 100L, searchQuery = "su thanh hoa"))
+        assertEquals(5, dao.getSongCount(accountId = 100L, searchQuery = "HOA SU"))
+        val page = dao.getSongs(accountId = 100L, searchQuery = "su thanh hoa", offset = 2, limit = 2)
+        assertEquals(listOf("Sử Thanh Hóa 3", "Sử Thanh Hóa 2"), page.map { it.title })
+        assertEquals(1, dao.getSongCount(accountId = 100L, searchQuery = "artist khac"))
+    }
 }

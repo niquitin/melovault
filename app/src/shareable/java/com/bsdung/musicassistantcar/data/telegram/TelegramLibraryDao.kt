@@ -24,7 +24,7 @@ interface TelegramLibraryDao {
     ): Int
 
     /**
-     * Retrieves songs for an account, with optional chat filtering, substring title search,
+     * Retrieves songs for an account, with optional chat filtering, accent-insensitive search over title/performer/filename,
      * pagination, ordered by message date descending.
      */
     fun getSongs(

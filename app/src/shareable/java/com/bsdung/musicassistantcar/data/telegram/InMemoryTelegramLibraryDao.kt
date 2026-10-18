@@ -54,12 +54,11 @@ class InMemoryTelegramLibraryDao : TelegramLibraryDao {
         offset: Int,
         limit: Int
     ): List<IndexedTelegramSong> {
-        val queryLower = searchQuery?.trim()?.lowercase()
         return songs.values
             .asSequence()
             .filter { it.accountId == accountId && !it.isDeleted }
             .filter { chatId == null || it.chatId == chatId }
-            .filter { queryLower.isNullOrEmpty() || it.title.lowercase().contains(queryLower) }
+            .filter { TelegramSearchPolicy.matches(searchQuery, it) }
             .sortedWith(compareByDescending<IndexedTelegramSong> { it.date }.thenByDescending { it.messageId }.thenByDescending { it.chatId })
             .drop(offset)
             .take(limit)
@@ -71,12 +70,11 @@ class InMemoryTelegramLibraryDao : TelegramLibraryDao {
         chatId: Long?,
         searchQuery: String?
     ): Int {
-        val queryLower = searchQuery?.trim()?.lowercase()
         return songs.values
             .asSequence()
             .filter { it.accountId == accountId && !it.isDeleted }
             .filter { chatId == null || it.chatId == chatId }
-            .filter { queryLower.isNullOrEmpty() || it.title.lowercase().contains(queryLower) }
+            .filter { TelegramSearchPolicy.matches(searchQuery, it) }
             .count()
     }
 
