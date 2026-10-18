@@ -204,7 +204,8 @@ internal class MeloLibraryPane(
             bar.setActive(letter)
             if (index != null) {
                 onLibraryChanged()
-                list.setSelection(index)
+                android.util.Log.i("MeloVaultAz", "jump $letter -> index $index of ${snapshot?.rows?.size}")
+                list.post { list.setSelectionFromTop(index, 0) }
             }
         }
         pendingJump = task
