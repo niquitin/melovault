@@ -43,6 +43,7 @@ Test mốc Beta95: mỗi biến thể 1.132 tests, 1.111 passed, 21 skipped (**[
 
 ## 7. Việc tiếp theo
 Xem `docs/plans/BACKLOG.md` (A–Z, EQ, tìm không dấu). Mỗi phiên làm đúng một việc theo `docs/plans/<việc>.md`. Theme 04 và FYT chỉ làm khi chủ dự án giao; Drive/OneDrive là workstream riêng.
+- Tìm không dấu: kế hoạch `docs/plans/tim-khong-dau.md` (18/10/2026) — thêm cột `search_key`, DB v1→v2 bằng `ALTER TABLE ADD COLUMN` + điền lại trong giao dịch `onUpgrade`, không mất dữ liệu. **Chờ chủ dự án duyệt đổi schema** trước khi thực hiện.
 
 ## 8. Nguồn tài liệu
 Ưu tiên: Git + source > test XML/build vừa chạy > QA thiết bị có artifact > HANDOFF này > `docs/history/` và các tài liệu E9/E91 ở thư mục gốc (chỉ là lịch sử). Báo cáo QA từng bản nằm trên Tiny dưới `C:\Bots\_qa_temp\` (ảnh chứa tên bài riêng tư, chỉ giữ local); handoff cũ ở `D:\Bots\_handoff\MeloVault\`.
