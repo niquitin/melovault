@@ -33,7 +33,7 @@ Test mốc Beta95: mỗi biến thể 1.132 tests, 1.111 passed, 21 skipped (**[
 Đặc tả `docs/ui-spec.md` 8 bước đã hoàn tất về code.
 
 ## 6. Bug / rủi ro đang mở
-- **Test mạng flaky:** `AudioStreamingNetworkRecoveryTest.testNetworkDrop_5Seconds_SocketDisconnectAndRangeResume` (dòng ~194) FAIL ở lần chạy đầu sau mỗi lần ff code mới trên Tiny (Beta94, Beta95; Debug+Release), PASS khi `--rerun`; Ni luôn xanh. Script Tiny tự chạy lại một lần. Việc sửa nằm trong `docs/plans/BACKLOG.md`.
+- **Test mạng flaky: ĐÃ SỬA** (commit `9597332`, chỉ đổi test; không nằm trong APK Beta95 vì không bump/build). Nguyên nhân: RST sau sleep 100 ms làm mất byte client chưa đọc; server test nay chờ client báo đã đọc xong rồi mới RST. 5 lần Debug + 5 lần Release xanh trên Ni và Tiny. Chi tiết: `docs/plans/BACKLOG.md` mục 4. Clone Tiny đã ff tới `9597332`.
 - **Chưa kiểm trên thiết bị thật [CẦN XÁC NHẬN]:** nút vật lý Shanling khi tắt màn; nút vô lăng FYT (xdpi firmware, bàn phím tiếng Việt, nhận giọng nói); tai nghe/đồng hồ BT; màn khoá S25 (Android 17, cần quyền thông báo); vuốt app khỏi recents; tự sang bài khi hết bài lúc tắt màn; tốc độ phân tích sóng âm và native heap khi quét offline trên Shanling 3GB; lưới 3 cột Hai khung trên Y700; IME ngang, fontScale > 1.
 - Studio Deck: núm thanh tua tròn ở vị trí 0 bị cắt nửa khi chưa có sóng âm (nhỏ).
 - Tìm kiếm phân biệt dấu (DB dùng `LIKE`): "su thanh hoa" không ra "Sử Thanh Hóa".
@@ -42,7 +42,7 @@ Test mốc Beta95: mỗi biến thể 1.132 tests, 1.111 passed, 21 skipped (**[
 - Release ký bằng debug key; 21 test skipped; chưa kiểm đa tài khoản end-to-end; chưa sẵn sàng public/FYT.
 
 ## 7. Việc tiếp theo
-Xem `docs/plans/BACKLOG.md` (A–Z, EQ, tìm không dấu, sửa test mạng flaky). Mỗi phiên làm đúng một việc theo `docs/plans/<việc>.md`. Theme 04 và FYT chỉ làm khi chủ dự án giao; Drive/OneDrive là workstream riêng.
+Xem `docs/plans/BACKLOG.md` (A–Z, EQ, tìm không dấu). Mỗi phiên làm đúng một việc theo `docs/plans/<việc>.md`. Theme 04 và FYT chỉ làm khi chủ dự án giao; Drive/OneDrive là workstream riêng.
 
 ## 8. Nguồn tài liệu
 Ưu tiên: Git + source > test XML/build vừa chạy > QA thiết bị có artifact > HANDOFF này > `docs/history/` và các tài liệu E9/E91 ở thư mục gốc (chỉ là lịch sử). Báo cáo QA từng bản nằm trên Tiny dưới `C:\Bots\_qa_temp\` (ảnh chứa tên bài riêng tư, chỉ giữ local); handoff cũ ở `D:\Bots\_handoff\MeloVault\`.

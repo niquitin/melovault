@@ -12,5 +12,7 @@ Mỗi phiên làm đúng 1 việc: tạo `docs/plans/<việc>.md` (mục tiêu, 
 ## 3. Tìm không dấu
 - DB dùng `LIKE`, phân biệt dấu: "su thanh hoa" không ra "Sử Thanh Hóa". Cần cột/chỉ mục chuẩn hóa không dấu, có thể đổi schema → phải được duyệt, kèm migration an toàn cho DB đang có.
 
-## 4. Sửa test mạng flaky trên Tiny
-- `AudioStreamingNetworkRecoveryTest.testNetworkDrop_5Seconds_SocketDisconnectAndRangeResume` (dòng ~194) fail lần chạy đầu sau mỗi lần fast-forward code trên Tiny (Beta94, Beta95; Debug + Release), pass khi `--rerun`; Ni luôn xanh. Cần tìm nguyên nhân (thời gian/socket/cold start) và làm ổn định, không bỏ qua test bằng skip/Ignore.
+## 4. ~~Sửa test mạng flaky trên Tiny~~ — XONG (18/10/2026, commit `9597332`)
+- Nguyên nhân: server giả lập của test RST socket sau `sleep(100)` ở offset cắt; RST làm OS vứt byte client chưa đọc, nên số byte client nhận (`totalRead`, dòng 194) phụ thuộc tốc độ client (Tiny chạy lần đầu chậm hơn → < 128 KB). Tái hiện được trên Ni bằng cách cho client chờ 400 ms.
+- Sửa: server chờ cổng `CountDownLatch` (client gọi `markClientDrained` khi đã đọc hết byte trước điểm cắt; chờ tối đa 10 s) rồi mới RST. Không dùng FIN vì JDK client sẽ thấy EOF sạch thay vì IOException (cache tưởng bài chỉ dài 128 KB). Assertion giữ nguyên, không skip.
+- Kiểm: 5 lần liên tiếp Debug + 5 lần Release xanh (6/6 test) trên Ni và trên clone cô lập Tiny (ngay sau fast-forward, lần đầu); xanh cả khi cố ý làm client chậm 400 ms. Full suite Ni: 1.132 tests, 21 skipped, 0 failed ở cả hai biến thể.
