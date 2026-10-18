@@ -150,6 +150,45 @@ class MeloLibraryPolicyTest {
     }
 
     @Test
+    fun wideHeaderKeepsOneRow() {
+        assertFalse(MeloLibraryPolicy.headerStacked(paneWidthPx = 1400, titleWidthPx = 2000, chipsWidthPx = 480, minTitlePx = 400))
+    }
+
+    @Test
+    fun narrowHeaderWithLongTitleStacks() {
+        // pane 700, buttons 480 -> 220 left for the title, which needs min(2000, max(400, 280)) = 400
+        assertTrue(MeloLibraryPolicy.headerStacked(700, 2000, 480, 400))
+    }
+
+    @Test
+    fun shortTitleStaysOnTheRowWhenItFits() {
+        // 220 left, the whole title is only 150 wide
+        assertFalse(MeloLibraryPolicy.headerStacked(700, 150, 480, 400))
+        // but not when 220 is less than the title's own width
+        assertTrue(MeloLibraryPolicy.headerStacked(700, 260, 480, 400))
+    }
+
+    @Test
+    fun buttonsWiderThanThePaneStack() {
+        assertTrue(MeloLibraryPolicy.headerStacked(300, 100, 500, 100))
+    }
+
+    @Test
+    fun headerBoundaryIsFortyPercentOfThePane() {
+        // pane 1000: the title needs 400 (40%) because minTitle 100 is smaller
+        assertFalse(MeloLibraryPolicy.headerStacked(1000, 3000, 600, 100)) // exactly 400 left
+        assertTrue(MeloLibraryPolicy.headerStacked(1000, 3000, 601, 100))  // 399 left
+        // minTitle larger than 40%: it wins
+        assertTrue(MeloLibraryPolicy.headerStacked(1000, 3000, 600, 450))
+    }
+
+    @Test
+    fun headerWithoutButtonsOrWidthNeverStacks() {
+        assertFalse(MeloLibraryPolicy.headerStacked(1000, 3000, 0, 400))
+        assertFalse(MeloLibraryPolicy.headerStacked(0, 3000, 100, 400))
+    }
+
+    @Test
     fun topResetWaitsForRowsAndNeverRunsOnTheGrid() {
         assertTrue(MeloLibraryPolicy.shouldResetTop(pending = true, showingSources = false, rowCount = 30))
         assertFalse(MeloLibraryPolicy.shouldResetTop(pending = false, showingSources = false, rowCount = 30))

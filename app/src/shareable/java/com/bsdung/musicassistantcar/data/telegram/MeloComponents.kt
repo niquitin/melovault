@@ -341,6 +341,8 @@ internal class MeloComponents(
             setTextColor(if (selected) palette.onAccent else palette.text)
             typeface = if (selected) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
             background = if (selected) pill(palette.accent) else pill(palette.surfaceRaised, palette.border)
+            // A chip is one line; when space is short its row moves, the text never wraps out of the pill.
+            maxLines = 1
             setPadding(sizes.gap * 2, 0, sizes.gap * 2, 0)
             minHeight = sizes.minTouch
             isClickable = true

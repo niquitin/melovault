@@ -81,6 +81,17 @@ internal object MeloLibraryPolicy {
         (listHeightPx / 3).coerceIn(0, (listHeightPx - rowHeightPx).coerceAtLeast(0))
 
     /**
+     * Group title row: the two buttons ("Mới nhất", "Phát hết") stay on the title's row while the
+     * title keeps at least [minTitlePx] (or 40% of the pane, whichever is larger) or all of its
+     * own text if that is shorter; otherwise the title takes a row of its own above them.
+     */
+    fun headerStacked(paneWidthPx: Int, titleWidthPx: Int, chipsWidthPx: Int, minTitlePx: Int): Boolean {
+        if (paneWidthPx <= 0 || chipsWidthPx <= 0) return false
+        val needed = minOf(titleWidthPx.coerceAtLeast(0), maxOf(minTitlePx, paneWidthPx * 2 / 5))
+        return paneWidthPx - chipsWidthPx < needed
+    }
+
+    /**
      * A freshly opened group starts at its first row. The jump waits for rows to arrive (they
      * load asynchronously) and never happens on the channel grid.
      */

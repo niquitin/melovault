@@ -49,6 +49,9 @@ internal class MeloLibraryPane(
     private val sortChip = c.chip("↕ Mới nhất", false) {
         host.setSort(if (host.sort() == SongSort.NAME) SongSort.NEWEST else SongSort.NAME)
     }
+    private val header = LinearLayout(context)
+    private val headerChips = LinearLayout(context)
+    private var headerStacked = false
     private val note = c.text("", s.secondaryText, p.textSecondary, maxLines = 2)
     private val list = ListView(context)
     private val listFrame = FrameLayout(context)
@@ -86,13 +89,19 @@ internal class MeloLibraryPane(
         view.addView(chipHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = s.gap
         })
-        val header = LinearLayout(context).apply {
+        headerChips.apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            addView(sortChip)
+            addView(playAll)
+        }
+        header.apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, s.gap, 0, s.gap / 2)
             addView(groupTitle, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(sortChip)
-            addView(playAll)
+            addView(headerChips, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addOnLayoutChangeListener { _, l, _, r, _, ol, _, or_, _ -> if (r - l != or_ - ol) post { fitHeader() } }
         }
         view.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         view.addView(note, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -164,6 +173,7 @@ internal class MeloLibraryPane(
         }
         searchField.hint = if (snap.showingSources) "Tìm nhóm, kênh hoặc bot…" else MeloComponentPolicy.searchHint(snap.total)
         renderChips(snap)
+        header.post { fitHeader() }
         if (snap.showingSources) {
             groupTitle.text = "Telegram · ${MeloComponentPolicy.formatCount(snap.sources.count { it.chatId != 0L })} nguồn"
             playAll.visibility = View.GONE
@@ -197,6 +207,30 @@ internal class MeloLibraryPane(
                 playAllWhenLoaded = false
                 host.playAll(true)
             }
+        }
+    }
+
+    /** Long group name on a narrow pane: title on its own row (2 lines), the two buttons under it at the right. */
+    private fun fitHeader() {
+        val width = header.width
+        if (width <= 0) return
+        val unspecified = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        headerChips.measure(unspecified, unspecified)
+        val titleWidth = groupTitle.paint.measureText(groupTitle.text.toString()).toInt() + groupTitle.paddingLeft + groupTitle.paddingRight
+        val stacked = MeloLibraryPolicy.headerStacked(width, titleWidth, headerChips.measuredWidth, s.minTouch * 4)
+        if (stacked == headerStacked) return
+        headerStacked = stacked
+        header.orientation = if (stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+        groupTitle.maxLines = if (stacked) 2 else 1
+        groupTitle.layoutParams = if (stacked) {
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        } else {
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        headerChips.layoutParams = if (stacked) {
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = s.gap / 2 }
+        } else {
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
         }
     }
 
