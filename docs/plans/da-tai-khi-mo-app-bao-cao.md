@@ -68,4 +68,31 @@ Ghi chú kỹ thuật: bộ đệm logcat Shanling chỉ 256 KiB và bị log TD
 4. Khi vừa mở app, bấm phát một bài và cuộn danh sách: không giật, nhạc không ngắt.
 5. Shanling (đã cài b109): mở Thư viện, chờ ~1 phút, menu ≡ → "Đã tải": thấy "Đã tải · 3 bài"; quay lại "Tất cả", bấm bài có dấu ✓: phát được. **Lưu ý:** Shanling (bố cục Gọn) không có thẻ nguồn nên không có "đã tải N" trên thẻ — cần chủ dự án/ChatGPT quyết nơi hiển thị.
 
+---
+
+## 8. REWORK — dòng "Đã tải" trong bố cục Gọn (19/10/2026, Sonnet phiên mới)
+
+Căn cứ: nghiệm thu `0fb21d3` (REWORK, chủ dự án đã duyệt thêm 1 dòng dưới tiêu đề Thư viện Gọn). Làn nhanh; cùng nhánh `feature/e93-03d-y700-offline-cockpit`, cây sạch lúc bắt đầu, HEAD `0fb21d3`, không agent khác. Không đổi `versionCode` (vẫn 109).
+
+**Commit:** `06abe49` — `fix(shareable): show downloaded group count under the Compact library title`. Production 29 dòng thêm / 1 dòng sửa, **2 file** (trong giới hạn 2 file / 80 dòng); thêm 51 dòng test.
+
+**Đã sửa**
+- `MeloCompactScreen.kt`: dòng `downloadedLine` đặt dưới tiêu đề, **bên trong hàng header 48dp** (cột dọc tiêu đề + dòng phụ) nên không lấy thêm chiều cao danh sách và không đụng thanh phát 72dp. Số lấy từ `host.sourceSummaries().first().downloaded` = `downloadedLibraryTotal` có sẵn (không có bộ đếm thứ hai). Dòng tự cập nhật qua `onLibraryChanged()`, vốn đã được `scheduleMeloLibraryRefresh()` gọi khi số đã lưu được nạp và khi quét nền xong.
+- `MeloCompactPolicy.kt`: `downloadedLine(mode, sourceTitle, showingSources, groups)` và màu `#3DDC97`. Chữ: "Đã tải: N nhóm · lần kiểm trước". Ẩn khi số chưa xác định (null/âm); 0 hiện "0 nhóm". Chỉ hiện ở Thư viện "Tất cả" và danh sách nguồn; ẩn ở "Đã tải" (tiêu đề đã có số), Playlist, và khi mở một kênh riêng (số là của cả thư viện).
+- Không đổi: `TelegramPreviewActivity.kt`, `MeloScreenHost.kt`, TDLib, SQLite, cache, quét nền, Media3, bố cục Điện thoại/Tablet.
+
+**Giới hạn đã chấp nhận:** nhãn "lần kiểm trước" dùng chung cho số đã lưu lẫn số vừa quét xong (đúng cả hai, nhưng không phân biệt "mới"/"cũ"). Phân biệt hai trạng thái cần thêm trường vào `Snapshot`/host → sửa thêm 2 file, vượt làn nhanh; để ChatGPT quyết nếu muốn.
+
+**Test (Ni, HEAD `06abe49`):** `testShareableDebugUnitTest` + `testShareableReleaseUnitTest` BUILD SUCCESSFUL: mỗi variant 1255 test (1249 + 6 mới), 21 skipped, 0 failures, 0 errors. `assembleShareableDebug` + `assembleShareableRelease` BUILD SUCCESSFUL. `git diff --check` sạch (chỉ cảnh báo LF→CRLF có sẵn).
+6 test mới (`MeloCompactPolicyTest`): số chưa xác định (null/âm) → ẩn; số đã lưu → đúng chữ; số đổi sau quét → chữ đổi; giá trị 0 hợp lệ; chỉ hiện ở màn thư viện toàn bộ; màu #3DDC97 và ngân sách chiều cao (tiêu đề 16sp + dòng 13sp ≤ 48dp tới fontScale 1,3). "Không che header/nút phát" chỉ chứng minh bằng tính toán JVM, **không phải bằng ảnh thật**.
+
+**QA Shanling — BLOCKED (không cài, không có ảnh mới)**
+- ADB xác minh lại trên Ni: `30313860180939` trạng thái `device`; Shanling / Shanling M3 Ultra; app.melovault.player vc109 / `0.6.88-beta`; phiên media `state=2` (tạm dừng), không phát nhạc.
+- APK build Ni (`app/build/outputs/apk/shareable/debug/app-shareable-debug.apk`) **thiếu cấu hình Telegram**: BuildConfig `TELEGRAM_APP_API_ID = 0` và `TELEGRAM_APP_API_HASH` rỗng (chỉ kiểm có/không, không đọc giá trị). Theo CLAUDE.md §3 không cài APK này lên Shanling (sẽ không đăng nhập/tải được Telegram). Không lấy bí mật từ Tiny sang Ni. Không chạy `adb install`, không uninstall/pm clear.
+- Cần: build APK vc109 (hoặc bump theo quyết định ChatchatGPT/chủ dự án) tại Tiny với config bí mật + verify package/version/cert `eecd3df7…ce8`, rồi mới `adb install -r` lên Shanling và chụp 5 ảnh yêu cầu (mở app, sau cập nhật số, mở lại, vào Đã tải, đang phát). Lưu ý APK cùng `versionCode` 109 sẽ cài đè được (không phải hạ phiên bản) nhưng khó phân biệt bản trên máy; nên để ChatGPT quyết có bump hay không.
+
+**Chưa kiểm chứng:** hiển thị thật trên Shanling (độ dài chữ "Đã tải: N nhóm · lần kiểm trước" có vừa chiều rộng ≈ 200dp giữa ☰ và hai nút bên phải hay bị cắt "…"; nếu bị cắt cần rút chữ); tự cập nhật sau quét nền trên máy; fontScale > 1,3 (hàng header giãn nhẹ); xoay/chia đôi màn hình.
+
+**Bác sĩ tự kiểm tra (sau khi có APK đúng):** (1) Shanling: mở app → Thư viện Gọn: dưới "Tất cả · 29.607 bài" thấy dòng xanh ngọc "Đã tải: 3 nhóm · lần kiểm trước". (2) Đóng hẳn rồi mở lại: dòng có ngay, không cần vào "Đã tải". (3) ☰ → Đã tải: tiêu đề "Đã tải · 3 bài", dòng xanh biến mất; quay lại "Tất cả" dòng hiện lại. (4) Bấm tab Telegram: dòng vẫn hiện dưới "Telegram · 29 nguồn". (5) Phát một bài: thanh phát nhạc 72dp vẫn đủ, không bị che, danh sách vẫn thấy ~8 hàng.
+
 Đã dừng, chờ ChatGPT nghiệm thu.
