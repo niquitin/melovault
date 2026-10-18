@@ -503,7 +503,7 @@ internal class MeloComponents(
         }
     }
 
-    private fun thinProgressDrawable(): LayerDrawable {
+    internal fun thinProgressDrawable(): LayerDrawable {
         val track = GradientDrawable().apply { setColor(palette.border) }
         val fill = ClipDrawable(GradientDrawable().apply { setColor(palette.accent) }, Gravity.START, ClipDrawable.HORIZONTAL)
         return LayerDrawable(arrayOf(track, fill)).apply {

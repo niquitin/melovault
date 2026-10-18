@@ -51,9 +51,7 @@ internal class MeloCompactScreen(
     private val note = c.text("", s.secondaryText, p.textSecondary, maxLines = 2)
     private val list = ListView(context)
     private val adapter = RowsAdapter()
-    private val miniHost = FrameLayout(context)
-    private var mini: MeloComponents.MiniPlayerHandle? = null
-    private var miniTitle: String? = null
+    private val bar = MeloBottomBar(context, c, host, onTab = ::onBarTab, onOpenNowPlaying = ::openNowPlaying)
     private lateinit var searchBar: LinearLayout
     private var nowPage: NowPlayingPage? = null
     private var snapshot: Snapshot? = null
@@ -113,7 +111,7 @@ internal class MeloCompactScreen(
             })
         }
         libraryPage.addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        libraryPage.addView(miniHost, matchWrap().apply { topMargin = s.gap / 2 })
+        libraryPage.addView(bar.view, matchWrap().apply { topMargin = s.gap / 2 })
     }
 
     private fun header(): View = LinearLayout(context).apply {
@@ -149,6 +147,7 @@ internal class MeloCompactScreen(
         note.visibility = if (snap.note.isNullOrBlank()) View.GONE else View.VISIBLE
         backCallback.isEnabled = nowPage != null || searchBar.visibility == View.VISIBLE ||
             (!snap.showingSources && snap.sourceTitle != null)
+        bar.renderTabs(snap.showingSources, snap.mode)
         adapter.notifyDataSetChanged()
     }
 
@@ -262,8 +261,9 @@ internal class MeloCompactScreen(
             menu.add(0, 1, 1, "♫ Thư viện")
             menu.add(0, 2, 2, "☷ Telegram")
             menu.add(0, 3, 3, "☆ Playlist")
-            menu.add(0, 4, 4, "▶ Đang phát")
-            menu.add(0, 5, 5, "⚙ Cài đặt giao diện")
+            menu.add(0, 6, 4, "✓ Đã tải")
+            menu.add(0, 4, 5, "▶ Đang phát")
+            menu.add(0, 5, 6, "⚙ Cài đặt giao diện")
             setOnMenuItemClickListener {
                 when (it.itemId) {
                     1 -> { host.openSource(null); host.setMode(Mode.ALL) }
@@ -271,6 +271,7 @@ internal class MeloCompactScreen(
                     3 -> host.setMode(Mode.PLAYLIST)
                     4 -> openNowPlaying()
                     5 -> host.openUiLab()
+                    6 -> host.setMode(Mode.DOWNLOADED)
                 }
                 true
             }
@@ -298,27 +299,18 @@ internal class MeloCompactScreen(
 
     // ---- Playback ----------------------------------------------------------------------------
 
+    private fun onBarTab(tab: MeloBottomBarPolicy.Tab) {
+        when (tab) {
+            MeloBottomBarPolicy.Tab.LIBRARY -> { host.openSource(null); host.setMode(Mode.ALL) }
+            MeloBottomBarPolicy.Tab.TELEGRAM -> host.showSources()
+            MeloBottomBarPolicy.Tab.PLAYLIST -> host.setMode(Mode.PLAYLIST)
+            MeloBottomBarPolicy.Tab.DOWNLOADED -> host.setMode(Mode.DOWNLOADED)
+        }
+    }
+
     fun onPlaybackChanged() {
         val now = host.nowPlaying()
-        if (now == null) {
-            miniHost.removeAllViews()
-            mini = null
-            miniTitle = null
-        } else if (mini == null || miniTitle != now.title) {
-            miniHost.removeAllViews()
-            val handle = c.miniPlayer(
-                MeloComponents.MiniPlayerModel(now.title, now.sourceTitle,
-                    (now.positionMs / 1000).toInt(), (now.durationMs / 1000).toInt(), now.playing, now.art),
-                onPlayPause = { host.playPause() },
-                onNext = { host.next() },
-                onOpen = { openNowPlaying() }
-            )
-            miniHost.addView(handle.view)
-            mini = handle
-            miniTitle = now.title
-        } else {
-            mini?.update((now.positionMs / 1000).toInt(), (now.durationMs / 1000).toInt(), now.playing)
-        }
+        bar.update(now)
         nowPage?.update(now)
         // The playing row highlight follows track changes without re-reading the list every tick.
         snapshot?.let { shown ->
