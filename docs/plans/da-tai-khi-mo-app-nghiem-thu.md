@@ -49,3 +49,31 @@
 - Ưu tiên làm trên chính nhánh đang thực hiện E9.3-03D (ngoại lệ do nhiệm vụ bắt đầu trước luật dot/<TASK_ID>); nếu chuyển sang nhánh dot cần chọn migration an toàn và không reset lịch sử. Sonnet phiên mới, không sửa logic scan, TDLib, cache, SQLite, playback hoặc signing.
 - Các nguy cơ cần test sau sửa: compact widths 360dp, các mức fontScale, offline count null/stale/zero, rotate/split screen; regression của Sony/Y700 source card và 20s/6h scheduling.
 - Đợi chủ dự án **chốt vị trí hiển thị** rồi mới đưa prompt Sonnet REWORK. Chưa có owner PASS trên 3–6 thao tác, do đó tuyệt đối không tuyên bố Beta109 feature đã nghiệm thu đủ. Bản Beta109 Shanling đã cài; không gỡ app/xóa dữ liệu hoặc cài lại chỉ để kiểm số.
+
+## Kiểm toán REWORK lần 2 — ChatGPT, 19/10/2026
+
+**Kết luận: ĐẠT KỸ THUẬT, BLOCKED — CHỜ BÁC SĨ XÁC NHẬN THAO TÁC.** Không đánh dấu PASS cuối cùng, không triển khai theme/nhiệm vụ mới.
+
+### Nguồn và Git
+- Sonnet sửa tại commit 06abe49, báo cáo 33150d4 trên Ni, nhánh legacy feature/e93-03d-y700-offline-cockpit. Production chỉ sửa MeloCompactScreen.kt, MeloCompactPolicy.kt (+29/-1 dòng), bổ sung 6 test trong MeloCompactPolicyTest.kt. Không sửa TDLib, Media3, SQLite, cache hoặc số đếm backend.
+- ChatGPT trực tiếp đọc code và PNG thực, không chỉ đọc báo cáo Sonnet. Số dòng phụ đến từ host.sourceSummaries().firstOrNull()?.downloaded, policy ẩn khi null, hiển thị 0 nếu đã xác nhận, nội dung luôn ghi lần kiểm trước.
+- Trên Ni, ChatGPT tự chạy lại Gradle testShareableDebugUnitTest, testShareableReleaseUnitTest, assembleShareableDebug và assembleShareableRelease với --rerun-tasks. BUILD SUCCESSFUL, 109 tasks executed, mỗi variant 117 XML suites, 1255 defined, 1234 passed, 21 skipped, 0 failed/error.
+- Chuyển code qua bundle Git có SHA256 6E75CAFBAB37747308A4C3747D9111F5BEB3D3CCB719641F358BB7C06CA154F0 vào Tiny QA clone độc lập branch qa/b109-compact-hint (HEAD 33150d4). Tiny cũng BUILD SUCCESSFUL hai variant + Debug/Release APK, cùng 1234 pass / 21 skipped mỗi variant. Tiny Preview nguyên bản e278649 và Stable/backend không bị sửa.
+
+### APK và Shanling
+- Tiny tạo APK Debug chứa Telegram config local hợp lệ về mặt hiện diện (kiểm tra ID không zero/hash không rỗng, KHÔNG đọc/chuyển raw secrets sang Ni), SHA256 7C4F61553465BC7201F5008351419DA8E8194D5C80E69268B98309F285990FDE; package app.melovault.player, vc109/0.6.88-beta, certificate SHA256 eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8, trùng chứng chỉ Shanling đã cài.
+- ADB Ni xác minh Shanling M3 Ultra serial 30313860180939, app MediaSession state=2 PAUSED trước khi cài. Chỉ dùng adb install -r, kết quả Success, không uninstall, pm clear, logout, đổi cấu hình hệ thống hay xóa dữ liệu; vẫn vc109 sau cài. Đây là Debug QA build cùng versionCode, KHÔNG phải release/phiên bản mới.
+- ChatGPT đã tự chụp PNG bằng adb exec-out screencap -p và đọc hình ảnh tại docs/plans/artifacts/da-tai-khi-mo-app; các ảnh này được Git ignore, không đưa vào commit:
+  15-rework-b109-compact-first-launch.png: Thư viện Tất cả 29.610 bài và dòng xanh ngọc Đã tải: 3 nhóm · lần kiểm trước xuất hiện ngay, đủ chiều ngang và không che thanh phát.
+  16-rework-b109-compact-telegram-sources.png: Telegram 29 nguồn, dòng 3 nhóm hiện đúng; danh sách/mini player rõ.
+  17-rework-b109-compact-menu.png: menu thao tác mở được.
+  18-rework-b109-compact-downloaded.png: trong lúc đang quét, màn Đã tải hiển thị 4 nhóm/9 bản tạm thời và KHÔNG lặp dòng gợi ý xanh.
+  20-rework-b109-downloaded-after-fullscan.png: quét đủ 29.610 bài, 4 nhóm/9 bản offline, 15 mục metadata chưa xác minh; không còn Đang kiểm tra.
+  21-rework-b109-library-after-fullscan.png: trở lại Thư viện, dòng xanh tự cập nhật từ 3 sang 4 nhóm.
+  22-rework-b109-persisted-after-reopen.png: sau force-stop/am start không xóa data, dòng Đã tải: 4 nhóm · lần kiểm trước hiện ngay. Thanh player và danh sách không che nhau.
+- Mẫu log AndroidRuntime/ActivityManager sau mở lại: không phát hiện FATAL EXCEPTION hoặc ANR in app.melovault.player. Chưa chứng minh soak dài, pin, nhiệt, fontScale > 1.3 hoặc các cửa sổ bị chia cực nhỏ.
+
+### Điểm dừng
+- **Bác sĩ phải xác nhận 3–6 thao tác tự kiểm tra trực tiếp trên Shanling**, gồm Thư viện, Telegram, Đã tải, trở lại, đóng/mở và phát bài thật. Chỉ lúc đó mới PASS/được bàn merge và nhiệm vụ Opus tiếp theo.
+- Số 15 metadata chưa xác minh không có nghĩa là 15 bài chắc chắn chưa tải; không xóa cache để làm số đẹp.
+- Không tự phát hành/upload APK Debug vc109 như bản Beta mới; bản kỹ thuật đang chỉ dùng QA, đợi quyết định release/version sau.
