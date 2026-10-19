@@ -14,6 +14,11 @@ internal interface MeloScreenHost {
     fun setMode(mode: Mode)
     fun showSources()
     fun openSource(chatId: Long?)
+
+    /** "Nhạc trên máy": opens the device music list; asks for audio access only here (the owner tapped it). */
+    fun openLocal()
+    /** Leaves "Nhạc trên máy" back to the Telegram screen the owner came from. */
+    fun closeLocal()
     fun setQuery(query: String)
     fun loadMore()
     fun playAt(index: Int)
@@ -96,7 +101,9 @@ internal interface MeloScreenHost {
         val durationSeconds: Int,
         val songKey: Long,
         val downloaded: Boolean,
-        val downloadingPercent: Int?
+        val downloadingPercent: Int?,
+        /** A "Nhạc trên máy" song: its row says "Trên máy", not "Đã tải". */
+        val local: Boolean = false
     )
 
     data class Row(
@@ -109,7 +116,10 @@ internal interface MeloScreenHost {
         val downloadingPercent: Int?,
         val art: Bitmap?,
         /** Search key, only filled while sorted by name (drives the A–Z bar). */
-        val sortKey: String = ""
+        val sortKey: String = "",
+        /** MediaStore MIME type of a local song (format text); null for Telegram rows. */
+        val mimeType: String? = null,
+        val local: Boolean = false
     )
 
     data class SourceRow(val chatId: Long, val title: String, val count: Int)
@@ -129,7 +139,9 @@ internal interface MeloScreenHost {
         val sort: SongSort = SongSort.NEWEST,
         val letterFloor: String? = null,
         /** The channel open in the list, null for all sources, Saved Messages or Playlist. */
-        val selectedChatId: Long? = null
+        val selectedChatId: Long? = null,
+        /** The list on screen is "Nhạc trên máy" (not Telegram). */
+        val local: Boolean = false
     )
 
     data class NowPlaying(
@@ -146,6 +158,8 @@ internal interface MeloScreenHost {
         val repeatLabel: String,
         val downloadNote: String?,
         /** Paused by the user (play-when-ready off); false while merely buffering. */
-        val paused: Boolean = false
+        val paused: Boolean = false,
+        /** The playing song comes from "Nhạc trên máy"; [sourceTitle] is then its artist or folder. */
+        val local: Boolean = false
     )
 }

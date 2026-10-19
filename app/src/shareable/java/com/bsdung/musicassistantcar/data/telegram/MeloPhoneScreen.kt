@@ -46,7 +46,8 @@ internal class MeloPhoneScreen(
     private val backCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
             val snap = snapshot
-            if (snap != null && !snap.showingSources && snap.sourceTitle != null) host.showSources()
+            if (snap != null && snap.local) host.closeLocal()
+            else if (snap != null && !snap.showingSources && snap.sourceTitle != null) host.showSources()
             else { isEnabled = false; backDispatcher.onBackPressed() }
         }
     }

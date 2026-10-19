@@ -1,4 +1,20 @@
 # HANDOFF — MeloVault (Shareable Preview)
+## Cập nhật tích hợp 19/10/2026 — E94 MERGED (ƯU TIÊN CAO NHẤT)
+
+- **E94-LOCAL-MUSIC:** chủ dự án đã duyệt PASS (commit nghiệm thu c2fa595) với các giới hạn nêu trong biên bản. Đã merge bằng --no-ff vào feature/e93-03d-y700-offline-cockpit; **merge commit 0b984f79beb9413c3d6e871835b1eaa4f40e0cd9**, hai parent: 0cc29e3 và 1a91ab3. Nhánh dot/E94-LOCAL-MUSIC vẫn lưu, chưa xóa; không phát hành APK mới khi merge.
+- ChatGPT độc lập chạy lại trên integration: testShareableDebugUnitTest, testShareableReleaseUnitTest, assembleShareableDebug và assembleShareableRelease (offline): **BUILD SUCCESSFUL**; mỗi biến thể 1.302 tests, 21 skipped, 0 failures/errors; working tree sau merge sạch; git diff HEAD^ HEAD --check sạch.
+- Media3 Legacy khi ADB media dispatch gây crash trên Shanling là vấn đề cần điều tra **riêng**, chưa xác định do E94 hay đã tồn tại từ trước; không tự sửa/đổi service trong E95 và không lặp lại thao tác nguy cơ crash để chứng minh. Phím vật lý/âm thanh thực và Android 13+ chưa QA; giới hạn này không làm đảo quyết định PASS chức năng E94 đã được chủ dự án chấp thuận.
+- **E95-FYT-UI-OPTIMIZATION:** plan Opus nằm trên nhánh dot/E95-FYT-UI-OPTIMIZATION tại commit 6acaaff (được tạo từ mốc cũ 0cc29e3). Điều kiện E94 PASS + merged trong plan E95 mục S0 **đã được đáp ứng**. Khi bắt đầu E95, làm **một hội thoại ChatGPT mới**; Sonnet trong phiên Code riêng; kiểm Git sạch và tích hợp merge commit 0b984f7 vào nhánh E95 trước khi sửa code. **Chưa triển khai E95 và không tự merge E95.**
+- Hồ sơ E94 canonical: docs/plans/E94-LOCAL-MUSIC.md, -bao-cao.md, -nghiem-thu.md, -apk-test.md, -hinh-nghiem-thu.md. Tài liệu snapshot cũ nói E94 chưa merge là trạng thái lịch sử trước mục cập nhật này.
+
+## Bổ sung 19/10/2026 — E94 đã PASS (ưu tiên hơn snapshot Beta109 bên dưới)
+
+- Chủ dự án duyệt nghiệm thu E94-LOCAL-MUSIC ngày 19/10/2026; ChatGPT đã kiểm toán Git, test Debug/Release (1.302 tests mỗi biến thể, 21 skipped, 0 failed), APK Tiny có Telegram config, ảnh QA Shanling/Sony. **Trạng thái E94: PASS theo phạm vi kiểm thử.**
+- Nhánh dot/E94-LOCAL-MUSIC, commit source 2d58121, commit báo cáo 1a73f9a, commit nghiệm thu PASS c2fa595. Tài liệu canonical: docs/plans/E94-LOCAL-MUSIC-nghiem-thu.md; link APK + ảnh ở docs/plans/E94-LOCAL-MUSIC-apk-test.md và -hinh-nghiem-thu.md.
+- **Chưa merge vào feature/e93-03d-y700-offline-cockpit; chưa triển khai E95.** Cần chủ dự án xác nhận riêng trước thao tác merge. Plan E95 đã có trên dot/E95-FYT-UI-OPTIMIZATION (6acaaff), bước S0 đợi E94 merge.
+- Ngoại lệ được chủ dự án chấp thuận: diff E94 vượt ngưỡng cảnh báo nhưng đúng phạm vi; crash Media3 Legacy khi dùng ADB shell media dispatch (5 FATAL + 1 ANR) chưa đối chứng, chuyển thành vấn đề điều tra riêng. Không tự sửa service/TDLib/Media3 để xử lý, không đánh đồng với âm thanh/nút vật lý thật đã PASS.
+- Quy trình: kế hoạch lớn tiếp theo làm trong hội thoại ChatGPT mới; Opus/Sonnet cũng dùng các phiên riêng theo CLAUDE.md, luôn đọc Git và tài liệu canonical. Không khôi phục trạng thái E94 thành BLOCKED từ lịch sử cũ.
+
 
 **Snapshot:** 18/10/2026 (sau Beta109, ứng viên chờ nghiệm thu). Lịch sử Beta85–95 (bundle, SHA256, báo cáo QA từng bản) ở `docs/history/HANDOFF_ARCHIVE_2026-10.md`. Điều chưa kiểm chứng ghi **[CẦN XÁC NHẬN]**. Luôn kiểm Git live trước khi hành động.
 
