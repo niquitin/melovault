@@ -219,6 +219,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
     /** All channels (unfiltered by search / hide-zero) for the two-pane quick switch; main thread only. */
     private var meloChannelRows: List<MeloScreenHost.SourceRow> = emptyList()
     private var meloChannelsRequested = false
+    /** Library numbers (counts only) handed to "Thông tin màn hình"; written on the database thread (E95 F05). */
+    @Volatile private var meloLibraryDiag: MeloLibraryPolicy.LibraryDiag? = null
+    private var lastMeloChannelRefreshMs = 0L
     /** Whole-library song count (unfiltered `getSongCount`); null until the DB answered. Main thread. */
     @Volatile private var telegramLibraryTotal: Int? = null
     /** Offline groups of the last finished whole-library scan (no channel, search or playlist); memory only. */
@@ -3358,8 +3361,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
                 8 -> toggleThemePreset()
                 9 -> showSourceDisplayModeDialog()
-                10 -> startActivity(Intent(this, MeloUiLabActivity::class.java)
-                    .putExtra(MeloUiLabActivity.EXTRA_SONG_COUNT, totalCountForCurrentView))
+                10 -> startActivity(uiLabIntent())
                 11 -> openLocalMusic()
             }
             true
@@ -4205,7 +4207,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             if (uiQueryGeneration.get() != generation) return@executeOnDb
 
             if (isBrowseSources) {
-                val sources = if (db != null && userId > 0L) db.getSources(userId) else emptyList()
+                val sources = if (db != null && userId > 0L) withLiveCounts(db, userId, db.getSources(userId)) else emptyList()
                 val totalCount = if (db != null && userId > 0L) db.getSongCount(userId) else songs.size
                 val rawSources: List<IndexedTelegramSource> = if (sources.isNotEmpty()) {
                     sources
@@ -4656,13 +4658,62 @@ class TelegramPreviewActivity : AppCompatActivity() {
         if (userId <= 0L) return
         meloChannelsRequested = true
         executeOnDb {
-            val sources = db.getSources(userId)
+            val sources = withLiveCounts(db, userId, db.getSources(userId))
             for (src in sources) sourceNames[src.chatId] = src.title
             runOnUiThread {
                 if (isDestroyed || library.authorizedUser()?.value != userId) return@runOnUiThread
                 meloChannelRows = meloChannelRowsOf(sources)
                 scheduleMeloLibraryRefresh()
             }
+        }
+    }
+
+    /**
+     * E95 F05: [sources] with the real number of songs per channel (read-only query, see
+     * [TelegramLibraryDao.getLiveSourceCounts]); the stored counts only change when a full sync
+     * completes, so a channel with songs could read "0 bài". Also remembers the library numbers
+     * for the settings screen. Background (database) thread only.
+     */
+    private fun withLiveCounts(db: TelegramLibraryDao, userId: Long, sources: List<IndexedTelegramSource>): List<IndexedTelegramSource> {
+        val live = runCatching { db.getLiveSourceCounts(userId) }.getOrNull() ?: return sources
+        meloLibraryDiag = MeloLibraryPolicy.LibraryDiag(
+            liveSongs = live.values.sum(),
+            storedChannels = sources.count { it.chatId != 0L && it.trackCount > 0 },
+            liveChannels = live.size,
+            lastSyncCompletedMs = runCatching { db.getSyncState(userId)?.lastSyncCompletedAtMs }.getOrNull() ?: 0L
+        )
+        return TelegramVaultBentoPolicy.withLiveCounts(userId, sources, live) { chatId -> sourceNames[chatId] ?: "Nguồn Telegram $chatId" }
+    }
+
+    /** "Cài đặt giao diện" with the song count and, once a list was built, the library numbers (counts only). */
+    private fun uiLabIntent(): Intent {
+        val lab = Intent(this, MeloUiLabActivity::class.java)
+            .putExtra(MeloUiLabActivity.EXTRA_SONG_COUNT, totalCountForCurrentView)
+        meloLibraryDiag?.let { diag ->
+            lab.putExtra(MeloUiLabActivity.EXTRA_LIB_LIVE_SONGS, diag.liveSongs)
+                .putExtra(MeloUiLabActivity.EXTRA_LIB_STORED_CHANNELS, diag.storedChannels)
+                .putExtra(MeloUiLabActivity.EXTRA_LIB_LIVE_CHANNELS, diag.liveChannels)
+                .putExtra(MeloUiLabActivity.EXTRA_LIB_LAST_SYNC_MS, diag.lastSyncCompletedMs)
+        }
+        return lab
+    }
+
+    /**
+     * While a sync writes pages nothing else refreshes the channel list: rebuild it with the
+     * live counts at most every [MeloLibraryPolicy.CHANNEL_REFRESH_MIN_MS]. Database thread.
+     */
+    private fun refreshMeloChannelsWhileSyncing(userId: Long) {
+        val db = libraryDb ?: return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (!MeloLibraryPolicy.channelRefreshDue(now, lastMeloChannelRefreshMs)) return
+        lastMeloChannelRefreshMs = now
+        val sources = withLiveCounts(db, userId, db.getSources(userId))
+        for (src in sources) sourceNames[src.chatId] = src.title
+        runOnUiThread {
+            if (isDestroyed || library.authorizedUser()?.value != userId) return@runOnUiThread
+            meloChannelRows = meloChannelRowsOf(sources)
+            meloChannelsRequested = true
+            scheduleMeloLibraryRefresh()
         }
     }
 
@@ -4929,8 +4980,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         override fun openLegacyOverflow(anchor: View) = showLibraryOverflow(anchor)
 
         override fun openUiLab() {
-            startActivity(Intent(this@TelegramPreviewActivity, MeloUiLabActivity::class.java)
-                .putExtra(MeloUiLabActivity.EXTRA_SONG_COUNT, totalCountForCurrentView))
+            startActivity(uiLabIntent())
         }
 
         override fun saveListAnchor(groupKey: String, songKey: Long?, offsetPx: Int) {
@@ -6123,7 +6173,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val db = getOrInitDatabase(userId)
         executeOnDb {
             val count = db.getSongCount(userId)
-            val sources = db.getSources(userId)
+            val sources = withLiveCounts(db, userId, db.getSources(userId))
             for (src in sources) {
                 sourceNames[src.chatId] = src.title
             }
@@ -6170,7 +6220,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun reloadIndexedSourcesFromDb(userId: Long) {
         val db = libraryDb ?: return
         executeOnDb {
-            val sources = db.getSources(userId)
+            val sources = withLiveCounts(db, userId, db.getSources(userId))
             currentAuthoritativeSourceCount = sources.size
             for (src in sources) {
                 sourceNames[src.chatId] = src.title
@@ -6380,6 +6430,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
             val syncState = libraryDb?.getSyncState(currentUser)
             val totalSynced = syncState?.totalItemsSynced ?: indexedSongs.size
+            refreshMeloChannelsWhileSyncing(currentUser)
 
             runOnUiThread {
                 if (!allChatsMode || !auth.isReady() || library.authorizedUser()?.value != currentUser || isDestroyed) return@runOnUiThread

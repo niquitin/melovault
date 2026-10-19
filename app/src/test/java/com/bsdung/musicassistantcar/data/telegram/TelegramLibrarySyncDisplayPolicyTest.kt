@@ -41,26 +41,26 @@ class TelegramLibrarySyncDisplayPolicyTest {
 
     @Test
     fun paginatedPartialDisplayDistinguishesPageFromTotal() {
-        // Cold-start: 200 loaded out of 25,055 total
+        // Cold-start: 200 loaded out of 25.055 total
         val label = TelegramLibrarySyncDisplayPolicy.formatSyncSubtitle(
             displayedCount = 200,
             totalIndexedCount = 25055,
             isSyncing = false,
             isAuthenticated = true
         )
-        assertEquals("Hiển thị 200 / 25,055 bài · Đã đồng bộ", label)
+        assertEquals("Hiển thị 200 / 25.055 bài · Đã đồng bộ", label)
     }
 
     @Test
     fun paginatedPartialDisplayScrolledTo400() {
-        // Scrolled down: 400 loaded out of 25,055 total
+        // Scrolled down: 400 loaded out of 25.055 total
         val label = TelegramLibrarySyncDisplayPolicy.formatSyncSubtitle(
             displayedCount = 400,
             totalIndexedCount = 25055,
             isSyncing = false,
             isAuthenticated = true
         )
-        assertEquals("Hiển thị 400 / 25,055 bài · Đã đồng bộ", label)
+        assertEquals("Hiển thị 400 / 25.055 bài · Đã đồng bộ", label)
     }
 
     @Test
@@ -71,7 +71,7 @@ class TelegramLibrarySyncDisplayPolicyTest {
             isSyncing = true,
             isAuthenticated = true
         )
-        assertEquals("Hiển thị 200 / 25,055 bài · Đang đồng bộ…", label)
+        assertEquals("Hiển thị 200 / 25.055 bài · Đang đồng bộ…", label)
     }
 
     @Test
@@ -84,7 +84,7 @@ class TelegramLibrarySyncDisplayPolicyTest {
             isSourcesMode = true,
             sourceCount = 29
         )
-        assertEquals("29 nguồn · 25,055 bài · Đã đồng bộ", label)
+        assertEquals("29 nguồn · 25.055 bài · Đã đồng bộ", label)
     }
 
     @Test
@@ -96,17 +96,17 @@ class TelegramLibrarySyncDisplayPolicyTest {
             isAuthenticated = true,
             selectedSourceTitle = "Nhạc Trẻ 2026"
         )
-        assertEquals("Nhạc Trẻ 2026 · Hiển thị 200 / 4,330 bài · Đã đồng bộ", label)
+        assertEquals("Nhạc Trẻ 2026 · Hiển thị 200 / 4.330 bài · Đã đồng bộ", label)
     }
 
     // ── E9.3-03C Regression: Sources Overview Header Count After Channel Visit ─
 
     @Test
     fun sourcesOverviewAfterChannelVisit_showsFullLibraryTotalNotChannelCount() {
-        // Simulates the bug scenario: user opened DJ channel (4,332 songs), then pressed back
+        // Simulates the bug scenario: user opened DJ channel (4.332 songs), then pressed back
         // to the Bento sources overview. totalCountForCurrentView must be reset to the full DB
-        // total (25,074) in refreshSongRows() before updateSyncHeaderSubtitle() is called.
-        // The prior stale value of 4,332 must NOT appear in the header.
+        // total (25.074) in refreshSongRows() before updateSyncHeaderSubtitle() is called.
+        // The prior stale value of 4.332 must NOT appear in the header.
         val labelWithCorrectTotal = TelegramLibrarySyncDisplayPolicy.formatSyncSubtitle(
             displayedCount = 29,        // 29 source cards shown
             totalIndexedCount = 25074,  // full DB total — correctly reset by E9.3-03C fix
@@ -115,9 +115,9 @@ class TelegramLibrarySyncDisplayPolicyTest {
             isSourcesMode = true,
             sourceCount = 29
         )
-        assertEquals("29 nguồn · 25,074 bài · Đã đồng bộ", labelWithCorrectTotal)
+        assertEquals("29 nguồn · 25.074 bài · Đã đồng bộ", labelWithCorrectTotal)
 
-        // The stale channel total MUST NOT produce a sources-overview label with 4,332
+        // The stale channel total MUST NOT produce a sources-overview label with 4.332
         val labelWithStaleChannelTotal = TelegramLibrarySyncDisplayPolicy.formatSyncSubtitle(
             displayedCount = 29,
             totalIndexedCount = 4332,   // stale per-channel count — the pre-fix bug value
@@ -127,7 +127,7 @@ class TelegramLibrarySyncDisplayPolicyTest {
             sourceCount = 29
         )
         // Verify that the stale value would produce a WRONG label (so the fix is meaningful)
-        assertEquals("29 nguồn · 4,332 bài · Đã đồng bộ", labelWithStaleChannelTotal)
+        assertEquals("29 nguồn · 4.332 bài · Đã đồng bộ", labelWithStaleChannelTotal)
     }
 
     @Test
@@ -141,7 +141,7 @@ class TelegramLibrarySyncDisplayPolicyTest {
             isSourcesMode = true,
             sourceCount = 29
         )
-        assertEquals("29 nguồn · 25,074 bài · Đã đồng bộ", label)
+        assertEquals("29 nguồn · 25.074 bài · Đã đồng bộ", label)
     }
 
     @Test
@@ -156,7 +156,7 @@ class TelegramLibrarySyncDisplayPolicyTest {
             isSourcesMode = true,
             sourceCount = 29
         )
-        assertEquals("29 nguồn · 25,074 bài · Đã đồng bộ", label)
+        assertEquals("29 nguồn · 25.074 bài · Đã đồng bộ", label)
     }
 
     @Test

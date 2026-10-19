@@ -30,7 +30,12 @@ internal object MeloSourceCardPolicy {
     /** A phone-width window lower than this (the head unit's 1/2 and 1/3 split) keeps the room for the list. */
     const val PHONE_MIN_HEIGHT_DP = 700
 
-    fun cards(sources: List<Source>, selected: Kind?): List<Card> =
+    /**
+     * [channelOpen]: one specific channel is open in the list. The Telegram card then says
+     * "Về tất cả · N bài" (D4, wording to be confirmed on the FYT) because tapping it goes back to the
+     * whole of Telegram - it is not the current group. Other cards and the closed state are unchanged.
+     */
+    fun cards(sources: List<Source>, selected: Kind?, channelOpen: Boolean = false): List<Card> =
         sources
             .filter { (it.total ?: 0) > 0 }
             .distinctBy { it.kind }
@@ -42,14 +47,19 @@ internal object MeloSourceCardPolicy {
                 val downloadedText = downloaded?.let { "đã tải ${MeloComponentPolicy.formatCount(it)}" }
                 val isSelected = source.kind == selected
                 val title = titleOf(source.kind)
+                val backToAll = channelOpen && source.kind == Kind.TELEGRAM
+                val detailParts = listOfNotNull(if (backToAll) "Về tất cả · $countText" else countText, downloadedText)
                 Card(
                     kind = source.kind,
                     title = title,
-                    detail = listOfNotNull(countText, downloadedText).joinToString(" · "),
+                    detail = detailParts.joinToString(" · "),
                     selected = isSelected,
-                    contentDescription = "Nguồn $title, " +
-                        listOfNotNull(countText, downloadedText).joinToString(", ") +
-                        if (isSelected) ", đang chọn" else ""
+                    contentDescription = if (backToAll) {
+                        "Về toàn bộ $title, " + listOfNotNull(countText, downloadedText).joinToString(", ")
+                    } else {
+                        "Nguồn $title, " + listOfNotNull(countText, downloadedText).joinToString(", ") +
+                            if (isSelected) ", đang chọn" else ""
+                    }
                 )
             }
 

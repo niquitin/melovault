@@ -109,6 +109,36 @@ internal object MeloLibraryPolicy {
     fun shouldResetTop(pending: Boolean, showingSources: Boolean, rowCount: Int): Boolean =
         pending && !showingSources && rowCount > 0
 
+    /** While a sync writes pages, the channel list is rebuilt at most this often (E95 F05). */
+    const val CHANNEL_REFRESH_MIN_MS = 10_000L
+
+    /** True when the channel list may be rebuilt now ([lastMs] <= 0: never yet; a clock that went back counts as due). */
+    fun channelRefreshDue(nowMs: Long, lastMs: Long, minIntervalMs: Long = CHANNEL_REFRESH_MIN_MS): Boolean =
+        lastMs <= 0L || nowMs < lastMs || nowMs - lastMs >= minIntervalMs
+
+    /**
+     * Library numbers for "Thông tin màn hình": what the database really holds ([liveSongs],
+     * [liveChannels]) against what the stored counts claim ([storedChannels] with track_count > 0)
+     * and when a full sync last completed. Counts only, never a channel name. -1 = not known.
+     */
+    data class LibraryDiag(val liveSongs: Int, val storedChannels: Int, val liveChannels: Int, val lastSyncCompletedMs: Long)
+
+    fun libraryDiagLines(diag: LibraryDiag?, zone: java.util.TimeZone = java.util.TimeZone.getDefault()): List<Pair<String, String>> {
+        if (diag == null || diag.liveSongs < 0) return listOf("Thư viện (dữ liệu thật)" to "chưa có số (mở lại màn này sau khi thư viện tải xong)")
+        return listOf(
+            "Tổng bài trong thư viện" to "${MeloComponentPolicy.formatCount(diag.liveSongs)} bài",
+            "Kênh có bài (số đã lưu)" to MeloComponentPolicy.formatCount(diag.storedChannels),
+            "Kênh có bài (đếm thật)" to MeloComponentPolicy.formatCount(diag.liveChannels),
+            "Đồng bộ hoàn tất lần cuối" to lastSyncText(diag.lastSyncCompletedMs, zone)
+        )
+    }
+
+    fun lastSyncText(completedAtMs: Long, zone: java.util.TimeZone = java.util.TimeZone.getDefault()): String {
+        if (completedAtMs <= 0L) return "chưa từng hoàn tất"
+        val format = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.US).apply { timeZone = zone }
+        return format.format(java.util.Date(completedAtMs))
+    }
+
     /** Tablet portrait gets Previous on the mini player; phones keep Play and Next only (spec). */
     fun miniPlayerShowsPrevious(layer: NewLayer): Boolean = layer == NewLayer.TABLET_PORTRAIT
 

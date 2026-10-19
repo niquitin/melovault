@@ -1,6 +1,5 @@
 package com.bsdung.musicassistantcar.data.telegram
 
-import java.util.Locale
 
 /**
  * Pure policy for formatting library sync and pagination status labels truthfully.
@@ -37,8 +36,8 @@ object TelegramLibrarySyncDisplayPolicy {
         if (!isAuthenticated) return "Telegram · $stateLabel"
 
         if (isSourcesMode) {
-            val srcStr = String.format(Locale.US, "%,d nguồn", sourceCount)
-            val totalStr = String.format(Locale.US, "%,d bài", totalIndexedCount)
+            val srcStr = "${MeloComponentPolicy.formatCount(sourceCount)} nguồn"
+            val totalStr = "${MeloComponentPolicy.formatCount(totalIndexedCount)} bài"
             return "$srcStr · $totalStr · $stateLabel"
         }
 
@@ -46,9 +45,9 @@ object TelegramLibrarySyncDisplayPolicy {
             return "Chưa có bài · $stateLabel"
         }
 
-        val totalStr = String.format(Locale.US, "%,d", totalIndexedCount)
+        val totalStr = MeloComponentPolicy.formatCount(totalIndexedCount)
         val countLabel = if (displayedCount in 1 until totalIndexedCount) {
-            val dispStr = String.format(Locale.US, "%,d", displayedCount)
+            val dispStr = MeloComponentPolicy.formatCount(displayedCount)
             "Hiển thị $dispStr / $totalStr bài"
         } else {
             "$totalStr bài"

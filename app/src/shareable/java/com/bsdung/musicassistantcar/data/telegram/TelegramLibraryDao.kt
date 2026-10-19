@@ -64,6 +64,14 @@ interface TelegramLibraryDao {
     fun getSources(accountId: Long): List<IndexedTelegramSource>
 
     /**
+     * READ-ONLY (E95 F05): the real number of live (not deleted) songs per chat, straight from the
+     * songs table, for chats that have at least one. Unlike the stored `track_count` of
+     * [getSources], which is only recalculated when a full sync completes, this is always true.
+     * Never writes; chat 0 and chats without songs are not in the map.
+     */
+    fun getLiveSourceCounts(accountId: Long): Map<Long, Int>
+
+    /**
      * Inserts or updates sources.
      */
     fun upsertSources(sources: Collection<IndexedTelegramSource>): Int
@@ -105,4 +113,16 @@ interface TelegramLibraryDao {
      * Deletes all index data (songs, sources, sync state) for an account.
      */
     fun deleteAccountData(accountId: Long)
+
+    companion object {
+        /**
+         * The one statement behind [getLiveSourceCounts]: a SELECT over the existing index
+         * `idx_tg_songs_chat (account_id, chat_id, is_deleted)`, which covers it entirely (no table
+         * read, no new index). Kept here so the SQLite test runs the very same text.
+         */
+        const val LIVE_SOURCE_COUNTS_SQL =
+            "SELECT ${TelegramLibrarySql.COL_CHAT_ID}, COUNT(*) FROM ${TelegramLibrarySql.TABLE_SONGS} " +
+                "WHERE ${TelegramLibrarySql.COL_ACCOUNT_ID} = ? AND ${TelegramLibrarySql.COL_IS_DELETED} = 0 " +
+                "GROUP BY ${TelegramLibrarySql.COL_CHAT_ID}"
+    }
 }

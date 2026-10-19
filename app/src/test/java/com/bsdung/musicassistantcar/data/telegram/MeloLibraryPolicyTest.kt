@@ -249,4 +249,28 @@ class MeloLibraryPolicyTest {
         assertEquals(-1, MeloLibraryPolicy.quickSwitchIndex(rows, null))
         assertEquals(-1, MeloLibraryPolicy.quickSwitchIndex(emptyList(), 5L))
     }
+
+    @Test
+    fun channelListRefreshesAtMostEveryTenSecondsWhileSyncing() {
+        assertTrue(MeloLibraryPolicy.channelRefreshDue(5_000, 0))              // never refreshed yet
+        assertFalse(MeloLibraryPolicy.channelRefreshDue(14_999, 5_000))
+        assertTrue(MeloLibraryPolicy.channelRefreshDue(15_000, 5_000))
+        assertTrue(MeloLibraryPolicy.channelRefreshDue(1_000, 5_000))          // the clock went back: do not stall forever
+        assertTrue(MeloLibraryPolicy.channelRefreshDue(7_000, 5_000, minIntervalMs = 2_000))
+    }
+
+    @Test
+    fun libraryDiagShowsCountsOnlyAndAdmitsWhenUnknown() {
+        val utc = java.util.TimeZone.getTimeZone("UTC")
+        val lines = MeloLibraryPolicy.libraryDiagLines(MeloLibraryPolicy.LibraryDiag(42_734, 0, 27, 1_700_000_000_000L), utc)
+        assertEquals("42.734 bài", lines.first { it.first == "Tổng bài trong thư viện" }.second)
+        assertEquals("0", lines.first { it.first == "Kênh có bài (số đã lưu)" }.second)
+        assertEquals("27", lines.first { it.first == "Kênh có bài (đếm thật)" }.second)
+        assertEquals("14/11/2023 22:13", lines.first { it.first == "Đồng bộ hoàn tất lần cuối" }.second)
+        assertEquals("chưa từng hoàn tất", MeloLibraryPolicy.lastSyncText(0L, utc))
+        val unknown = MeloLibraryPolicy.libraryDiagLines(null)
+        assertEquals(1, unknown.size)
+        assertTrue(unknown.single().second.startsWith("chưa có số"))
+        assertEquals(1, MeloLibraryPolicy.libraryDiagLines(MeloLibraryPolicy.LibraryDiag(-1, -1, -1, 0L)).size)
+    }
 }

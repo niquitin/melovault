@@ -331,6 +331,17 @@ class AndroidTelegramLibraryDatabase(
         return results
     }
 
+    override fun getLiveSourceCounts(accountId: Long): Map<Long, Int> {
+        val counts = LinkedHashMap<Long, Int>()
+        readableDatabase.rawQuery(TelegramLibraryDao.LIVE_SOURCE_COUNTS_SQL, arrayOf(accountId.toString())).use { cursor ->
+            while (cursor.moveToNext()) {
+                val count = cursor.getInt(1)
+                if (count > 0) counts[cursor.getLong(0)] = count
+            }
+        }
+        return counts
+    }
+
     override fun upsertSources(sources: Collection<IndexedTelegramSource>): Int {
         if (sources.isEmpty()) return 0
         val db = writableDatabase

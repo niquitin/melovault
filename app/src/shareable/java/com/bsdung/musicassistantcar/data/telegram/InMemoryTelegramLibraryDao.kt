@@ -106,6 +106,13 @@ class InMemoryTelegramLibraryDao : TelegramLibraryDao {
             .toList()
     }
 
+    override fun getLiveSourceCounts(accountId: Long): Map<Long, Int> =
+        songs.values
+            .asSequence()
+            .filter { it.accountId == accountId && !it.isDeleted }
+            .groupingBy { it.chatId }
+            .eachCount()
+
     override fun upsertSources(sources: Collection<IndexedTelegramSource>): Int {
         var count = 0
         for (src in sources) {

@@ -350,7 +350,8 @@ internal class MeloLibraryPane(
 
     private fun renderSourceCards(snap: Snapshot) {
         val selected = MeloSourceCardPolicy.selectedKind(snap.selectedChatId, snap.showingSources, snap.local)
-        val cards = MeloSourceCardPolicy.cards(host.sourceSummaries(), selected)
+        val channelOpen = snap.selectedChatId != null && !snap.showingSources && !snap.local
+        val cards = MeloSourceCardPolicy.cards(host.sourceSummaries(), selected, channelOpen)
         sourceRowVisible = MeloSourceCardPolicy.rowVisible(
             layer, snap.showingSources, snap.mode, context.resources.configuration.screenHeightDp, cards.size
         )

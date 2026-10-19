@@ -39,6 +39,12 @@ class MeloUiLabActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_SONG_COUNT = "melo_song_count"
 
+        /** Library numbers from the host (counts only, no names): live songs, channels by stored / real count, last full sync. */
+        const val EXTRA_LIB_LIVE_SONGS = "melo_lib_live_songs"
+        const val EXTRA_LIB_STORED_CHANNELS = "melo_lib_stored_channels"
+        const val EXTRA_LIB_LIVE_CHANNELS = "melo_lib_live_channels"
+        const val EXTRA_LIB_LAST_SYNC_MS = "melo_lib_last_sync_ms"
+
         /** Insets worth reading on a head unit: where its own bars and the card handle press into the window. */
         private val INSET_TYPES = listOf(
             "Inset thanh trạng thái" to WindowInsetsCompat.Type.statusBars(),
@@ -360,6 +366,17 @@ class MeloUiLabActivity : AppCompatActivity() {
             "Bố cục thực tế đang dùng" to effectiveLayoutName(m, layout),
             "Màn Đang phát (Studio Deck)" to
                 if (MeloNowPlayingPolicy.deckLayout(m.windowWidthDp, m.windowHeightDp) == MeloNowPlayingPolicy.DeckLayout.LANDSCAPE) "Hai cột" else "Một cột"
+        ) + MeloLibraryPolicy.libraryDiagLines(libraryDiag())
+    }
+
+    /** The host's library numbers, or null when the screen was opened before any channel list was built. */
+    private fun libraryDiag(): MeloLibraryPolicy.LibraryDiag? {
+        if (!intent.hasExtra(EXTRA_LIB_LIVE_SONGS)) return null
+        return MeloLibraryPolicy.LibraryDiag(
+            liveSongs = intent.getIntExtra(EXTRA_LIB_LIVE_SONGS, -1),
+            storedChannels = intent.getIntExtra(EXTRA_LIB_STORED_CHANNELS, -1),
+            liveChannels = intent.getIntExtra(EXTRA_LIB_LIVE_CHANNELS, -1),
+            lastSyncCompletedMs = intent.getLongExtra(EXTRA_LIB_LAST_SYNC_MS, 0L)
         )
     }
 
