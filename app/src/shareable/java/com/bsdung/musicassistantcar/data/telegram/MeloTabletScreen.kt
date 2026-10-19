@@ -77,7 +77,9 @@ internal class MeloTabletScreen(
     private var quickShown = false
     private var quickScrolledId: Long? = null
     private val miniArtHost = FrameLayout(context)
-    private val miniTitle = c.text("Chọn một bài để phát", s.titleText, p.text, bold = true, maxLines = 1)
+    private val miniTitle = c.text("Chọn một bài để phát", s.titleText, p.text, bold = true, maxLines = 2)
+    /** Cover of the mini player: the 48dp touch size, not the taller list-row cover. */
+    private val miniArtPx = s.minTouch
     private lateinit var miniPlay: TextView
     private var miniArtKey: Any? = null
     private var snapshot: MeloScreenHost.Snapshot? = null
@@ -292,13 +294,18 @@ internal class MeloTabletScreen(
         }
         quickPane.addView(quickList, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
+        // Two rows (F07): [cover | title on two lines] over [⏮ ⏸ ⏭], so the title gets the pane's width
+        // instead of the ~22dp the fixed 224dp of the old one-row bar left it.
         val mini = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.VERTICAL
             background = roundedMini()
             setPadding(s.gap, s.gap, s.gap, s.gap)
         }
-        mini.addView(miniArtHost, LinearLayout.LayoutParams(s.rowArt, s.rowArt).apply { marginEnd = s.gap })
+        val info = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        info.addView(miniArtHost, LinearLayout.LayoutParams(miniArtPx, miniArtPx).apply { marginEnd = s.gap })
         miniTitle.apply {
             isClickable = true
             isFocusable = true
@@ -307,11 +314,19 @@ internal class MeloTabletScreen(
             contentDescription = "Mở màn hình đang phát"
             setOnClickListener { host.openNowPlaying() }
         }
-        mini.addView(miniTitle, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        mini.addView(c.iconButton("⏮", "Bài trước") { host.previous() })
+        info.addView(miniTitle, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        mini.addView(info, matchWrap())
+        val controls = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        controls.addView(c.iconButton("⏮", "Bài trước") { host.previous() },
+            LinearLayout.LayoutParams(0, s.minTouch, 1f).apply { marginEnd = s.gap / 2 })
         miniPlay = c.iconButton("▶", "Phát", primary = true) { host.playPause() }
-        mini.addView(miniPlay, LinearLayout.LayoutParams(s.minTouch, s.minTouch).apply { marginStart = s.gap / 2; marginEnd = s.gap / 2 })
-        mini.addView(c.iconButton("⏭", "Bài kế") { host.next() })
+        controls.addView(miniPlay, LinearLayout.LayoutParams(0, s.minTouch, 1f).apply { marginStart = s.gap / 2; marginEnd = s.gap / 2 })
+        controls.addView(c.iconButton("⏭", "Bài kế") { host.next() },
+            LinearLayout.LayoutParams(0, s.minTouch, 1f).apply { marginStart = s.gap / 2 })
+        mini.addView(controls, matchWrap().apply { topMargin = s.gap })
         quickPane.addView(mini, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = s.gap
         })
@@ -341,9 +356,12 @@ internal class MeloTabletScreen(
     }
 
     private fun renderQuickSwitch(snap: MeloScreenHost.Snapshot) {
-        val show = MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, snap.showingSources, snap.mode, snap.selectedChatId)
+        // Channels are only read while one channel is open. No channel with songs (still loading,
+        // or every count 0) keeps the big player: never an empty column.
+        val channelOpen = MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, snap.showingSources, snap.mode, snap.selectedChatId, 1)
+        val rows = if (channelOpen) MeloLibraryPolicy.quickSwitchRows(host.channels()) else emptyList()
+        val show = MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, snap.showingSources, snap.mode, snap.selectedChatId, rows.size)
         if (show) {
-            val rows = MeloLibraryPolicy.quickSwitchRows(host.channels())
             val wasShown = quickShown
             val selectionChanged = snap.selectedChatId != quickOpenId
             if (rows != quickRows || selectionChanged || !wasShown) {
@@ -374,12 +392,12 @@ internal class MeloTabletScreen(
         miniTitle.show(now?.title ?: "Chọn một bài để phát")
         miniPlay.show(if (now?.playing == true) "❚❚" else "▶")
         miniPlay.contentDescription = if (now?.playing == true) "Dừng" else "Phát"
-        val key = Triple(now?.art, now?.title, s.rowArt)
+        val key = Triple(now?.art, now?.title, miniArtPx)
         if (key == miniArtKey) return
         miniArtKey = key
         miniArtHost.removeAllViews()
-        miniArtHost.addView(c.artView(now?.art, now?.sourceTitle, now?.title ?: "♪", s.rowArt).apply {
-            layoutParams = FrameLayout.LayoutParams(s.rowArt, s.rowArt)
+        miniArtHost.addView(c.artView(now?.art, now?.sourceTitle, now?.title ?: "♪", miniArtPx).apply {
+            layoutParams = FrameLayout.LayoutParams(miniArtPx, miniArtPx)
         })
     }
 

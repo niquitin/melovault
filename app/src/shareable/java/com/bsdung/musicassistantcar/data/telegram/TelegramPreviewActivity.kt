@@ -185,6 +185,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var filterOnlyDownloaded = false
     private var lastSystemBarsInsets = WindowInsetsPolicy.Insets.ZERO
     private var lastImeInsets = WindowInsetsPolicy.Insets.ZERO
+    /** Top strip kept free for the head unit's card handle, measured with the last insets (E95 F04). */
+    private var lastHandleBand = 0
     private lateinit var syncSubtitle: TextView
     private lateinit var bottomNavBar: LinearLayout
     private val bottomNavButtons = mutableListOf<Button>()
@@ -1187,7 +1189,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
             displayCutout = WindowInsetsPolicy.Insets.ZERO,
             baseHorizontal = dp(if (isNarrowLayout) 6 else 12),
             baseTop = dp(if (isShortLayout) 2 else 6),
-            baseBottom = dp(3)
+            baseBottom = dp(3),
+            handleBand = lastHandleBand
         )
         mainRoot.setPadding(computed.left, computed.top, computed.right, computed.bottom)
     }
@@ -2371,7 +2374,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             setBackgroundColor(midnight)
         }
         mainRoot = root
-        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
             val systemBars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
@@ -2380,6 +2383,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             lastSystemBarsInsets = WindowInsetsPolicy.Insets(
                 systemBars.left, systemBars.top, systemBars.right, systemBars.bottom
             )
+            lastHandleBand = MeloUiLabActivity.handleBandPx(v, insets)
             lastImeInsets = WindowInsetsPolicy.Insets(
                 ime.left, ime.top, ime.right, ime.bottom
             )
@@ -3703,7 +3707,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     displayCutout = WindowInsetsPolicy.Insets.ZERO,
                     baseHorizontal = dp(18),
                     baseTop = dp(18),
-                    baseBottom = dp(18)
+                    baseBottom = dp(18),
+                    handleBand = MeloUiLabActivity.handleBandPx(wrapper, insets)
                 )
                 wrapper.setPadding(computed.left, computed.top, computed.right, computed.bottom)
                 insets
@@ -3746,7 +3751,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 displayCutout = WindowInsetsPolicy.Insets.ZERO,
                 baseHorizontal = dp(16),
                 baseTop = dp(14),
-                baseBottom = dp(16)
+                baseBottom = dp(16),
+                handleBand = MeloUiLabActivity.handleBandPx(container, insets)
             )
             container.setPadding(computed.left, computed.top, computed.right, computed.bottom)
             insets
@@ -3760,16 +3766,19 @@ class TelegramPreviewActivity : AppCompatActivity() {
             textSize = 16f
             setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(ink)
-        }, LinearLayout.LayoutParams(0, dp(56), 1f))
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         header.addView(uiButton("Xong").apply {
             setOnClickListener { popup.dismiss() }
         }, LinearLayout.LayoutParams(dp(82), dp(48)))
-        container.addView(header, LinearLayout.LayoutParams(-1, dp(60)))
+        // Wrap + minimum height instead of fixed rows: at font ×1.25 a second line is not clipped.
+        header.minimumHeight = dp(60)
+        container.addView(header, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))
         container.addView(TextView(this).apply {
             text = "Danh sách của nguồn · Bài chưa tải sẽ cần tải qua Telegram"
             textSize = 12f
             setTextColor(subtle)
-        }, LinearLayout.LayoutParams(-1, dp(47)))
+            minHeight = dp(47)
+        }, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))
         val rows = ListView(this).apply {
             divider = null
             dividerHeight = dp(8)
@@ -4441,7 +4450,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 ViewCompat.setOnApplyWindowInsetsListener(v) { view, insets ->
                     val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
                     val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-                    view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+                    // This listener replaces the padding, so the handle band is added to the top here.
+                    view.setPadding(bars.left, bars.top + MeloUiLabActivity.handleBandPx(view, insets), bars.right, maxOf(bars.bottom, ime.bottom))
                     insets
                 }
             }
@@ -4504,9 +4514,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            v.setPadding(base[0] + bars.left, base[1] + bars.top, base[2] + bars.right, base[3] + maxOf(bars.bottom, ime.bottom))
+            val band = MeloUiLabActivity.handleBandPx(v, insets)
+            v.setPadding(base[0] + bars.left, base[1] + bars.top + band, base[2] + bars.right, base[3] + maxOf(bars.bottom, ime.bottom))
             insets
         }
+        // The window's place on the screen is only known after the first layout: measure the band again then.
+        view.post { ViewCompat.requestApplyInsets(view) }
     }
 
     /** Car Mode at the panel's real pixels, full screen; emulated FYT frames for testing on a tablet. */

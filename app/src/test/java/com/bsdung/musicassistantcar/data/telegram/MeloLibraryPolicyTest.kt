@@ -161,13 +161,22 @@ class MeloLibraryPolicyTest {
 
     @Test
     fun quickSwitchOnlyOnTwoPaneWithOneChannelOpen() {
-        assertTrue(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.ALL, 7L))
-        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, true, Mode.ALL, 7L))
-        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.ALL, null))
-        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.PLAYLIST, 7L))
-        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.DOWNLOADED, 7L))
-        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.PHONE_PORTRAIT, false, Mode.ALL, 7L))
-        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TABLET_PORTRAIT, false, Mode.ALL, 7L))
+        assertTrue(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.ALL, 7L, 5))
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, true, Mode.ALL, 7L, 5))
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.ALL, null, 5))
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.PLAYLIST, 7L, 5))
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.DOWNLOADED, 7L, 5))
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.PHONE_PORTRAIT, false, Mode.ALL, 7L, 5))
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TABLET_PORTRAIT, false, Mode.ALL, 7L, 5))
+    }
+
+    @Test
+    fun quickSwitchStaysHiddenWhileThereIsNoChannelToSwitchTo() {
+        // F02: no channel with songs (list loading, or every count still 0) keeps the big player.
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.ALL, 7L, 0))
+        assertTrue(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.ALL, 7L, 1))
+        val none = listOf(MeloScreenHost.SourceRow(7L, "Kênh", 0), MeloScreenHost.SourceRow(0L, "Kho", 10))
+        assertEquals(0, MeloLibraryPolicy.quickSwitchRows(none).size)
     }
 
     @Test

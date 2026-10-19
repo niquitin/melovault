@@ -164,9 +164,11 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         root.addView(content, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            v.setPadding(bars.left, bars.top + MeloUiLabActivity.handleBandPx(v, insets), bars.right, bars.bottom)
             insets
         }
+        // The window's place on the screen is only known after the first layout: measure the band again then.
+        root.post { ViewCompat.requestApplyInsets(root) }
         return root
     }
 

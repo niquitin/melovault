@@ -61,9 +61,13 @@ internal object MeloLibraryPolicy {
         if (count <= 0) null
         else (if (expanded) "▾ " else "▸ ") + "Các kênh chưa có nhạc (${MeloComponentPolicy.formatCount(count)})"
 
-    /** Two-pane left pane turns into the channel list only while one specific channel is open. */
-    fun quickSwitchVisible(layer: NewLayer, showingSources: Boolean, mode: Mode, selectedChatId: Long?): Boolean =
-        layer == NewLayer.TWO_PANE && !showingSources && mode == Mode.ALL && selectedChatId != null
+    /**
+     * Two-pane left pane turns into the channel list only while one specific channel is open AND
+     * there is at least one channel to switch to ([rowCount] of [quickSwitchRows]); with none (the
+     * list not loaded yet, or every count still 0) the big player stays instead of an empty column.
+     */
+    fun quickSwitchVisible(layer: NewLayer, showingSources: Boolean, mode: Mode, selectedChatId: Long?, rowCount: Int): Boolean =
+        layer == NewLayer.TWO_PANE && !showingSources && mode == Mode.ALL && selectedChatId != null && rowCount > 0
 
     /** Channels offered for the quick switch: only those with songs, original (grid) order. */
     fun quickSwitchRows(channels: List<MeloScreenHost.SourceRow>): List<MeloScreenHost.SourceRow> =

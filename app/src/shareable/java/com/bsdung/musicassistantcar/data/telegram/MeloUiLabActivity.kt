@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.graphics.Typeface
 import android.hardware.display.DisplayManager
@@ -91,6 +92,34 @@ class MeloUiLabActivity : AppCompatActivity() {
                 panelLongPx = panel.second,
                 inMultiWindow = isInMultiWindow(activity)
             )
+        }
+
+        /**
+         * Extra top room for the head unit's "•••" card handle at [view]'s window (E95 F04): the
+         * policy's answer from where the window really sits on the screen and the owner's
+         * "Chừa chỗ nút •••" setting. 0 on a phone's full screen, on Shanling and in the lower
+         * window of a top/bottom split. Works inside a Dialog too (the root view is the dialog's).
+         */
+        internal fun handleBandPx(view: View, insets: WindowInsetsCompat): Int {
+            val context = view.context
+            val density = context.resources.displayMetrics.density
+            val onScreen = IntArray(2)
+            runCatching { view.rootView.getLocationOnScreen(onScreen) }
+            val activity = activityOf(context)
+            return WindowInsetsPolicy.handleBandPx(
+                topDp = (onScreen[1] / density).toInt(),
+                inMultiWindow = activity != null && isInMultiWindow(activity),
+                statusTopPx = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top,
+                captionTopPx = insets.getInsets(WindowInsetsCompat.Type.captionBar()).top,
+                setting = WindowInsetsPolicy.loadHandleBand(context.getSharedPreferences(MeloScreenPolicy.PREFS_NAME, Context.MODE_PRIVATE)),
+                bandPx = (WindowInsetsPolicy.HANDLE_BAND_DP * density).toInt()
+            )
+        }
+
+        private tailrec fun activityOf(context: Context): Activity? = when (context) {
+            is Activity -> context
+            is ContextWrapper -> activityOf(context.baseContext)
+            else -> null
         }
 
         /** (display this window is on, the default display); each may be null when firmware refuses. */
@@ -213,6 +242,20 @@ class MeloUiLabActivity : AppCompatActivity() {
         MeloNowPlayingPolicy.NowPlayingStyle.entries.forEach { style ->
             content.addView(choiceRow(style.displayName, style == nowStyle) {
                 MeloNowPlayingPolicy.saveStyle(prefs, style)
+                render()
+            })
+        }
+
+        content.addView(components.sectionTitle("Chừa chỗ nút ••• hệ thống"))
+        content.addView(note(
+            "Màn ô tô (FYT) vẽ nút ••• của thẻ cửa sổ đè lên đầu app. Tự động: chừa một dải khi app đang chạy trong thẻ chia màn " +
+                "và Android không báo thanh trạng thái hay thanh tiêu đề ở đó. Nếu chữ đầu trang vẫn bị che, chọn Luôn chừa; " +
+                "nếu thấy dải trống thừa, chọn Không chừa. Quay lại màn chính để thấy thay đổi."
+        ))
+        val handleBand = WindowInsetsPolicy.loadHandleBand(prefs)
+        WindowInsetsPolicy.HandleBand.entries.forEach { setting ->
+            content.addView(choiceRow(setting.displayName, setting == handleBand) {
+                WindowInsetsPolicy.saveHandleBand(prefs, setting)
                 render()
             })
         }
