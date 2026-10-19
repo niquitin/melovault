@@ -59,7 +59,9 @@ internal class MeloComponents(
         val qualityLabel: String? = null,
         val progressPercent: Int? = null,
         val art: Bitmap? = null,
-        val index: Int? = null
+        val index: Int? = null,
+        /** A "Nhạc trên máy" song: the status line says "Trên máy" instead of "Đã tải". */
+        val local: Boolean = false
     )
 
     data class MiniPlayerModel(
@@ -161,7 +163,7 @@ internal class MeloComponents(
         onLongClick: (() -> Unit)? = null,
         onMore: (() -> Unit)? = null
     ): View {
-        val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent)
+        val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local)
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -305,7 +307,7 @@ internal class MeloComponents(
             view.setOnLongClickListener { onLongClick(); true }
             if (model == bound) return
             bound = model
-            val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent)
+            val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local)
             view.background = roundedBackground(
                 if (status.highlightRow) palette.accentSoft else palette.surface,
                 stroke = if (status.highlightRow) palette.accent else null
@@ -378,7 +380,8 @@ internal class MeloComponents(
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
             addView(text(card.title, sizes.titleText, palette.text, bold = true))
-            addView(text(card.detail, sizes.secondaryText, palette.textSecondary).apply {
+            // Two lines so "25.105 bài · đã tải 67" is never cut with "…" on a ~213dp card.
+            addView(text(card.detail, sizes.secondaryText, palette.textSecondary, maxLines = 2).apply {
                 setPadding(0, sizes.gap / 2, 0, 0)
             })
         }

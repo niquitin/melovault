@@ -87,6 +87,24 @@ class MeloSourceCardPolicyTest {
     }
 
     @Test
+    fun selectedKindIsLocalWhileLocalListIsOpen() {
+        assertEquals(Kind.LOCAL, MeloSourceCardPolicy.selectedKind(null, false, localOpen = true))
+        assertEquals(Kind.LOCAL, MeloSourceCardPolicy.selectedKind(5L, false, localOpen = true))
+        assertEquals(Kind.LOCAL, MeloSourceCardPolicy.selectedKind(null, true, localOpen = true))
+        // Default (localOpen = false) keeps the Telegram rules.
+        assertEquals(Kind.TELEGRAM, MeloSourceCardPolicy.selectedKind(null, false, localOpen = false))
+        assertNull(MeloSourceCardPolicy.selectedKind(5L, false, localOpen = false))
+    }
+
+    @Test
+    fun twoCardsOnNarrowPhoneShowHalfOfTheSecond() {
+        val width = MeloSourceCardPolicy.cardWidthPx(328, 2, 200, 8)
+        assertEquals(213, width)
+        val peek = 328 - width - 8
+        assertTrue("peek=$peek", kotlin.math.abs(peek - width / 2) <= 2)
+    }
+
+    @Test
     fun rowVisibleOnlyOnPhoneTabletLibrary() {
         for (layer in listOf(NewLayer.PHONE_PORTRAIT, NewLayer.TABLET_PORTRAIT)) {
             assertTrue(MeloSourceCardPolicy.rowVisible(layer, false, Mode.ALL, 800, 1))
