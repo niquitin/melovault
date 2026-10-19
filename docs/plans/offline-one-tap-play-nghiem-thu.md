@@ -12,3 +12,9 @@ KET LUAN: REWORK PLAN - CHUA CHO SONNET VIET CODE.
 - Tests can no-readable -> khong phat/khong download, account isolation, same-title different file/path, playing/default, async account switch, GON/Legacy taps, va regression ba cham hien co. 3-6 buoc manual owner QA duoc giu, bo tieu chi queue-per-group chua phe duyet.
 - Neu Opus nhan thay bat buoc phai doi queue/menu/TDLib/Media3 de hoan thanh one-tap, DUNG va de xuat cho owner chot; khong ghi "chu du an chot" khi thuc te chua.
 - Bước kế: Opus HOI THOAI MOI doc danh gia nay, sua CHI file docs/plans/offline-one-tap-play.md tren CUNG nhanh dot/offline-one-tap-play, commit plan revision. KHONG sua source/build/cai APK. ChatGPT audit plan moi truoc khi gui Sonnet.
+
+## Quyết định mới của chủ dự án 19/10/2026 — duyệt plan nguyên văn
+
+**TRẠNG THÁI PLAN: ĐÃ DUYỆT — thay thế kết luận REWORK PLAN phía trên.** Chủ dự án nói rõ "plan này ko cần chỉnh sửa gì đâu". Kế hoạch Opus ở commit 29c54f9 được phê duyệt toàn bộ (kể cả thiết kế menu/queue trong plan), KHÔNG được yêu cầu thêm một vòng Opus sửa. Các rủi ro về lựa chọn file, phát online fallback và queue được giữ trong hồ sơ để Sonnet và ChatGPT kiểm thử, không tự ý viết lại plan.
+**Bổ sung QA từ xa, không đổi plan:** bác sĩ không thường ở cạnh thiết bị. Sonnet phải tự thực hiện test và chụp ảnh/video bằng ADB (Shanling Ni, Sony Tiny nếu phù hợp); ChatGPT xem ảnh, độc lập kiểm tra và gửi ảnh/video cho bác sĩ duyệt ngay tại hội thoại. Bài test âm thanh thật hoặc đổi chế độ máy bay mà Agent không được phép tự làm phải ghi CHƯA KIỂM CHỨNG, không tuyên bố đã đạt.
+**Bước tiếp theo:** Claude Sonnet trong hội thoại MỚI, nhánh dot/offline-one-tap-play, dùng đúng plan và SOP mới. Không mở lại Opus.

@@ -10,9 +10,9 @@ Chủ sở hữu phê duyệt quy trình ngày 18/10/2026. **ChatGPT duy nhất 
 - **ChatGPT** đọc Git/diff và report, chủ động test+build lại trên Ni, xem PNG thực, đánh giá thông tin dữ liệu/rollback, ghi docs/plans/<TASK_ID>-nghiem-thu.md. Nếu cần QA Sony/Tiny thì chỉ QA trong môi trường cô lập và không tự đánh dấu thay cho Shanling/Y700.
 
 ## B. Kết quả bắt buộc
-- **PASS:** các test và QA kỹ thuật cần thiết đạt, mọi ảnh/thiết bị đối chiếu, và **chủ dự án đã xác nhận** 3–6 thao tác thủ công. Sau đó ChatGPT mới merge dot/<TASK_ID> (không force) vào nhánh tích hợp được phê duyệt. Nếu code vốn đã nằm trên nhánh tích hợp do vòng cũ, không tự viết lại lịch sử; ghi ngoại lệ và chỉ áp dụng quy ước dot cho việc mới.
+- **PASS:** các test và QA kỹ thuật cần thiết đạt, mọi ảnh/thiết bị đối chiếu, và **chủ dự án đã xác nhận** kết quả 3–6 thao tác qua ảnh/video QA từ xa hoặc tự thử trực tiếp. Sau đó ChatGPT mới merge dot/<TASK_ID> (không force) vào nhánh tích hợp được phê duyệt. Nếu code vốn đã nằm trên nhánh tích hợp do vòng cũ, không tự viết lại lịch sử; ghi ngoại lệ và chỉ áp dụng quy ước dot cho việc mới.
 - **REWORK:** diff/test/UI/logic không đúng kế hoạch. ChatGPT chỉ rõ file và bằng chứng trong nghiệm thu; chủ dự án duyệt sửa, Sonnet MỚI tiếp tục trên dot/<TASK_ID>, không tạo nhánh khác.
-- **BLOCKED:** thiếu thiết bị ADB, config, credential, quyền, dữ liệu hoặc chưa có xác nhận của chủ dự án. Test xanh nhưng thiếu owner QA được gắn nhãn BLOCKED — CHỜ CHỦ DỰ ÁN, không merge. Nếu Sonnet đã commit, giữ nguyên branch.
+- **BLOCKED:** thiếu thiết bị ADB, config, credential, quyền, dữ liệu hoặc chưa có xác nhận của chủ dự án. Test xanh nhưng thiếu owner duyệt bằng chứng QA trực tiếp/từ xa được gắn nhãn BLOCKED — CHỜ CHỦ DỰ ÁN, không merge. Nếu Sonnet đã commit, giữ nguyên branch.
 - Nếu chỉ có test JVM và ảnh Sony mô phỏng → không tuyên bố đã thử Shanling thật/Y700 thật. Số liệu screen/product thực phải có nguồn.
 
 ## C. Luật cài máy và bảo vệ dữ liệu
@@ -35,3 +35,13 @@ Sonnet làm thẳng, **không cần Opus**, chỉ khi **cả**: (a) một màn h
 
 ## F. Quy trình riêng khi Claude bị hết quota
 Không giả định hội thoại được chuyển giữa tài khoản. Agent mới dùng đúng repo Ni, CLAUDE.md, HEAD Git, ba file TASK_ID và HANDOFF để khôi phục. Nếu đầu việc dở và uncommitted files: không xóa, không reset; chỉ báo tiến độ/dirty diff để ChatGPT quyết định, không chạy hai agent song song.
+
+## G. Quy trình nghiệm thu từ xa được duyệt 19/10/2026
+
+- Opus vẫn chỉ lập kế hoạch; Sonnet tự QA từ xa qua ADB trên thiết bị thật, ChatGPT kiểm toán lại và gửi hình/video nghiệm thu trực tiếp trong hội thoại, chủ dự án chỉ cần xem và chốt. Mục 3–6 bước bác sĩ tự kiểm trong plan được Agent thực hiện nếu an toàn, không đòi bác sĩ trực tiếp đến Shanling/Sony.
+- Ni/Shanling M3 Ultra: serial đã xác minh 30313860180939; Tiny/Sony Xperia 5 II: QV725WEQ54. Mỗi phiên xác nhận lại adb devices -l và getprop; dùng clone/build đã kiểm mã, version, chữ ký, Telegram config. Cài giữ dữ liệu chỉ adb install -r, nếu signature mismatch hoặc version downgrade thì dừng.
+- Sonnet phải thử click/chuyển màn/menu/player/Next tương ứng 3–6 bước, chụp trước/sau bằng adb exec-out screencap -p, có thể screenrecord nếu an toàn, lưu docs/plans/artifacts/<TASK_ID>/ (private, không commit), ghi timestamp, model/serial, kỳ vọng, thực tế, PASS/FAIL/BLOCKED, Media3 playback state/position và log crash/ANR.
+- ChatGPT truy cập ảnh thật trên Ni/Tiny, xác nhận code/diff/test/build, và đính kèm ảnh/video quan trọng vào chat cho owner; không chỉ gửi đường dẫn Windows mà owner phải tự vào tìm. Không phát tán Telegram PII hay thông tin tài khoản.
+- Trạng thái Media3/progress và ảnh không tự chứng minh âm thanh thực sự phát ra; nếu không có ghi âm/kiểm tra độc lập thì ghi CHƯA XÁC NHẬN ÂM THANH THỰC. Không tự bật airplane/tắt Wi-Fi, sửa account, xóa file hoặc session trái plan. Những bước không thể làm an toàn phải giữ CHƯA KIỂM CHỨNG.
+- Owner duyệt từ xa là phê duyệt nghiệm thu cho phần đủ bằng chứng; ChatGPT mới quyết PASS/REWORK/BLOCKED, ghi hạn chế chưa kiểm chứng và không merge trước owner duyệt. Không yêu cầu bác sĩ có mặt ở địa điểm thiết bị.
+- Kế hoạch offline-one-tap-play commit 29c54f9 ĐƯỢC CHỦ DỰ ÁN DUYỆT NGUYÊN VĂN, không Opus REWORK. Ý kiến phản biện trước đó giữ làm checklist QA, không còn là blocker lập kế hoạch.
