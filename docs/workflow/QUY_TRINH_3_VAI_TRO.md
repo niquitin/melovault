@@ -51,3 +51,9 @@ Không giả định hội thoại được chuyển giữa tài khoản. Agent 
 Áp dụng cho mọi phiên Opus/Sonnet và cả ChatGPT kiểm toán. **M3 Ultra (Ni) và Sony (Tiny) mặc định để màn hình tắt; chỉ bật lúc cần tap/chụp/quay UI**, xong bước hoặc kết thúc QA thì **tắt ngay và xác minh Display State=OFF**. Không tắt lúc đang có người/agent khác thao tác, không tắt nguồn hoặc sửa data. Không cần màn ON để build, test JVM, đọc log hoặc chờ chủ dự án nghiệm thu từ xa.
 
 Chính sách và lệnh an toàn ở `docs/workflow/SCREEN_LIFECYCLE_QA.md`: KEYCODE_WAKEUP=224 bật khi cần, KEYCODE_SLEEP=223 tắt theo hướng idempotent (tránh KEYCODE_POWER=26 toggle), `dumpsys power` + `dumpsys display` kiểm tra; `Dozing` chỉ được coi tắt khi display thực sự OFF. Sonnet bảo đảm cleanup trong `finally` sau cả PASS/FAIL/BLOCKED và ghi trạng thái màn hình cuối từng máy. Nếu cần người dùng mở khóa hợp lệ hoặc screen cannot turn OFF, báo rõ, không tự phá security.
+
+## H. Bàn giao ảnh/video có liên kết bấm trực tiếp (19/10/2026)
+
+- ChatGPT đưa bộ screenshot/video tiêu biểu lên thư mục Google Drive Ni N riêng tư sau khi QA; kiểm Drive owner-only, URL thực từ connector, không mở share public. Không upload có OTP/credentials; với Telegram metadata cá nhân chỉ lưu riêng tư.
+- ChatGPT tạo docs/plans/<TASK_ID>-hinh-nghiem-thu.md liệt kê từng thao tác và URL bấm trực tiếp, cùng folder QA. Claude Code có thể mở Markdown và Ctrl+Click; trong ChatGPT cung cấp link Drive tương ứng. Không cho link giả từ tên file Windows.
+- Sonnet chịu trách nhiệm thu ảnh/video, không tự thay permission Drive hoặc công bố file. Nếu chưa có ảnh hay chưa hoàn tất đồng bộ, phải nói rõ và không đánh dấu giao nộp xong.

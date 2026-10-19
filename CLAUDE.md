@@ -68,3 +68,11 @@ Mọi phiên Claude nói tiếng Việt thường, gồm 3 phần ngắn: **Đã
 - Bật bằng `adb -s SERIAL shell input keyevent 224` (KEYCODE_WAKEUP) **sau khi kiểm trạng thái**; tắt bằng `adb -s SERIAL shell input keyevent 223` (KEYCODE_SLEEP, không phải nút toggle). Kiểm `dumpsys power` và `dumpsys display` trước/sau. Màn Sony có thể `mWakefulness=Dozing` nhưng `Display State=OFF`, như vậy màn đã tắt.
 - Phải thực hiện thao tác tắt màn trong bước cleanup `finally`, kể cả test FAIL/BLOCKED, và ghi `SHANLING_SCREEN_END` / `SONY_SCREEN_END` trong báo cáo. Không để màn sáng trong suốt 5–10 phút build/test.
 - Đọc chi tiết `docs/workflow/SCREEN_LIFECYCLE_QA.md`. Chỉ ChatGPT được chỉnh quy trình này. Không tự đánh thức Shanling/Sony khi không cần QA.
+
+## 7. Chuẩn giao nộp ảnh QA bằng liên kết một chạm — 19/10/2026
+
+- Sonnet vẫn chụp PNG/video riêng tư tại docs/plans/artifacts/<TASK_ID>/, ghi số thứ tự và tên rõ mục đích. Không tự public ảnh chứa metadata Telegram, không thay đổi permission Drive.
+- **ChatGPT là người duy nhất chuẩn hóa ảnh nghiệm thu sau QA**: đưa 5–10 ảnh quan trọng vào thư mục **Google Drive Ni N ở chế độ owner-only**, kiểm tra SHA-256 kích thước khi sao chép và xác minh Drive shared=false bằng connector. Nếu đồng bộ không xong, ghi rõ giới hạn, không tự tạo link file giả.
+- ChatGPT lập **docs/plans/<TASK_ID>-hinh-nghiem-thu.md** trong repo với liên kết Markdown bấm trực tiếp tới folder và từng ảnh đã được Drive xác minh. Như vậy người dùng có thể Ctrl+Click từ Claude Code hoặc bấm ngay trong ChatGPT mà không cần tìm file trong thư mục Windows.
+- Khi owner dùng tài khoản khác, liên kết Drive Ni N riêng tư có thể yêu cầu đăng nhập đúng tài khoản; KHÔNG mở quyền Anyone with link nếu chủ dự án chưa cho phép.
+- Tài liệu nghiệm thu phải trỏ tới file link-index và nói rõ audio thật/mất mạng/thiết bị nào chưa kiểm được. Coi link-index là một phần bắt buộc của QA handoff, không chỉ là ưu đãi một lần.

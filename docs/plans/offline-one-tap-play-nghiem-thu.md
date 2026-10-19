@@ -56,3 +56,28 @@ TRẠNG THÁI: ĐẠT KỸ THUẬT CÓ BẰNG CHỨNG; BLOCKED — CHỜ CHỦ D
 - ÂM THANH THỰC chưa xác nhận (Media3 PLAYING không đủ chứng minh loa phát âm thanh). Chưa test airplane/mất mạng do plan cấm tự tắt mạng, chưa test xóa file thật do cấm đụng dữ liệu, Sony chưa thử tính năng này.
 - QUY TẮC MÀN HÌNH đã có từ commit 93c50c1 tại docs/workflow/SCREEN_LIFECYCLE_QA.md, CLAUDE.md và prompt: chỉ bật màn Shanling/Sony khi thao tác chụp/QA, sau đó KEYCODE_SLEEP=223 trong finally, verify Display OFF. Sonnet xác nhận cuối phiên Shanling Asleep+OFF, Sony Dozing+OFF; ChatGPT xác nhận độc lập màn Shanling Asleep/OFF và Sony Dozing/OFF. Không sửa brightness, timeout hoặc AOD.
 - Chỉ khi chủ dự án xem hình và xác nhận đạt thì ChatGPT mới xem xét PASS/merge trong phạm vi đã QA, ghi rõ giới hạn âm thanh thực và offline không mạng. KHÔNG tự gộp hoặc phát hành.
+
+## PHÁN QUYẾT CUỐI — PASS có giới hạn phạm vi, chủ dự án duyệt 19/10/2026
+
+**Chủ dự án đã trả lời 'đạt' sau khi ChatGPT trình bày kết quả QA thực tế của Offline One-Tap Play. PASS cho các chức năng đã kiểm chứng và được duyệt.**
+
+### Tiêu chí nghiệm thu ĐẠT
+- Mã tính năng: commit fdf64c5, Sonnet QA báo cáo commit 2ddd01e; ChatGPT kiểm toán ở commit 0e2636e. Repo trên nhánh dot/offline-one-tap-play.
+- Debug và Release unit tests: mỗi variant 1263 defined, 1242 passed, 21 skipped, 0 fail/error; ChatGPT đã tự chạy lại hai variant và build Debug/Release tại Ni với --rerun-tasks. Tiny QA clone cũng đã build/test.
+- Trên Shanling M3 Ultra serial 30313860180939: cài giữ nguyên dữ liệu bằng adb install -r (đúng chữ ký, package, version); chạm một lần bài trong Đã tải thì phát; menu ba chấm có chọn bản khác; đổi bản khác cập nhật nguồn; Next chuyển bài đúng hàng đợi; Thư viện thông thường không bị ảnh hưởng. Sonnet báo Media3 PLAYING và position tăng, không thấy FATAL/ANR. ChatGPT đã tự mở ảnh thực.
+- Chủ dự án duyệt QA từ xa qua ChatGPT, không yêu cầu đến vị trí thiết bị.
+
+### Không thuộc PASS hiện tại
+- Chưa xác nhận âm thanh thực phát từ thiết bị bằng nguồn thu/kiểm nghe độc lập.
+- Chưa thử tắt mạng/chế độ máy bay hoặc thiếu tệp thật vì các thao tác có nguy cơ ảnh hưởng thiết bị/dữ liệu không được phép tự ý chạy.
+- Sony, Y700, FYT và các cấu hình cửa sổ khác chưa được kiểm thử trực tiếp cho tác vụ này; không coi màn Shanling là bằng chứng cho các thiết bị đó.
+
+### Bộ ảnh nghiệm thu 1-click và an toàn
+- File index Markdown trong cùng repo: docs/plans/offline-one-tap-play-hinh-nghiem-thu.md.
+- Drive Ni N riêng tư: https://drive.google.com/drive/folders/1WZJqW4ADZ63U3CjOLD6cPgpzP0Is3ygW ; kiểm metadata thư mục owner-only và ảnh not_shared.
+- 7 ảnh PNG quan trọng có đường dẫn bấm trực tiếp trong index; original 26 QA assets vẫn lưu offline trong docs/plans/artifacts/offline-one-tap-play, không commit hình/PII.
+- Chính sách bật màn khi thao tác/tắt sau QA vẫn áp dụng: docs/workflow/SCREEN_LIFECYCLE_QA.md; Shanling và Sony cuối phiên đều màn hình OFF.
+
+### Gate Git
+- Sau khi ghi PASS, nhánh dot/offline-one-tap-play được phép merge fast-forward sang nhánh Preview tích hợp feature/e93-03d-y700-offline-cockpit nếu Git tree sạch, target đúng là ancestor và không có agent khác viết mã.
+- Giữ nguyên Private Stable, backend production, Telegram database/session/cache. Không tự tăng versionCode, không upload APK phát hành mới chỉ vì QA PASS.
