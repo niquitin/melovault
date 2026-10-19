@@ -77,3 +77,11 @@
 - **Bác sĩ phải xác nhận 3–6 thao tác tự kiểm tra trực tiếp trên Shanling**, gồm Thư viện, Telegram, Đã tải, trở lại, đóng/mở và phát bài thật. Chỉ lúc đó mới PASS/được bàn merge và nhiệm vụ Opus tiếp theo.
 - Số 15 metadata chưa xác minh không có nghĩa là 15 bài chắc chắn chưa tải; không xóa cache để làm số đẹp.
 - Không tự phát hành/upload APK Debug vc109 như bản Beta mới; bản kỹ thuật đang chỉ dùng QA, đợi quyết định release/version sau.
+
+## Phản hồi QA chủ dự án — 19/10/2026 (chạm bài trong Đã tải)
+
+- Chủ dự án thử trên Shanling: chạm một bài trong tab Đã tải không phát ngay, mà mở bảng thông tin/lựa chọn bản. Bước QA "chạm một lần để phát" chưa đạt như cách checklist trước diễn đạt; chưa có xác nhận người dùng đã thử chọn tiếp một phiên bản và nghe được âm thanh.
+- ChatGPT đọc mã nguồn ở HEAD dadd106: MeloCompactScreen.onRowClick -> host.playAt(index) -> TelegramPreviewActivity.playShownSong (dòng khoảng 4228-4233). Nếu filterOnlyDownloaded và group.entries.size > 1 thì gọi showOfflineVersions(group), không gọi downloadAndPlay ngay. Handler Legacy tại dòng 2695-2697 cũng giống vậy. Chọn một dòng trong dialog tại dòng 3493-3498 mới gọi downloadAndPlay(song).
+- TelegramOfflineLibrary.Group: sameFile nếu các entry có cùng path, label "Có tại N nguồn/bản"; khác path nhưng cùng tên thì label "Các bản cùng tên". Không coi trùng tên chắc chắn là cùng âm thanh; không tự xóa/dedup.
+- Kết luận: hành vi mở dialog đối với nhóm nhiều bản là logic đã tồn tại, không phải regression do dòng số đếm Beta109. Tuy nhiên mong đợi UX phát nhạc một chạm đã được chủ dự án báo khác hiện trạng. Chưa PASS toàn bộ checklist.
+- Đề xuất nhiệm vụ UI/Playback mới cần CHỦ DỰ ÁN CHỐT: chạm bài phát bản offline đại diện an toàn, menu ba chấm để chọn các bản/nguồn; Opus lập kế hoạch riêng vì liên quan chính sách chọn bản và playback. Chưa sửa code.
