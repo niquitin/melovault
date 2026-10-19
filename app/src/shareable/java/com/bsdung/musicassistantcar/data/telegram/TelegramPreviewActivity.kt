@@ -35,7 +35,11 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.provider.Settings
+import android.content.ContentUris
+import com.bsdung.musicassistantcar.data.LocalMediaRepository
 import android.text.InputType
 import android.text.Editable
 import android.text.TextWatcher
@@ -344,6 +348,361 @@ class TelegramPreviewActivity : AppCompatActivity() {
             .show()
     }
 
+    // ---- Nhạc trên máy (docs/plans/E94-LOCAL-MUSIC.md) -------------------------------------------
+    // A read-only MediaStore list with its own song keys and its own player queue. Nothing here
+    // touches the Telegram index, TDLib, the playlist store or the Telegram queue; a local song
+    // is never turned into a Telegram [Song]. MediaStore is only read on the library's executor.
+
+    private val localMusicLazy = lazy {
+        MeloLocalLibrary(
+            repository = LocalMediaRepository(applicationContext),
+            countQuery = ::countDeviceMusic,
+            executor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+                Thread(r, "MeloVault-Local").apply { priority = Thread.MIN_PRIORITY }
+            },
+            post = { mainHandler.post(it) },
+            clock = android.os.SystemClock::elapsedRealtime
+        )
+    }
+    private val localMusic: MeloLocalLibrary get() = localMusicLazy.value
+    private var localMode = false
+    /** Bumped when the owner taps a local song; a slower Telegram answer from an earlier tap is dropped. */
+    private var localPlayEpoch = 0L
+    private var localGranted = false
+    private var localRowsKey = -1L
+    private var localRows: List<MeloScreenHost.Row> = emptyList()
+
+    private val localPermissionResult = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        localGranted = localPermissionGranted()
+        if (granted && localGranted) {
+            enterLocal()
+        } else {
+            toast("Chưa có quyền đọc nhạc trên máy.")
+            scheduleMeloLibraryRefresh()
+        }
+    }
+
+    private fun toast(message: String) {
+        runOnUiThread {
+            if (!isFinishing && !isDestroyed) android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** Same URI and condition as [LocalMediaRepository], so the card number matches the list. Executor thread. */
+    private fun countDeviceMusic(): Int? = try {
+        contentResolver.query(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, arrayOf(MediaStore.Audio.Media._ID),
+            "${MediaStore.Audio.Media.IS_MUSIC} != 0", null, null
+        )?.use { it.count }
+    } catch (_: Exception) {
+        null
+    }
+
+    private fun localPermissionName(): String = MeloLocalSourcePolicy.permissionFor(Build.VERSION.SDK_INT)
+
+    private fun localPermissionGranted(): Boolean =
+        ContextCompat.checkSelfPermission(this, localPermissionName()) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+    /** The only place that may ask for audio access, and only because the owner tapped "Nhạc trên máy". */
+    private fun openLocalMusic() {
+        if (!auth.isReady()) return
+        localGranted = localPermissionGranted()
+        val prefs = getSharedPreferences(MeloLocalSourcePolicy.PREFS_NAME, Context.MODE_PRIVATE)
+        val permission = localPermissionName()
+        when (MeloLocalSourcePolicy.permissionStep(
+            granted = localGranted,
+            askedBefore = prefs.getBoolean(MeloLocalSourcePolicy.KEY_ASKED, false),
+            showRationale = shouldShowRequestPermissionRationale(permission)
+        )) {
+            MeloLocalSourcePolicy.PermissionStep.OPEN -> enterLocal()
+            MeloLocalSourcePolicy.PermissionStep.EXPLAIN_THEN_ASK -> AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                .setTitle("Cho phép đọc nhạc trên máy?")
+                .setMessage("MeloVault cần quyền đọc tệp âm thanh trên máy để liệt kê và phát nhạc của bạn. " +
+                    "Ứng dụng chỉ đọc, không sửa, xóa hay gửi tệp đi đâu.")
+                .setNegativeButton("Để sau", null)
+                .setPositiveButton("Tiếp tục") { _, _ ->
+                    prefs.edit().putBoolean(MeloLocalSourcePolicy.KEY_ASKED, true).apply()
+                    localPermissionResult.launch(permission)
+                }
+                .show()
+            MeloLocalSourcePolicy.PermissionStep.OPEN_SETTINGS -> AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                .setTitle("Quyền đọc nhạc đang tắt")
+                .setMessage("Bật quyền đọc nhạc/âm thanh cho MeloVault trong Cài đặt Android để xem nhạc trên máy.")
+                .setNegativeButton("Để sau", null)
+                .setPositiveButton("Mở cài đặt") { _, _ ->
+                    runCatching {
+                        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
+                    }
+                }
+                .show()
+        }
+    }
+
+    private fun enterLocal() {
+        if (!auth.isReady()) return
+        localGranted = localPermissionGranted()
+        if (!localGranted) return
+        localMode = true
+        val library = localMusic
+        library.setSort(activeSort())
+        if (library.needsLoad()) library.load(force = true) { scheduleMeloLibraryRefresh() }
+        scheduleMeloLibraryRefresh()
+    }
+
+    /** Back to the Telegram screen; local music that is already playing keeps playing. */
+    private fun closeLocalMusic() {
+        if (!localMode) return
+        localMode = false
+        localMusic.setQuery("")
+        scheduleMeloLibraryRefresh()
+    }
+
+    /** Logout / session closed: forget the list and the card so nothing outlives the account screen. */
+    private fun resetLocalMusic() {
+        localMode = false
+        localGranted = false
+        localRowsKey = -1L
+        localRows = emptyList()
+        if (localMusicLazy.isInitialized()) localMusic.clear()
+    }
+
+    /** Card number only (no permission prompt): runs when the library is ready and on every resume. */
+    private fun refreshLocalCount() {
+        if (!auth.isReady()) return
+        localGranted = localPermissionGranted()
+        if (!localGranted) {
+            scheduleMeloLibraryRefresh()
+            return
+        }
+        localMusic.refreshCount { scheduleMeloLibraryRefresh() }
+    }
+
+    private fun currentLocalId(): Long? = MeloLocalSourcePolicy.idOfMediaId(player?.currentMediaItem?.mediaId)
+
+    /** Key of the playing song in either source (Telegram keys are >= 0, local keys <= -2^62). */
+    private fun currentSongKey(): Long? =
+        currentTelegramMessageId() ?: currentLocalId()?.let(MeloLocalSourcePolicy::keyOf)
+
+    private fun localMimeOf(item: MediaItem): String? =
+        item.mediaMetadata.extras?.getString(MeloLocalSourcePolicy.EXTRA_MIME)
+
+    private fun localSizeOf(item: MediaItem): Long =
+        item.mediaMetadata.extras?.getLong(MeloLocalSourcePolicy.EXTRA_SIZE, -1L) ?: -1L
+
+    private fun localDurationOf(item: MediaItem): Long =
+        item.mediaMetadata.extras?.getLong(MeloLocalSourcePolicy.EXTRA_DURATION, 0L) ?: 0L
+
+    private fun localMediaItem(song: MeloLocalSourcePolicy.LocalSong): MediaItem {
+        val extras = Bundle().apply {
+            putString(MeloLocalSourcePolicy.EXTRA_MIME, song.mimeType)
+            putLong(MeloLocalSourcePolicy.EXTRA_SIZE, song.sizeBytes)
+            putLong(MeloLocalSourcePolicy.EXTRA_DURATION, song.durationMs)
+        }
+        return MediaItem.Builder()
+            .setMediaId(MeloLocalSourcePolicy.mediaIdOf(song.mediaStoreId))
+            .setUri(ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, song.mediaStoreId))
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(song.title)
+                    .setArtist(MeloMediaControlPolicy.fallbackArtist(song.artist))
+                    .setAlbumTitle(song.album)
+                    .setExtras(extras)
+                    .build()
+            )
+            .build()
+    }
+
+    /**
+     * Plays [index] of the list on screen. The queue becomes up to 500 local songs around it
+     * ([enqueueItems] replaces the whole list), so Telegram songs never mix into it.
+     */
+    private fun playLocal(index: Int) {
+        if (!auth.isReady()) return
+        val songs = localMusic.shown()
+        if (index !in songs.indices) return
+        // Same clean-up as picking a file: a slower Telegram answer must not take the player back.
+        localPlayEpoch++
+        downloadWaiting?.let { TelegramProgressiveCache.stop(it) }
+        downloadWaiting = null
+        currentDownloadingSong = null
+        currentSongIndex = -1
+        playFeedback?.let { setPlayFeedback(null, it.songKey) }
+        ShareablePlaybackService.clearTelegramQueue()
+        queueSongOrder = emptyList()
+        val window = MeloLocalSourcePolicy.queueWindow(songs.size, index)
+        enqueueItems(songs.slice(window).map(::localMediaItem), index - window.first)
+    }
+
+    private fun localSnapshot(): MeloScreenHost.Snapshot {
+        val library = localMusic
+        val sort = activeSort()
+        if (library.sort != sort) library.setSort(sort) { scheduleMeloLibraryRefresh() }
+        // snapshot() runs twice per redraw: build the rows only when the list or the sort changed.
+        val key = library.version.toLong() * 2L + if (sort == SongSort.NAME) 1L else 0L
+        if (key != localRowsKey) {
+            localRowsKey = key
+            localRows = library.visible().map { song ->
+                MeloScreenHost.Row(
+                    title = song.title,
+                    sourceTitle = song.artist,
+                    filename = "",
+                    durationSeconds = (song.durationMs / 1000L).toInt(),
+                    songKey = song.key,
+                    downloaded = true,
+                    downloadingPercent = null,
+                    art = null,
+                    sortKey = if (sort == SongSort.NAME) song.alphaKey else "",
+                    mimeType = song.mimeType,
+                    local = true
+                )
+            }
+        }
+        val shown = library.shown().size
+        return MeloScreenHost.Snapshot(
+            showingSources = false,
+            mode = MeloCompactPolicy.Mode.ALL,
+            rows = localRows,
+            sources = emptyList(),
+            total = shown,
+            sourceTitle = MeloLocalSourcePolicy.SOURCE_TITLE,
+            playingKey = currentSongKey(),
+            paused = player?.let { it.currentMediaItem != null && !it.playWhenReady } == true,
+            query = library.query,
+            note = MeloLocalSourcePolicy.note(library.loading, library.loadedCount, shown, library.query),
+            sort = sort,
+            letterFloor = null,
+            selectedChatId = null,
+            local = true
+        )
+    }
+
+    private fun localNowPlaying(controller: MediaController, item: MediaItem): MeloScreenHost.NowPlaying {
+        val duration = controller.duration.takeIf { it != C.TIME_UNSET && it > 0L } ?: localDurationOf(item)
+        return MeloScreenHost.NowPlaying(
+            songKey = currentSongKey(),
+            title = item.mediaMetadata.title?.toString()?.takeIf { it.isNotBlank() } ?: "Đang phát",
+            sourceTitle = item.mediaMetadata.artist?.toString()?.takeIf { it.isNotBlank() },
+            filename = null,
+            positionMs = controller.currentPosition.coerceAtLeast(0L),
+            durationMs = duration,
+            playing = controller.isPlaying,
+            art = null,
+            favorite = false,
+            shuffle = controller.shuffleModeEnabled,
+            repeatLabel = when (controller.repeatMode) {
+                Player.REPEAT_MODE_ALL -> "tất cả"
+                Player.REPEAT_MODE_ONE -> "một bài"
+                else -> "tắt"
+            },
+            downloadNote = null,
+            paused = !controller.playWhenReady,
+            local = true
+        )
+    }
+
+    /** The playing queue read straight from the player: it only holds local songs while one plays. */
+    private fun localQueueItems(): List<MeloScreenHost.QueueItem> {
+        val controller = player ?: return emptyList()
+        return (0 until controller.mediaItemCount).map { i ->
+            val item = controller.getMediaItemAt(i)
+            MeloScreenHost.QueueItem(
+                title = item.mediaMetadata.title?.toString()?.takeIf { it.isNotBlank() } ?: "Nhạc trên máy",
+                sourceTitle = item.mediaMetadata.artist?.toString()?.takeIf { it.isNotBlank() },
+                durationSeconds = (localDurationOf(item) / 1000L).toInt(),
+                songKey = MeloLocalSourcePolicy.idOfMediaId(item.mediaId)?.let(MeloLocalSourcePolicy::keyOf) ?: Long.MIN_VALUE,
+                downloaded = true,
+                downloadingPercent = null,
+                local = true
+            )
+        }
+    }
+
+    private fun playLocalQueueAt(index: Int) {
+        val controller = player ?: return
+        if (index !in 0 until controller.mediaItemCount) return
+        controller.seekToDefaultPosition(index)
+        controller.play()
+    }
+
+    private fun showLocalSongMenu(anchor: View, onPlay: () -> Unit, onInfo: () -> Unit) {
+        val popup = PopupMenu(ContextThemeWrapper(this, R.style.Theme_MusicAssistantCar_Dialog), anchor)
+        popup.menu.add(0, 1, 1, "▶ Phát bài này")
+        popup.menu.add(0, 2, 2, "ℹ Thông tin")
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> onPlay()
+                2 -> onInfo()
+            }
+            true
+        }
+        popup.show()
+    }
+
+    /** Name, tags, format, size, duration and the folder name; never the file path or URI. */
+    private fun showLocalInfo(
+        title: String, artist: String?, album: String?, mime: String?, sizeBytes: Long, durationMs: Long, folder: String?
+    ) {
+        val info = buildString {
+            append("• Tên: $title\n")
+            append("• Nghệ sĩ: ${artist?.takeIf { it.isNotBlank() } ?: "Không xác định"}\n")
+            album?.takeIf { it.isNotBlank() }?.let { append("• Album: $it\n") }
+            append("• Định dạng: ${MeloComponentPolicy.formatOf(mime, null) ?: "Không xác định"}\n")
+            append("• Dung lượng: ${TelegramSongDisplayPolicy.formatFileSize(sizeBytes) ?: "Không xác định"}\n")
+            append("• Thời lượng: ${TelegramSongDisplayPolicy.formatDuration((durationMs / 1000L).toInt()) ?: "Không xác định"}")
+            folder?.takeIf { it.isNotBlank() }?.let { append("\n• Thư mục: $it") }
+        }
+        AlertDialog.Builder(ContextThemeWrapper(this, R.style.Theme_MusicAssistantCar_Dialog))
+            .setTitle("Thông tin chi tiết")
+            .setMessage(info)
+            .setPositiveButton("Đóng", null)
+            .show()
+    }
+
+    private fun openLocalRowMenu(index: Int, anchor: View) {
+        val song = localMusic.visible().getOrNull(index) ?: return
+        showLocalSongMenu(anchor, onPlay = { playLocal(index) }, onInfo = {
+            showLocalInfo(song.title, song.artist, song.album, song.mimeType, song.sizeBytes, song.durationMs, song.folder)
+        })
+    }
+
+    private fun openLocalQueueMenu(index: Int, anchor: View) {
+        val controller = player ?: return
+        if (index !in 0 until controller.mediaItemCount) return
+        val item = controller.getMediaItemAt(index)
+        val known = MeloLocalSourcePolicy.idOfMediaId(item.mediaId)?.let { localMusic.byId(it) }
+        showLocalSongMenu(anchor, onPlay = { playLocalQueueAt(index) }, onInfo = {
+            showLocalInfo(
+                item.mediaMetadata.title?.toString().orEmpty().ifBlank { "Nhạc trên máy" },
+                item.mediaMetadata.artist?.toString(), item.mediaMetadata.albumTitle?.toString(),
+                localMimeOf(item), localSizeOf(item), localDurationOf(item), known?.folder
+            )
+        })
+    }
+
+    /** Hàng đợi while a local song plays: the player's own list, tap = jump to that song. */
+    private fun showLocalUpcomingQueue() {
+        val controller = player ?: return
+        val count = controller.mediaItemCount
+        if (count == 0) return
+        queueDialog?.dismiss()
+        val at = controller.currentMediaItemIndex.coerceIn(0, count - 1)
+        val names = Array(count) { i ->
+            val title = controller.getMediaItemAt(i).mediaMetadata.title?.toString().orEmpty().ifBlank { "Nhạc trên máy" }
+            (if (i == at) "▶ " else "") + title
+        }
+        val dialog = AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            .setTitle("Danh sách phát · $count bài")
+            .setItems(names) { _, which -> playLocalQueueAt(which) }
+            .setPositiveButton("Xong", null)
+            .create()
+        queueDialog = dialog
+        dialog.setOnDismissListener { if (queueDialog === dialog) queueDialog = null }
+        dialog.show()
+        dialog.listView?.setSelection((at - 2).coerceAtLeast(0))
+    }
+
     // Car Mode voice search: the spoken text only fills the search field; nothing is stored.
     private var voiceSearchCallback: ((String) -> Unit)? = null
     private val voiceSearchResult = registerForActivityResult(
@@ -470,6 +829,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                if (localMode) {
+                    closeLocalMusic()
+                    return
+                }
                 if (allChatsMode && (!browseSources || playlistMode)) {
                     playlistMode = false
                     browseSources = true
@@ -507,6 +870,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // Picks up a changed "Bố cục Gọn" setting when returning from Cài đặt giao diện.
         applyMeloLayer()
         if (auth.isReady()) {
+            refreshLocalCount()
             val user = library.authorizedUser()?.value ?: 0L
             if (user > 0L && songs.isEmpty()) {
                 loadDatabaseIndex(user) {
@@ -537,8 +901,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
             nowPlayingTitle.text = titleText
             if (::nowPlayingSubtitle.isInitialized) {
                 val artist = mediaItem?.mediaMetadata?.artist?.toString()?.takeIf { it.isNotBlank() }
+                val sourceLabel = if (MeloLocalSourcePolicy.idOfMediaId(mediaItem?.mediaId) != null) {
+                    "${MeloLocalSourcePolicy.SOURCE_TITLE} · Đang phát"
+                } else "Telegram · Đang phát"
                 nowPlayingSubtitle.text = if (mediaItem != null) {
-                    listOfNotNull(artist, "Telegram · Đang phát").joinToString(" · ")
+                    listOfNotNull(artist, sourceLabel).joinToString(" · ")
                 } else "Telegram · MeloVault"
             }
             updateMiniPlayerProgress()
@@ -2936,10 +3303,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val bentoLabel = "Hiển thị nguồn: ${currentSourceDisplayMode.displayName} ›"
         menu.menu.add(0, 9, 9, bentoLabel)
         menu.menu.add(0, 10, 10, "⚙ Cài đặt giao diện (thử nghiệm)")
+        // Car Mode has no device-music list.
+        if (meloLayer != null && carScreen == null) menu.menu.add(0, 11, 11, "♪ ${MeloLocalSourcePolicy.SOURCE_TITLE}")
         menu.setOnMenuItemClickListener {
             val user = library.authorizedUser()?.value ?: 0L
             when (it.itemId) {
-                1 -> if (auth.isReady()) loadSavedMessages()
+                1 -> if (auth.isReady()) {
+                    closeLocalMusic()
+                    loadSavedMessages()
+                }
                 2 -> if (auth.isReady()) {
                     autoRecoveryPolicy.onManualScanRequested()
                     scanAllTelegramAudio(browseAfter = false, incremental = true)
@@ -2957,6 +3329,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     }
                 }
                 5 -> if (auth.isReady()) {
+                    closeLocalMusic()
                     val shouldScan = autoRecoveryPolicy.shouldTabTriggerScan(
                         auth.isReady(), allChatsMode, globalScanLoading, songs.size,
                         user
@@ -2981,6 +3354,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 9 -> showSourceDisplayModeDialog()
                 10 -> startActivity(Intent(this, MeloUiLabActivity::class.java)
                     .putExtra(MeloUiLabActivity.EXTRA_SONG_COUNT, totalCountForCurrentView))
+                11 -> openLocalMusic()
             }
             true
         }
@@ -3283,6 +3657,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun showUpcomingQueue() {
         if (!auth.isReady()) return
+        if (currentLocalId() != null) {
+            showLocalUpcomingQueue()
+            return
+        }
         library.authorizedUser()?.value?.let { restorePlayingQueueIfAny(it) }
         val list = queueSongOrder
         queueDialog?.dismiss()
@@ -3988,6 +4366,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun toggleCurrentFavorite() {
+        if (currentLocalId() != null) {
+            toast("Nhạc trên máy chưa hỗ trợ Lưu.")
+            return
+        }
         val account = library.authorizedUser() ?: return
         if (!auth.isReady()) return
         val target = currentTelegramMessageId() ?: return
@@ -4077,6 +4459,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val layout = MeloScreenPolicy.chooseLayout(measured.windowWidthDp, measured.windowHeightDp, carMode = false)
         val layer = MeloLibraryPolicy.newLayer(MeloLibraryPolicy.loadStyle(prefs), layout, auth.isReady())
         if (layer == null) {
+            closeLocalMusic()
             detachMeloLayer()
             return
         }
@@ -4120,6 +4503,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     /** Car Mode at the panel's real pixels, full screen; emulated FYT frames for testing on a tablet. */
     private fun showCarLayer(setting: MeloCarPolicy.CarSetting, display: MeloScreenPolicy.DisplaySpec) {
+        // Car Mode has no device-music list; never leave it showing Telegram-only screens over local rows.
+        closeLocalMusic()
         val key = "car:${setting.key}:${display.widthPx}x${display.heightPx}:${display.densityDpi}"
         if (carScreen != null && meloLayerKey == key) {
             scheduleMeloLibraryRefresh()
@@ -4269,14 +4654,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private val meloHost = object : MeloScreenHost {
         override fun snapshot(): MeloScreenHost.Snapshot {
+            if (localMode) return localSnapshot()
             val showingSources = allChatsMode && browseSources && !playlistMode
             val mode = when {
                 playlistMode -> MeloCompactPolicy.Mode.PLAYLIST
                 filterOnlyDownloaded -> MeloCompactPolicy.Mode.DOWNLOADED
                 else -> MeloCompactPolicy.Mode.ALL
             }
-            val playingKey = currentTelegramMessageId()
-            val downloadingPercent = playingKey?.let { currentDownloadPercent() }
+            // Same key space as nowPlaying().songKey, so the rows are not redrawn every second while local music plays.
+            val playingKey = currentSongKey()
+            val downloadingPercent = currentTelegramMessageId()?.let { currentDownloadPercent() }
             val sort = activeSort()
             val rows = if (showingSources) emptyList() else shownSongs.map { song ->
                 MeloScreenHost.Row(
@@ -4334,6 +4721,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
             librarySortCache = sort
             getSharedPreferences(MeloScreenPolicy.PREFS_NAME, Context.MODE_PRIVATE)
                 .edit().putString(MeloAlphabetPolicy.PREF_SORT, sort.name).apply()
+            // The Telegram list below is re-sorted too, so it is right when the owner goes back to it.
+            if (localMode) localMusic.setSort(sort) { scheduleMeloLibraryRefresh() }
             letterFloor = null
             offlineVisibleLimit = 200
             refreshSongRows()
@@ -4341,6 +4730,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
         override fun jumpToLetter(lowerBound: String?): Int? {
             if (activeSort() != SongSort.NAME) return 0
+            if (localMode) return localMusic.jumpTo(lowerBound)
             val dbList = allChatsMode && !browseSources && !playlistMode && !filterOnlyDownloaded &&
                 libraryDb != null && (library.authorizedUser()?.value ?: 0L) > 0L
             if (dbList) {
@@ -4368,8 +4758,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
             ).coerceAtMost((shownSongs.size - 1).coerceAtLeast(0))
         }
 
+        override fun openLocal() = openLocalMusic()
+
+        override fun closeLocal() = closeLocalMusic()
+
         override fun setMode(mode: MeloCompactPolicy.Mode) {
             if (!auth.isReady()) return
+            closeLocalMusic()
             letterFloor = null
             when (mode) {
                 MeloCompactPolicy.Mode.ALL -> { playlistMode = false; filterOnlyDownloaded = false; browseSources = false }
@@ -4383,6 +4778,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
         override fun showSources() {
             if (!auth.isReady()) return
+            closeLocalMusic()
             letterFloor = null
             browseSources = true
             selectedChatId = null
@@ -4394,6 +4790,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
         override fun openSource(chatId: Long?) {
             if (!auth.isReady()) return
+            closeLocalMusic()
             letterFloor = null
             selectedChatId = chatId
             browseSources = false
@@ -4404,17 +4801,34 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
 
         override fun setQuery(query: String) {
+            if (localMode) {
+                // Its own search text: the Telegram filter box (and its database query) is left alone.
+                localMusic.setQuery(query) { scheduleMeloLibraryRefresh() }
+                return
+            }
             if (songFilter.text?.toString() != query) letterFloor = null
             if (songFilter.text?.toString() != query) songFilter.setText(query)
         }
 
-        override fun loadMore() = loadMoreSongsIfNeeded()
+        override fun loadMore() {
+            if (localMode) {
+                if (localMusic.loadMore()) scheduleMeloLibraryRefresh()
+                return
+            }
+            loadMoreSongsIfNeeded()
+        }
 
-        override fun playAt(index: Int) = playShownSong(index)
+        override fun playAt(index: Int) {
+            if (localMode) playLocal(index) else playShownSong(index)
+        }
 
-        override fun playStatus(): TelegramPlayFeedbackPolicy.PlayStatus? = playFeedback
+        override fun playStatus(): TelegramPlayFeedbackPolicy.PlayStatus? = if (localMode) null else playFeedback
 
         override fun openSongMenu(index: Int, anchor: View) {
+            if (localMode) {
+                openLocalRowMenu(index, anchor)
+                return
+            }
             val group = offlineGroups.getOrNull(index).takeIf { filterOnlyDownloaded }
             if (group != null && group.entries.size > 1) openOfflineGroupMenu(group, anchor)
             else shownSongs.getOrNull(index)?.let { showSongOptionsMenu(it, songIsDownloaded(it), anchor) }
@@ -4423,6 +4837,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         override fun nowPlaying(): MeloScreenHost.NowPlaying? {
             val controller = player ?: return null
             val item = controller.currentMediaItem ?: return null
+            if (currentLocalId() != null) return localNowPlaying(controller, item)
             val key = currentTelegramMessageId()
             val song = key?.let { k ->
                 shownSongs.firstOrNull { it.messageId == k } ?: queueSongOrder.firstOrNull { it.messageId == k }
@@ -4506,6 +4921,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
 
         override fun playAll(shuffle: Boolean) {
+            if (localMode) {
+                if (localMusic.shown().isEmpty()) return
+                if (shuffle) player?.shuffleModeEnabled = true
+                playLocal(0)
+                return
+            }
             if (shownSongs.isEmpty()) return
             // Same path as tapping the first row: the queue is the list on screen.
             if (shuffle) player?.shuffleModeEnabled = true
@@ -4515,12 +4936,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
         override fun openNowPlaying() = showFullPlayer()
 
         override fun syncSubtitle(): String? =
-            syncSubtitleText()
+            if (localMode) "${MeloLocalSourcePolicy.SOURCE_TITLE} · chỉ đọc" else syncSubtitleText()
 
         override fun downloadedCount(): Int? = offlineGroups.size.takeIf { offlineSummary != null }
 
-        override fun sourceSummaries(): List<MeloSourceCardPolicy.Source> =
-            listOf(MeloSourceCardPolicy.Source(MeloSourceCardPolicy.Kind.TELEGRAM, telegramLibraryTotal, downloadedLibraryTotal))
+        override fun sourceSummaries(): List<MeloSourceCardPolicy.Source> = listOfNotNull(
+            MeloSourceCardPolicy.Source(MeloSourceCardPolicy.Kind.TELEGRAM, telegramLibraryTotal, downloadedLibraryTotal),
+            if (localGranted) MeloLocalSourcePolicy.cardSource(true, localMusic.count()) else null
+        )
 
         override fun hideZeroSources(): Boolean = this@TelegramPreviewActivity.hideZeroSources
 
@@ -4534,11 +4957,18 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
         override fun rescan() {
             if (!auth.isReady()) return
+            if (localMode) {
+                // Re-read MediaStore now (also repairs a half-read list); no Telegram scan.
+                localMusic.load(force = true) { scheduleMeloLibraryRefresh() }
+                scheduleMeloLibraryRefresh()
+                return
+            }
             autoRecoveryPolicy.onManualScanRequested()
             scanAllTelegramAudio(browseAfter = false, incremental = true)
         }
 
         override fun queue(): List<MeloScreenHost.QueueItem> {
+            if (currentLocalId() != null) return localQueueItems()
             val account = library.authorizedUser()?.value ?: return emptyList()
             restorePlayingQueueIfAny(account)
             val current = currentTelegramMessageId()
@@ -4556,15 +4986,24 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
 
         override fun playQueueAt(index: Int) {
+            if (currentLocalId() != null) {
+                playLocalQueueAt(index)
+                return
+            }
             queueSongOrder.getOrNull(index)?.let { downloadAndPlay(it) }
         }
 
         override fun openQueueSongMenu(index: Int, anchor: View) {
+            if (currentLocalId() != null) {
+                openLocalQueueMenu(index, anchor)
+                return
+            }
             queueSongOrder.getOrNull(index)?.let { showSongOptionsMenu(it, songIsDownloaded(it), anchor) }
         }
 
         override fun qualityLabel(bitDepth: Int?): String? {
             val groups = player?.currentTracks?.groups ?: return null
+            val localItem = player?.currentMediaItem?.takeIf { currentLocalId() != null }
             val key = currentTelegramMessageId()
             val filename = key?.let { k ->
                 (queueSongOrder.firstOrNull { it.messageId == k } ?: songs.firstOrNull { it.messageId == k })?.filename
@@ -4574,16 +5013,22 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 for (i in 0 until group.length) {
                     if (!group.isTrackSelected(i)) continue
                     val f = group.getTrackFormat(i)
-                    return MeloNowPlayingPolicy.qualityLabel(f.sampleMimeType, filename, f.sampleRate, f.bitrate, bitDepth)
+                    // A local song's format is its MediaStore MIME (the decoder reports WAV as audio/raw); no bit depth is read.
+                    return if (localItem != null) {
+                        MeloNowPlayingPolicy.qualityLabel(localMimeOf(localItem) ?: f.sampleMimeType, null, f.sampleRate, f.bitrate, null)
+                    } else {
+                        MeloNowPlayingPolicy.qualityLabel(f.sampleMimeType, filename, f.sampleRate, f.bitrate, bitDepth)
+                    }
                 }
             }
-            return null
+            return localItem?.let { MeloNowPlayingPolicy.qualityLabel(localMimeOf(it), null, 0, 0, null) }
         }
 
         override fun qualityChips(bitDepth: Int?): List<MeloQualityChipPolicy.Chip> {
             val controller = player ?: return emptyList()
-            val key = currentTelegramMessageId() ?: return emptyList()
-            val song = queueSongOrder.firstOrNull { it.messageId == key } ?: songs.firstOrNull { it.messageId == key }
+            val localItem = controller.currentMediaItem?.takeIf { currentLocalId() != null }
+            val key = if (localItem != null) null else (currentTelegramMessageId() ?: return emptyList())
+            val song = key?.let { k -> queueSongOrder.firstOrNull { it.messageId == k } ?: songs.firstOrNull { it.messageId == k } }
             var mime: String? = null
             var sampleRate = 0
             var bitrate = 0
@@ -4598,8 +5043,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     break@audioTracks
                 }
             }
+            if (localItem != null) {
+                // Format and size from MediaStore, kHz/kbps from the playing track; bit depth is never read for local
+                // songs, so there is no Hi-Res pill for them.
+                return MeloNowPlayingPolicy.qualityChips(
+                    localMimeOf(localItem) ?: mime, null, sampleRate, bitrate, null, localSizeOf(localItem)
+                )
+            }
             // The size Telegram announced; a fully downloaded file is the fallback when it is unknown.
-            val size = song?.expectedSize?.takeIf { it > 0L } ?: ownedCachedFile(key)?.length() ?: -1L
+            val size = song?.expectedSize?.takeIf { it > 0L } ?: key?.let { ownedCachedFile(it) }?.length() ?: -1L
             return MeloNowPlayingPolicy.qualityChips(mime, song?.filename, sampleRate, bitrate, bitDepth, size)
         }
 
@@ -4705,6 +5157,20 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun playAdjacent(delta: Int) {
+        if (currentLocalId() != null) {
+            // Local songs are neighbours inside the player's own list; the end of that list just stops.
+            val controller = player ?: return
+            if (delta > 0) {
+                if (!controller.hasNextMediaItem()) return
+                controller.seekToNextMediaItem()
+            } else if (controller.hasPreviousMediaItem()) {
+                controller.seekToPreviousMediaItem()
+            } else {
+                controller.seekToDefaultPosition()
+            }
+            controller.play()
+            return
+        }
         if (!auth.isReady()) return
         val currentId = currentTelegramMessageId() ?: return
         val index = queueSongOrder.indexOfFirst { it.messageId == currentId }
@@ -4762,6 +5228,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun addToUpcomingQueue(song: Song) {
         if (!auth.isReady()) return
+        if (!MeloLocalSourcePolicy.canQueueNext(currentIsLocal = currentLocalId() != null, songIsLocal = false)) {
+            toast("Đang phát Nhạc trên máy. Bấm bài Telegram để chuyển nguồn.")
+            return
+        }
         val currentId = currentTelegramMessageId()
         val mutable = queueSongOrder.toMutableList()
         val currentIndex = if (currentId != null) mutable.indexOfFirst { it.messageId == currentId } else -1
@@ -5355,6 +5825,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     meloChannelRows = emptyList()
                     meloChannelsRequested = false
                     telegramLibraryTotal = null
+                    resetLocalMusic()
                     clearDownloadedCount()
                     requestedSourceNames.clear()
                     sourcesAdapter.clear()
@@ -5638,6 +6109,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 telegramLibraryTotal = count
                 scheduleMeloLibraryRefresh()
                 startDownloadedCountFlow(userId)
+                refreshLocalCount()
                 if (count > 0) {
                     totalCountForCurrentView = count
                     songs.clear()
@@ -6100,8 +6572,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
         setPlayFeedback(TelegramPlayFeedbackPolicy.Stage.RESOLVING, song.messageId, TelegramPlayFeedbackPolicy.RESOLVING_TEXT)
         android.util.Log.w("MeloVaultPlay", "stage=resolve chat=$effectiveChatId msg=$rawMsgId")
 
+        val epoch = localPlayEpoch
         resolveTelegramMessage(effectiveChatId, rawMsgId) { result ->
             if (!auth.isReady() || isDestroyed) return@resolveTelegramMessage
+            // The owner tapped a local song after this tap: a slower Telegram answer must not replace its queue.
+            if (epoch != localPlayEpoch) return@resolveTelegramMessage
             when (result) {
                 is TelegramAudioResolverPolicy.Result.Error -> {
                     downloadWaiting = null
@@ -6251,6 +6726,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         meloChannelRows = emptyList()
         meloChannelsRequested = false
         telegramLibraryTotal = null
+        resetLocalMusic()
         clearDownloadedCount()
         requestedSourceNames.clear()
         openDocument.isEnabled = false
@@ -6280,6 +6756,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         queueDialog = null
         clearPendingQrLink()
         syncCoordinator?.cancelSync()
+        localMode = false
+        if (localMusicLazy.isInitialized()) localMusic.shutdown()
         dbExecutor.shutdownNow()
         offlineExecutor.shutdownNow()
         pendingOffline.values.forEach { it.cancel(false) }

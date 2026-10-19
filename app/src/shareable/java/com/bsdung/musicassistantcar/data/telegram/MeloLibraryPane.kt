@@ -90,6 +90,7 @@ internal class MeloLibraryPane(
     private var groupKey: String? = null
     private var emptyExpanded = false
     private var pendingTopReset = false
+    private var lastLocal = false
 
     init {
         searchHolder.addView(searchBar)
@@ -182,10 +183,17 @@ internal class MeloLibraryPane(
     fun onLibraryChanged() {
         val snap = host.snapshot()
         snapshot = snap
-        val key = "${snap.showingSources}|${snap.mode}|${snap.sourceTitle}|${snap.query}|${snap.sort}|${snap.letterFloor}"
+        val key = "${snap.showingSources}|${snap.mode}|${snap.sourceTitle}|${snap.query}|${snap.sort}|${snap.letterFloor}|${snap.local}"
         if (key != groupKey) {
             groupKey = key
             resetScroll()
+        }
+        if (snap.local != lastLocal) {
+            // The search box belongs to one source: show that source's own query when switching.
+            lastLocal = snap.local
+            pendingQuery?.let(handler::removeCallbacks)
+            lastQuery = snap.query
+            if (searchField.text.toString() != snap.query) searchField.setText(snap.query)
         }
         searchField.hint = if (snap.showingSources) "Tìm nhóm, kênh hoặc bot…" else MeloComponentPolicy.searchHint(snap.total)
         renderChips(snap)
@@ -287,7 +295,8 @@ internal class MeloLibraryPane(
     }
 
     private fun renderChips(snap: Snapshot) {
-        if (snap.showingSources) {
+        // Telegram's Tất cả / Đã tải / Playlist chips (and its counts) mean nothing on the device list.
+        if (snap.showingSources || snap.local) {
             chipHolder.visibility = View.GONE
             return
         }
@@ -312,7 +321,7 @@ internal class MeloLibraryPane(
     // ---- Source cards -------------------------------------------------------------------------
 
     private fun renderSourceCards(snap: Snapshot) {
-        val selected = MeloSourceCardPolicy.selectedKind(snap.selectedChatId, snap.showingSources)
+        val selected = MeloSourceCardPolicy.selectedKind(snap.selectedChatId, snap.showingSources, snap.local)
         val cards = MeloSourceCardPolicy.cards(host.sourceSummaries(), selected)
         sourceRowVisible = MeloSourceCardPolicy.rowVisible(
             layer, snap.showingSources, snap.mode, context.resources.configuration.screenHeightDp, cards.size
@@ -340,8 +349,12 @@ internal class MeloLibraryPane(
         val strip = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
         sourceCards.forEachIndexed { i, card ->
             strip.addView(c.sourceCard(card, (88 * density).toInt()) {
-                if (!card.selected && card.kind == MeloSourceCardPolicy.Kind.TELEGRAM) host.openSource(null)
-            }, LinearLayout.LayoutParams(cardWidth, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                if (!card.selected) when (card.kind) {
+                    MeloSourceCardPolicy.Kind.TELEGRAM -> host.openSource(null)
+                    MeloSourceCardPolicy.Kind.LOCAL -> host.openLocal()
+                    MeloSourceCardPolicy.Kind.DRIVE -> Unit
+                }
+            }, LinearLayout.LayoutParams(cardWidth, ViewGroup.LayoutParams.MATCH_PARENT).apply {
                 if (i < sourceCards.size - 1) marginEnd = s.gap
             })
         }
@@ -372,9 +385,12 @@ internal class MeloLibraryPane(
             } else {
                 MeloCompactPolicy.rowStatus(row.downloaded, row.downloadingPercent, playing, snap.paused)
             }
-            val quality = MeloComponentPolicy.qualityLabel(MeloComponentPolicy.formatOf(null, row.filename), null, null, null)
+            val quality = MeloComponentPolicy.qualityLabel(MeloComponentPolicy.formatOf(row.mimeType, row.filename), null, null, null)
             return c.songRow(
-                SongRowModel(row.title, row.sourceTitle, row.durationSeconds, status, quality, row.downloadingPercent, row.art)
+                SongRowModel(
+                    row.title, row.sourceTitle, row.durationSeconds, status, quality, row.downloadingPercent, row.art,
+                    local = snap.local || row.local
+                )
             ).also { unclickable(it, position) }
         }
     }

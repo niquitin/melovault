@@ -21,13 +21,19 @@ internal object MeloComponentPolicy {
         val highlightRow: Boolean
     )
 
-    fun presentStatus(status: Status, qualityLabel: String? = null, progressPercent: Int? = null): StatusPresentation =
+    /** [local] = a song of "Nhạc trên máy": it is on the device, not "đã tải" from Telegram. */
+    fun presentStatus(
+        status: Status,
+        qualityLabel: String? = null,
+        progressPercent: Int? = null,
+        local: Boolean = false
+    ): StatusPresentation =
         when (status) {
             Status.PLAYING -> StatusPresentation(status, "Đang phát", ColorRole.ACCENT, highlightRow = true)
             Status.PAUSED -> StatusPresentation(status, "Tạm dừng", ColorRole.ACCENT, highlightRow = true)
             Status.DOWNLOADED -> StatusPresentation(
                 status,
-                listOfNotNull("Đã tải", qualityLabel?.takeIf { it.isNotBlank() }).joinToString(" · "),
+                listOfNotNull(if (local) "Trên máy" else "Đã tải", qualityLabel?.takeIf { it.isNotBlank() }).joinToString(" · "),
                 ColorRole.ACCENT, highlightRow = false
             )
             Status.DOWNLOADING -> StatusPresentation(

@@ -458,7 +458,8 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
             sourceTitle = item.sourceTitle,
             durationSeconds = item.durationSeconds,
             status = status,
-            progressPercent = item.downloadingPercent
+            progressPercent = item.downloadingPercent,
+            local = item.local
         ), onMore = { row?.let { host.openQueueSongMenu(index, it) } })
         return row
     }

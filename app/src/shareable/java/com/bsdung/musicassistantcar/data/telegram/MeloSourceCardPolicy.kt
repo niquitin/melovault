@@ -94,7 +94,13 @@ internal object MeloSourceCardPolicy {
         return minOf(minCardPx, paneWidthPx)
     }
 
-    /** Telegram is selected while no specific channel is open; null when a channel is open. */
-    fun selectedKind(selectedChatId: Long?, showingSources: Boolean): Kind? =
-        if (!showingSources && selectedChatId == null) Kind.TELEGRAM else null
+    /**
+     * "Nhạc trên máy" is selected while its list is open; otherwise Telegram is selected while no
+     * specific channel is open, and nothing when a channel is open.
+     */
+    fun selectedKind(selectedChatId: Long?, showingSources: Boolean, localOpen: Boolean = false): Kind? = when {
+        localOpen -> Kind.LOCAL
+        !showingSources && selectedChatId == null -> Kind.TELEGRAM
+        else -> null
+    }
 }

@@ -58,12 +58,14 @@ internal class MeloCompactScreen(
     private var snapshot: Snapshot? = null
     private var pendingQuery: Runnable? = null
     private var lastQuery = ""
+    private var lastLocal = false
 
     private val backCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
             when {
                 nowPage != null -> closeNowPlaying()
                 searchBar.visibility == View.VISIBLE -> hideSearch()
+                snapshot?.local == true -> host.closeLocal()
                 snapshot?.showingSources == false && snapshot?.sourceTitle != null -> host.showSources()
                 else -> { isEnabled = false; backDispatcher.onBackPressed() }
             }
@@ -149,8 +151,16 @@ internal class MeloCompactScreen(
         } else {
             MeloCompactPolicy.headerTitle(snap.mode, snap.sourceTitle, snap.total)
         }
+        if (snap.local != lastLocal) {
+            // The search box belongs to one source: show that source's own query when switching.
+            lastLocal = snap.local
+            pendingQuery?.let(handler::removeCallbacks)
+            lastQuery = snap.query
+            (searchBar.getChildAt(1) as? TextView)?.let { if (it.text.toString() != snap.query) it.text = snap.query }
+        }
         val downloaded = MeloCompactPolicy.downloadedLine(
-            snap.mode, snap.sourceTitle, snap.showingSources, host.sourceSummaries().firstOrNull()?.downloaded
+            snap.mode, snap.sourceTitle, snap.showingSources,
+            host.sourceSummaries().firstOrNull { it.kind == MeloSourceCardPolicy.Kind.TELEGRAM }?.downloaded
         )
         downloadedLine.text = downloaded.orEmpty()
         downloadedLine.visibility = if (downloaded == null) View.GONE else View.VISIBLE
@@ -192,7 +202,7 @@ internal class MeloCompactScreen(
     private fun songRow(snap: Snapshot, row: Row, position: Int): View {
         val playing = row.songKey == snap.playingKey
         val status = MeloCompactPolicy.rowStatus(row.downloaded, row.downloadingPercent, playing, snap.paused)
-        val quality = MeloComponentPolicy.qualityLabel(MeloComponentPolicy.formatOf(null, row.filename), null, null, null)
+        val quality = MeloComponentPolicy.qualityLabel(MeloComponentPolicy.formatOf(row.mimeType, row.filename), null, null, null)
         // Rows are drawn by the ListView itself: the row view must not swallow clicks.
         return c.songRow(SongRowModel(
             title = row.title,
@@ -201,7 +211,8 @@ internal class MeloCompactScreen(
             status = status,
             qualityLabel = quality,
             progressPercent = row.downloadingPercent,
-            art = row.art
+            art = row.art,
+            local = snap.local || row.local
         )).also { rowGap(it); unclickable(it, position) }
     }
 
@@ -285,6 +296,7 @@ internal class MeloCompactScreen(
             menu.add(0, 2, 2, "☷ Telegram")
             menu.add(0, 3, 3, "☆ Playlist")
             menu.add(0, 6, 4, "✓ Đã tải")
+            menu.add(0, 7, 4, "♪ Nhạc trên máy")
             menu.add(0, 4, 5, "▶ Đang phát")
             menu.add(0, 5, 6, "⚙ Cài đặt giao diện")
             setOnMenuItemClickListener {
@@ -295,6 +307,7 @@ internal class MeloCompactScreen(
                     4 -> openNowPlaying()
                     5 -> host.openUiLab()
                     6 -> host.setMode(Mode.DOWNLOADED)
+                    7 -> host.openLocal()
                 }
                 true
             }
@@ -504,7 +517,7 @@ internal class MeloCompactScreen(
             time.text = MeloComponentPolicy.progressText((now.positionMs / 1000).toInt(), (now.durationMs / 1000).toInt())
             play.text = if (now.playing) "❚❚" else "▶"
             play.contentDescription = if (now.playing) "Dừng" else "Phát"
-            source.text = now.sourceTitle?.let { "Kênh: $it" } ?: ""
+            source.text = now.sourceTitle?.let { if (now.local) "Nghệ sĩ: $it" else "Kênh: $it" } ?: ""
             probeBitDepth(now)
             val chips = host.qualityChips(fileBitDepth)
             if (qualityChips.setChips(chips)) {
