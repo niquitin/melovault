@@ -26,3 +26,7 @@ KHÔNG cung cấp prompt phiên mới hoặc tự đề xuất rồi làm việc
 
 ---
 Khi ChatGPT báo REWORK, mở một hội thoại Sonnet MỚI, vào đúng dot/<TASK_ID>, đọc docs/plans/<TASK_ID>-nghiem-thu.md, sửa đúng những lỗi nêu trong đó và cập nhật báo cáo cũ có dấu vết từng vòng; không bắt đầu plan mới.
+
+### QUY ĐỊNH BẮT BUỘC VỀ MÀN HÌNH (19/10/2026)
+
+Đọc `docs/workflow/SCREEN_LIFECYCLE_QA.md` trước mọi ADB QA. **Để màn Shanling trên Ni và Sony trên Tiny tắt khi không chụp/thao tác**. Chỉ wake trước màn hình cần test bằng `adb -s SERIAL shell input keyevent 224` sau khi kiểm trạng thái. Sau chuỗi thao tác, trong khối `finally`, gửi `adb -s SERIAL shell input keyevent 223`; kiểm `dumpsys display` xác nhận Display State=OFF. Không dùng KEYCODE_POWER 26 không kiểm trạng thái, không tắt màn khi người/agent khác đang dùng, không giữ sáng lúc build/test Gradle. Báo cáo `SHANLING_SCREEN_END`, `SONY_SCREEN_END` và blocker nếu có; **không thay timeout/brightness/AOD hoặc xóa dữ liệu**.

@@ -45,3 +45,9 @@ Không giả định hội thoại được chuyển giữa tài khoản. Agent 
 - Trạng thái Media3/progress và ảnh không tự chứng minh âm thanh thực sự phát ra; nếu không có ghi âm/kiểm tra độc lập thì ghi CHƯA XÁC NHẬN ÂM THANH THỰC. Không tự bật airplane/tắt Wi-Fi, sửa account, xóa file hoặc session trái plan. Những bước không thể làm an toàn phải giữ CHƯA KIỂM CHỨNG.
 - Owner duyệt từ xa là phê duyệt nghiệm thu cho phần đủ bằng chứng; ChatGPT mới quyết PASS/REWORK/BLOCKED, ghi hạn chế chưa kiểm chứng và không merge trước owner duyệt. Không yêu cầu bác sĩ có mặt ở địa điểm thiết bị.
 - Kế hoạch offline-one-tap-play commit 29c54f9 ĐƯỢC CHỦ DỰ ÁN DUYỆT NGUYÊN VĂN, không Opus REWORK. Ý kiến phản biện trước đó giữ làm checklist QA, không còn là blocker lập kế hoạch.
+
+## H. Quy tắc bắt buộc bảo vệ màn hình thiết bị QA (19/10/2026)
+
+Áp dụng cho mọi phiên Opus/Sonnet và cả ChatGPT kiểm toán. **M3 Ultra (Ni) và Sony (Tiny) mặc định để màn hình tắt; chỉ bật lúc cần tap/chụp/quay UI**, xong bước hoặc kết thúc QA thì **tắt ngay và xác minh Display State=OFF**. Không tắt lúc đang có người/agent khác thao tác, không tắt nguồn hoặc sửa data. Không cần màn ON để build, test JVM, đọc log hoặc chờ chủ dự án nghiệm thu từ xa.
+
+Chính sách và lệnh an toàn ở `docs/workflow/SCREEN_LIFECYCLE_QA.md`: KEYCODE_WAKEUP=224 bật khi cần, KEYCODE_SLEEP=223 tắt theo hướng idempotent (tránh KEYCODE_POWER=26 toggle), `dumpsys power` + `dumpsys display` kiểm tra; `Dozing` chỉ được coi tắt khi display thực sự OFF. Sonnet bảo đảm cleanup trong `finally` sau cả PASS/FAIL/BLOCKED và ghi trạng thái màn hình cuối từng máy. Nếu cần người dùng mở khóa hợp lệ hoặc screen cannot turn OFF, báo rõ, không tự phá security.

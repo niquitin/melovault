@@ -61,3 +61,10 @@ Mọi phiên Claude nói tiếng Việt thường, gồm 3 phần ngắn: **Đã
 - Kịch bản không được phép tự động (ví dụ bật chế độ máy bay, xóa file giả lập lỗi, thay tài khoản) phải ghi CHƯA KIỂM CHỨNG/BLOCKED và xin phép riêng nếu thật sự cần, không phá luật an toàn để có ảnh.
 - PASS cuối cùng yêu cầu ChatGPT kiểm toán độc lập và chủ dự án CHẤP THUẬN chứng cứ từ xa trong phạm vi đã test; các giới hạn chưa xác minh phải nêu rõ, có thể tách gate riêng khi quan trọng. Không merge trước khi có phê duyệt.
 - Kế hoạch offline-one-tap-play commit 29c54f9 được owner duyệt GIỮ NGUYÊN ngày 19/10; không bắt Opus sửa lại. Rủi ro được nêu trong biên bản audit cũ vẫn là điểm cần QA, không được tự sửa plan.
+
+## 7. Chính sách màn hình QA — hiệu lực 19/10/2026
+
+**M3 Ultra trên Ni và Sony trên Tiny phải tắt màn hình khi không dùng để thao tác/chụp QA.** CHỈ bật sáng trước bước cần màn ON; sau khi test xong hoặc gặp lỗi phải tắt màn và xác minh qua `dumpsys display` có `Display State=OFF`. Khi chạy Gradle, đọc báo cáo, log hoặc chờ chủ dự án duyệt thì màn hình phải OFF. Không tắt khi agent/người dùng khác đang chạm hoặc quay video. Không tắt nguồn, không sửa khóa màn hình/bảo mật, không đổi timeout/AOD/brightness hay xóa dữ liệu.
+- Bật bằng `adb -s SERIAL shell input keyevent 224` (KEYCODE_WAKEUP) **sau khi kiểm trạng thái**; tắt bằng `adb -s SERIAL shell input keyevent 223` (KEYCODE_SLEEP, không phải nút toggle). Kiểm `dumpsys power` và `dumpsys display` trước/sau. Màn Sony có thể `mWakefulness=Dozing` nhưng `Display State=OFF`, như vậy màn đã tắt.
+- Phải thực hiện thao tác tắt màn trong bước cleanup `finally`, kể cả test FAIL/BLOCKED, và ghi `SHANLING_SCREEN_END` / `SONY_SCREEN_END` trong báo cáo. Không để màn sáng trong suốt 5–10 phút build/test.
+- Đọc chi tiết `docs/workflow/SCREEN_LIFECYCLE_QA.md`. Chỉ ChatGPT được chỉnh quy trình này. Không tự đánh thức Shanling/Sony khi không cần QA.

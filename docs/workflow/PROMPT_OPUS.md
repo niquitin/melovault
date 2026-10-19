@@ -25,3 +25,7 @@ DỪNG. Không viết prompt Sonnet, ChatGPT sẽ cung cấp sau khi chủ dự 
 
 ---
 Khi phải sửa chính kế hoạch theo kết quả ChatGPT REWORK, mở phiên Opus MỚI trên cùng nhánh, không tạo nhánh/plan trùng.
+
+### QUY ĐỊNH MÀN HÌNH KHI LẬP KẾ HOẠCH (19/10/2026)
+
+Khi lập 3–6 bước QA từ xa, xác định bước nào cần màn ON và bước nào có thể thực hiện màn OFF (test JVM, log/Media3). Yêu cầu Sonnet dùng vòng đời `wake → thao tác/ảnh → sleep + verify Display OFF` theo `docs/workflow/SCREEN_LIFECYCLE_QA.md`. Không đòi giữ màn M3/Sony sáng lúc build hay chờ bác sĩ duyệt. Không chỉnh độ sáng/thời gian tắt/AOD của Android.
