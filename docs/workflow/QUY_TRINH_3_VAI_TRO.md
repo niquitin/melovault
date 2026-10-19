@@ -57,3 +57,11 @@ Chính sách và lệnh an toàn ở `docs/workflow/SCREEN_LIFECYCLE_QA.md`: KEY
 - ChatGPT đưa bộ screenshot/video tiêu biểu lên thư mục Google Drive Ni N riêng tư sau khi QA; kiểm Drive owner-only, URL thực từ connector, không mở share public. Không upload có OTP/credentials; với Telegram metadata cá nhân chỉ lưu riêng tư.
 - ChatGPT tạo docs/plans/<TASK_ID>-hinh-nghiem-thu.md liệt kê từng thao tác và URL bấm trực tiếp, cùng folder QA. Claude Code có thể mở Markdown và Ctrl+Click; trong ChatGPT cung cấp link Drive tương ứng. Không cho link giả từ tên file Windows.
 - Sonnet chịu trách nhiệm thu ảnh/video, không tự thay permission Drive hoặc công bố file. Nếu chưa có ảnh hay chưa hoàn tất đồng bộ, phải nói rõ và không đánh dấu giao nộp xong.
+
+## I. Giao APK thử nghiệm mới từ xa (duyệt 19/10/2026)
+
+- Mỗi APK test mới, phân biệt bằng TASK_ID + Git commit + SHA-256 file, đều phải được **bàn giao cho owner bằng link bấm trực tiếp** khi vượt qua cổng kiểm tra APK hợp lệ. Không đồng nhất APK mới với việc vừa chạy lại Gradle hoặc dùng lại file cũ.
+- Sonnet tạo APK và viết báo cáo gồm: đường dẫn Windows, bytes, SHA256, cert SHA256, package, vc/vname, đúng source commit, Debug/Release, Telegram config có/không, tests, trạng thái ADB cài Shanling/Sony và các lỗi QA. Sonnet **không tự đổi Drive permissions, public hoặc upload vào nơi không được chỉ định**, không xóa APK cũ.
+- ChatGPT tự xác minh file APK/bằng chứng, chỉ đưa bản có package/phiên bản/chữ ký/cấu hình phù hợp vào **Drive Ni N owner-only**, lưu từng TASK_ID/ngày/commit độc lập, xác minh metadata share và gửi **link APK** (không chỉ folder link) cùng SHA-256 trong chat. Dùng `docs/plans/<TASK_ID>-apk-test.md` làm index bấm mở từ Claude Code. Nếu upload chưa xác minh được, phải báo BLOCKED, không cung cấp link đoán.
+- APK có thể được đưa lên Drive **trước khi owner PASS tính năng** nếu đủ điều kiện an toàn để QA: đặt nhãn **QA CANDIDATE — CHƯA NGHIỆM THU**, nêu test còn thiếu; không gọi Stable hay production. PASS/merge vẫn cần kiểm toán độc lập và owner duyệt như quy trình cũ.
+- Không đưa secrets, local.properties, signing key, TDLib session, cache lên Drive. Không sửa file code để đạt việc upload, không tự tăng vc hoặc ép hạ version, không thay đổi chính sách screen lifecycle.

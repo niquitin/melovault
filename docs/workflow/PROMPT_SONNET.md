@@ -30,3 +30,7 @@ Khi ChatGPT báo REWORK, mở một hội thoại Sonnet MỚI, vào đúng dot/
 ### QUY ĐỊNH BẮT BUỘC VỀ MÀN HÌNH (19/10/2026)
 
 Đọc `docs/workflow/SCREEN_LIFECYCLE_QA.md` trước mọi ADB QA. **Để màn Shanling trên Ni và Sony trên Tiny tắt khi không chụp/thao tác**. Chỉ wake trước màn hình cần test bằng `adb -s SERIAL shell input keyevent 224` sau khi kiểm trạng thái. Sau chuỗi thao tác, trong khối `finally`, gửi `adb -s SERIAL shell input keyevent 223`; kiểm `dumpsys display` xác nhận Display State=OFF. Không dùng KEYCODE_POWER 26 không kiểm trạng thái, không tắt màn khi người/agent khác đang dùng, không giữ sáng lúc build/test Gradle. Báo cáo `SHANLING_SCREEN_END`, `SONY_SCREEN_END` và blocker nếu có; **không thay timeout/brightness/AOD hoặc xóa dữ liệu**.
+
+### BÀN GIAO APK QA BẮT BUỘC (19/10/2026)
+
+Khi kết thúc mỗi TASK_ID có một APK test **mới** thực sự, bổ sung vào `docs/plans/<TASK_ID>-bao-cao.md` mục **"APK QA cần ChatGPT bàn giao"**: Git commit, tên/đường dẫn APK từ Ni hoặc Tiny (có xác minh tồn tại), package, versionCode/versionName, SHA-256, bytes, cert SHA256, loại build, trạng thái Telegram config có hợp lệ hay không (boolean, không in API ID/hash), Gradle tests, kết quả ADB/thiết bị, điểm chưa QA. Không xóa/ghi đè APK cũ và không tự công bố APK/đổi Drive permissions. DỪNG chờ ChatGPT kiểm toán và upload owner-only. ChatGPT sẽ tạo `docs/plans/<TASK_ID>-apk-test.md` và gửi link tải trực tiếp tới chủ dự án. Nếu chưa build được APK hợp lệ, ghi blocker, tuyệt đối không giới thiệu artifact lỗi như bản test dùng được.

@@ -29,3 +29,7 @@ Khi phải sửa chính kế hoạch theo kết quả ChatGPT REWORK, mở phiê
 ### QUY ĐỊNH MÀN HÌNH KHI LẬP KẾ HOẠCH (19/10/2026)
 
 Khi lập 3–6 bước QA từ xa, xác định bước nào cần màn ON và bước nào có thể thực hiện màn OFF (test JVM, log/Media3). Yêu cầu Sonnet dùng vòng đời `wake → thao tác/ảnh → sleep + verify Display OFF` theo `docs/workflow/SCREEN_LIFECYCLE_QA.md`. Không đòi giữ màn M3/Sony sáng lúc build hay chờ bác sĩ duyệt. Không chỉnh độ sáng/thời gian tắt/AOD của Android.
+
+### YÊU CẦU KẾ HOẠCH APK TEST (19/10/2026)
+
+Nếu nhiệm vụ sẽ tạo APK thử nghiệm, kế hoạch phải có bước **bàn giao APK QA**: Sonnet ghi package, vc/vname, signer, SHA256, bytes, source commit, vị trí artifact và tình trạng config/test; ChatGPT kiểm toán độc lập, upload Google Drive Ni N riêng tư, gửi link trực tiếp và tạo `docs/plans/<TASK_ID>-apk-test.md`. Link QA có thể gửi trước khi owner nghiệm thu nhưng phải ghi rõ **CHƯA PASS**. Không public, không đổi signer/version trái yêu cầu, không đưa secrets lên Drive.
