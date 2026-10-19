@@ -43,3 +43,16 @@ KET LUAN: REWORK PLAN - CHUA CHO SONNET VIET CODE.
 ### Rủi ro còn phải xem xét khi nghiệm thu
 - Theo plan đã duyệt, `defaultEntry` có fallback sang ứng viên không còn đọc được rồi cho `downloadAndPlay` quyết định; nếu offline mất nhưng có mạng, có thể stream lại. Không gọi đó là "đã chứng minh offline hoàn toàn" nếu chưa test tình huống; không được phá dữ liệu/bật máy bay trái quyền để tạo case.
 - Media3 chuyển sang PLAYING/time tăng không chứng minh loa/tai nghe phát âm thực; không tuyên bố đã nghe âm thực khi chưa có bằng chứng.
+
+## Kiểm toán ChatGPT sau Sonnet QA từ xa — 19/10/2026, 09:55
+
+TRẠNG THÁI: ĐẠT KỸ THUẬT CÓ BẰNG CHỨNG; BLOCKED — CHỜ CHỦ DỰ ÁN DUYỆT HÌNH ẢNH TỪ XA. KHÔNG MERGE/RELEASE.
+
+- Branch dot/offline-one-tap-play, HEAD 2ddd01e409b26e03244fd879aaf56dcaf8946c84, tree sạch. Code tính năng fdf64c5; các commit tiếp theo chỉ docs. Báo cáo Sonnet có thật tại docs/plans/offline-one-tap-play-bao-cao.md.
+- ChatGPT đã tự chạy lại trên Ni từ 09:17 đến 09:23: Gradle Debug/Release unit tests và assemble Debug/Release, --rerun-tasks, BUILD SUCCESSFUL. Mỗi variant 1263 defined, 1242 passed, 21 skipped, 0 failed/error. Code production sau đó không đổi.
+- Sonnet test lại trên Tiny QA clone, cùng 1242 passed/21 skipped mỗi variant, build Debug APK có cấu hình Telegram private tại Tiny. SHA256 APK 9BE6753B70C0B78A8ED2D4644F64F56C5670A91E0403543BD56EAA08CD3C44C1, vc109, package app.melovault.player, signer trùng. Sonnet báo adb install -r Success trên Shanling, pull base APK và xác minh SHA256. ChatGPT xác nhận Shanling ADB serial 30313860180939 và Sony ADB serial QV725WEQ54.
+- ChatGPT trực tiếp mở ảnh PNG thực trên Ni: 05_after_tap_row1_5s_shanling_093049.png (chạm một lần, hàng sáng và Pause); 06_menu_row1_overflow_shanling_093130.png (menu Chọn bản khác); 07_version_list_row1_shanling_093140.png (hai bản/nguồn); 08_after_pick_other_copy_shanling_093211.png (dialog đóng, phát nguồn khác); 12_next_2_shanling_093336.png (Next sang bài khác). Sonnet báo Media3 state=PLAYING, position tăng, queue theo một nhóm/mục, không phát hiện FATAL/ANR.
+- Chưa xem trực tiếp nội dung MP4, Sonnet đã báo file screenrecord hiện diện và chưa tự xem được. Sonnet có các ảnh tiếp theo cho lặp lại, Next 1/3, hồi quy thư viện, nhóm 1 bản và 3 bản; đều lưu private trong docs/plans/artifacts/offline-one-tap-play/.
+- ÂM THANH THỰC chưa xác nhận (Media3 PLAYING không đủ chứng minh loa phát âm thanh). Chưa test airplane/mất mạng do plan cấm tự tắt mạng, chưa test xóa file thật do cấm đụng dữ liệu, Sony chưa thử tính năng này.
+- QUY TẮC MÀN HÌNH đã có từ commit 93c50c1 tại docs/workflow/SCREEN_LIFECYCLE_QA.md, CLAUDE.md và prompt: chỉ bật màn Shanling/Sony khi thao tác chụp/QA, sau đó KEYCODE_SLEEP=223 trong finally, verify Display OFF. Sonnet xác nhận cuối phiên Shanling Asleep+OFF, Sony Dozing+OFF; ChatGPT xác nhận độc lập màn Shanling Asleep/OFF và Sony Dozing/OFF. Không sửa brightness, timeout hoặc AOD.
+- Chỉ khi chủ dự án xem hình và xác nhận đạt thì ChatGPT mới xem xét PASS/merge trong phạm vi đã QA, ghi rõ giới hạn âm thanh thực và offline không mạng. KHÔNG tự gộp hoặc phát hành.
