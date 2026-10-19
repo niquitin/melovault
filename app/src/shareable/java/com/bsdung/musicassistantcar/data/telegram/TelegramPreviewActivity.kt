@@ -613,7 +613,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // Playback queue follows only the selected source (and visible title
         // filter), never silently jumps into a different Telegram channel.
         queueSongOrder = TelegramQueueRetentionPolicy.forSelected(
-            if (filterOnlyDownloaded) offlineGroups.flatMap { it.entries }.map { offlineSong(it.song) } else shownSongs,
+            if (filterOnlyDownloaded) offlineQueueSongs(song.messageId) else shownSongs,
             queueSongOrder, song.messageId
         ) { it.messageId }.ifEmpty { listOf(song) }
         library.authorizedUser()?.let { owner ->
@@ -667,7 +667,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // The Media3 source waits only for missing bytes; do not wait for the
         // full mix or silently pretend the file is fully cached.
         queueSongOrder = TelegramQueueRetentionPolicy.forSelected(
-            shownSongs, queueSongOrder, song.messageId
+            if (filterOnlyDownloaded) offlineQueueSongs(song.messageId) else shownSongs,
+            queueSongOrder, song.messageId
         ) { it.messageId }.ifEmpty { listOf(song) }
         library.authorizedUser()?.let { owner ->
             ShareablePlaybackService.configureTelegramQueue(
@@ -2547,7 +2548,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 } else {
                     "Telegram · Chưa tải"
                 }
-                if (group != null && group.entries.size > 1) holder.subtitleView.text = group.label + " · Chạm để mở"
+                if (group != null && group.entries.size > 1) holder.subtitleView.text = group.label + " · ⋮ để chọn bản"
                 holder.subtitleView.textSize = if (isShortLayout) 10.5f else 12f
                 holder.subtitleView.setTextColor(subtle)
                 holder.subtitleView.setPadding(0, dp(2), 0, 0)
@@ -2590,7 +2591,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
                     holder.moreButton.visibility = View.VISIBLE
                     holder.moreButton.setOnClickListener { v ->
-                        if (group != null && group.entries.size > 1) showOfflineVersions(group, v)
+                        if (group != null && group.entries.size > 1) openOfflineGroupMenu(group, v)
                         else showSongOptionsMenu(song, isDownloaded, v)
                     }
                 } else {
@@ -2692,9 +2693,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     refreshSongRows()
                 }
             } else {
-                val group = offlineGroups.getOrNull(position).takeIf { filterOnlyDownloaded }
-                if (group != null && group.entries.size > 1) showOfflineVersions(group)
-                else shownSongs.getOrNull(position)?.let { downloadAndPlay(it) }
+                playShownSong(position)
             }
         }
         libraryContainer.addView(tracks, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -3481,7 +3480,44 @@ class TelegramPreviewActivity : AppCompatActivity() {
         group.entries.firstOrNull { it.song.songKey == currentTelegramMessageId() }?.song ?: group.entries.first().song
     )
 
-    private fun showOfflineVersions(group: TelegramOfflineLibrary.Group, anchor: View? = null) {
+    private fun isReadableOfflineCopy(entry: TelegramOfflineLibrary.Entry): Boolean = runCatching {
+        val file = File(entry.path)
+        file.isFile && file.canRead() && file.length() > 0L &&
+            TelegramAccountStoragePolicy.isOwnedFile(filesRoot, file)
+    }.getOrDefault(false)
+
+    private fun defaultOfflineEntry(group: TelegramOfflineLibrary.Group): TelegramOfflineLibrary.Entry? {
+        val account = library.authorizedUser()?.value ?: return null
+        return TelegramOfflinePlayPolicy.defaultEntry(group, account, currentTelegramMessageId(), ::isReadableOfflineCopy)
+    }
+
+    private fun playOfflineEntry(group: TelegramOfflineLibrary.Group, entry: TelegramOfflineLibrary.Entry) {
+        val account = library.authorizedUser()?.value ?: return
+        if (!auth.isReady() || entry.song.accountId != account) return
+        val song = offlineSong(entry.song)
+        // Keep the row on the copy now playing; the group (and the row count) is unchanged.
+        val index = offlineGroups.indexOfFirst { it === group }
+        if (index in shownSongs.indices && shownSongs[index].messageId != song.messageId) {
+            shownSongs = shownSongs.toMutableList().also { it[index] = song }
+            if (::adapter.isInitialized) adapter.notifyDataSetChanged()
+        }
+        downloadAndPlay(song)
+    }
+
+    private fun playOfflineGroup(group: TelegramOfflineLibrary.Group) {
+        defaultOfflineEntry(group)?.let { playOfflineEntry(group, it) }
+    }
+
+    private fun openOfflineGroupMenu(group: TelegramOfflineLibrary.Group, anchor: View) {
+        val entry = defaultOfflineEntry(group) ?: return
+        showSongOptionsMenu(offlineSong(entry.song), true, anchor, versions = group)
+    }
+
+    /** One entry per Downloaded group, so Next never replays the same song from another source. */
+    private fun offlineQueueSongs(selectedKey: Long): List<Song> =
+        TelegramOfflinePlayPolicy.queueEntries(offlineGroups, selectedKey).map { offlineSong(it.song) }
+
+    private fun showOfflineVersions(group: TelegramOfflineLibrary.Group) {
         val account = library.authorizedUser()?.value ?: return
         val labels = group.entries.map { entry ->
             val s = entry.song
@@ -3494,8 +3530,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val selected = group.entries[index].song
             val entry = group.selected(account, selected.chatId, selected.messageId) ?: return@setItems
             if (library.authorizedUser()?.value != account || !auth.isReady()) return@setItems
-            val song = offlineSong(entry.song)
-            if (anchor != null) showSongOptionsMenu(song, true, tracks) else downloadAndPlay(song)
+            playOfflineEntry(group, entry)
         }.setNegativeButton("Đóng", null).show()
     }
 
@@ -4225,10 +4260,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
     }
 
-    /** Same row action as the legacy list: grouped offline copies open the chooser. */
+    /** Same row action as the legacy list: a grouped offline row plays its default copy at once. */
     private fun playShownSong(index: Int) {
         val group = offlineGroups.getOrNull(index).takeIf { filterOnlyDownloaded }
-        if (group != null && group.entries.size > 1) showOfflineVersions(group)
+        if (group != null && group.entries.size > 1) playOfflineGroup(group)
         else shownSongs.getOrNull(index)?.let { downloadAndPlay(it) }
     }
 
@@ -4381,7 +4416,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
         override fun openSongMenu(index: Int, anchor: View) {
             val group = offlineGroups.getOrNull(index).takeIf { filterOnlyDownloaded }
-            if (group != null && group.entries.size > 1) showOfflineVersions(group, anchor)
+            if (group != null && group.entries.size > 1) openOfflineGroupMenu(group, anchor)
             else shownSongs.getOrNull(index)?.let { showSongOptionsMenu(it, songIsDownloaded(it), anchor) }
         }
 
@@ -4690,11 +4725,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
         downloadAndPlay(target)
     }
 
-    private fun showSongOptionsMenu(song: Song, isDownloaded: Boolean, anchor: View) {
+    private fun showSongOptionsMenu(
+        song: Song, isDownloaded: Boolean, anchor: View,
+        versions: TelegramOfflineLibrary.Group? = null
+    ) {
         val themed = ContextThemeWrapper(this, R.style.Theme_MusicAssistantCar_Dialog)
         val popup = PopupMenu(themed, anchor)
         val isFav = song.messageId in favoriteIds
+        val manyVersions = versions?.takeIf { it.entries.size > 1 }
         popup.menu.add(0, 1, 1, "▶ Phát bài này")
+        if (manyVersions != null) popup.menu.add(0, 6, 1, "☰ Chọn bản khác (${manyVersions.entries.size} bản)")
         popup.menu.add(0, 2, 2, "⏭ Phát tiếp theo")
         popup.menu.add(0, 3, 3, if (isFav) "★ Xóa khỏi Playlist" else "☆ Thêm vào Playlist")
         if (!isDownloaded) {
@@ -4704,11 +4744,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
-                1 -> downloadAndPlay(song)
+                1 -> {
+                    val entry = manyVersions?.entries?.firstOrNull { it.song.songKey == song.messageId }
+                    if (manyVersions != null && entry != null) playOfflineEntry(manyVersions, entry)
+                    else downloadAndPlay(song)
+                }
                 2 -> addToUpcomingQueue(song)
                 3 -> toggleFavoriteSong(song)
                 4 -> downloadAndPlay(song)
                 5 -> showSongDetailsDialog(song, isDownloaded)
+                6 -> manyVersions?.let { showOfflineVersions(it) }
             }
             true
         }
