@@ -101,6 +101,17 @@ internal object MeloBottomBarPolicy {
         return ((windowWidthDp - sideMarginsDp - transport) / (perSide * 2)).coerceAtLeast(0)
     }
 
+    /**
+     * Width one tab label ("Thư viện" at 11sp) needs at font scale 1; it grows with the system
+     * font scale, so the head unit's ×1.25 needs 53dp (its 1/3 window gives ~50dp) while S25 and
+     * Sony at ×1.0 keep their labels in their 43–49dp cells (as checked in Beta106).
+     */
+    const val TAB_LABEL_BASE_DP = 42
+
+    /** A tab cell too narrow for its label shows only the icon (the label stays in the content description). */
+    fun tabIconOnly(tabWidthDp: Int, fontScale: Float): Boolean =
+        tabWidthDp < Math.round(TAB_LABEL_BASE_DP * fontScale.coerceAtLeast(1f))
+
     /** Rows that fit between the header and the bar: used to check the Shanling budget (8 rows). */
     fun visibleRows(windowHeightDp: Int, headerDp: Int, barDp: Int, rowDp: Int, dividerDp: Int, reservedDp: Int = 0): Int {
         val free = windowHeightDp - headerDp - barDp - reservedDp

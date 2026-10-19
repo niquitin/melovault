@@ -27,20 +27,16 @@ internal object MeloCompactPolicy {
     enum class Mode { ALL, DOWNLOADED, PLAYLIST }
 
     /**
-     * AUTO looks at the whole display, not the window, so a large tablet in split
-     * screen keeps the old layout. Never before login: the login screen stays the old one.
+     * AUTO looks at the physical PANEL ([panelCompact], see [MeloScreenPolicy.panelCompact]), not
+     * the window, so a big head unit or tablet in split screen never turns into Gọn and rotating
+     * a small player does not flip layouts. Never before login: the login screen stays the old one.
      */
-    fun shouldUseCompact(setting: CompactSetting, displayWidthDp: Int, displayHeightDp: Int, authorized: Boolean): Boolean {
+    fun shouldUseCompact(setting: CompactSetting, panelCompact: Boolean, authorized: Boolean): Boolean {
         if (!authorized) return false
         return when (setting) {
             CompactSetting.OFF -> false
             CompactSetting.ON, CompactSetting.EMULATE_SHANLING -> true
-            CompactSetting.AUTO -> {
-                // Measure the portrait shape so rotating a small player does not flip layouts.
-                val shortSide = minOf(displayWidthDp, displayHeightDp)
-                val longSide = maxOf(displayWidthDp, displayHeightDp)
-                MeloScreenPolicy.chooseLayout(shortSide, longSide, carMode = false) == MeloScreenPolicy.Layout.COMPACT
-            }
+            CompactSetting.AUTO -> panelCompact
         }
     }
 

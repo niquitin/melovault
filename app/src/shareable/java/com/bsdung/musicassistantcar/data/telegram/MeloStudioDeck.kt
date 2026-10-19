@@ -99,10 +99,8 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         val metrics = MeloUiLabActivity.realMeasurements(activity)
         val d = metrics.display
         layout = MeloNowPlayingPolicy.deckLayout(metrics.windowWidthDp, metrics.windowHeightDp)
-        val chosen = MeloScreenPolicy.profileFor(
-            MeloScreenPolicy.chooseLayout(metrics.windowWidthDp, metrics.windowHeightDp, carMode = false), metrics.smallestWidthDp
-        )
-        val profile = if (chosen == MeloDesignTokens.Profile.TABLET) chosen else MeloDesignTokens.Profile.PHONE
+        // One profile rule for the library, the settings screen and this deck (sw 560–599 stays consistent).
+        val profile = MeloLibraryPolicy.profileFor(metrics.smallestWidthDp)
         c = MeloComponents(activity, MeloDesignTokens.sizes(profile, d.density, d.fontScale, d.physicalPpi))
         title = c.text("", s.playerTitleText, p.text, bold = true, maxLines = 2)
         source = c.text("", s.titleText, p.textSecondary, maxLines = 1)

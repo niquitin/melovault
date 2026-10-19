@@ -11,36 +11,43 @@ import org.junit.Test
 
 class MeloCompactPolicyTest {
 
+    /** The PANEL (not the window) decides: panel short/long side in dp and whether the app shares the screen. */
+    private fun panelCompact(shortDp: Int, longDp: Int, inMultiWindow: Boolean = false) =
+        MeloScreenPolicy.panelCompact(shortDp, longDp, inMultiWindow)
+
     @Test
-    fun autoTurnsOnForShanlingDisplayInBothOrientations() {
-        assertTrue(MeloCompactPolicy.shouldUseCompact(CompactSetting.AUTO, 384, 640, authorized = true))
-        assertTrue(MeloCompactPolicy.shouldUseCompact(CompactSetting.AUTO, 640, 384, authorized = true))
+    fun autoTurnsOnForShanlingPanel() {
+        // Shanling M3 Ultra: 768 × 1280 px at 320 dpi = 384 × 640dp, either orientation.
+        assertTrue(MeloCompactPolicy.shouldUseCompact(CompactSetting.AUTO, panelCompact(384, 640), authorized = true))
     }
 
     @Test
     fun autoStaysOffOnPhonesAndTablets() {
-        assertFalse(MeloCompactPolicy.shouldUseCompact(CompactSetting.AUTO, 411, 914, authorized = true)) // phone
-        assertFalse(MeloCompactPolicy.shouldUseCompact(CompactSetting.AUTO, 1024, 640, authorized = true)) // Y700-like
-        assertFalse(MeloCompactPolicy.shouldUseCompact(CompactSetting.AUTO, 1920, 1200, authorized = true)) // FYT 160
+        assertFalse(MeloCompactPolicy.shouldUseCompact(CompactSetting.AUTO, panelCompact(411, 914), authorized = true)) // phone
+        assertFalse(MeloCompactPolicy.shouldUseCompact(CompactSetting.AUTO, panelCompact(640, 1024), authorized = true)) // Y700-like
+        assertFalse(MeloCompactPolicy.shouldUseCompact(CompactSetting.AUTO, panelCompact(1200, 1920), authorized = true)) // FYT 160
+        assertFalse(MeloCompactPolicy.shouldUseCompact(CompactSetting.AUTO, panelCompact(756, 1209), authorized = true)) // FYT 7870 real panel
     }
 
     @Test
-    fun autoUsesDisplayNotSplitWindow() {
-        // A Y700 display is large even when the app window is split; callers pass display size.
-        assertFalse(MeloCompactPolicy.shouldUseCompact(CompactSetting.AUTO, 1024, 640, authorized = true))
+    fun autoUsesPanelNotSplitWindow() {
+        // The head unit's panel is 1209 × 756dp; its 1/3 window (388 × 642dp) must not turn into Gọn.
+        assertFalse(MeloCompactPolicy.shouldUseCompact(CompactSetting.AUTO, panelCompact(756, 1209), authorized = true))
+        // Even if firmware reported only the card as the panel, a shared screen never counts as Gọn.
+        assertFalse(MeloCompactPolicy.shouldUseCompact(CompactSetting.AUTO, panelCompact(388, 642, inMultiWindow = true), authorized = true))
     }
 
     @Test
     fun manualSettingsOverrideAuto() {
-        assertTrue(MeloCompactPolicy.shouldUseCompact(CompactSetting.ON, 1024, 640, authorized = true))
-        assertTrue(MeloCompactPolicy.shouldUseCompact(CompactSetting.EMULATE_SHANLING, 1024, 640, authorized = true))
-        assertFalse(MeloCompactPolicy.shouldUseCompact(CompactSetting.OFF, 384, 640, authorized = true))
+        assertTrue(MeloCompactPolicy.shouldUseCompact(CompactSetting.ON, panelCompact(640, 1024), authorized = true))
+        assertTrue(MeloCompactPolicy.shouldUseCompact(CompactSetting.EMULATE_SHANLING, panelCompact(640, 1024), authorized = true))
+        assertFalse(MeloCompactPolicy.shouldUseCompact(CompactSetting.OFF, panelCompact(384, 640), authorized = true))
     }
 
     @Test
     fun neverBeforeLogin() {
         for (s in CompactSetting.entries) {
-            assertFalse(MeloCompactPolicy.shouldUseCompact(s, 384, 640, authorized = false))
+            assertFalse(MeloCompactPolicy.shouldUseCompact(s, panelCompact(384, 640), authorized = false))
         }
     }
 

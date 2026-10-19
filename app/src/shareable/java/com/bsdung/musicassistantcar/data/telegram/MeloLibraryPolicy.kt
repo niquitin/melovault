@@ -92,6 +92,13 @@ internal object MeloLibraryPolicy {
     }
 
     /**
+     * Index of the row with [songKey] in [rows] (where the list was scrolled to before the layout
+     * changed), 0 when there is no key or the row is not loaded: the list then starts at its top.
+     */
+    fun anchorIndex(rows: List<MeloScreenHost.Row>, songKey: Long?): Int =
+        if (songKey == null) 0 else rows.indexOfFirst { it.songKey == songKey }.coerceAtLeast(0)
+
+    /**
      * A freshly opened group starts at its first row. The jump waits for rows to arrive (they
      * load asynchronously) and never happens on the channel grid.
      */

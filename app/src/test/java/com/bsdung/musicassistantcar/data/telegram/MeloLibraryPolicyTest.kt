@@ -33,14 +33,35 @@ class MeloLibraryPolicyTest {
 
     @Test
     fun deviceNumbersPickTheRightLayer() {
-        fun layer(w: Int, h: Int) = MeloLibraryPolicy.newLayer(LibraryStyle.NEW, MeloScreenPolicy.chooseLayout(w, h, false), true)
+        fun layer(w: Int, h: Int, panelCompact: Boolean = false) =
+            MeloLibraryPolicy.newLayer(LibraryStyle.NEW, MeloScreenPolicy.chooseLayout(w, h, false, panelCompact), true)
         assertEquals(NewLayer.PHONE_PORTRAIT, layer(384, 832))   // S25 Ultra portrait (measured)
         assertEquals(NewLayer.TWO_PANE, layer(832, 384))         // S25 Ultra landscape (measured)
         assertEquals(NewLayer.PHONE_PORTRAIT, layer(360, 840))   // Sony XQ-AS52 portrait
         assertEquals(NewLayer.TWO_PANE, layer(840, 360))         // Sony landscape
         assertEquals(NewLayer.TWO_PANE, layer(1024, 640))        // Y700-like landscape
         assertEquals(NewLayer.TABLET_PORTRAIT, layer(640, 1024)) // Y700-like portrait
-        assertNull(layer(384, 640))                              // Shanling stays on Gọn
+        assertNull(layer(384, 640, panelCompact = true))         // Shanling stays on Gọn
+    }
+
+    @Test
+    fun fytWindowsPickTheNewLayerNeverTheOldOne() {
+        // FYT 7870 (panel 1209 × 756dp, so panelCompact is false) at full, 2/3, 1/2 and 1/3.
+        assertEquals(NewLayer.TWO_PANE, MeloLibraryPolicy.newLayer(LibraryStyle.NEW, MeloScreenPolicy.chooseLayout(1179, 642, false, false), true))
+        assertEquals(NewLayer.TABLET_PORTRAIT, MeloLibraryPolicy.newLayer(LibraryStyle.NEW, MeloScreenPolicy.chooseLayout(782, 642, false, false), true))
+        assertEquals(NewLayer.PHONE_PORTRAIT, MeloLibraryPolicy.newLayer(LibraryStyle.NEW, MeloScreenPolicy.chooseLayout(592, 642, false, false), true))
+        assertEquals(NewLayer.PHONE_PORTRAIT, MeloLibraryPolicy.newLayer(LibraryStyle.NEW, MeloScreenPolicy.chooseLayout(388, 642, false, false), true))
+    }
+
+    @Test
+    fun anchorIndexFindsTheRowOrStartsAtTheTop() {
+        fun row(key: Long) = MeloScreenHost.Row("t$key", null, "f$key.mp3", 60, key, false, null, null)
+        val rows = listOf(row(10), row(20), row(30))
+        assertEquals(0, MeloLibraryPolicy.anchorIndex(rows, 10))
+        assertEquals(2, MeloLibraryPolicy.anchorIndex(rows, 30))
+        assertEquals(0, MeloLibraryPolicy.anchorIndex(rows, 99)) // not loaded (yet): top
+        assertEquals(0, MeloLibraryPolicy.anchorIndex(rows, null))
+        assertEquals(0, MeloLibraryPolicy.anchorIndex(emptyList(), 10))
     }
 
     @Test

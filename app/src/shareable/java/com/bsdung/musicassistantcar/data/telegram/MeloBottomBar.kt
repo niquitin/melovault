@@ -47,6 +47,7 @@ internal class MeloBottomBar(
     private val tabViews = LinkedHashMap<Tab, TextView>()
     private var hasSong = false
     private var shownTitle: String? = null
+    private var iconOnly = false
 
     init {
         view.apply {
@@ -81,6 +82,8 @@ internal class MeloBottomBar(
         row.addView(transportButton("⏭", "Bài kế") { host.next() })
         MeloBottomBarPolicy.rightTabs(spec.tabs).forEach { row.addView(tabView(it), tabParams()) }
         view.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, rowHeight))
+        // The window can be resized without rebuilding this bar: re-check the label fit each time.
+        row.addOnLayoutChangeListener { _, l, _, r, _, ol, _, or_, _ -> if (r - l != or_ - ol) row.post { updateTabLabels() } }
         installOpenGestures()
         // No song yet: setOnClickListener made the bar clickable, so switch it and Play off again.
         view.isClickable = false
@@ -104,9 +107,24 @@ internal class MeloBottomBar(
         }
     }
 
+    /** A tab cell too narrow for its label (head unit's 1/3 window, font ×1.25) shows only the icon, larger. */
+    private fun updateTabLabels() {
+        val cell = tabViews.values.firstOrNull()?.width ?: return
+        if (cell <= 0) return
+        val only = MeloBottomBarPolicy.tabIconOnly((cell / density).toInt(), fontScale)
+        if (only == iconOnly) return
+        iconOnly = only
+        tabViews.forEach { (tab, v) ->
+            v.text = tabText(tab)
+            v.setTextSize(TypedValue.COMPLEX_UNIT_PX, if (only) s.titleText else s.secondaryText * 0.85f)
+        }
+    }
+
+    private fun tabText(tab: Tab): String = if (iconOnly) tab.icon else "${tab.icon}\n${tab.label}"
+
     private fun tabView(tab: Tab): TextView {
         val label = TextView(context).apply {
-            text = "${tab.icon}\n${tab.label}"
+            text = tabText(tab)
             gravity = Gravity.CENTER
             setTextSize(TypedValue.COMPLEX_UNIT_PX, s.secondaryText * 0.85f)
             setTextColor(p.textSecondary)

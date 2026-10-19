@@ -23,6 +23,25 @@ internal object MeloScreenPolicy {
     const val TWO_PANE_MIN_WIDTH_DP = 840
     const val CAR_OFFER_MIN_WIDTH_DP = 1200
 
+    /**
+     * E95 window thresholds (D3, tuned after FYT QA): from this width the player and the library
+     * sit side by side; a narrower window keeps one list and the bottom bar.
+     */
+    const val TWO_PANE_PLAYER_MIN_WIDTH_DP = 960
+
+    /** A landscape window shorter than this is too low for a list with a bottom bar: two panes. */
+    const val LIST_FIRST_MIN_HEIGHT_DP = 560
+
+    /** A phone window narrower than 600dp and shorter than this stays on the old compact layout. */
+    const val SPLIT_COMPACT_MAX_HEIGHT_DP = 480
+
+    /** A panel qualifies for Gọn only when it is smaller than this on both sides (Shanling 384 × 640dp). */
+    const val PANEL_COMPACT_MAX_SHORT_DP = 600
+    const val PANEL_COMPACT_MAX_LONG_DP = 700
+
+    /** A physical panel dimension outside 1..this (px) is firmware noise and is ignored. */
+    private const val MAX_PLAUSIBLE_PANEL_PX = 20_000
+
     /** A plausible physical density; outside it xdpi/ydpi from firmware is treated as unknown. */
     private const val MIN_PLAUSIBLE_PPI = 80f
     private const val MAX_PLAUSIBLE_PPI = 800f
@@ -104,15 +123,41 @@ internal object MeloScreenPolicy {
         TWO_PANE("Hai khung ngang")
     }
 
-    /** Spec "Cách app chọn bố cục": window size in dp; Car Mode overrides every other rule. */
-    fun chooseLayout(widthDp: Int, heightDp: Int, carMode: Boolean): Layout = when {
+    /**
+     * The largest plausible physical panel among [candidates] (width × height in px, any
+     * orientation) as (short side, long side), or null when none is usable. 0, negative and absurd
+     * values from firmware are skipped, so the remaining numbers still decide.
+     */
+    fun panelSizePx(candidates: List<Pair<Int, Int>>): Pair<Int, Int>? =
+        candidates
+            .filter { (w, h) -> w in 1..MAX_PLAUSIBLE_PANEL_PX && h in 1..MAX_PLAUSIBLE_PANEL_PX }
+            .maxByOrNull { (w, h) -> w.toLong() * h }
+            ?.let { (w, h) -> minOf(w, h) to maxOf(w, h) }
+
+    /**
+     * Gọn is for a small panel that is NOT shared with another app. [inMultiWindow] is the safety
+     * net for a launcher that gives every app card its own display (the "panel" is then the card).
+     */
+    fun panelCompact(panelShortDp: Int, panelLongDp: Int, inMultiWindow: Boolean): Boolean =
+        !inMultiWindow && panelShortDp in 1 until PANEL_COMPACT_MAX_SHORT_DP && panelLongDp in 1 until PANEL_COMPACT_MAX_LONG_DP
+
+    /**
+     * Spec "Cách app chọn bố cục" (E95): window size in dp; Car Mode overrides every other rule.
+     * [panelCompact] tells whether the PANEL is small (Shanling): only then does a narrow window
+     * mean the Gọn layout; a narrow window of a big panel (a split screen on the head unit) is
+     * the Điện thoại list with the bottom bar. Callers pass it explicitly, there is no default.
+     */
+    fun chooseLayout(widthDp: Int, heightDp: Int, carMode: Boolean, panelCompact: Boolean): Layout = when {
         carMode -> Layout.CAR
-        widthDp < COMPACT_MAX_WIDTH_DP && heightDp < COMPACT_MAX_HEIGHT_DP -> Layout.COMPACT
+        panelCompact && widthDp < COMPACT_MAX_WIDTH_DP && heightDp < COMPACT_MAX_HEIGHT_DP -> Layout.COMPACT
+        // A phone cut to a very low split window keeps the old layout, as before E95.
+        widthDp < COMPACT_MAX_WIDTH_DP && heightDp < SPLIT_COMPACT_MAX_HEIGHT_DP -> Layout.COMPACT
         widthDp < TABLET_MIN_WIDTH_DP -> Layout.PHONE_PORTRAIT
-        widthDp >= TWO_PANE_MIN_WIDTH_DP -> Layout.TWO_PANE
-        // Measured S25 Ultra turned sideways is 832 × 384dp: just under 840 but far too short
-        // for the tablet column, so any landscape window from 600dp wide gets the two panes.
-        widthDp > heightDp -> Layout.TWO_PANE
+        widthDp >= TWO_PANE_PLAYER_MIN_WIDTH_DP -> Layout.TWO_PANE
+        // Measured S25 Ultra turned sideways is 832 × 384dp: far too short for the tablet column,
+        // so a low landscape window gets the two panes; a taller one (Y700 split 800 × 620, the
+        // head unit's 782 × 642) keeps one wide list with the bottom bar.
+        widthDp > heightDp && heightDp < LIST_FIRST_MIN_HEIGHT_DP -> Layout.TWO_PANE
         else -> Layout.TABLET_PORTRAIT
     }
 

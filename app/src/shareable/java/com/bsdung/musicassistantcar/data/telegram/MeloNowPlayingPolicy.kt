@@ -30,11 +30,15 @@ internal object MeloNowPlayingPolicy {
 
     enum class DeckLayout { PORTRAIT, LANDSCAPE }
 
-    /** Two panes (player left, queue right) wherever the library would use two panes. */
+    /**
+     * Player on the left and queue on the right in every window that is wider than tall and at
+     * least 600dp wide (E95: the head unit's 782 × 642 stays two columns); narrower or taller
+     * windows get one column. It no longer follows the library's layout, which switches to the
+     * list with a bottom bar at those sizes.
+     */
     fun deckLayout(widthDp: Int, heightDp: Int): DeckLayout =
-        if (MeloScreenPolicy.chooseLayout(widthDp, heightDp, carMode = false) == MeloScreenPolicy.Layout.TWO_PANE) {
-            DeckLayout.LANDSCAPE
-        } else DeckLayout.PORTRAIT
+        if (widthDp > heightDp && widthDp >= MeloScreenPolicy.TABLET_MIN_WIDTH_DP) DeckLayout.LANDSCAPE
+        else DeckLayout.PORTRAIT
 
     enum class SleepOption(val minutes: Int, val label: String) {
         OFF(0, "Tắt hẹn giờ"),

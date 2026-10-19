@@ -129,4 +129,25 @@ class MeloBottomBarPolicyTest {
         // S25 Ultra (384dp) with four tabs: two tabs per side, still above the 48dp touch width.
         assertTrue(MeloBottomBarPolicy.tabWidthDp(384, spec(Profile.PHONE), sideMarginsDp = 32) >= 48)
     }
+
+    @Test
+    fun tabsShowOnlyTheIconWhenTheCellIsTooNarrowForTheLabel() {
+        // FYT 7870 at font ×1.25: the label needs 53dp.
+        assertTrue(MeloBottomBarPolicy.tabIconOnly(52, 1.25f))
+        assertFalse(MeloBottomBarPolicy.tabIconOnly(53, 1.25f))
+        // FYT 1/3 window (388dp, four tabs) gives about 50dp per tab; the 1/2 window (592dp) about 100dp.
+        val third = MeloBottomBarPolicy.tabWidthDp(388, spec(Profile.PHONE), sideMarginsDp = 32)
+        val half = MeloBottomBarPolicy.tabWidthDp(592, spec(Profile.PHONE), sideMarginsDp = 32)
+        assertTrue("third=$third", MeloBottomBarPolicy.tabIconOnly(third, 1.25f))
+        assertFalse("half=$half", MeloBottomBarPolicy.tabIconOnly(half, 1.25f))
+        // S25 Ultra (49dp) and Sony (43dp) at font ×1.0 keep their labels, as they did before E95.
+        val s25 = MeloBottomBarPolicy.tabWidthDp(384, spec(Profile.PHONE), sideMarginsDp = 32)
+        val sony = MeloBottomBarPolicy.tabWidthDp(360, spec(Profile.PHONE), sideMarginsDp = 32)
+        assertFalse("s25=$s25", MeloBottomBarPolicy.tabIconOnly(s25, 1.0f))
+        assertFalse("sony=$sony", MeloBottomBarPolicy.tabIconOnly(sony, 1.0f))
+        assertTrue(MeloBottomBarPolicy.tabIconOnly(41, 1.0f))
+        assertFalse(MeloBottomBarPolicy.tabIconOnly(42, 1.0f))
+        // A font scale below 1 never shrinks the label need below the base.
+        assertTrue(MeloBottomBarPolicy.tabIconOnly(41, 0.85f))
+    }
 }

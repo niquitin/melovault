@@ -90,7 +90,11 @@ internal class MeloLibraryPane(
     private var groupKey: String? = null
     private var emptyExpanded = false
     private var pendingTopReset = false
-    private var lastLocal = false
+    /** Null until the first snapshot: the search box then starts from the host's query, not empty. */
+    private var lastLocal: Boolean? = null
+    /** Scroll position handed over by the screen this one replaced; used once, for the same group only. */
+    private var inheritedAnchor: MeloScreenHost.ListAnchor? = host.listAnchor()
+    private var restoringAnchor: MeloScreenHost.ListAnchor? = null
 
     init {
         searchHolder.addView(searchBar)
@@ -162,9 +166,23 @@ internal class MeloLibraryPane(
     }
 
     fun detach() {
-    pendingJump?.let(handler::removeCallbacks)
+        saveScrollAnchor()
+        pendingJump?.let(handler::removeCallbacks)
         pendingQuery?.let(handler::removeCallbacks)
         handler.removeCallbacksAndMessages(null)
+    }
+
+    /**
+     * A window-size change that needs another screen type tears this pane down; hand the first
+     * visible song to the host so the next pane scrolls back to it (E95 F03d).
+     */
+    private fun saveScrollAnchor() {
+        val snap = snapshot ?: return
+        val key = groupKey ?: return
+        if (snap.showingSources || snap.rows.isEmpty() || listFrame.visibility != View.VISIBLE) return
+        val first = list.firstVisiblePosition
+        val row = snap.rows.getOrNull(first) ?: return
+        host.saveListAnchor(key, row.songKey, list.getChildAt(0)?.top ?: 0)
     }
 
     /** Back at the top with the owner's title row visible, e.g. after switching group or page. */
@@ -185,8 +203,12 @@ internal class MeloLibraryPane(
         snapshot = snap
         val key = "${snap.showingSources}|${snap.mode}|${snap.sourceTitle}|${snap.query}|${snap.sort}|${snap.letterFloor}|${snap.local}"
         if (key != groupKey) {
+            val inherited = inheritedAnchor?.takeIf { groupKey == null && it.groupKey == key }
+            inheritedAnchor = null
             groupKey = key
-            resetScroll()
+            restoringAnchor = inherited
+            // The same group as the screen this one replaced: keep the owner's place in the list.
+            if (inherited == null) resetScroll()
         }
         if (snap.local != lastLocal) {
             // The search box belongs to one source: show that source's own query when switching.
@@ -223,6 +245,12 @@ internal class MeloLibraryPane(
             list.setPadding(0, 0, if (showBar) bar.barWidthPx else 0, 0)
             if (!showBar) bar.setActive(null)
             adapter.notifyDataSetChanged()
+            val restore = restoringAnchor
+            if (restore != null && snap.rows.isNotEmpty()) {
+                restoringAnchor = null
+                val index = MeloLibraryPolicy.anchorIndex(snap.rows, restore.songKey)
+                list.post { list.setSelectionFromTop(index, restore.offsetPx) }
+            }
             if (MeloLibraryPolicy.shouldResetTop(pendingTopReset, snap.showingSources, snap.rows.size)) {
                 // The rows of the new group just arrived; the list still remembers the old group's offset.
                 pendingTopReset = false

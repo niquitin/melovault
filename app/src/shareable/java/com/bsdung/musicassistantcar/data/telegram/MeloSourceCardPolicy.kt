@@ -27,6 +27,9 @@ internal object MeloSourceCardPolicy {
     /** Two-pane right pane shows the row only when the window is at least this tall. */
     const val TWO_PANE_MIN_HEIGHT_DP = 560
 
+    /** A phone-width window lower than this (the head unit's 1/2 and 1/3 split) keeps the room for the list. */
+    const val PHONE_MIN_HEIGHT_DP = 700
+
     fun cards(sources: List<Source>, selected: Kind?): List<Card> =
         sources
             .filter { (it.total ?: 0) > 0 }
@@ -72,7 +75,8 @@ internal object MeloSourceCardPolicy {
     ): Boolean {
         if (cardCount <= 0 || showingSources || mode == Mode.PLAYLIST) return false
         return when (layer) {
-            NewLayer.PHONE_PORTRAIT, NewLayer.TABLET_PORTRAIT -> true
+            NewLayer.PHONE_PORTRAIT -> windowHeightDp >= PHONE_MIN_HEIGHT_DP
+            NewLayer.TABLET_PORTRAIT -> true
             NewLayer.TWO_PANE -> windowHeightDp >= TWO_PANE_MIN_HEIGHT_DP
         }
     }

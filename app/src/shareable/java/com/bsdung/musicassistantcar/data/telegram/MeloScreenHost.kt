@@ -41,6 +41,14 @@ internal interface MeloScreenHost {
     /** Starts speech input; false when this device has no speech recognizer. */
     fun startVoiceSearch(onText: (String) -> Unit): Boolean
 
+    /**
+     * Where the song list was scrolled to when its screen was torn down by a window-size change
+     * that needs another screen type (E95). Kept in memory only; the next screen restores it
+     * when it shows the same group ([groupKey]) and the song is loaded.
+     */
+    fun saveListAnchor(groupKey: String, songKey: Long?, offsetPx: Int)
+    fun listAnchor(): ListAnchor?
+
     // ---- Library screens (Điện thoại / Tablet / Hai khung) ---------------------------------
 
     /** "Phát hết": plays the group on screen from its first loaded song; [shuffle] turns shuffle on first. */
@@ -123,6 +131,9 @@ internal interface MeloScreenHost {
     )
 
     data class SourceRow(val chatId: Long, val title: String, val count: Int)
+
+    /** The first visible song of a group and how far its top edge sits from the list's top. */
+    data class ListAnchor(val groupKey: String, val songKey: Long?, val offsetPx: Int)
 
     data class Snapshot(
         val showingSources: Boolean,

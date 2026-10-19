@@ -24,7 +24,7 @@ class MeloScreenPolicyTest {
         assertEquals(4.2f, s.diagonalInches, 0.01f)
         // Spec: 1dp is about 0.14mm on this panel, so 48dp is about 7mm.
         assertEquals(0.143f, s.dpInMm, 0.005f)
-        assertEquals(Layout.COMPACT, MeloScreenPolicy.chooseLayout(s.widthDp, s.heightDp, false))
+        assertEquals(Layout.COMPACT, MeloScreenPolicy.chooseLayout(s.widthDp, s.heightDp, false, panelCompact = true))
     }
 
     @Test
@@ -52,14 +52,15 @@ class MeloScreenPolicyTest {
 
     @Test
     fun layoutThresholdsFollowSpecTable() {
-        assertEquals(Layout.CAR, MeloScreenPolicy.chooseLayout(384, 640, true))
-        assertEquals(Layout.COMPACT, MeloScreenPolicy.chooseLayout(599, 699, false))
-        assertEquals(Layout.PHONE_PORTRAIT, MeloScreenPolicy.chooseLayout(599, 700, false))
-        assertEquals(Layout.PHONE_PORTRAIT, MeloScreenPolicy.chooseLayout(412, 915, false))
-        assertEquals(Layout.TABLET_PORTRAIT, MeloScreenPolicy.chooseLayout(600, 960, false))
-        assertEquals(Layout.TABLET_PORTRAIT, MeloScreenPolicy.chooseLayout(839, 1200, false))
-        assertEquals(Layout.TWO_PANE, MeloScreenPolicy.chooseLayout(840, 500, false))
-        assertEquals(Layout.TWO_PANE, MeloScreenPolicy.chooseLayout(1920, 1200, false))
+        assertEquals(Layout.CAR, MeloScreenPolicy.chooseLayout(384, 640, true, panelCompact = true))
+        assertEquals(Layout.COMPACT, MeloScreenPolicy.chooseLayout(599, 699, false, panelCompact = true))
+        assertEquals(Layout.PHONE_PORTRAIT, MeloScreenPolicy.chooseLayout(599, 699, false, panelCompact = false))
+        assertEquals(Layout.PHONE_PORTRAIT, MeloScreenPolicy.chooseLayout(599, 700, false, panelCompact = false))
+        assertEquals(Layout.PHONE_PORTRAIT, MeloScreenPolicy.chooseLayout(412, 915, false, panelCompact = false))
+        assertEquals(Layout.TABLET_PORTRAIT, MeloScreenPolicy.chooseLayout(600, 960, false, panelCompact = false))
+        assertEquals(Layout.TABLET_PORTRAIT, MeloScreenPolicy.chooseLayout(839, 1200, false, panelCompact = false))
+        assertEquals(Layout.TWO_PANE, MeloScreenPolicy.chooseLayout(840, 500, false, panelCompact = false))
+        assertEquals(Layout.TWO_PANE, MeloScreenPolicy.chooseLayout(1920, 1200, false, panelCompact = false))
     }
 
     @Test
@@ -115,18 +116,18 @@ class MeloScreenPolicyTest {
         assertEquals(832, portrait.heightDp)
         assertEquals(0.190f, portrait.dpInMm, 0.002f)
         assertEquals(6.9f, portrait.diagonalInches, 0.05f)
-        assertEquals(Layout.PHONE_PORTRAIT, MeloScreenPolicy.chooseLayout(384, 832, false))
-        assertEquals(Layout.TWO_PANE, MeloScreenPolicy.chooseLayout(landscape.widthDp, landscape.heightDp, false))
+        assertEquals(Layout.PHONE_PORTRAIT, MeloScreenPolicy.chooseLayout(384, 832, false, panelCompact = false))
+        assertEquals(Layout.TWO_PANE, MeloScreenPolicy.chooseLayout(landscape.widthDp, landscape.heightDp, false, panelCompact = false))
         assertEquals(Profile.PHONE, MeloScreenPolicy.profileFor(Layout.TWO_PANE, landscape.smallestWidthDp))
-        assertFalse(MeloCompactPolicy.shouldUseCompact(MeloCompactPolicy.CompactSetting.AUTO, 384, 832, authorized = true))
+        assertFalse(MeloCompactPolicy.shouldUseCompact(MeloCompactPolicy.CompactSetting.AUTO, MeloScreenPolicy.panelCompact(384, 832, false), authorized = true))
         assertFalse(MeloScreenPolicy.shouldOfferCarMode(832, 384, carMode = false, alreadyAsked = false))
     }
 
     @Test
     fun landscapeBetween600And839IsTwoPanePortraitStaysTablet() {
-        assertEquals(Layout.TWO_PANE, MeloScreenPolicy.chooseLayout(700, 500, false))
-        assertEquals(Layout.TABLET_PORTRAIT, MeloScreenPolicy.chooseLayout(700, 1000, false))
-        assertEquals(Layout.TABLET_PORTRAIT, MeloScreenPolicy.chooseLayout(800, 800, false))
+        assertEquals(Layout.TWO_PANE, MeloScreenPolicy.chooseLayout(700, 500, false, panelCompact = false))
+        assertEquals(Layout.TABLET_PORTRAIT, MeloScreenPolicy.chooseLayout(700, 1000, false, panelCompact = false))
+        assertEquals(Layout.TABLET_PORTRAIT, MeloScreenPolicy.chooseLayout(800, 800, false, panelCompact = false))
     }
 
     @Test
@@ -134,7 +135,84 @@ class MeloScreenPolicyTest {
         // [CẦN XÁC NHẬN] real Y700 density must come from the "Thông tin màn hình" screen.
         val landscape = DisplaySpec(2560, 1600, 400, 343f, 343f)
         val portrait = DisplaySpec(1600, 2560, 400, 343f, 343f)
-        assertEquals(Layout.TWO_PANE, MeloScreenPolicy.chooseLayout(landscape.widthDp, landscape.heightDp, false))
-        assertEquals(Layout.TABLET_PORTRAIT, MeloScreenPolicy.chooseLayout(portrait.widthDp, portrait.heightDp, false))
+        assertEquals(Layout.TWO_PANE, MeloScreenPolicy.chooseLayout(landscape.widthDp, landscape.heightDp, false, panelCompact = false))
+        assertEquals(Layout.TABLET_PORTRAIT, MeloScreenPolicy.chooseLayout(portrait.widthDp, portrait.heightDp, false, panelCompact = false))
+    }
+
+    private fun layout(w: Int, h: Int, panelCompact: Boolean = false) =
+        MeloScreenPolicy.chooseLayout(w, h, carMode = false, panelCompact = panelCompact)
+
+    @Test
+    fun fytWindowsFollowTheWindowNotThePanel() {
+        // FYT 7870 (owner video 2026-10-19): full 1179 × 642dp, then 2/3, 1/2 and 1/3 of it.
+        assertEquals(Layout.TWO_PANE, layout(1179, 642))
+        assertEquals(Layout.TABLET_PORTRAIT, layout(782, 642))
+        assertEquals(Layout.PHONE_PORTRAIT, layout(592, 642))
+        assertEquals(Layout.PHONE_PORTRAIT, layout(388, 642))
+    }
+
+    @Test
+    fun shanlingPanelKeepsCompactAndOtherDevicesKeepTheirLayouts() {
+        assertEquals(Layout.COMPACT, layout(384, 574, panelCompact = true))
+        assertEquals(Layout.COMPACT, layout(384, 640, panelCompact = true))
+        // S25 Ultra 832 × 384, Sony Xperia 5 II 840 × 360 and 360 × 840.
+        assertEquals(Layout.TWO_PANE, layout(832, 384))
+        assertEquals(Layout.TWO_PANE, layout(840, 360))
+        assertEquals(Layout.PHONE_PORTRAIT, layout(360, 840))
+        // Y700 landscape / portrait and its split windows.
+        assertEquals(Layout.TWO_PANE, layout(1280, 800))
+        assertEquals(Layout.TABLET_PORTRAIT, layout(800, 1280))
+        assertEquals(Layout.TABLET_PORTRAIT, layout(853, 800))
+        assertEquals(Layout.TABLET_PORTRAIT, layout(800, 620))
+    }
+
+    @Test
+    fun veryLowPhoneSplitWindowsKeepTheOldCompactLayout() {
+        assertEquals(Layout.COMPACT, layout(384, 400))
+        assertEquals(Layout.COMPACT, layout(360, 400))
+        assertEquals(Layout.COMPACT, layout(416, 384))
+    }
+
+    @Test
+    fun layoutBoundaries() {
+        assertEquals(Layout.TABLET_PORTRAIT, layout(959, 800))
+        assertEquals(Layout.TWO_PANE, layout(960, 800))
+        assertEquals(Layout.TWO_PANE, layout(800, 559))
+        assertEquals(Layout.TABLET_PORTRAIT, layout(800, 560))
+        assertEquals(Layout.COMPACT, layout(400, 479))
+        assertEquals(Layout.PHONE_PORTRAIT, layout(400, 480))
+        assertEquals(Layout.PHONE_PORTRAIT, layout(599, 800))
+        assertEquals(Layout.TABLET_PORTRAIT, layout(600, 800))
+    }
+
+    @Test
+    fun carModeStillWinsOverEveryWindow() {
+        assertEquals(Layout.CAR, MeloScreenPolicy.chooseLayout(388, 642, carMode = true, panelCompact = false))
+        assertEquals(Layout.CAR, MeloScreenPolicy.chooseLayout(1179, 642, carMode = true, panelCompact = false))
+    }
+
+    @Test
+    fun panelCompactOnlyForSmallUnsharedPanels() {
+        assertTrue(MeloScreenPolicy.panelCompact(384, 640, inMultiWindow = false)) // Shanling
+        assertFalse(MeloScreenPolicy.panelCompact(756, 1209, inMultiWindow = false)) // FYT 7870
+        assertFalse(MeloScreenPolicy.panelCompact(411, 914, inMultiWindow = false)) // phone
+        assertFalse(MeloScreenPolicy.panelCompact(640, 1024, inMultiWindow = false)) // Y700
+        assertFalse(MeloScreenPolicy.panelCompact(600, 640, inMultiWindow = false))
+        assertFalse(MeloScreenPolicy.panelCompact(384, 700, inMultiWindow = false))
+        assertTrue(MeloScreenPolicy.panelCompact(599, 699, inMultiWindow = false))
+        // Whatever the panel numbers, a window shared with another app is never Gọn.
+        assertFalse(MeloScreenPolicy.panelCompact(384, 640, inMultiWindow = true))
+        assertFalse(MeloScreenPolicy.panelCompact(0, 0, inMultiWindow = false))
+    }
+
+    @Test
+    fun panelSizeTakesTheLargestPlausibleCandidate() {
+        // FYT: current display mode may be the card (1243 × 1020), the default display the real panel.
+        assertEquals(1200 to 1920, MeloScreenPolicy.panelSizePx(listOf(1243 to 1020, 1920 to 1200, 1243 to 1020)))
+        assertEquals(768 to 1280, MeloScreenPolicy.panelSizePx(listOf(768 to 1280, 1280 to 768)))
+        // Zero or absurd firmware values are skipped; the remaining numbers still decide.
+        assertEquals(768 to 1280, MeloScreenPolicy.panelSizePx(listOf(0 to 0, 768 to 1280, 99_999 to 99_999)))
+        assertNull(MeloScreenPolicy.panelSizePx(listOf(0 to 0, -1 to 5)))
+        assertNull(MeloScreenPolicy.panelSizePx(emptyList()))
     }
 }

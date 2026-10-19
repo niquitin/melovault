@@ -30,6 +30,21 @@ class MeloNowPlayingPolicyTest {
     }
 
     @Test
+    fun deckIsTwoColumnsWhenWiderThanTallAndAtLeast600dp() {
+        // FYT 7870 windows (owner video 2026-10-19) and the Sony sideways window.
+        assertEquals(DeckLayout.LANDSCAPE, MeloNowPlayingPolicy.deckLayout(1179, 642))
+        assertEquals(DeckLayout.LANDSCAPE, MeloNowPlayingPolicy.deckLayout(782, 642))
+        assertEquals(DeckLayout.LANDSCAPE, MeloNowPlayingPolicy.deckLayout(912, 411))
+        assertEquals(DeckLayout.PORTRAIT, MeloNowPlayingPolicy.deckLayout(592, 642))
+        assertEquals(DeckLayout.PORTRAIT, MeloNowPlayingPolicy.deckLayout(388, 642))
+        assertEquals(DeckLayout.PORTRAIT, MeloNowPlayingPolicy.deckLayout(411, 860))
+        // Boundaries: 600dp wide is the first two-column width, a square window is one column.
+        assertEquals(DeckLayout.LANDSCAPE, MeloNowPlayingPolicy.deckLayout(600, 599))
+        assertEquals(DeckLayout.PORTRAIT, MeloNowPlayingPolicy.deckLayout(599, 400))
+        assertEquals(DeckLayout.PORTRAIT, MeloNowPlayingPolicy.deckLayout(700, 700))
+    }
+
+    @Test
     fun sleepTimerDeadlineAndLabel() {
         assertNull(MeloNowPlayingPolicy.sleepDeadline(SleepOption.OFF, 1_000))
         assertNull(MeloNowPlayingPolicy.sleepDeadline(SleepOption.END_OF_TRACK, 1_000))

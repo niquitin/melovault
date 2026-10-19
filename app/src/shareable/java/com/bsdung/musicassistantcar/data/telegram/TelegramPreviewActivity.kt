@@ -296,6 +296,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var tabletScreen: MeloTabletScreen? = null
     private var meloLayer: View? = null
     private var meloLayerKey: String? = null
+    /** List place handed from a torn-down library screen to the next one (memory only, E95 F03d). */
+    private var meloListAnchor: MeloScreenHost.ListAnchor? = null
     private var carPromptShown = false
     private var compactRefreshPosted = false
     private var authEpoch: Long = 0L
@@ -4405,7 +4407,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         maybeAskCarMode(prefs, carSetting, display)
         val setting = MeloCompactPolicy.loadSetting(prefs)
-        val wanted = MeloCompactPolicy.shouldUseCompact(setting, display.widthDp, display.heightDp, auth.isReady())
+        val wanted = MeloCompactPolicy.shouldUseCompact(setting, measured.panelCompact, auth.isReady())
         if (!wanted) {
             showNewLayer(prefs, measured)
             return
@@ -4456,21 +4458,27 @@ class TelegramPreviewActivity : AppCompatActivity() {
      */
     private fun showNewLayer(prefs: android.content.SharedPreferences, measured: MeloUiLabActivity.Measurements) {
         val display = measured.display
-        val layout = MeloScreenPolicy.chooseLayout(measured.windowWidthDp, measured.windowHeightDp, carMode = false)
+        val layout = MeloScreenPolicy.chooseLayout(
+            measured.windowWidthDp, measured.windowHeightDp, carMode = false, panelCompact = measured.panelCompact)
         val layer = MeloLibraryPolicy.newLayer(MeloLibraryPolicy.loadStyle(prefs), layout, auth.isReady())
         if (layer == null) {
             closeLocalMusic()
             detachMeloLayer()
             return
         }
-        val key = "new:$layer:${measured.windowWidthPx}x${measured.windowHeightPx}:${display.densityDpi}:${display.fontScale}"
+        val profile = MeloLibraryPolicy.profileFor(measured.smallestWidthDp)
+        // No window size in the key: resizing inside one screen type keeps the screen (list position,
+        // search box, open groups) and the views stretch by themselves. Only the type, profile,
+        // density and font scale rebuild it (E95 F03d).
+        val key = "new:$layer:$profile:${display.densityDpi}:${display.fontScale}"
         if ((phoneScreen != null || tabletScreen != null) && meloLayerKey == key) {
+            // The window moved or resized: the handle band and the bars are measured again.
+            meloLayer?.let { ViewCompat.requestApplyInsets(it) }
             scheduleMeloLibraryRefresh()
             return
         }
         detachMeloLayer()
-        val sizes = MeloDesignTokens.sizes(
-            MeloLibraryPolicy.profileFor(measured.smallestWidthDp), display.density, display.fontScale, display.physicalPpi)
+        val sizes = MeloDesignTokens.sizes(profile, display.density, display.fontScale, display.physicalPpi)
         val view: View
         if (layer == MeloLibraryPolicy.NewLayer.TWO_PANE) {
             val screen = MeloTabletScreen(this, sizes, meloHost, onBackPressedDispatcher)
@@ -4911,6 +4919,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
             startActivity(Intent(this@TelegramPreviewActivity, MeloUiLabActivity::class.java)
                 .putExtra(MeloUiLabActivity.EXTRA_SONG_COUNT, totalCountForCurrentView))
         }
+
+        override fun saveListAnchor(groupKey: String, songKey: Long?, offsetPx: Int) {
+            meloListAnchor = MeloScreenHost.ListAnchor(groupKey, songKey, offsetPx)
+        }
+
+        override fun listAnchor(): MeloScreenHost.ListAnchor? = meloListAnchor
 
         override fun startVoiceSearch(onText: (String) -> Unit): Boolean {
             if (!voiceSearchAvailable()) return false
