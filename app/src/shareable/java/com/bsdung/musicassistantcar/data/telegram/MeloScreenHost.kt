@@ -171,6 +171,8 @@ internal interface MeloScreenHost {
         /** Paused by the user (play-when-ready off); false while merely buffering. */
         val paused: Boolean = false,
         /** The playing song comes from "Nhạc trên máy"; [sourceTitle] is then its artist or folder. */
-        val local: Boolean = false
+        val local: Boolean = false,
+        /** Local song with no artist tag: [sourceTitle] is its folder name, so the line says "Thư mục:" (E95 F08). */
+        val sourceIsFolder: Boolean = false
     )
 }

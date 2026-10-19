@@ -460,7 +460,7 @@ internal class MeloTabletScreen(
             showArt(null, null, "♪")
         } else {
             relayout = title.show(now.title)
-            relayout = source.show(now.sourceTitle.orEmpty()) or relayout
+            relayout = source.show(MeloNowPlayingPolicy.sourceLine(now.sourceTitle, now.local, now.sourceIsFolder).orEmpty()) or relayout
             quality.show(listOfNotNull(host.qualityLabel(null), now.downloadNote?.takeUnless { it.startsWith("Đã tải") }).joinToString(" · "))
             time.show(MeloComponentPolicy.progressText((now.positionMs / 1000).toInt(), (now.durationMs / 1000).toInt()))
             play.show(if (now.playing) "❚❚" else "▶")

@@ -156,4 +156,38 @@ class MeloNowPlayingPolicyTest {
         assertEquals(Status.DOWNLOADED, MeloNowPlayingPolicy.queueStatus(false, true, null))
         assertEquals(Status.TELEGRAM, MeloNowPlayingPolicy.queueStatus(false, false, null))
     }
+
+    // ---- Source line under the title (E95 F08) ------------------------------------------------
+
+    @Test
+    fun telegramSongNamesTheChannelNeverAnArtist() {
+        assertEquals("Kênh: Nhạc Lạnh - Chillout (EMI)", MeloNowPlayingPolicy.sourceLine("Nhạc Lạnh - Chillout (EMI)", local = false, sourceIsFolder = false))
+        assertEquals("Kênh: LakHouse", MeloNowPlayingPolicy.sourceLine("  LakHouse ", local = false, sourceIsFolder = false))
+        // The folder flag only matters for local songs; a channel is never labelled "Nghệ sĩ".
+        assertEquals("Kênh: LakHouse", MeloNowPlayingPolicy.sourceLine("LakHouse", local = false, sourceIsFolder = true))
+    }
+
+    @Test
+    fun localSongSaysArtistWhenItHasOneAndFolderOtherwise() {
+        assertEquals("Nghệ sĩ: Sơn Tùng M-TP", MeloNowPlayingPolicy.sourceLine("Sơn Tùng M-TP", local = true, sourceIsFolder = false))
+        assertEquals("Thư mục: Download", MeloNowPlayingPolicy.sourceLine("Download", local = true, sourceIsFolder = true))
+    }
+
+    @Test
+    fun noNameMeansNoLine() {
+        assertNull(MeloNowPlayingPolicy.sourceLine(null, local = false, sourceIsFolder = false))
+        assertNull(MeloNowPlayingPolicy.sourceLine("   ", local = true, sourceIsFolder = false))
+        assertNull(MeloNowPlayingPolicy.sourceLine("", local = true, sourceIsFolder = true))
+    }
+
+    @Test
+    fun localNameEqualToTheFolderIsTheFolder() {
+        // MeloLocalSourcePolicy.displayArtist falls back to the folder when there is no real artist.
+        assertTrue(MeloNowPlayingPolicy.localSourceIsFolder("Vietnam", "Vietnam"))
+        assertTrue(MeloNowPlayingPolicy.localSourceIsFolder(" vietnam ", "Vietnam"))
+        assertFalse(MeloNowPlayingPolicy.localSourceIsFolder("Hà Anh Tuấn", "Vietnam"))
+        assertFalse(MeloNowPlayingPolicy.localSourceIsFolder(null, "Vietnam"))
+        assertFalse(MeloNowPlayingPolicy.localSourceIsFolder("Hà Anh Tuấn", null))
+        assertFalse(MeloNowPlayingPolicy.localSourceIsFolder("", ""))
+    }
 }

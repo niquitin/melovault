@@ -431,7 +431,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
             return
         }
         var relayout = title.show(now.title)
-        source.show(now.sourceTitle.orEmpty())
+        source.show(MeloNowPlayingPolicy.sourceLine(now.sourceTitle, now.local, now.sourceIsFolder).orEmpty())
         showQuality(host.qualityChips(fileBitDepth), now.downloadNote?.takeUnless { it.startsWith("Đã tải") }.orEmpty())
         time.show(MeloComponentPolicy.progressText((now.positionMs / 1000).toInt(), (now.durationMs / 1000).toInt()))
         play.show(if (now.playing) "❚❚" else "▶")

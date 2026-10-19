@@ -587,10 +587,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun localNowPlaying(controller: MediaController, item: MediaItem): MeloScreenHost.NowPlaying {
         val duration = controller.duration.takeIf { it != C.TIME_UNSET && it > 0L } ?: localDurationOf(item)
+        val shownName = item.mediaMetadata.artist?.toString()?.takeIf { it.isNotBlank() }
+        // The player's artist is the real artist or, without one, the folder: tell the screens which (E95 F08, label only).
+        val folder = MeloLocalSourcePolicy.idOfMediaId(item.mediaId)
+            ?.let { id -> if (localMusicLazy.isInitialized()) localMusic.byId(id)?.folder else null }
         return MeloScreenHost.NowPlaying(
             songKey = currentSongKey(),
             title = item.mediaMetadata.title?.toString()?.takeIf { it.isNotBlank() } ?: "Đang phát",
-            sourceTitle = item.mediaMetadata.artist?.toString()?.takeIf { it.isNotBlank() },
+            sourceTitle = shownName,
+            sourceIsFolder = MeloNowPlayingPolicy.localSourceIsFolder(shownName, folder),
             filename = null,
             positionMs = controller.currentPosition.coerceAtLeast(0L),
             durationMs = duration,

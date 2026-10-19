@@ -66,6 +66,33 @@ internal object MeloNowPlayingPolicy {
     fun seekTarget(positionMs: Long, durationMs: Long, deltaMs: Long): Long =
         MeloCarPolicy.seekTarget(positionMs, durationMs, deltaMs)
 
+    /**
+     * The line under the song title on the Now Playing screens (E95 F08). A Telegram song says
+     * "Kênh: …" - the channel is a source, never passed off as an artist; a local song says
+     * "Nghệ sĩ: …" when it has a real artist and "Thư mục: …" when only its folder is known.
+     * Null when there is no name at all. UI text only: the MediaSession metadata is unchanged (D2).
+     */
+    fun sourceLine(sourceTitle: String?, local: Boolean, sourceIsFolder: Boolean): String? {
+        val name = sourceTitle?.trim().orEmpty()
+        if (name.isEmpty()) return null
+        return when {
+            !local -> "Kênh: $name"
+            sourceIsFolder -> "Thư mục: $name"
+            else -> "Nghệ sĩ: $name"
+        }
+    }
+
+    /**
+     * A local song's display artist is its real artist, else its folder name (see
+     * MeloLocalSourcePolicy.displayArtist). When the shown name is the folder's name the line
+     * says "Thư mục"; the name is true for either label if an artist happens to share it.
+     */
+    fun localSourceIsFolder(displayArtist: String?, folder: String?): Boolean {
+        val artist = displayArtist?.trim().orEmpty()
+        val dir = folder?.trim().orEmpty()
+        return artist.isNotEmpty() && dir.isNotEmpty() && artist.equals(dir, ignoreCase = true)
+    }
+
     /** Transport buttons (−30s / Lùi / Tiến / +60s) are 56dp in a window tall enough for it, else 48dp (touch minimum). */
     fun transportHeightDp(windowHeightDp: Int): Int = if (windowHeightDp >= TALL_WINDOW_DP) 56 else 48
 
