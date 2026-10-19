@@ -2,7 +2,6 @@ package com.bsdung.musicassistantcar.data.telegram
 
 import android.content.SharedPreferences
 import com.bsdung.musicassistantcar.data.telegram.MeloComponentPolicy.Status
-import kotlin.math.abs
 
 /**
  * Rules for the Studio Deck Now Playing screen, docs/ui-spec.md step 6.
@@ -14,7 +13,6 @@ internal object MeloNowPlayingPolicy {
     /** Lives with the playback preferences so ShareablePlaybackService can read it too. */
     const val PLAYBACK_PREFS = UiThemePolicy.PREFS_NAME
     const val KEY_PREFETCH_NEXT = "prefetch_next"
-    const val WAVEFORM_BUCKETS = 120
     const val SEEK_BACK_MS = -30_000L
     const val SEEK_FORWARD_MS = 60_000L
 
@@ -68,26 +66,17 @@ internal object MeloNowPlayingPolicy {
     fun seekTarget(positionMs: Long, durationMs: Long, deltaMs: Long): Long =
         MeloCarPolicy.seekTarget(positionMs, durationMs, deltaMs)
 
+    /** Transport buttons (−30s / Lùi / Tiến / +60s) are 56dp in a window tall enough for it, else 48dp (touch minimum). */
+    fun transportHeightDp(windowHeightDp: Int): Int = if (windowHeightDp >= TALL_WINDOW_DP) 56 else 48
+
+    private const val TALL_WINDOW_DP = 600
+
     /**
-     * Normalises real sample peaks to [buckets] bars in 0..1. Fewer samples than bars
-     * keeps the samples' count (bars are never invented); an all-silent file stays flat.
+     * The bit depth sits in the header of a downloaded lossless file only; lossy files never get
+     * a Hi-Res claim, so they are not probed at all.
      */
-    fun bucketPeaks(samples: FloatArray, buckets: Int): FloatArray {
-        if (samples.isEmpty() || buckets <= 0) return FloatArray(0)
-        val count = minOf(buckets, samples.size)
-        val out = FloatArray(count)
-        for (i in 0 until count) {
-            val from = (i.toLong() * samples.size / count).toInt()
-            val to = maxOf(from + 1, ((i + 1).toLong() * samples.size / count).toInt())
-            var peak = 0f
-            for (j in from until to) peak = maxOf(peak, abs(samples[j]))
-            out[i] = peak
-        }
-        val max = out.maxOrNull() ?: 0f
-        if (max <= 0f) return out
-        for (i in out.indices) out[i] = out[i] / max
-        return out
-    }
+    fun shouldProbeBitDepth(filename: String?): Boolean =
+        MeloComponentPolicy.isLossless(MeloComponentPolicy.formatOf(null, filename))
 
     /**
      * Side of the square cover: what is left of the column height after everything else
@@ -115,24 +104,6 @@ internal object MeloNowPlayingPolicy {
         val cell = (availableWidthPx - gapPx * (chipWidthsPx.size - 1)) / chipWidthsPx.size
         return chipWidthsPx.max() > cell
     }
-
-    /** Touch position to 0..1 over the bar, which starts and ends [inset] px inside the view. */
-    fun seekFraction(x: Float, width: Float, inset: Float = 0f): Float {
-        val span = width - 2f * inset.coerceAtLeast(0f)
-        if (span <= 0f) return 0f
-        return ((x - inset.coerceAtLeast(0f)) / span).coerceIn(0f, 1f)
-    }
-
-    /** Knob centre for [fraction]: [inset] at 0, width - [inset] at 1, so the knob is never clipped. */
-    fun knobCenter(fraction: Float, width: Float, inset: Float): Float {
-        val i = inset.coerceAtLeast(0f)
-        val span = (width - 2f * i).coerceAtLeast(0f)
-        return i + span * fraction.coerceIn(0f, 1f)
-    }
-
-    /** Derived data only; scoped by account so a different login never reuses another's file. */
-    fun waveformCacheName(accountId: Long, songKey: Long, sizeBytes: Long): String =
-        "wf_${accountId}_${songKey}_${sizeBytes}.bin"
 
     /**
      * Quality label from the real decoder format. ExoPlayer may report "audio/raw" after

@@ -205,7 +205,7 @@ class MeloUiLabActivity : AppCompatActivity() {
 
         content.addView(components.sectionTitle("Màn Đang phát"))
         content.addView(note(
-            "Studio Deck: ảnh bìa lớn, sóng âm thật của bài đã tải để tua, −30s / +60s, hẹn giờ tắt, " +
+            "Studio Deck: ảnh bìa lớn, −30s / +60s, hàng nút điều khiển luôn nằm cuối màn, hẹn giờ tắt, " +
                 "hàng đợi có trạng thái từng bài và công tắc Tải trước bài kế. Chọn \"Màn cũ\" nếu cần quay về. " +
                 "Bản Gọn và Car Mode có màn Đang phát riêng."
         ))

@@ -4,7 +4,6 @@ import com.bsdung.musicassistantcar.data.telegram.MeloComponentPolicy.Status
 import com.bsdung.musicassistantcar.data.telegram.MeloNowPlayingPolicy.DeckLayout
 import com.bsdung.musicassistantcar.data.telegram.MeloNowPlayingPolicy.NowPlayingStyle
 import com.bsdung.musicassistantcar.data.telegram.MeloNowPlayingPolicy.SleepOption
-import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -63,24 +62,31 @@ class MeloNowPlayingPolicyTest {
     }
 
     @Test
-    fun peaksAreNormalisedAndNeverInvented() {
-        val peaks = MeloNowPlayingPolicy.bucketPeaks(floatArrayOf(0.1f, -0.5f, 0.2f, 0.25f), 2)
-        assertArrayEquals(floatArrayOf(1f, 0.5f), peaks, 0.0001f)
-        assertEquals(3, MeloNowPlayingPolicy.bucketPeaks(floatArrayOf(0.1f, 0.2f, 0.4f), 120).size)
-        assertEquals(0, MeloNowPlayingPolicy.bucketPeaks(FloatArray(0), 120).size)
-        assertArrayEquals(floatArrayOf(0f, 0f), MeloNowPlayingPolicy.bucketPeaks(floatArrayOf(0f, 0f), 2), 0f)
-        val many = MeloNowPlayingPolicy.bucketPeaks(FloatArray(1000) { it / 1000f }, 120)
-        assertEquals(120, many.size)
-        assertEquals(1f, many.last(), 0.0001f)
-        assertTrue(many.all { it in 0f..1f })
+    fun transportButtonsGrowOnlyInTallWindows() {
+        // Head unit windows are 642dp tall: 56dp buttons; a low sideways phone keeps the 48dp minimum.
+        assertEquals(56, MeloNowPlayingPolicy.transportHeightDp(642))
+        assertEquals(56, MeloNowPlayingPolicy.transportHeightDp(600))
+        assertEquals(48, MeloNowPlayingPolicy.transportHeightDp(599))
+        assertEquals(48, MeloNowPlayingPolicy.transportHeightDp(384))
     }
 
     @Test
-    fun seekFractionIsClamped() {
-        assertEquals(0.5f, MeloNowPlayingPolicy.seekFraction(50f, 100f), 0.0001f)
-        assertEquals(0f, MeloNowPlayingPolicy.seekFraction(-5f, 100f), 0.0001f)
-        assertEquals(1f, MeloNowPlayingPolicy.seekFraction(150f, 100f), 0.0001f)
-        assertEquals(0f, MeloNowPlayingPolicy.seekFraction(5f, 0f), 0.0001f)
+    fun bitDepthIsProbedForLosslessFilesOnly() {
+        assertTrue(MeloNowPlayingPolicy.shouldProbeBitDepth("Biển Gọi Tên Gió.flac"))
+        assertTrue(MeloNowPlayingPolicy.shouldProbeBitDepth("track.WAV"))
+        assertFalse(MeloNowPlayingPolicy.shouldProbeBitDepth("track.mp3"))
+        assertFalse(MeloNowPlayingPolicy.shouldProbeBitDepth("track.m4a"))
+        assertFalse(MeloNowPlayingPolicy.shouldProbeBitDepth("noextension"))
+        assertFalse(MeloNowPlayingPolicy.shouldProbeBitDepth(null))
+    }
+
+    @Test
+    fun seekStepsStayThirtyBackSixtyForward() {
+        // The waveform scrubber is gone; these steps (Media3 seek through the host) are the only seek on the deck.
+        assertEquals(-30_000L, MeloNowPlayingPolicy.SEEK_BACK_MS)
+        assertEquals(60_000L, MeloNowPlayingPolicy.SEEK_FORWARD_MS)
+        assertEquals(70_000L, MeloNowPlayingPolicy.seekTarget(10_000, 300_000, MeloNowPlayingPolicy.SEEK_FORWARD_MS))
+        assertEquals(0L, MeloNowPlayingPolicy.seekTarget(20_000, 300_000, MeloNowPlayingPolicy.SEEK_BACK_MS))
     }
 
     @Test
@@ -130,51 +136,6 @@ class MeloNowPlayingPolicyTest {
         // a negative rest is treated as 0
         assertEquals(300, MeloNowPlayingPolicy.artSide(300, 800, -40, 56))
         assertEquals(0, MeloNowPlayingPolicy.artSide(300, 10, 20, -5))
-    }
-
-    @Test
-    fun seekFractionWithInsetMapsTheBarNotTheView() {
-        assertEquals(0f, MeloNowPlayingPolicy.seekFraction(0f, 100f, 10f), 0.0001f)
-        assertEquals(0f, MeloNowPlayingPolicy.seekFraction(10f, 100f, 10f), 0.0001f)
-        assertEquals(1f, MeloNowPlayingPolicy.seekFraction(90f, 100f, 10f), 0.0001f)
-        assertEquals(1f, MeloNowPlayingPolicy.seekFraction(100f, 100f, 10f), 0.0001f)
-        assertEquals(0.5f, MeloNowPlayingPolicy.seekFraction(50f, 100f, 10f), 0.0001f)
-        assertEquals(0.25f, MeloNowPlayingPolicy.seekFraction(30f, 100f, 10f), 0.0001f)
-    }
-
-    @Test
-    fun seekFractionNeverDividesByZero() {
-        assertEquals(0f, MeloNowPlayingPolicy.seekFraction(5f, 20f, 10f), 0.0001f)
-        assertEquals(0f, MeloNowPlayingPolicy.seekFraction(5f, 10f, 10f), 0.0001f)
-        assertEquals(0f, MeloNowPlayingPolicy.seekFraction(5f, 0f, 3f), 0.0001f)
-        assertEquals(0.5f, MeloNowPlayingPolicy.seekFraction(50f, 100f, -4f), 0.0001f)
-    }
-
-    @Test
-    fun knobStaysInsideTheViewAtBothEnds() {
-        assertEquals(10f, MeloNowPlayingPolicy.knobCenter(0f, 100f, 10f), 0.0001f)
-        assertEquals(90f, MeloNowPlayingPolicy.knobCenter(1f, 100f, 10f), 0.0001f)
-        assertEquals(50f, MeloNowPlayingPolicy.knobCenter(0.5f, 100f, 10f), 0.0001f)
-        assertEquals(10f, MeloNowPlayingPolicy.knobCenter(-1f, 100f, 10f), 0.0001f)
-        assertEquals(90f, MeloNowPlayingPolicy.knobCenter(2f, 100f, 10f), 0.0001f)
-        // a view narrower than the knob keeps the knob at the inset instead of going negative
-        assertEquals(10f, MeloNowPlayingPolicy.knobCenter(0.7f, 15f, 10f), 0.0001f)
-    }
-
-    @Test
-    fun touchAndKnobAgree() {
-        for (f in listOf(0f, 0.2f, 0.5f, 0.9f, 1f)) {
-            val x = MeloNowPlayingPolicy.knobCenter(f, 240f, 12f)
-            assertEquals(f, MeloNowPlayingPolicy.seekFraction(x, 240f, 12f), 0.0001f)
-        }
-    }
-
-    @Test
-    fun waveformCacheIsAccountScoped() {
-        val a = MeloNowPlayingPolicy.waveformCacheName(1, 42, 9_000_000)
-        val b = MeloNowPlayingPolicy.waveformCacheName(2, 42, 9_000_000)
-        assertTrue(a != b)
-        assertEquals("wf_1_42_9000000.bin", a)
     }
 
     @Test

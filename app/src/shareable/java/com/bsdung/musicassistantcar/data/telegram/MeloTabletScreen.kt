@@ -52,7 +52,6 @@ internal class MeloTabletScreen(
     private val source = c.text("", s.titleText, p.textSecondary, maxLines = 1)
     private val quality = c.text("", s.secondaryText, p.accent, maxLines = 1)
     private val time = c.text("", s.secondaryText, p.textSecondary)
-    private val bar: MeloWaveformView
     private lateinit var play: TextView
     private lateinit var shuffle: TextView
     private lateinit var repeat: TextView
@@ -100,10 +99,6 @@ internal class MeloTabletScreen(
     }
 
     init {
-        bar = MeloWaveformView(context, p.accent, p.border) { fraction ->
-            val dur = host.nowPlaying()?.durationMs ?: 0L
-            if (dur > 0L) host.seekTo((dur * fraction).toLong())
-        }
         buildNav()
         view.addView(navColumn, LinearLayout.LayoutParams(s.minTouch * 80 / 48, ViewGroup.LayoutParams.MATCH_PARENT))
         playerPane = buildPlayerPane()
@@ -184,8 +179,7 @@ internal class MeloTabletScreen(
         column.addView(title, matchWrap().apply { topMargin = s.gap * 2 })
         column.addView(source, matchWrap().apply { topMargin = s.gap / 2 })
         column.addView(quality, matchWrap().apply { topMargin = s.gap / 2 })
-        column.addView(bar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, s.minTouch).apply { topMargin = s.gap * 2 })
-        column.addView(time.apply { gravity = Gravity.END }, matchWrap())
+        column.addView(time.apply { gravity = Gravity.END }, matchWrap().apply { topMargin = s.gap * 2 })
 
         val transport = transportRow.apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         transport.addView(c.iconButton("⏮", "Bài trước") { host.previous() }.apply {
@@ -273,7 +267,7 @@ internal class MeloTabletScreen(
         title.maxLines = if (tight) 1 else 2
         quality.visibility = if (tight) View.GONE else View.VISIBLE
         val top = if (tight) s.gap else s.gap * 2
-        listOf<View>(title, bar, transportRow, extrasBox).forEach { v ->
+        listOf<View>(title, time, transportRow, extrasBox).forEach { v ->
             (v.layoutParams as LinearLayout.LayoutParams).topMargin = top
             v.requestLayout()
         }
@@ -444,14 +438,12 @@ internal class MeloTabletScreen(
             relayout = source.show("") or relayout
             quality.show("")
             time.show("")
-            bar.setProgress(0f)
             play.show("▶")
             showArt(null, null, "♪")
         } else {
             relayout = title.show(now.title)
             relayout = source.show(now.sourceTitle.orEmpty()) or relayout
             quality.show(listOfNotNull(host.qualityLabel(null), now.downloadNote?.takeUnless { it.startsWith("Đã tải") }).joinToString(" · "))
-            bar.setProgress(if (now.durationMs > 0L) now.positionMs.toFloat() / now.durationMs else 0f)
             time.show(MeloComponentPolicy.progressText((now.positionMs / 1000).toInt(), (now.durationMs / 1000).toInt()))
             play.show(if (now.playing) "❚❚" else "▶")
             play.contentDescription = if (now.playing) "Dừng" else "Phát"
