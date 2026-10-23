@@ -162,8 +162,21 @@ internal class MeloCompactScreen(
             snap.mode, snap.sourceTitle, snap.showingSources,
             host.sourceSummaries().firstOrNull { it.kind == MeloSourceCardPolicy.Kind.TELEGRAM }?.downloaded
         )
-        downloadedLine.text = downloaded.orEmpty()
-        downloadedLine.visibility = if (downloaded == null) View.GONE else View.VISIBLE
+        // E96 P4: on the Playlist tab the same hint line carries the honest Playlist state; tap = detail.
+        val playlistState = if (snap.mode == Mode.PLAYLIST && !snap.showingSources) host.playlistStatus() else null
+        val hint = playlistState?.text ?: downloaded
+        downloadedLine.text = hint.orEmpty()
+        downloadedLine.visibility = if (hint == null) View.GONE else View.VISIBLE
+        if (playlistState != null) {
+            downloadedLine.contentDescription = "Trạng thái Playlist: ${playlistState.text}. Chạm để xem chi tiết."
+            downloadedLine.setOnClickListener {
+                android.widget.Toast.makeText(context, playlistState.text + "\n" + playlistState.fullDetail(), android.widget.Toast.LENGTH_LONG).show()
+            }
+        } else {
+            downloadedLine.contentDescription = null
+            downloadedLine.setOnClickListener(null)
+            downloadedLine.isClickable = false
+        }
         note.text = snap.note.orEmpty()
         note.visibility = if (snap.note.isNullOrBlank()) View.GONE else View.VISIBLE
         backCallback.isEnabled = nowPage != null || searchBar.visibility == View.VISIBLE ||
@@ -528,7 +541,9 @@ internal class MeloCompactScreen(
             download.text = now.downloadNote.orEmpty()
             shuffle.text = if (now.shuffle) "⇄ Đảo: bật" else "⇄ Đảo: tắt"
             repeat.text = "↻ Lặp: ${now.repeatLabel}"
-            favorite.text = if (now.favorite) "★ Đã lưu vào Playlist" else "☆ Lưu vào Playlist"
+            val save = MeloSavePolicy.buttonState(now.saveAvailability, now.favorite, now.saveBusy)
+            favorite.text = if (save.saved) "★ Bỏ lưu khỏi Playlist" else "☆ Lưu vào Playlist"
+            favorite.contentDescription = save.contentDescription
             setTextPx(shuffle); setTextPx(repeat); setTextPx(favorite); setTextPx(queue)
         }
 

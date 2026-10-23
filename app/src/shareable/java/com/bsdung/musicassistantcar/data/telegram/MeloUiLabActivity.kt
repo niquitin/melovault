@@ -212,6 +212,14 @@ class MeloUiLabActivity : AppCompatActivity() {
         }
 
         content.addView(header())
+        content.addView(components.sectionTitle("Đồng bộ Playlist"))
+        content.addView(note(
+            "Playlist luôn được lưu trên máy. Đồng bộ đám mây giữa các máy (qua kênh Telegram riêng) chưa được kích hoạt trong bản thử nghiệm; " +
+                "màn này cho xem quyền riêng tư và trạng thái."
+        ))
+        content.addView(actionButton("Mở Đồng bộ Playlist") {
+            startActivity(Intent(this, MeloSyncSettingsActivity::class.java))
+        })
         content.addView(components.sectionTitle("Thông tin màn hình"))
         rootScroll = scroll
         infoLinesNow = infoLines(m, scroll)

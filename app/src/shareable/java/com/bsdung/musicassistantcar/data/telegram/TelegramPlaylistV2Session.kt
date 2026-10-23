@@ -29,6 +29,8 @@ internal interface PlaylistSessionApi {
     fun detachIndex(index: PlaylistIndex)
     /** Gives legacy keys their real (chat, message) once the index can tell. Returns true if something changed. */
     fun resolveLegacyKeys(account: TelegramUserId): Boolean
+    /** E96 P4: counts for the status line, from the committed state (V1-only sessions have none). Call from the playlist thread. */
+    fun statusFacts(account: TelegramUserId): PlaylistStatusFacts? = null
 }
 
 /** Why importing the changes an older app made to V1 was put off. Nothing is lost: V1 and V2 are left as they were. */
@@ -388,6 +390,13 @@ internal class TelegramPlaylistV2Session(
         if (!trySave(account, next)) return false
         state = next
         return true
+    }
+
+    @Synchronized
+    override fun statusFacts(account: TelegramUserId): PlaylistStatusFacts? {
+        if (user != account) return null
+        state?.let { return PlaylistStatusFacts.of(it, importDeferred) }
+        return blocked?.let { PlaylistStatusFacts.unreadable(account.value, it) }
     }
 
     // ---- sync host (E96 P2) ---------------------------------------------------------------------

@@ -31,6 +31,10 @@
         <activity android:name=".data.telegram.MeloUiLabActivity"
                   android:exported="false"
                   android:theme="@style/Theme.MusicAssistantCar" />
+        <!-- E96 P4: Settings > Đồng bộ Playlist (privacy notice, consents, status). Sync is off in this build. -->
+        <activity android:name=".data.telegram.MeloSyncSettingsActivity"
+                  android:exported="false"
+                  android:theme="@style/Theme.MusicAssistantCar" />
         <activity android:name=".data.telegram.MeloUiPreviewActivity"
                   android:exported="false"
                   android:resizeableActivity="true"

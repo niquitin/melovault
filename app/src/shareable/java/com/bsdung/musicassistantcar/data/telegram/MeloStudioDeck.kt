@@ -438,10 +438,11 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         play.contentDescription = if (now.playing) "Dừng" else "Phát"
         relayout = styleToggle(shuffle, now.shuffle, "⇄ Đảo") or relayout
         relayout = styleToggle(repeat, now.repeatLabel != "tắt", MeloNowPlayingPolicy.repeatChipLabel(now.repeatLabel)) or relayout
-        relayout = styleToggle(favorite, now.favorite, if (now.favorite) "★ Lưu" else "☆ Lưu") or relayout
+        val save = MeloSavePolicy.buttonState(now.saveAvailability, now.favorite, now.saveBusy)
+        relayout = styleToggle(favorite, save.saved, MeloSavePolicy.chipLabel(save.saved)) or relayout
         shuffle.contentDescription = if (now.shuffle) "Đảo bài: bật" else "Đảo bài: tắt"
         repeat.contentDescription = "Lặp: ${now.repeatLabel}"
-        favorite.contentDescription = if (now.favorite) "Đã lưu bài" else "Lưu bài"
+        favorite.contentDescription = save.contentDescription
         showArt(now.art ?: coverFromFile, now.sourceTitle, now.title)
         if (relayout) requestArtFit()
     }

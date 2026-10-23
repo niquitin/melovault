@@ -441,7 +441,19 @@ internal class MeloTabletScreen(
     fun onLibraryChanged() {
         val snap = host.snapshot()
         snapshot = snap
-        syncLine.show("☁ " + MeloLibraryPolicy.syncLine(host.syncSubtitle(), snap.total, false))
+        val playlistState = if (snap.mode == Mode.PLAYLIST && !snap.showingSources) host.playlistStatus() else null
+        syncLine.show(PlaylistSyncStatusPolicy.libraryLine(
+            playlistState, "☁ " + MeloLibraryPolicy.syncLine(host.syncSubtitle(), snap.total, false)
+        ))
+        // E96 P4: on the Playlist tab the line is the honest Playlist state; tap = detail.
+        if (playlistState != null) {
+            syncLine.setOnClickListener {
+                android.widget.Toast.makeText(syncLine.context, playlistState.text + "\n" + playlistState.fullDetail(), android.widget.Toast.LENGTH_LONG).show()
+            }
+        } else {
+            syncLine.setOnClickListener(null)
+            syncLine.isClickable = false
+        }
         backCallback.isEnabled = !snap.showingSources && snap.sourceTitle != null
         renderNav(snap)
         renderQuickSwitch(snap)
@@ -467,10 +479,11 @@ internal class MeloTabletScreen(
             play.contentDescription = if (now.playing) "Dừng" else "Phát"
             relayout = toggleStyle(shuffle, now.shuffle, "⇄ Đảo") or relayout
             relayout = toggleStyle(repeat, now.repeatLabel != "tắt", MeloNowPlayingPolicy.repeatChipLabel(now.repeatLabel)) or relayout
-            relayout = toggleStyle(favorite, now.favorite, if (now.favorite) "★ Lưu" else "☆ Lưu") or relayout
+            val save = MeloSavePolicy.buttonState(now.saveAvailability, now.favorite, now.saveBusy)
+            relayout = toggleStyle(favorite, save.saved, MeloSavePolicy.chipLabel(save.saved)) or relayout
             shuffle.contentDescription = if (now.shuffle) "Đảo bài: bật" else "Đảo bài: tắt"
             repeat.contentDescription = "Lặp: ${now.repeatLabel}"
-            favorite.contentDescription = if (now.favorite) "Đã lưu bài" else "Lưu bài"
+            favorite.contentDescription = save.contentDescription
             showArt(now.art, now.sourceTitle, now.title)
         }
         if (relayout && ::playerScroll.isInitialized) requestArtFit()

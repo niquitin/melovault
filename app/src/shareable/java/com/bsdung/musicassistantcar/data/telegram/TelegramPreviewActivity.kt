@@ -615,7 +615,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
             },
             downloadNote = null,
             paused = !controller.playWhenReady,
-            local = true
+            local = true,
+            saveAvailability = MeloSavePolicy.Availability.LOCAL_ONLY
         )
     }
 
@@ -4397,23 +4398,34 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
     }
 
+    /** The song a Save would name: any list this screen holds, so the target never depends on which list is open. */
+    private fun songForSave(key: Long): Song? =
+        songs.firstOrNull { it.messageId == key } ?: queueSongOrder.firstOrNull { it.messageId == key }
+            ?: shownSongs.firstOrNull { it.messageId == key }
+
     private fun toggleCurrentFavorite() {
         if (currentLocalId() != null) {
-            toast("Nhạc trên máy chưa hỗ trợ Lưu.")
+            toast(MeloSavePolicy.HINT_LOCAL_ONLY)
             return
         }
         val account = library.authorizedUser() ?: return
         if (!auth.isReady()) return
         val target = currentTelegramMessageId() ?: return
-        if (songs.none { it.messageId == target } &&
-            queueSongOrder.none { it.messageId == target }) {
+        // Carry the real (chat, message) of the song, not only the UI key, so V2 can name it on any device.
+        val song = songForSave(target)
+        if (song == null) {
             showMessage("Chưa xác định được bài đang phát để lưu. Hãy mở bài từ danh sách rồi thử lại.")
             return
         }
-        // Carry the real (chat, message) of the song, not only the UI key, so V2 can name it on any device.
-        val song = songs.firstOrNull { it.messageId == target } ?: queueSongOrder.firstOrNull { it.messageId == target }
-        requestPlaylistToggle(account, PlaylistTarget(target, song?.chatId ?: 0L, song?.rawMessageId ?: 0L), null)
+        requestPlaylistToggle(account, PlaylistTarget(target, song.chatId, song.rawMessageId), null)
     }
+
+    /** E96 P4: quick taps fold into one write at a time (see [SaveToggleGuard]); UI thread only. One guard per account. */
+    private var saveGuard = SaveToggleGuard<PlaylistTarget>()
+    private var saveGuardAccount = 0L
+    @Volatile private var playlistLoaded = false
+    @Volatile private var playlistStatusLine: PlaylistSyncStatusPolicy.Line? = null
+    private val syncConsentStore by lazy { FileSyncConsentStore(noBackupFilesDir) }
 
     /**
      * The one Save/Unsave path (now-playing button and song menu). The write runs on the playlist
@@ -4422,10 +4434,36 @@ class TelegramPreviewActivity : AppCompatActivity() {
      * [title] null = short "N bài đã lưu" wording.
      */
     private fun requestPlaylistToggle(account: TelegramUserId, target: PlaylistTarget, title: String?) {
+        if (saveGuardAccount != account.value) {
+            saveGuard = SaveToggleGuard()
+            saveGuardAccount = account.value
+        }
+        val guard = saveGuard
+        // A write is already running: this tap is counted and the running write's end will pick it up.
+        if (guard.tap(target)) startPlaylistWrite(guard, account, target, title)
+        notifyMeloPlayback()
+    }
+
+    private fun startPlaylistWrite(
+        guard: SaveToggleGuard<PlaylistTarget>, account: TelegramUserId, target: PlaylistTarget, title: String?
+    ) {
         TelegramPlaylistRuntime.submit {
             val outcome = playlistSession.toggle(account, target)
-            runOnUiThread { onPlaylistToggled(account, outcome, title) }
+            runOnUiThread { onPlaylistWriteDone(guard, account, outcome, title) }
         }
+    }
+
+    private fun onPlaylistWriteDone(
+        guard: SaveToggleGuard<PlaylistTarget>, account: TelegramUserId,
+        outcome: TelegramPlaylistSession.ToggleOutcome, title: String?
+    ) {
+        val written = outcome is TelegramPlaylistSession.ToggleOutcome.Added || outcome is TelegramPlaylistSession.ToggleOutcome.Removed
+        val next = guard.finish(written)
+        onPlaylistToggled(account, outcome, title)
+        refreshPlaylistStatus(account)
+        // A guard replaced by an account change belongs to the previous account: its leftovers are not re-run.
+        if (guard === saveGuard && next != null) startPlaylistWrite(guard, account, next, null)
+        notifyMeloPlayback()
     }
 
     private fun onPlaylistToggled(
@@ -4435,11 +4473,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
         when (outcome) {
             is TelegramPlaylistSession.ToggleOutcome.Added -> {
                 applySavedPlaylist(outcome.ids)
-                showMessage(if (title != null) "Đã thêm '$title' vào Playlist." else "Playlist cá nhân: ${outcome.ids.size} bài đã lưu.")
+                showMessage(if (title != null) "Đã lưu '$title' trên máy." else "Đã lưu trên máy · ${outcome.ids.size} bài trong Playlist.")
             }
             is TelegramPlaylistSession.ToggleOutcome.Removed -> {
                 applySavedPlaylist(outcome.ids)
-                showMessage(if (title != null) "Đã xóa '$title' khỏi Playlist." else "Playlist cá nhân: ${outcome.ids.size} bài đã lưu.")
+                showMessage(if (title != null) "Đã bỏ lưu '$title'." else "Đã bỏ lưu · ${outcome.ids.size} bài trong Playlist.")
             }
             is TelegramPlaylistSession.ToggleOutcome.Full -> {
                 val message = "Playlist đã đủ ${TelegramPlaylistPolicy.MAX_IDS} bài. Hãy xóa bớt một bài trước khi thêm bài mới."
@@ -4482,6 +4520,27 @@ class TelegramPreviewActivity : AppCompatActivity() {
         refreshSongRows()
     }
 
+    /**
+     * E96 P4: recomputes the Playlist status line from the committed V2 state. The read runs on the playlist thread (it
+     * waits behind a Save in progress), never on the UI thread. Nothing here starts a sync: with the build switch off
+     * the consent file is not even read.
+     */
+    private fun refreshPlaylistStatus(account: TelegramUserId) {
+        TelegramPlaylistRuntime.submit {
+            val facts = playlistSession.statusFacts(account)
+            val consent = if (TelegramPlaylistFlags.SYNC_ENABLED) syncConsentStore.load(account) else SyncConsent()
+            val line = PlaylistSyncStatusPolicy.evaluate(
+                account.value, facts, SyncContext(TelegramPlaylistFlags.SYNC_ENABLED, consent)
+            )
+            runOnUiThread {
+                if (isDestroyed || library.authorizedUser() != account) return@runOnUiThread
+                playlistStatusLine = line
+                carScreen?.onPlaylistStatusChanged()
+                scheduleMeloLibraryRefresh()
+            }
+        }
+    }
+
     private fun showPlaylistUnreadable() {
         val message = "Không đọc được Playlist đã lưu trên máy này. Để không mất dữ liệu, ứng dụng sẽ không ghi đè lên nó. " +
             "Hãy giữ nguyên ứng dụng và báo cho người hỗ trợ."
@@ -4512,6 +4571,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     is TelegramPlaylistSession.OpenResult.Ready -> {
                         favoriteIds = opened.ids
                         playlistUnreadable = false
+                        playlistLoaded = true
                         updatePlaylistButtons()
                         if (playlistMode) refreshSongRows()
                         opened.warning?.let { showPlaylistImportDeferred(it) }
@@ -4519,17 +4579,25 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     is TelegramPlaylistSession.OpenResult.Blocked -> {
                         favoriteIds = emptyList()
                         playlistUnreadable = true
+                        playlistLoaded = false
                         updatePlaylistButtons()
                         if (playlistMode) refreshSongRows()
                         showPlaylistUnreadable()
                     }
                 }
+                refreshPlaylistStatus(user)
+                notifyMeloPlayback()
             }
         }
     }
 
     private fun closeSavedPlaylist() {
         playlistUnreadable = false
+        playlistLoaded = false
+        playlistStatusLine = null
+        // A different account must never inherit the previous one's queued taps.
+        saveGuard = SaveToggleGuard()
+        saveGuardAccount = 0L
         TelegramPlaylistRuntime.submit { playlistSession.close() }
     }
 
@@ -5092,8 +5160,21 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     else -> "tắt"
                 },
                 downloadNote = currentDownloadNote(),
-                paused = !controller.playWhenReady
+                paused = !controller.playWhenReady,
+                saveAvailability = MeloSavePolicy.availability(
+                    playing = true, local = false, songKey = key, songKnown = song != null,
+                    chatId = song?.chatId ?: 0L, rawMessageId = song?.rawMessageId ?: 0L,
+                    accountId = library.authorizedUser()?.value ?: 0L,
+                    playlistUnreadable = playlistUnreadable, playlistLoaded = playlistLoaded
+                ),
+                saveBusy = saveGuard.busy
             )
+        }
+
+        override fun playlistStatus(): PlaylistSyncStatusPolicy.Line? = playlistStatusLine
+
+        override fun openSyncSettings() {
+            startActivity(Intent(this@TelegramPreviewActivity, MeloSyncSettingsActivity::class.java))
         }
 
         override fun playPause() {

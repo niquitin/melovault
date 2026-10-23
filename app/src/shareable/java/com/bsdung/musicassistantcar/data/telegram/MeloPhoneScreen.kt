@@ -101,7 +101,19 @@ internal class MeloPhoneScreen(
     fun onLibraryChanged() {
         val snap = host.snapshot()
         snapshot = snap
-        syncLine.text = "☁ " + MeloLibraryPolicy.syncLine(host.syncSubtitle(), snap.total, false)
+        val playlistState = if (snap.mode == Mode.PLAYLIST && !snap.showingSources) host.playlistStatus() else null
+        syncLine.text = PlaylistSyncStatusPolicy.libraryLine(
+            playlistState, "☁ " + MeloLibraryPolicy.syncLine(host.syncSubtitle(), snap.total, false)
+        )
+        // E96 P4: on the Playlist tab the line is the honest Playlist state; tap = detail.
+        if (playlistState != null) {
+            syncLine.setOnClickListener {
+                android.widget.Toast.makeText(syncLine.context, playlistState.text + "\n" + playlistState.fullDetail(), android.widget.Toast.LENGTH_LONG).show()
+            }
+        } else {
+            syncLine.setOnClickListener(null)
+            syncLine.isClickable = false
+        }
         backCallback.isEnabled = !snap.showingSources && snap.sourceTitle != null
         bar.renderTabs(snap.showingSources, snap.mode)
         pane.onLibraryChanged()

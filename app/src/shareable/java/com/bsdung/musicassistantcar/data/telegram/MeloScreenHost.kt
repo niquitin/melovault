@@ -32,6 +32,16 @@ internal interface MeloScreenHost {
     fun previous()
     fun seekTo(positionMs: Long)
     fun toggleFavorite()
+
+    /**
+     * E96 P4: the honest one-line state of the saved Playlist (saved on this device / waiting / synced / why not),
+     * computed off the UI thread and cached; null until the first read. Never a guess, never another account's.
+     */
+    fun playlistStatus(): PlaylistSyncStatusPolicy.Line? = null
+
+    /** Opens Settings > Đồng bộ Playlist. */
+    fun openSyncSettings() = Unit
+
     fun toggleShuffle()
     fun cycleRepeat()
     fun openQueue()
@@ -173,6 +183,10 @@ internal interface MeloScreenHost {
         /** The playing song comes from "Nhạc trên máy"; [sourceTitle] is then its artist or folder. */
         val local: Boolean = false,
         /** Local song with no artist tag: [sourceTitle] is its folder name, so the line says "Thư mục:" (E95 F08). */
-        val sourceIsFolder: Boolean = false
+        val sourceIsFolder: Boolean = false,
+        /** E96 P4: whether and how the Save button may act on this song (see [MeloSavePolicy]). */
+        val saveAvailability: MeloSavePolicy.Availability = MeloSavePolicy.Availability.READY,
+        /** A Save write for this song is running; [favorite] still shows what is committed. */
+        val saveBusy: Boolean = false
     )
 }

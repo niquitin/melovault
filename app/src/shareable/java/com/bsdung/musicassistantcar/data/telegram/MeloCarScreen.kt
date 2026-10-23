@@ -79,6 +79,14 @@ internal class MeloCarScreen(
     private val seek = SeekBar(context)
     private val time = c.text("", s.secondaryText, p.textSecondary)
     private lateinit var play: TextView
+    private lateinit var saveButton: TextView
+    private var saveState: MeloSavePolicy.ButtonState? = null
+    private val playlistStatus = c.text("", s.secondaryText, p.textSecondary, maxLines = 1).apply {
+        visibility = View.GONE
+        ellipsize = android.text.TextUtils.TruncateAt.END
+        isClickable = true
+        isFocusable = true
+    }
     private var userSeeking = false
     private var lastArt: Bitmap? = null
     private var lastArtKey: Long? = null
@@ -256,6 +264,45 @@ internal class MeloCarScreen(
         seekRow.addView(bigButton("60s ⏩", "Tua tới 60 giây") { seekBy(MeloCarPolicy.SEEK_FORWARD_MS) },
             LinearLayout.LayoutParams(0, s.transportHeight, 1f))
         playerPane.addView(seekRow, matchWrap().apply { topMargin = s.gap * 2 })
+
+        // E96 P4: one tap, always on the Now Playing pane (no menu, no Playlist tab, no long press).
+        saveButton = bigButton("☆ Lưu", "Lưu bài đang phát vào Playlist") { onSaveTap() }
+        playerPane.addView(saveButton, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, MeloSavePolicy.carButtonHeightPx(s)
+        ).apply { topMargin = s.gap * 2 })
+        renderSave(null)
+    }
+
+    /** A tap on a button that cannot act only says why; otherwise it goes to the host's single Save path (which folds quick repeats). */
+    private fun onSaveTap() {
+        val state = saveState ?: return
+        if (!state.actionable) {
+            state.hint?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() }
+            return
+        }
+        host.toggleFavorite()
+        renderSave(host.nowPlaying())
+    }
+
+    private fun renderSave(now: NowPlaying?) {
+        val state = MeloSavePolicy.buttonState(
+            now?.saveAvailability ?: MeloSavePolicy.Availability.NOTHING_PLAYING, now?.favorite == true, now?.saveBusy == true
+        )
+        saveState = state
+        saveButton.text = if (state.hint != null) {
+            android.text.SpannableString(state.label + "\n" + state.hint).apply {
+                setSpan(android.text.style.RelativeSizeSpan(0.6f), state.label.length + 1, length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        } else state.label
+        saveButton.contentDescription = state.contentDescription
+        androidx.core.view.ViewCompat.setStateDescription(saveButton, state.stateDescription)
+        saveButton.background = if (state.saved) c.roundedBackground(p.accentSoft, stroke = p.accent) else c.roundedBackground(p.surfaceRaised)
+        saveButton.setTextColor(if (state.saved) p.accent else p.text)
+        saveButton.alpha = when {
+            !state.actionable -> 0.55f
+            state.busy -> 0.75f
+            else -> 1f
+        }
     }
 
     private fun progressTrack(): LayerDrawable {
@@ -290,6 +337,7 @@ internal class MeloCarScreen(
             seek.progress = 0
             play.text = "▶"
             showArt(null, null, "♪", null)
+            renderSave(null)
             return
         }
         songTitle.text = now.title
@@ -304,6 +352,7 @@ internal class MeloCarScreen(
         play.text = if (now.playing) "❚❚" else "▶"
         play.contentDescription = if (now.playing) "Dừng" else "Phát"
         showArt(now.art, now.sourceTitle, now.title, now.songKey)
+        renderSave(now)
     }
 
     private fun showArt(art: Bitmap?, sourceTitle: String?, title: String, key: Long?) {
@@ -393,7 +442,16 @@ internal class MeloCarScreen(
             gravity = Gravity.CENTER_VERTICAL
             minimumHeight = s.minTouch * 7 / 10
         }
-        header.addView(listTitle, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        // E96 P4: under the title, the honest Playlist state (Playlist tab only); tap = detail in a short message, no dialog.
+        val titles = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        titles.addView(listTitle, matchWrap())
+        titles.addView(playlistStatus, matchWrap())
+        playlistStatus.setOnClickListener {
+            host.playlistStatus()?.let { line ->
+                Toast.makeText(context, line.text + "\n" + line.fullDetail(), Toast.LENGTH_LONG).show()
+            }
+        }
+        header.addView(titles, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         header.addView(listStatus)
         listPane.addView(header, matchWrap())
         listPane.addView(rows, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -446,12 +504,37 @@ internal class MeloCarScreen(
         }
         listStatus.text = listOfNotNull(if (online) null else "Mất kết nối", "Trang ${page + 1}/$pages").joinToString(" · ")
         listStatus.setTextColor(if (online) p.textSecondary else p.warning)
+        renderPlaylistStatus(snap)
         if (snap.showingSources) {
             rows.removeAllViews()
             renderSources(snap)
         } else {
             renderSongs(snap)
         }
+    }
+
+    /** The Playlist state line shows on the Playlist tab only, so the other lists keep their full height. */
+    private fun renderPlaylistStatus(snap: Snapshot) {
+        val line = if (snap.mode == Mode.PLAYLIST && !snap.showingSources && !searchOpen) host.playlistStatus() else null
+        if (line == null) {
+            playlistStatus.visibility = View.GONE
+            return
+        }
+        playlistStatus.visibility = View.VISIBLE
+        playlistStatus.text = line.text
+        playlistStatus.contentDescription = "Trạng thái Playlist: ${line.text}. Chạm để xem chi tiết."
+        playlistStatus.setTextColor(
+            when (line.severity) {
+                PlaylistSyncStatusPolicy.Severity.OK -> p.accent
+                PlaylistSyncStatusPolicy.Severity.WARN, PlaylistSyncStatusPolicy.Severity.ERROR -> p.warning
+                PlaylistSyncStatusPolicy.Severity.INFO -> p.textSecondary
+            }
+        )
+    }
+
+    /** The status line was recomputed (off the UI thread); redraw only that line. */
+    fun onPlaylistStatusChanged() {
+        snapshot?.let { renderPlaylistStatus(it) }
     }
 
     /** Five rows built once; a page turn only rebinds them (Sony test F3: no view creation per tap). */
