@@ -635,7 +635,9 @@ class TelegramPlaylistSyncCoordinatorTest {
         assertEquals(PlaylistState.MAX_OUTBOX, a.pendingIds().size)
 
         val r = a.sync()
-        assertEquals(SyncStatus.OK, r.status)
+        // E96-P2-REWORK-02: 100 of 5,000 went out and 4,900 still wait, so this is NOT "synchronised"
+        assertEquals(SyncStatus.OUTBOX_INCOMPLETE, r.status)
+        assertEquals(PlaylistState.MAX_OUTBOX - 100, r.pendingLeft)
         assertEquals(5, r.envelopesSent)
         assertEquals("100 operations went out, were acknowledged, and only then were pruned", PlaylistState.MAX_OUTBOX - 100, a.pendingIds().size)
         assertEquals("the oldest went first, in order", ops.take(100).map { it.opId }, a.sentOpIds().take(100))

@@ -35,7 +35,10 @@ internal enum class SyncMode {
 }
 
 internal enum class SyncStatus {
-    /** Everything the channel holds was read and what was waiting was sent. The only status that means "synchronised". */
+    /**
+     * The whole history of the channel was read AND nothing is waiting to be sent (judged at the end of the run).
+     * The only status that means "synchronised".
+     */
     OK,
     NOT_OPEN, NO_CHANNEL,
     /**
@@ -43,6 +46,12 @@ internal enum class SyncStatus {
      * [SyncReport.replayPosition]); nothing was sent, and the playlist is NOT known to be up to date. Call again.
      */
     CATCH_UP_INCOMPLETE,
+    /**
+     * The history was read, but the run's send budget ran out (or new work arrived meanwhile) with operations still
+     * waiting - see [SyncReport.pendingLeft]. Everything sent was acknowledged; what is left is untouched, in order,
+     * with the same ids. Not synchronised: call again. Distinct from [CATCH_UP_INCOMPLETE], which is about reading.
+     */
+    OUTBOX_INCOMPLETE,
     /** Called again before the wait is over: no transport call was made. */
     BACKOFF_ACTIVE,
     /** Temporary trouble (network, timeout, FLOOD_WAIT, lost answer). Retry after [SyncReport.retryAfterMs]. */
@@ -85,7 +94,14 @@ internal data class SyncConfig(
     val maxEnvelopesPerRun: Int = 50,
     /** Asks once more, with a page of one, whether the oldest unread message is really the first one of the page. */
     val verifyPageStart: Boolean = true,
-)
+) {
+    init {
+        // A budget that cannot do any work would let a run report success having done nothing.
+        require(pageSize >= 1) { "pageSize must be at least 1" }
+        require(maxPagesPerRun >= 1) { "maxPagesPerRun must be at least 1" }
+        require(maxEnvelopesPerRun >= 1) { "maxEnvelopesPerRun must be at least 1" }
+    }
+}
 
 internal enum class ReplayMark { UNCHANGED, SET, CLEAR }
 
@@ -136,6 +152,10 @@ internal fun PlaylistState.applyRemoteBatch(
  *  - Running out of the page budget with history left is [SyncStatus.CATCH_UP_INCOMPLETE], never OK, and
  *    nothing is sent until the history is read. A FULL_REPLAY keeps its position in the checkpoint, so it
  *    resumes across runs and restarts instead of reading the same first pages again.
+ *  - Running out of the SEND budget with operations still waiting is [SyncStatus.OUTBOX_INCOMPLETE], never OK
+ *    (also when a Save arrived while the run was in flight). Everything sent was acknowledged; what is left is
+ *    not touched - same ids, same order, still waiting - and the next run continues with it. OK needs the
+ *    history read AND an empty queue. A budget of zero or less is refused when the configuration is made.
  *  - ACK only on evidence: the server's own answer to the send ([SendResult.Sent]) or finding the very same
  *    operation id again in the fetched history. A send whose answer was lost is never an ACK; its
  *    operations stay waiting (RETRY_REQUIRED) and keep their ids, so the retry is the identical message.
@@ -173,6 +193,14 @@ internal class PlaylistSyncCoordinator(
         class Done(val more: Boolean) : FetchOutcome()
     }
 
+    private sealed class SendOutcome {
+        class Stop(val report: SyncReport) : SendOutcome()
+        /** Nothing waits any more. */
+        object Drained : SendOutcome()
+        /** The send budget is spent and [left] operations still wait (untouched). */
+        class BudgetSpent(val left: Int) : SendOutcome()
+    }
+
     /** For a person pressing "try again": forget the wait. */
     @Synchronized
     fun resetBackoff() = backoff.reset()
@@ -195,10 +223,15 @@ internal class PlaylistSyncCoordinator(
             is FetchOutcome.Stop -> return fetched.report
             is FetchOutcome.Done -> if (fetched.more) return report(c, account, SyncStatus.CATCH_UP_INCOMPLETE)
         }
-        sendPhase(account, epoch, channel, scope, c)?.let { return it }
+        val sent = sendPhase(account, epoch, channel, scope, c)
+        if (sent is SendOutcome.Stop) return sent.report
         prune(account, epoch)
         backoff.onSuccess()
-        return report(c, account, SyncStatus.OK)
+        // OK is judged on what is true NOW, not on what this run planned: it needs the history read AND nothing
+        // waiting. A spent budget, or a Save that arrived while the run was in flight, leaves operations waiting.
+        val waiting = current(account, epoch)?.state?.outbox?.count { it.status != OutboxStatus.ACKNOWLEDGED }
+            ?: return report(c, account, SyncStatus.STALE_SESSION)
+        return report(c, account, if (sent is SendOutcome.BudgetSpent || waiting > 0) SyncStatus.OUTBOX_INCOMPLETE else SyncStatus.OK)
     }
 
     // ---- fetch ---------------------------------------------------------------------------------
@@ -312,14 +345,15 @@ internal class PlaylistSyncCoordinator(
 
     // ---- send ----------------------------------------------------------------------------------
 
-    private fun sendPhase(account: TelegramUserId, epoch: Long, channel: Long, scope: String, c: Counters): SyncReport? {
+    private fun sendPhase(account: TelegramUserId, epoch: Long, channel: Long, scope: String, c: Counters): SendOutcome {
+        fun stop(report: SyncReport) = SendOutcome.Stop(report)
         var envelopes = 0
         while (envelopes < config.maxEnvelopesPerRun) {
-            val view = current(account, epoch) ?: return report(c, account, SyncStatus.STALE_SESSION)
+            val view = current(account, epoch) ?: return stop(report(c, account, SyncStatus.STALE_SESSION))
             val waiting = view.state.outbox.filter { it.status != OutboxStatus.ACKNOWLEDGED }.map { it.op }
-            if (waiting.isEmpty()) return null
+            if (waiting.isEmpty()) return SendOutcome.Drained
             val envelope = PlaylistSyncProtocol.planFirstEnvelope(scope, view.state.deviceId, waiting)
-                ?: return recovery(c, account, RecoveryReason.OP_TOO_LARGE)
+                ?: return stop(recovery(c, account, RecoveryReason.OP_TOO_LARGE))
             val ids = envelope.ops.map { it.opId }.toSet()
             val result = try {
                 transport.send(channel, PlaylistSyncProtocol.encode(envelope))
@@ -333,23 +367,26 @@ internal class PlaylistSyncCoordinator(
                         c.sent++
                         c.acked += ids.size
                     }
-                    is UpdateResult.Stale -> return report(c, account, SyncStatus.STALE_SESSION)
+                    is UpdateResult.Stale -> return stop(report(c, account, SyncStatus.STALE_SESSION))
                     // The server has them; our note of it was not written. The next run finds the same ids in the history.
-                    else -> return report(c, account, SyncStatus.SAVE_FAILED)
+                    else -> return stop(report(c, account, SyncStatus.SAVE_FAILED))
                 }
                 is SendResult.Unknown -> {
                     host.update(account, epoch) { s -> ids.fold(s) { acc, id -> acc.markRetryRequired(id) } }
-                    return failure(c, account, SyncErrorKind.TIMEOUT, 0)
+                    return stop(failure(c, account, SyncErrorKind.TIMEOUT, 0))
                 }
                 is SendResult.Failed -> {
                     if (result.kind == SyncErrorKind.NETWORK || result.kind == SyncErrorKind.TIMEOUT || result.kind == SyncErrorKind.FLOOD_WAIT) {
                         host.update(account, epoch) { s -> ids.fold(s) { acc, id -> acc.markRetryRequired(id) } }
                     }
-                    return failure(c, account, result.kind, result.retryAfterSeconds)
+                    return stop(failure(c, account, result.kind, result.retryAfterSeconds))
                 }
             }
         }
-        return null
+        // The budget is spent. Look once more: the last message may just have emptied the queue.
+        val left = current(account, epoch)?.state?.outbox?.count { it.status != OutboxStatus.ACKNOWLEDGED }
+            ?: return stop(report(c, account, SyncStatus.STALE_SESSION))
+        return if (left == 0) SendOutcome.Drained else SendOutcome.BudgetSpent(left)
     }
 
     /** Acknowledged entries are removed in a write of their own, after the acknowledgements are durable. */
