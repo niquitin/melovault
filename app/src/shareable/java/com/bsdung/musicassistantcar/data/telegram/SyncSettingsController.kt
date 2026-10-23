@@ -1,15 +1,16 @@
 package com.bsdung.musicassistantcar.data.telegram
 
 /**
- * E96 P4: the four calls the Settings > Đồng bộ Playlist screen may make into P3. In the shipped P4 build the only
- * implementation that exists in production code is [DisabledSyncActions]; the adapter onto the real P3 sync service lives
- * in the test sources until P5 is approved, so no production file can reach TDLib. Every call blocks: worker thread only.
+ * E96 P4/P5-A: the four calls the Settings > Đồng bộ Playlist screen may make into P3. Production code obtains a port only
+ * from [SyncServiceProvider.actions], which answers [DisabledSyncActions] for as long as the build switch is off. Every
+ * call blocks: worker thread only. [close] releases whatever a call bound (the TDLib sink) and stops unfinished work.
  */
 internal interface SyncActionsPort {
     fun discover(account: TelegramUserId): Gated<ChannelDiscovery>
     fun create(account: TelegramUserId): Gated<CreateOutcome>
     fun bind(account: TelegramUserId, chatId: Long): Gated<BindResult>
     fun run(account: TelegramUserId, mode: SyncMode): Gated<SyncReport>
+    fun close() = Unit
 }
 
 /** The shipped P4 wiring: nothing reaches TDLib, every answer is "the build has sync off". */
@@ -136,11 +137,16 @@ internal class SyncSettingsController(
     private val actions: SyncActionsPort,
     private val account: () -> TelegramUserId?,
     private val facts: () -> PlaylistStatusFacts?,
+    /** Where the last manual run of each account is kept, shared with the screens that show the Playlist status line. */
+    private val runLog: SyncRunLog = SyncRunLog(),
 ) {
     private var viewAccount: Long = 0L
     private var channel: ChannelView = ChannelView.Unchecked
-    private var lastRun: LastSyncRun? = null
+    private val lastRun: LastSyncRun? get() = runLog.last(viewAccount)
     private var running = false
+
+    /** Screen closed: release the TDLib binding of the sync and stop unfinished work. Deletes and sends nothing. */
+    fun close() = actions.close()
 
     /** Forget everything learned about another account's channel or runs. Called before each use. */
     @Synchronized
@@ -149,7 +155,6 @@ internal class SyncSettingsController(
         if (id != viewAccount) {
             viewAccount = id
             channel = ChannelView.Unchecked
-            lastRun = null
             running = false
         }
     }
@@ -356,7 +361,7 @@ internal class SyncSettingsController(
             val answer = actions.run(who, mode)
             val opCounterNow = facts()?.takeIf { it.accountId == who.value }?.opCounter ?: snapshot.opCounter
             synchronized(this) {
-                if (viewAccount == who.value) lastRun = LastSyncRun.of(who.value, answer, opCounterNow)
+                if (viewAccount == who.value) runLog.record(LastSyncRun.of(who.value, answer, opCounterNow))
             }
             if (answer is Gated.Denied) ActionResult.Denied(answer.reason) else ActionResult.Done
         } finally {

@@ -26,6 +26,13 @@ if (!(telegramApiId ==~ /[0-9]{1,10}/) || !(telegramApiHash ==~ /[a-fA-F0-9]{32}
     telegramApiId = '0'
     telegramApiHash = ''
 }
+// E96 P5-A: lets a build machine answer "is the Telegram developer config usable?" without ever showing it.
+// Prints only true/false; the ID and hash are never written to the console, a log or an artifact.
+tasks.register('reportTelegramConfig') {
+    description = 'Prints telegram.config.valid=true|false (never the values).'
+    def valid = (telegramApiId != '0' && telegramApiHash != '')
+    doLast { println 'telegram.config.valid=' + valid }
+}
 
 android {
     namespace 'com.bsdung.musicassistantcar'

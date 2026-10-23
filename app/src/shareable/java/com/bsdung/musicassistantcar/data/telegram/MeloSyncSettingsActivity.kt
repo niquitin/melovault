@@ -47,15 +47,19 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
         controller = SyncSettingsController(
             store = FileSyncConsentStore(noBackupFilesDir),
             buildEnabled = TelegramPlaylistFlags.SYNC_ENABLED,
-            actions = DisabledSyncActions,
+            // With the build switch off this is DisabledSyncActions and nothing of TDLib is touched.
+            actions = SyncRuntime.provider(noBackupFilesDir).actions(),
             account = { account },
             facts = { lastFacts },
+            runLog = SyncRuntime.runLog,
         )
         buildFrame()
         refresh()
     }
 
     override fun onDestroy() {
+        // Leaving the screen releases the sync's TDLib binding and stops an unfinished run; it sends and deletes nothing.
+        controller.close()
         worker.shutdownNow()
         super.onDestroy()
     }

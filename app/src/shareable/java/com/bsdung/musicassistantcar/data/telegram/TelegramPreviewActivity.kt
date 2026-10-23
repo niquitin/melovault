@@ -887,6 +887,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         uiForeground = true
         // Picks up a changed "Bố cục Gọn" setting when returning from Cài đặt giao diện.
         applyMeloLayer()
+        // E96 P5-A: coming back from Settings re-reads the Playlist status line (a local file read, no network).
+        library.authorizedUser()?.let { if (playlistLoaded) refreshPlaylistStatus(it) }
         if (auth.isReady()) {
             refreshLocalCount()
             val user = library.authorizedUser()?.value ?: 0L
@@ -4530,7 +4532,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val facts = playlistSession.statusFacts(account)
             val consent = if (TelegramPlaylistFlags.SYNC_ENABLED) syncConsentStore.load(account) else SyncConsent()
             val line = PlaylistSyncStatusPolicy.evaluate(
-                account.value, facts, SyncContext(TelegramPlaylistFlags.SYNC_ENABLED, consent)
+                account.value, facts,
+                SyncContext(TelegramPlaylistFlags.SYNC_ENABLED, consent, lastRun = SyncRuntime.runLog.last(account.value))
             )
             runOnUiThread {
                 if (isDestroyed || library.authorizedUser() != account) return@runOnUiThread
@@ -4598,6 +4601,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // A different account must never inherit the previous one's queued taps.
         saveGuard = SaveToggleGuard()
         saveGuardAccount = 0L
+        // E96 P5-A: no sync report outlives its session, and an unfinished sync is stopped (inert while the build switch is off).
+        SyncRuntime.runLog.clear()
+        SyncRuntime.provider(noBackupFilesDir).actions().close()
         TelegramPlaylistRuntime.submit { playlistSession.close() }
     }
 

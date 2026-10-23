@@ -315,11 +315,13 @@ class TdlibChannelConsentTest {
         assertFalse("a call alone binds only for its duration", r.tdlib.core.syncIsBound())
     }
 
-    @Test fun c24_nothingInTheAppReachesTheSyncServiceYet() {
+    @Test fun c24_nothingInTheAppReachesTheSyncServiceExceptTheGuardedProvider() {
         val srcRoot = listOf(File("src"), File("app/src")).first { it.isDirectory }
         val own = setOf(
             "TdlibPlaylistSyncService.kt", "TdlibSyncChannel.kt", "TdlibSyncHub.kt", "TdlibHistoryReader.kt",
             "TdlibPlaylistSyncTransport.kt", "ShareableTdlibOwner.kt",
+            // E96 P5-A: the single, switch-guarded composition root (see SyncServiceProvider and P5ReadinessInertnessTest).
+            "SyncServiceProvider.kt",
         )
         val offenders = listOf("main", "shareable").flatMap { set ->
             File(srcRoot, set).walkTopDown().filter { it.isFile && it.extension in setOf("kt", "java") && it.name !in own }
