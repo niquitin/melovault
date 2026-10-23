@@ -169,7 +169,7 @@ class TdlibOwnerFanOutTest {
         assertEquals(Gated.Denied(SyncDenied.BUILD_OFF), s.service.bindChannel(s.account, 5L))
         assertEquals(Gated.Denied(SyncDenied.BUILD_OFF), s.service.runSync(s.account, SyncMode.FULL_REPLAY))
         assertEquals(Gated.Denied(SyncDenied.BUILD_OFF), s.service.attach(s.account))
-        val forbidden = setOf("sendMessage", "createNewSupergroupChat", "getChatHistory", "searchChats", "getChat", "getSupergroup", "getSupergroupFullInfo", "loadChats")
+        val forbidden = setOf("sendMessage", "createNewSupergroupChat", "getChatHistory", "searchChats", "getChats", "getChat", "getSupergroup", "getSupergroupFullInfo", "loadChats")
         assertEquals("no sync request of any kind", emptyList<String>(), s.tdlib.gateway.typesSeen().filter { it in forbidden })
         assertFalse("the sync sink was never bound", s.tdlib.core.syncIsBound())
         assertEquals(5, s.service.metrics.get(SyncMetrics.Event.GATE_REFUSED))

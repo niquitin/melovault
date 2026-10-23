@@ -20,6 +20,7 @@ internal class FakeChatData(val id: Long, val supergroupId: Long, var title: Str
     var members = 1
     var autoDelete = 0
     var linkedChat = false
+    var archived = false
     var serverSeq = 0L
     val messages = TreeMap<Long, FakeMsg>()
 }
@@ -116,6 +117,19 @@ internal class FakeTdlibJsonGateway(val world: FakeTdlibWorld, var userId: Long)
     var clientsCreated = 0
     var closeRequests = 0
     var nonTextSends = 0
+    /** loadChats loads this many unloaded chats per call; "all loaded" is answered with TDLib's 404. */
+    var loadStep = Int.MAX_VALUE
+    var getChatsClamp = 1000
+    var neverFinishLoad = false
+    private val unloaded = HashSet<Long>()
+    enum class ForwardFault { ERROR_REPLY, MALFORMED, SILENT }
+    /** Faults applied, in order, to the next getChatHistory requests that read FORWARD (negative offset). */
+    val forwardFaults = java.util.ArrayDeque<ForwardFault>()
+
+    /** Every chat that exists now is unknown to this fresh client until loadChats brings it in (new chats arrive by update). */
+    fun startUnloaded() {
+        unloaded.addAll(world.chats.keys)
+    }
     private val failures = HashMap<String, java.util.ArrayDeque<Pair<Int, String>>>()
     private val silent = HashSet<String>()
     private var clientId = 0
@@ -200,11 +214,26 @@ internal class FakeTdlibJsonGateway(val world: FakeTdlibWorld, var userId: Long)
                 reply(r, JSONObject().put("@type", "chat").put("id", c.id).put("title", c.title).put("message_auto_delete_time", c.autoDelete)
                     .put("type", JSONObject().put("@type", c.kind).put("supergroup_id", c.supergroupId).put("is_channel", c.isChannel)))
             }
-            "loadChats" -> reply(r, JSONObject().put("@type", "ok"))
+            "loadChats" -> {
+                val archive = r.optJSONObject("chat_list")?.optString("@type") == "chatListArchive"
+                val next = unloaded.filter { world.chats[it]?.archived == archive }.take(minOf(loadStep, r.optInt("limit", 100)).coerceAtLeast(1))
+                if (neverFinishLoad) return reply(r, JSONObject().put("@type", "ok"))
+                if (next.isEmpty()) return error(r, 404, "Not Found") // TDLib: all chats of the list are loaded
+                unloaded.removeAll(next.toSet())
+                reply(r, JSONObject().put("@type", "ok"))
+            }
+            "getChats" -> {
+                val archive = r.optJSONObject("chat_list")?.optString("@type") == "chatListArchive"
+                val limit = minOf(r.optInt("limit"), getChatsClamp)
+                val ids = JSONArray()
+                world.chats.values.filter { it.id !in unloaded && it.archived == archive }.take(limit).forEach { ids.put(it.id) }
+                reply(r, JSONObject().put("@type", "chats").put("total_count", ids.length()).put("chat_ids", ids))
+            }
             "searchChats" -> {
+                // Offline title search among chats this client already has loaded, at most `limit` of them.
                 val q = r.optString("query").lowercase()
                 val ids = JSONArray()
-                world.chats.values.filter { it.title.lowercase().contains(q) }.forEach { ids.put(it.id) }
+                world.chats.values.filter { it.id !in unloaded && it.title.lowercase().contains(q) }.take(r.optInt("limit", 50)).forEach { ids.put(it.id) }
                 reply(r, JSONObject().put("@type", "chats").put("total_count", ids.length()).put("chat_ids", ids))
             }
             "getSupergroup" -> {
@@ -234,6 +263,14 @@ internal class FakeTdlibJsonGateway(val world: FakeTdlibWorld, var userId: Long)
 
     private fun history(r: JSONObject) {
         beforeHistory?.invoke(r)
+        if (r.optInt("offset") < 0) {
+            when (forwardFaults.poll()) {
+                ForwardFault.ERROR_REPLY -> return error(r, 500, "Internal error")
+                ForwardFault.MALFORMED -> return reply(r, JSONObject().put("@type", "messages").put("total_count", 3))
+                ForwardFault.SILENT -> return
+                null -> Unit
+            }
+        }
         val chat = world.chats[r.optLong("chat_id")] ?: return error(r, 400, "Chat not found")
         val from = r.optLong("from_message_id")
         val offset = r.optInt("offset")
@@ -380,6 +417,7 @@ internal class SyncRig(
     consent: Boolean = true,
     private val timeouts: TdlibTransportTimeouts = TdlibTransportTimeouts(requestMs = 2_000L, sendAckMs = 400L),
     private val limits: HistoryLimits = HistoryLimits(requestTimeoutMs = 2_000L),
+    private val discoveryLimits: DiscoveryLimits = DiscoveryLimits(),
 ) {
     val tdlib = TdlibRig(world, account.value, File(root, "tdlib-slot").apply { mkdirs() }).start()
     val device = FakeSyncDevice(
@@ -400,7 +438,7 @@ internal class SyncRig(
     }
 
     private fun newService() = TdlibPlaylistSyncService(
-        tdlib.core, device.session, SyncGate(build, consentStore), { device.nowMs }, config, timeouts, limits,
+        tdlib.core, device.session, SyncGate(build, consentStore), { device.nowMs }, config, timeouts, limits, discoveryLimits,
     )
 
     fun restart() {

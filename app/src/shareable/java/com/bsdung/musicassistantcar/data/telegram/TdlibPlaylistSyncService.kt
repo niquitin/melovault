@@ -25,6 +25,7 @@ internal class TdlibPlaylistSyncService(
     private val config: SyncConfig = SyncConfig(),
     private val timeouts: TdlibTransportTimeouts = TdlibTransportTimeouts(),
     private val historyLimits: HistoryLimits = HistoryLimits(),
+    private val discoveryLimits: DiscoveryLimits = DiscoveryLimits(),
     val metrics: SyncMetrics = SyncMetrics(),
     val alerts: ContinuityAlerts = ContinuityAlerts(),
 ) {
@@ -83,20 +84,26 @@ internal class TdlibPlaylistSyncService(
         }
     }
 
+    private fun directory(account: TelegramUserId, epoch: Long) =
+        TdlibChannelDirectory(hub, account.value, epoch, timeouts.requestMs, discoveryLimits)
+
+    /** The channel the checkpoint already names (0 = none): it is verified directly and no other is ever created. */
+    private fun boundChannel(account: TelegramUserId): Long = host.view(account)?.state?.checkpoint?.channelId ?: 0L
+
     fun discoverChannel(account: TelegramUserId): Gated<ChannelDiscovery> =
         session(account, { gate.mayRun(account) }) { epoch ->
-            TdlibChannelDirectory(hub, account.value, epoch, timeouts.requestMs).discover()
+            directory(account, epoch).discover(boundChannel(account))
         }
 
     /** Needs consent (b) as well as (a). Creates nothing if a channel already exists or is ambiguous. */
     fun createChannel(account: TelegramUserId): Gated<CreateOutcome> =
         session(account, { gate.mayCreate(account) }) { epoch ->
-            TdlibChannelDirectory(hub, account.value, epoch, timeouts.requestMs).create()
+            directory(account, epoch).create(boundChannel(account))
         }
 
     fun bindChannel(account: TelegramUserId, chatId: Long): Gated<BindResult> =
         session(account, { gate.mayRun(account) }) { epoch ->
-            TdlibChannelDirectory(hub, account.value, epoch, timeouts.requestMs).bind(host, account, chatId)
+            directory(account, epoch).bind(host, account, chatId)
         }
 
     /**

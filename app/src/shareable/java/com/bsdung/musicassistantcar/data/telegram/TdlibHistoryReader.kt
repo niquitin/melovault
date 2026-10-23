@@ -45,7 +45,10 @@ internal data class HistoryLimits(
  *  4. **Independent cross-check.** When a snapshot is made, and on every page of one (the coordinator's own "second
  *     look"), a forward query (from the cursor, negative offset) is made. A real message of the channel in
  *     (cursor, newest scanned] that the reverse scan did not contain proves the scan has a hole: the snapshot is
- *     dropped and the page is UNPROVEN, so the coordinator refuses it without moving the cursor.
+ *     dropped and the page is UNPROVEN, so the coordinator refuses it without moving the cursor. The look has
+ *     three typed outcomes: VERIFIED (serve), CONFLICT (UNPROVEN) and INCONCLUSIVE (an error, a timeout or a
+ *     malformed answer: Failed, nothing served, the unverified snapshot is kept and asked about again). A look that
+ *     could not be made is never taken for "no conflict".
  *  5. **Fails closed** on: another chat's message, a malformed or null entry, an id of 0, an edited sync message,
  *     a pending deletion/edit alert ([ContinuityAlerts]), more unread messages than the memory budget.
  *
@@ -82,6 +85,8 @@ internal class TdlibHistoryReader(
 
     private class Snapshot(val floor: Long, val top: Long, val ids: LongArray, val texts: List<String>, val createdAt: Long) {
         val idSet: Set<Long> by lazy { ids.toHashSet() }
+        /** Set only when the independent forward query confirmed that nothing real is missing. */
+        var verified = false
     }
 
     private sealed class Parsed {
@@ -125,10 +130,16 @@ internal class TdlibHistoryReader(
                 null -> Unit
             }
             snap = snapshot ?: return unproven()
-            // First look at the new snapshot against an independent query.
-            if (crossCheckConflicts(after, snap)) return conflict()
-        } else if (cap == 1) {
-            if (crossCheckConflicts(after, snap)) return conflict()
+        }
+        // A snapshot is served only after an independent forward query has VERIFIED it - once per snapshot, and again for
+        // every second look of the coordinator (limit 1). If that query cannot answer, the snapshot is kept but stays
+        // unverified: nothing is served, the cursor cannot move, and the next call asks again.
+        if (!snap.verified || cap == 1) {
+            when (val look = crossCheck(after, snap)) {
+                Look.Verified -> snap.verified = true
+                Look.Conflict -> return conflict()
+                is Look.Inconclusive -> return look.failure
+            }
         }
         hub.metrics.count(SyncMetrics.Event.SNAPSHOT_SERVED)
         lastServedAfter = after
@@ -251,8 +262,17 @@ internal class TdlibHistoryReader(
         return null
     }
 
-    /** True if the forward query shows a real message the scan did not contain (a hole). Inconclusive answers are not conflicts. */
-    private fun crossCheckConflicts(after: Long, snap: Snapshot): Boolean {
+    /** What the independent forward look said. Only [Verified] allows a page to be served. */
+    private sealed class Look {
+        /** The forward query answered and every real message it showed in (after, top] is in the snapshot. */
+        object Verified : Look()
+        /** It showed a real message the scan lacked (a hole), or an edited sync message. */
+        object Conflict : Look()
+        /** It did not answer, answered an error, or answered nonsense: NOTHING is known, so nothing may be served. */
+        class Inconclusive(val failure: FetchResult.Failed) : Look()
+    }
+
+    private fun crossCheck(after: Long, snap: Snapshot): Look {
         val reply = hub.call(account, epoch, "getChatHistory", limits.requestTimeoutMs) {
             it.put("chat_id", channelId)
             it.put("from_message_id", maxOf(after, 1L))
@@ -260,11 +280,13 @@ internal class TdlibHistoryReader(
             it.put("limit", 100)
             it.put("only_local", false)
         }
-        if (reply !is TdlibSyncHub.Reply.Ok) return false
-        val parsed = parse(reply.json)
-        if (parsed is Parsed.Tampered) return true
-        if (parsed !is Parsed.Ok) return false
-        return parsed.messages.any { it.id > after && it.id <= snap.top && it.id !in snap.idSet }
+        if (reply !is TdlibSyncHub.Reply.Ok) return Look.Inconclusive(failed(reply))
+        return when (val parsed = parse(reply.json)) {
+            Parsed.Tampered -> Look.Conflict
+            Parsed.Malformed -> Look.Inconclusive(FetchResult.Failed(SyncErrorKind.NETWORK))
+            is Parsed.Ok ->
+                if (parsed.messages.any { it.id > after && it.id <= snap.top && it.id !in snap.idSet }) Look.Conflict else Look.Verified
+        }
     }
 
     private fun parse(json: JSONObject): Parsed {
