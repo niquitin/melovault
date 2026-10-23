@@ -4410,15 +4410,18 @@ class TelegramPreviewActivity : AppCompatActivity() {
             showMessage("Chưa xác định được bài đang phát để lưu. Hãy mở bài từ danh sách rồi thử lại.")
             return
         }
-        requestPlaylistToggle(account, target, null)
+        // Carry the real (chat, message) of the song, not only the UI key, so V2 can name it on any device.
+        val song = songs.firstOrNull { it.messageId == target } ?: queueSongOrder.firstOrNull { it.messageId == target }
+        requestPlaylistToggle(account, PlaylistTarget(target, song?.chatId ?: 0L, song?.rawMessageId ?: 0L), null)
     }
 
     /**
      * The one Save/Unsave path (now-playing button and song menu). The write runs on the playlist
      * thread, never on the UI thread; the screen changes and a success message appears only after
-     * the file was really written. [title] null = short "N bài đã lưu" wording.
+     * the file was really written (local save: nothing is claimed about other devices).
+     * [title] null = short "N bài đã lưu" wording.
      */
-    private fun requestPlaylistToggle(account: TelegramUserId, target: Long, title: String?) {
+    private fun requestPlaylistToggle(account: TelegramUserId, target: PlaylistTarget, title: String?) {
         TelegramPlaylistRuntime.submit {
             val outcome = playlistSession.toggle(account, target)
             runOnUiThread { onPlaylistToggled(account, outcome, title) }
@@ -4451,7 +4454,25 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 showMessage("Playlist chưa sẵn sàng. Hãy thử lại sau giây lát.")
             is TelegramPlaylistSession.ToggleOutcome.Failed ->
                 showMessage("Không lưu được playlist an toàn trên thiết bị.")
+            is TelegramPlaylistSession.ToggleOutcome.OutboxFull -> {
+                val message = "Có quá nhiều thay đổi Playlist đang chờ đồng bộ nên chưa thể lưu thêm. Dữ liệu cũ vẫn được giữ nguyên."
+                showMessage(message)
+                toast(message)
+            }
         }
+    }
+
+    /** Lets Playlist V2 map a saved key back to its real (chat, message) through this account's library index. */
+    private val playlistIndex = object : PlaylistIndex {
+        override fun resolveAll(account: TelegramUserId, keys: Collection<Long>): Map<Long, PlaylistItemId.Telegram> {
+            val db = libraryDb ?: return emptyMap()
+            return db.getSongsByKeys(account.value, keys).associate { it.songKey to PlaylistItemId.Telegram(it.chatId, it.messageId) }
+        }
+    }
+
+    /** After the library index is loaded: saved keys that could not be named before get their real source. */
+    private fun upgradeLegacyPlaylistKeys(user: TelegramUserId) {
+        TelegramPlaylistRuntime.submit { playlistSession.resolveLegacyKeys(user) }
     }
 
     private fun applySavedPlaylist(ids: List<Long>) {
@@ -4471,6 +4492,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     /** Opens the signed-in account's saved playlist off the UI thread; queued behind any pending Save. */
     private fun loadSavedPlaylist(user: TelegramUserId) {
         TelegramPlaylistRuntime.submit {
+            playlistSession.attachIndex(playlistIndex)
             val opened = playlistSession.open(user)
             runOnUiThread {
                 if (isDestroyed || library.authorizedUser() != user) return@runOnUiThread
@@ -5468,7 +5490,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun toggleFavoriteSong(song: Song) {
         val account = library.authorizedUser() ?: return
         if (!auth.isReady()) return
-        requestPlaylistToggle(account, song.messageId, song.title)
+        requestPlaylistToggle(account, PlaylistTarget(song.messageId, song.chatId, song.rawMessageId), song.title)
     }
 
     private fun showSongDetailsDialog(song: Song, isDownloaded: Boolean) {
@@ -6308,6 +6330,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 telegramLibraryTotal = count
                 scheduleMeloLibraryRefresh()
                 startDownloadedCountFlow(userId)
+                upgradeLegacyPlaylistKeys(TelegramUserId(userId))
                 refreshLocalCount()
                 if (count > 0) {
                     totalCountForCurrentView = count
@@ -6964,6 +6987,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         syncCoordinator?.cancelSync()
         localMode = false
         if (localMusicLazy.isInitialized()) localMusic.shutdown()
+        // The playlist session outlives this screen: let go of this screen's library index.
+        TelegramPlaylistRuntime.submit { playlistSession.detachIndex(playlistIndex) }
         dbExecutor.shutdownNow()
         offlineExecutor.shutdownNow()
         pendingOffline.values.forEach { it.cancel(false) }

@@ -16,7 +16,7 @@ import java.util.concurrent.RejectedExecutionException
  * Not thread-confined on its own: it is synchronized, and the app calls it from [TelegramPlaylistRuntime]'s
  * single thread so that taps are also applied in the order they were made.
  */
-internal class TelegramPlaylistSession(private val persistence: PlaylistPersistence) {
+internal class TelegramPlaylistSession(private val persistence: PlaylistPersistence) : PlaylistSessionApi {
 
     sealed class OpenResult {
         data class Ready(val ids: List<Long>) : OpenResult()
@@ -32,6 +32,8 @@ internal class TelegramPlaylistSession(private val persistence: PlaylistPersiste
         object NotOpen : ToggleOutcome()
         /** The file could not be written. The previous file and the in-memory list are unchanged. */
         object Failed : ToggleOutcome()
+        /** (V2) too many changes are waiting to be synced; nothing waiting is ever dropped, so the new change is refused. */
+        object OutboxFull : ToggleOutcome()
     }
 
     private var user: TelegramUserId? = null
@@ -39,7 +41,7 @@ internal class TelegramPlaylistSession(private val persistence: PlaylistPersiste
     private var blocked: PlaylistUnreadableReason? = null
 
     @Synchronized
-    fun open(account: TelegramUserId): OpenResult {
+    override fun open(account: TelegramUserId): OpenResult {
         user = account
         ids = emptyList()
         blocked = null
@@ -57,14 +59,20 @@ internal class TelegramPlaylistSession(private val persistence: PlaylistPersiste
     }
 
     @Synchronized
-    fun close() {
+    override fun close() {
         user = null
         ids = emptyList()
         blocked = null
     }
 
     @Synchronized
-    fun snapshot(): List<Long> = ids
+    override fun snapshot(): List<Long> = ids
+
+    // V1-only session: there is no index, no legacy keys and no outbox.
+    override fun attachIndex(index: PlaylistIndex) = Unit
+    override fun detachIndex(index: PlaylistIndex) = Unit
+    override fun resolveLegacyKeys(account: TelegramUserId): Boolean = false
+    override fun toggle(account: TelegramUserId, target: PlaylistTarget): ToggleOutcome = toggle(account, target.songKey)
 
     @Synchronized
     fun toggle(account: TelegramUserId, target: Long): ToggleOutcome {
@@ -107,11 +115,18 @@ internal object TelegramPlaylistRuntime {
     private val executor = Executors.newSingleThreadExecutor { task ->
         Thread(task, "MeloVault-Playlist").apply { isDaemon = true }
     }
-    private var session: TelegramPlaylistSession? = null
+    private var session: PlaylistSessionApi? = null
 
     @Synchronized
-    fun session(noBackupDir: File): TelegramPlaylistSession =
-        session ?: TelegramPlaylistSession(TelegramSavedPlaylistStore(noBackupDir)).also { session = it }
+    fun session(noBackupDir: File): PlaylistSessionApi = session ?: run {
+        val v1 = TelegramSavedPlaylistStore(noBackupDir)
+        val built: PlaylistSessionApi = if (TelegramPlaylistFlags.V2_ENABLED) {
+            TelegramPlaylistV2Session(v1, TelegramPlaylistStoreV2(noBackupDir)) { java.util.UUID.randomUUID().toString() }
+        } else {
+            TelegramPlaylistSession(v1)
+        }
+        built.also { session = it }
+    }
 
     fun submit(task: () -> Unit) {
         try {

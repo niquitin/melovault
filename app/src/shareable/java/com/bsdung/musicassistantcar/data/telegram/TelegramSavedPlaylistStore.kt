@@ -42,7 +42,13 @@ internal object TelegramPlaylistPolicy {
 }
 
 /** Why a playlist file could not be turned into a list. Never carries file content. */
-internal enum class PlaylistUnreadableReason { IO, SIZE, DECRYPT, FORMAT }
+internal enum class PlaylistUnreadableReason {
+    IO, SIZE, DECRYPT, FORMAT,
+    /** (V2) written by a newer app version; read-only for us, never overwritten. */
+    SCHEMA,
+    /** (V2) the file belongs to another Telegram account. */
+    ACCOUNT
+}
 
 internal sealed class PlaylistLoadResult {
     /** No file yet: a playlist that was never saved. The only state in which an empty list is "true". */
@@ -96,8 +102,9 @@ internal object AtomicPlaylistFileIo : PlaylistFileIo {
 }
 
 /** Same alias, algorithm and blob layout as every earlier build, so existing files stay readable. */
-internal class KeystorePlaylistCipher : PlaylistCipher {
-    private val keyAlias = "melovault_e91_saved_playlist_aes_v1"
+internal class KeystorePlaylistCipher(
+    private val keyAlias: String = V1_ALIAS,
+) : PlaylistCipher {
 
     /**
      * Decrypting never creates a key: a Keystore that briefly reports no alias must not be allowed
@@ -138,6 +145,12 @@ internal class KeystorePlaylistCipher : PlaylistCipher {
 
     companion object {
         const val IV_BYTES = 12
+
+        /** The V1 key. Never changed: every existing V1 file depends on it. */
+        const val V1_ALIAS = "melovault_e91_saved_playlist_aes_v1"
+
+        /** The V2 key: a separate Keystore entry, so V1 and V2 can never break each other. */
+        const val V2_ALIAS = "melovault_e96_playlist_v2_aes_v1"
     }
 }
 
