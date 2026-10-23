@@ -32,7 +32,9 @@ internal object TelegramPlaylistCodec {
         val p = state.projection
         line("projection", p.status, p.lastDigest, p.pendingDigest, if (p.truncated) 1 else 0,
             p.conflictImported, p.conflictSkipped, p.conflictIgnoredRemovals)
-        line("checkpoint", state.checkpoint.channelId, state.checkpoint.lastAppliedServerId)
+        val cp = state.checkpoint
+        if (cp.replayPosition == SyncCheckpoint.NO_REPLAY) line("checkpoint", cp.channelId, cp.lastAppliedServerId)
+        else line("checkpoint", cp.channelId, cp.lastAppliedServerId, cp.replayPosition)
         for ((item, dots) in state.orSet.allAdds().entries.sortedBy { it.key.key }) {
             for ((dot, seq) in dots.entries.sortedBy { it.key }) line("A", item.key, dot.key, seq)
         }
@@ -121,8 +123,10 @@ internal object TelegramPlaylistCodec {
                 }
                 "checkpoint" -> {
                     once(checkpoint)
-                    if (f.size != 3) fail()
-                    checkpoint = SyncCheckpoint(f[1].toLong(), f[2].toLong())
+                    // The replay position is present only while a FULL_REPLAY is in progress.
+                    if (f.size != 3 && f.size != 4) fail()
+                    val replay = if (f.size == 4) f[3].toLong().also { if (it < 0L) fail() } else SyncCheckpoint.NO_REPLAY
+                    checkpoint = SyncCheckpoint(f[1].toLong(), f[2].toLong(), replay)
                 }
                 "A" -> {
                     if (f.size != 4) fail()

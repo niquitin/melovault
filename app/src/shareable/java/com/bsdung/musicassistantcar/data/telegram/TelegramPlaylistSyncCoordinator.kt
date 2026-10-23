@@ -26,17 +26,28 @@ internal interface PlaylistSyncHost {
 internal enum class SyncMode {
     /** Read only what is newer than the stored cursor. */
     INCREMENTAL,
-    /** Read the whole history again from the start. Always safe (applying is idempotent); picks up anything that showed up late. */
+    /**
+     * Read the whole history again from the start. Always safe (applying is idempotent); picks up anything that
+     * showed up late. A replay longer than one run is CONTINUED by calling this again - after a pause or a
+     * restart too - from the position stored in the checkpoint, until a run reports [SyncStatus.OK].
+     */
     FULL_REPLAY,
 }
 
 internal enum class SyncStatus {
-    OK, NOT_OPEN, NO_CHANNEL,
+    /** Everything the channel holds was read and what was waiting was sent. The only status that means "synchronised". */
+    OK,
+    NOT_OPEN, NO_CHANNEL,
+    /**
+     * The run's page budget ran out while more history remained. Progress was committed (see [SyncReport.cursor] and
+     * [SyncReport.replayPosition]); nothing was sent, and the playlist is NOT known to be up to date. Call again.
+     */
+    CATCH_UP_INCOMPLETE,
     /** Called again before the wait is over: no transport call was made. */
     BACKOFF_ACTIVE,
     /** Temporary trouble (network, timeout, FLOOD_WAIT, lost answer). Retry after [SyncReport.retryAfterMs]. */
     BACKOFF,
-    /** Something needs a person or a later phase (channel gone, access revoked, damaged log). Nothing was deleted. */
+    /** Something needs a person or a later phase (channel gone, access revoked, damaged log, broken transport). Nothing was deleted. */
     RECOVERY_REQUIRED,
     /** The account changed while the run was in flight; the run stopped without touching the new account. */
     STALE_SESSION,
@@ -44,7 +55,9 @@ internal enum class SyncStatus {
 }
 
 internal enum class RecoveryReason {
-    CHANNEL_MISSING, UNAUTHORIZED, SESSION_REVOKED, CORRUPT_MESSAGE, FUTURE_PROTOCOL, WRONG_ACCOUNT, OP_TOO_LARGE
+    CHANNEL_MISSING, UNAUTHORIZED, SESSION_REVOKED, CORRUPT_MESSAGE, FUTURE_PROTOCOL, WRONG_ACCOUNT, OP_TOO_LARGE,
+    /** A page was not the proven next part of the history. Refused without moving the cursor. */
+    TRANSPORT_CONTRACT,
 }
 
 internal data class SyncReport(
@@ -58,7 +71,10 @@ internal data class SyncReport(
     val opsApplied: Int = 0,
     val opsAcknowledged: Int = 0,
     val envelopesSent: Int = 0,
+    /** The durable cursor: every message up to here was applied. */
     val cursor: Long = 0L,
+    /** Where a FULL_REPLAY stands, or [SyncCheckpoint.NO_REPLAY]. With [SyncStatus.CATCH_UP_INCOMPLETE]: the next run continues here. */
+    val replayPosition: Long = SyncCheckpoint.NO_REPLAY,
     val pendingLeft: Int = 0,
     val retryAfterMs: Long = 0L,
 )
@@ -67,10 +83,19 @@ internal data class SyncConfig(
     val pageSize: Int = 100,
     val maxPagesPerRun: Int = 100,
     val maxEnvelopesPerRun: Int = 50,
+    /** Asks once more, with a page of one, whether the oldest unread message is really the first one of the page. */
+    val verifyPageStart: Boolean = true,
 )
 
-/** Applies what other devices (or our own earlier sends) wrote, acknowledges our own, and moves the cursor - as one new state. */
-internal fun PlaylistState.applyRemoteBatch(ops: List<PlaylistOp>, ackIds: Set<String>, lastGoodId: Long): PlaylistState {
+internal enum class ReplayMark { UNCHANGED, SET, CLEAR }
+
+/**
+ * Applies what other devices (or our own earlier sends) wrote, acknowledges our own, and moves the cursor to
+ * [position] - as one new state. For a FULL_REPLAY, [replay] also records where the replay stands (or that it ended).
+ */
+internal fun PlaylistState.applyRemoteBatch(
+    ops: List<PlaylistOp>, ackIds: Set<String>, position: Long, replay: ReplayMark = ReplayMark.UNCHANGED,
+): PlaylistState {
     var next = this
     for (op in ops) {
         next = next.applyRemote(op)
@@ -80,7 +105,17 @@ internal fun PlaylistState.applyRemoteBatch(ops: List<PlaylistOp>, ackIds: Set<S
         if (own != null && own.device == next.deviceId && own.counter > next.opCounter) next = next.copy(opCounter = own.counter)
     }
     for (id in ackIds) next = next.acknowledge(id)
-    return next.copy(checkpoint = next.checkpoint.copy(lastAppliedServerId = maxOf(next.checkpoint.lastAppliedServerId, lastGoodId)))
+    val cp = next.checkpoint
+    return next.copy(
+        checkpoint = cp.copy(
+            lastAppliedServerId = maxOf(cp.lastAppliedServerId, position),
+            replayPosition = when (replay) {
+                ReplayMark.UNCHANGED -> cp.replayPosition
+                ReplayMark.SET -> maxOf(cp.replayPosition, position)
+                ReplayMark.CLEAR -> SyncCheckpoint.NO_REPLAY
+            },
+        )
+    )
 }
 
 /**
@@ -93,6 +128,14 @@ internal fun PlaylistState.applyRemoteBatch(ops: List<PlaylistOp>, ackIds: Set<S
  * SEND (append our waiting operations), then prune acknowledged entries.
  *
  * Rules that make it safe:
+ *  - The transport owes a COMPLETE PREFIX: each page is the next part of the history after the cursor, with
+ *    a proof ([FetchResult.Page.completeThroughId]). The cursor moves to that proof and never past it. A page
+ *    without proof, with a proof below the cursor, that claims more but makes no progress, or whose oldest
+ *    message is not the oldest unread one (checked with a second look), is REFUSED: nothing applied, cursor
+ *    unmoved, RECOVERY_REQUIRED(TRANSPORT_CONTRACT). A newest-first page can therefore never skip anything.
+ *  - Running out of the page budget with history left is [SyncStatus.CATCH_UP_INCOMPLETE], never OK, and
+ *    nothing is sent until the history is read. A FULL_REPLAY keeps its position in the checkpoint, so it
+ *    resumes across runs and restarts instead of reading the same first pages again.
  *  - ACK only on evidence: the server's own answer to the send ([SendResult.Sent]) or finding the very same
  *    operation id again in the fetched history. A send whose answer was lost is never an ACK; its
  *    operations stay waiting (RETRY_REQUIRED) and keep their ids, so the retry is the identical message.
@@ -104,7 +147,8 @@ internal fun PlaylistState.applyRemoteBatch(ops: List<PlaylistOp>, ackIds: Set<S
  *  - Nothing waiting is ever dropped; only ACKNOWLEDGED entries are pruned, in a write of their own.
  *  - Every step re-checks that the same account/session is still open; a late result of account A is
  *    never applied to or sent for account B.
- *  - Failures set a backoff (obeying FLOOD_WAIT as given); calling again too early makes no transport call.
+ *  - Failures set a backoff (a FLOOD_WAIT is obeyed exactly as given); calling again too early makes no
+ *    transport call.
  *  - The clock only decides WHEN to try again. It never decides what is in the playlist.
  */
 internal class PlaylistSyncCoordinator(
@@ -121,6 +165,12 @@ internal class PlaylistSyncCoordinator(
         var applied = 0
         var acked = 0
         var sent = 0
+    }
+
+    private sealed class FetchOutcome {
+        class Stop(val report: SyncReport) : FetchOutcome()
+        /** [more]: the budget ended with history still unread. */
+        class Done(val more: Boolean) : FetchOutcome()
     }
 
     /** For a person pressing "try again": forget the wait. */
@@ -141,7 +191,10 @@ internal class PlaylistSyncCoordinator(
         if (channel == 0L) return report(c, account, SyncStatus.NO_CHANNEL) // never creates one
         val scope = PlaylistSyncProtocol.scopeOf(account.value)
 
-        fetchPhase(account, epoch, channel, scope, mode, c)?.let { return it }
+        when (val fetched = fetchPhase(account, epoch, channel, scope, mode, c)) {
+            is FetchOutcome.Stop -> return fetched.report
+            is FetchOutcome.Done -> if (fetched.more) return report(c, account, SyncStatus.CATCH_UP_INCOMPLETE)
+        }
         sendPhase(account, epoch, channel, scope, c)?.let { return it }
         prune(account, epoch)
         backoff.onSuccess()
@@ -152,12 +205,15 @@ internal class PlaylistSyncCoordinator(
 
     private fun fetchPhase(
         account: TelegramUserId, epoch: Long, channel: Long, scope: String, mode: SyncMode, c: Counters,
-    ): SyncReport? {
-        var cursor = if (mode == SyncMode.FULL_REPLAY) 0L
-        else current(account, epoch)?.state?.checkpoint?.lastAppliedServerId ?: return report(c, account, SyncStatus.STALE_SESSION)
+    ): FetchOutcome {
+        val start = current(account, epoch) ?: return stale(c, account)
+        val replaying = mode == SyncMode.FULL_REPLAY
+        // A replay resumes where it stood; an incremental read starts at the durable cursor.
+        var cursor = if (replaying) maxOf(0L, start.state.checkpoint.replayPosition) else start.state.checkpoint.lastAppliedServerId
         var pages = 0
+        var more = false
         while (pages < config.maxPagesPerRun) {
-            val view = current(account, epoch) ?: return report(c, account, SyncStatus.STALE_SESSION)
+            val view = current(account, epoch) ?: return stale(c, account)
             val result = try {
                 transport.fetchAfter(channel, cursor, config.pageSize)
             } catch (_: Exception) {
@@ -166,13 +222,31 @@ internal class PlaylistSyncCoordinator(
             pages++
             c.pages++
             val page = when (result) {
-                is FetchResult.Failed -> return failure(c, account, result.kind, result.retryAfterSeconds)
+                is FetchResult.Failed -> return FetchOutcome.Stop(failure(c, account, result.kind, result.retryAfterSeconds))
                 is FetchResult.Page -> result
             }
-            // Do not trust the order, the repeats or the ids of a page: sort, drop repeats, ignore what is behind us.
-            val messages = page.messages.distinctBy { it.id }.sortedBy { it.id }.filter { it.id > cursor }
+            // The page must prove it is the next part of the history, and must move us forward if it says there is more.
+            val proof = page.completeThroughId
+            if (proof == FetchResult.Page.UNPROVEN || proof < cursor || (page.hasMore && proof <= cursor)) {
+                return FetchOutcome.Stop(contractViolation(c, account))
+            }
+            // Do not trust the order, the repeats or the ids of a page: sort, drop repeats, keep what is proven.
+            val messages = page.messages.distinctBy { it.id }.sortedBy { it.id }.filter { it.id > cursor && it.id <= proof }
+            if (config.verifyPageStart && messages.isNotEmpty()) {
+                val probe = try {
+                    transport.fetchAfter(channel, cursor, 1)
+                } catch (_: Exception) {
+                    FetchResult.Failed(SyncErrorKind.NETWORK)
+                }
+                when (probe) {
+                    is FetchResult.Failed -> return FetchOutcome.Stop(failure(c, account, probe.kind, probe.retryAfterSeconds))
+                    is FetchResult.Page -> {
+                        val oldest = probe.messages.filter { it.id > cursor }.minOfOrNull { it.id }
+                        if (oldest != messages.first().id) return FetchOutcome.Stop(contractViolation(c, account))
+                    }
+                }
+            }
             c.read += messages.size
-            if (messages.isEmpty()) break // nothing new, even if hasMore is claimed: never spin
 
             val ownDevice = view.state.deviceId
             val ownOutbox = view.state.outbox.associateBy { it.op.opId }
@@ -207,22 +281,33 @@ internal class PlaylistSyncCoordinator(
                 }
                 if (badError != null) break
             }
-            if (lastGood > cursor) {
-                // One write: operations + acknowledgements + cursor, for the good messages before any bad one.
-                when (host.update(account, epoch) { it.applyRemoteBatch(ops, ackIds, lastGood) }) {
+            // Whole page good: everything up to the proof is done (also across gaps in the ids). A bad message
+            // stops us just before it.
+            val newPosition = if (badError == null) maxOf(proof, lastGood) else lastGood
+            val finishing = !page.hasMore && badError == null
+            val replayMark = when {
+                !replaying -> ReplayMark.UNCHANGED
+                finishing -> ReplayMark.CLEAR
+                else -> ReplayMark.SET
+            }
+            val replayToClear = replaying && finishing && view.state.checkpoint.replayPosition != SyncCheckpoint.NO_REPLAY
+            if (newPosition > cursor || replayToClear) {
+                // One write: operations + acknowledgements + cursor (+ replay position), for the good messages before any bad one.
+                when (host.update(account, epoch) { it.applyRemoteBatch(ops, ackIds, newPosition, replayMark) }) {
                     is UpdateResult.Committed -> {
                         c.applied += ops.size
                         c.acked += ackIds.size
-                        cursor = lastGood
+                        cursor = maxOf(cursor, newPosition)
                     }
-                    is UpdateResult.Stale -> return report(c, account, SyncStatus.STALE_SESSION)
-                    else -> return report(c, account, SyncStatus.SAVE_FAILED)
+                    is UpdateResult.Stale -> return stale(c, account)
+                    else -> return FetchOutcome.Stop(report(c, account, SyncStatus.SAVE_FAILED))
                 }
             }
-            badError?.let { return corrupt(c, account, badId, it) }
+            badError?.let { return FetchOutcome.Stop(corrupt(c, account, badId, it)) }
+            more = page.hasMore
             if (!page.hasMore) break
         }
-        return null
+        return FetchOutcome.Done(more)
     }
 
     // ---- send ----------------------------------------------------------------------------------
@@ -279,6 +364,9 @@ internal class PlaylistSyncCoordinator(
     private fun current(account: TelegramUserId, epoch: Long): SyncView? =
         host.view(account)?.takeIf { it.epoch == epoch && it.state.accountId == account.value }
 
+    private fun stale(c: Counters, account: TelegramUserId): FetchOutcome.Stop =
+        FetchOutcome.Stop(report(c, account, SyncStatus.STALE_SESSION))
+
     private fun failure(c: Counters, account: TelegramUserId, kind: SyncErrorKind, retryAfterSeconds: Int): SyncReport {
         val delay = backoff.onFailure(clock(), kind, retryAfterSeconds)
         return when (kind) {
@@ -294,6 +382,9 @@ internal class PlaylistSyncCoordinator(
         val delay = backoff.onFailure(clock(), SyncErrorKind.NETWORK, 0)
         return report(c, account, SyncStatus.RECOVERY_REQUIRED, reason, retryAfterMs = delay)
     }
+
+    private fun contractViolation(c: Counters, account: TelegramUserId): SyncReport =
+        recovery(c, account, RecoveryReason.TRANSPORT_CONTRACT)
 
     private fun corrupt(c: Counters, account: TelegramUserId, messageId: Long, error: PlaylistSyncProtocol.Error): SyncReport {
         val delay = backoff.onFailure(clock(), SyncErrorKind.NETWORK, 0)
@@ -316,6 +407,7 @@ internal class PlaylistSyncCoordinator(
             pagesFetched = c.pages, messagesRead = c.read, foreignSkipped = c.foreign,
             opsApplied = c.applied, opsAcknowledged = c.acked, envelopesSent = c.sent,
             cursor = state?.checkpoint?.lastAppliedServerId ?: 0L,
+            replayPosition = state?.checkpoint?.replayPosition ?: SyncCheckpoint.NO_REPLAY,
             pendingLeft = state?.outbox?.count { it.status != OutboxStatus.ACKNOWLEDGED } ?: 0,
             retryAfterMs = retryAfterMs,
         )

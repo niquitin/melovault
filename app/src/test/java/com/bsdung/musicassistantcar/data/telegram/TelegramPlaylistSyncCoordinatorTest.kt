@@ -279,10 +279,16 @@ class TelegramPlaylistSyncCoordinatorTest {
     @Test fun t15b_aRunLimitStopsEarlyAndTheNextRunContinuesWithoutLoss() {
         for (n in 1..45) channel.inject(envelopeText(acct.value, "dev-x", addOp("dev-x", n.toLong(), acct.value, saved(n))))
         val b = device("dev-b", config = SyncConfig(pageSize = 10, maxPagesPerRun = 2))
-        assertEquals(20, b.sync().messagesRead)
+        val r1 = b.sync()
+        assertEquals(20, r1.messagesRead)
+        assertEquals("not 'synchronised' while 25 messages are unread", SyncStatus.CATCH_UP_INCOMPLETE, r1.status)
         assertEquals(20, b.present().size)
-        assertEquals(20, b.sync().messagesRead)
-        assertEquals(5, b.sync().messagesRead)
+        val r2 = b.sync()
+        assertEquals(20, r2.messagesRead)
+        assertEquals(SyncStatus.CATCH_UP_INCOMPLETE, r2.status)
+        val r3 = b.sync()
+        assertEquals(5, r3.messagesRead)
+        assertEquals(SyncStatus.OK, r3.status)
         assertEquals(45, b.present().size)
     }
 
@@ -324,8 +330,12 @@ class TelegramPlaylistSyncCoordinatorTest {
             }
         }
         val c = PlaylistSyncCoordinator(a.session, spinning, { 0L })
-        assertEquals(SyncStatus.OK, c.runOnce(acct).status)
-        assertEquals(1, calls)
+        // E96-P2-REWORK-01: an empty page that claims more but proves no progress is refused (it used to be reported OK)
+        val r = c.runOnce(acct)
+        assertEquals(SyncStatus.RECOVERY_REQUIRED, r.status)
+        assertEquals(RecoveryReason.TRANSPORT_CONTRACT, r.recovery)
+        assertEquals("it did not spin", 1, calls)
+        assertEquals(0L, a.stored().checkpoint.lastAppliedServerId)
     }
 
     @Test fun t16d_textThatIsNotOursIsSkippedAndTheCursorPassesIt() {

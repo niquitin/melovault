@@ -206,7 +206,21 @@ internal data class ProjectionRecord(
 )
 
 /** Reserved for the sync phases (P2/P3). Nothing in P1 reads or writes it. */
-internal data class SyncCheckpoint(val channelId: Long, val lastAppliedServerId: Long)
+/**
+ * [lastAppliedServerId]: every message up to it has been applied (or deliberately skipped); only ever grows.
+ * [replayPosition]: where a FULL_REPLAY in progress stands, or [NO_REPLAY]. A replay longer than one run
+ * resumes from it, also after a restart. In the file it is written ONLY while a replay is in progress, so
+ * a state without one is byte-for-byte what the previous build wrote.
+ */
+internal data class SyncCheckpoint(
+    val channelId: Long,
+    val lastAppliedServerId: Long,
+    val replayPosition: Long = NO_REPLAY,
+) {
+    companion object {
+        const val NO_REPLAY = -1L
+    }
+}
 
 /** An unverified V1 key kept in saved order. Local to this device: no operation, no outbox entry. */
 internal data class LegacyEntry(val songKey: Long, val seq: Long) {

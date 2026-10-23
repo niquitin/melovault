@@ -69,6 +69,9 @@ internal class FakeTelegramChannel(seed: Long = 7L, val channelId: Long = -1_001
         return nextId
     }
 
+    /** Every stored message with its id, visible or not (for checking the cursor against the truth). */
+    fun allMessages(): List<Pair<Long, String>> = stored.sortedBy { it.id }.map { it.id to it.text }
+
     fun texts(): List<String> = stored.sortedBy { it.id }.map { it.text }
     fun count(): Int = stored.size
     fun maxId(): Long = stored.maxOfOrNull { it.id } ?: 0L
@@ -117,11 +120,14 @@ internal class FakeTelegramChannel(seed: Long = 7L, val channelId: Long = -1_001
         stored.forEach { if (it.hiddenFetches > 0) it.hiddenFetches-- }
         val visible = stored.filter { it.id > afterId && it.hiddenFetches == 0 }.sortedBy { it.id }
         val cap = minOf(limit, maxPageSize)
-        var page = visible.take(cap).map { ServerMessage(it.id, it.text) }
+        val taken = visible.take(cap) // the OLDEST unread messages: a complete prefix
+        var page = taken.map { ServerMessage(it.id, it.text) }
         val hasMore = visible.size > cap
+        // The honest proof: with more behind it, complete through the last message of the page; otherwise through the newest visible one.
+        val complete = if (hasMore) taken.last().id else (visible.lastOrNull()?.id ?: afterId)
         if (duplicateInPage && page.isNotEmpty()) page = page + page.first()
         if (shufflePages) page = page.shuffled(random)
-        return FetchResult.Page(page, hasMore)
+        return FetchResult.Page(page, hasMore, complete)
     }
 
     fun transport(hooks: TransportHooks = TransportHooks()): PlaylistSyncTransport = object : PlaylistSyncTransport {
@@ -150,6 +156,8 @@ internal class FakeSyncDevice(
     private val config: SyncConfig = SyncConfig(),
     private val index: PlaylistIndex? = null,
     bindOnFirstBoot: Boolean = true,
+    /** Lets a test put its own (possibly misbehaving) transport in front of the channel. */
+    private val transportFactory: ((FakeTelegramChannel, TransportHooks) -> PlaylistSyncTransport)? = null,
 ) {
     val v1Io = SyncFaultyIo("tg_playlists_v1")
     val v2Io = SyncFaultyIo("tg_playlists_v2")
@@ -172,7 +180,7 @@ internal class FakeSyncDevice(
         index?.let { session.attachIndex(it) }
         check(session.open(account) is TelegramPlaylistSession.OpenResult.Ready) { "$name could not open" }
         if (bindChannel) bindChannel(channel.channelId)
-        coordinator = PlaylistSyncCoordinator(session, channel.transport(hooks), { nowMs }, config)
+        coordinator = PlaylistSyncCoordinator(session, transportFactory?.invoke(channel, hooks) ?: channel.transport(hooks), { nowMs }, config)
     }
 
     /** Test stand-in for what P3's channel discovery will do. */
