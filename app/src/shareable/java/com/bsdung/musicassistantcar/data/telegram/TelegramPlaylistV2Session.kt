@@ -6,6 +6,9 @@ import com.bsdung.musicassistantcar.data.telegram.TelegramPlaylistSession.Toggle
 /** Code-level switch for the V2 playlist. Off = the P0 (V1-only) session, V1/V2 files untouched. */
 internal object TelegramPlaylistFlags {
     const val V2_ENABLED = true
+
+    /** E96 P2 sync core is only reachable from tests: nothing in the app starts it. P3 will connect it behind consent. */
+    const val SYNC_ENABLED = false
 }
 
 /** What the UI knows about the song the user taps. [chatId]/[rawMessageId] are 0 when unknown. */
@@ -97,11 +100,14 @@ internal class TelegramPlaylistV2Session(
     private val v1: PlaylistPersistence,
     private val v2: PlaylistStoreV2,
     private val newDeviceId: () -> String,
-) : PlaylistSessionApi {
+) : PlaylistSessionApi, PlaylistSyncHost {
     private var user: TelegramUserId? = null
     private var state: PlaylistState? = null
     private var blocked: PlaylistUnreadableReason? = null
     private var index: PlaylistIndex? = null
+
+    /** Changes every time an account is opened or closed, so a late result of an earlier one can be recognised. */
+    private var epoch: Long = 0L
 
     /** Set while changes an older app made to V1 are waiting to be imported: V1 must not be replaced meanwhile. */
     private var importDeferred: PlaylistWarning? = null
@@ -118,6 +124,7 @@ internal class TelegramPlaylistV2Session(
 
     @Synchronized
     override fun open(account: TelegramUserId): OpenResult {
+        epoch++
         user = account
         state = null
         blocked = null
@@ -133,6 +140,7 @@ internal class TelegramPlaylistV2Session(
 
     @Synchronized
     override fun close() {
+        epoch++
         user = null
         state = null
         blocked = null
@@ -380,6 +388,49 @@ internal class TelegramPlaylistV2Session(
         if (!trySave(account, next)) return false
         state = next
         return true
+    }
+
+    // ---- sync host (E96 P2) ---------------------------------------------------------------------
+
+    @Synchronized
+    override fun view(account: TelegramUserId): SyncView? {
+        if (user != account) return null
+        return state?.let { SyncView(epoch, it) }
+    }
+
+    /**
+     * Runs [transform] on the current state and stores the result in ONE V2 write before adopting it.
+     * Refuses (changing nothing) if the session is not the one the caller looked at. The V1 copy is
+     * brought along afterwards unless the old app's changes are still waiting to be imported.
+     */
+    @Synchronized
+    override fun update(account: TelegramUserId, epoch: Long, transform: (PlaylistState) -> PlaylistState): UpdateResult {
+        if (user != account || this.epoch != epoch) return UpdateResult.Stale
+        val current = state ?: return UpdateResult.NotOpen
+        val next = try {
+            transform(current)
+        } catch (_: Exception) {
+            return UpdateResult.Failed
+        }
+        if (next == current) return UpdateResult.Committed(current)
+        val self = account.value
+        val toSave = next.copy(
+            projection = next.projection.copy(
+                pendingDigest = TelegramPlaylistCodec.listDigest(projectionIds(next, self)),
+                truncated = next.presentSongKeys(self).size > TelegramPlaylistPolicy.MAX_IDS,
+            )
+        )
+        try {
+            v2.save(account, toSave)
+        } catch (e: PlaylistUnreadableException) {
+            state = null
+            blocked = e.reason
+            return UpdateResult.Failed
+        } catch (_: Exception) {
+            return UpdateResult.Failed
+        }
+        state = if (importDeferred == null) writeProjection(account, toSave) else toSave
+        return UpdateResult.Committed(state!!)
     }
 
     companion object {
