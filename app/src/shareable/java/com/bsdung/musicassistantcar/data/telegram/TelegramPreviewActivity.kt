@@ -100,6 +100,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val performer: String? = null,
         val durationSeconds: Int = 0,
         val sourceTitle: String? = null,
+        /** A saved Playlist entry the library does not know yet (E96 P0). Shown, removable, never played or queued. */
+        val placeholder: Boolean = false,
     ) {
         val genuineMessageId: Long get() = if (rawMessageId > 0L) rawMessageId else messageId
     }
@@ -290,8 +292,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private val songs = mutableListOf<Song>()
     private var shownSongs: List<Song> = emptyList()
     private var queueSongOrder: List<Song> = emptyList()
-    private val playlistStore by lazy { TelegramSavedPlaylistStore(noBackupFilesDir) }
-    private var favoriteIds: List<Long> = emptyList()
+    // E96 P0: the single writer of the saved playlist is process-wide (see TelegramPlaylistRuntime).
+    private val playlistSession by lazy { TelegramPlaylistRuntime.session(noBackupFilesDir) }
+    @Volatile private var favoriteIds: List<Long> = emptyList()
+    /** True while the saved playlist file exists but cannot be read; Save is then refused, nothing is overwritten. */
+    private var playlistUnreadable = false
     private var playlistMode = false
     // Gọn layout (docs/ui-spec.md step 4): a view layer over the unchanged legacy tree.
     private lateinit var outerRoot: FrameLayout
@@ -992,7 +997,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // Playback queue follows only the selected source (and visible title
         // filter), never silently jumps into a different Telegram channel.
         queueSongOrder = TelegramQueueRetentionPolicy.forSelected(
-            if (filterOnlyDownloaded) offlineQueueSongs(song.messageId) else shownSongs,
+            if (filterOnlyDownloaded) offlineQueueSongs(song.messageId) else shownSongs.filterNot { it.placeholder },
             queueSongOrder, song.messageId
         ) { it.messageId }.ifEmpty { listOf(song) }
         library.authorizedUser()?.let { owner ->
@@ -1046,7 +1051,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // The Media3 source waits only for missing bytes; do not wait for the
         // full mix or silently pretend the file is fully cached.
         queueSongOrder = TelegramQueueRetentionPolicy.forSelected(
-            if (filterOnlyDownloaded) offlineQueueSongs(song.messageId) else shownSongs,
+            if (filterOnlyDownloaded) offlineQueueSongs(song.messageId) else shownSongs.filterNot { it.placeholder },
             queueSongOrder, song.messageId
         ) { it.messageId }.ifEmpty { listOf(song) }
         library.authorizedUser()?.let { owner ->
@@ -4197,6 +4202,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val currentChatId = selectedChatId
         val isAllChats = allChatsMode
         val currentFavIds = favoriteIds.toSet()
+        // Playlist order is the saved order. The copies are taken here, on the calling thread, so the
+        // database thread never reads the live `songs` list while the main thread changes it.
+        val currentFavList = if (isPlaylist) favoriteIds else emptyList()
+        val loadedSongsSnapshot = if (isPlaylist) songs.toList() else emptyList()
         val currentSort = activeSort()
         val currentFloor = letterFloor.takeIf { currentSort == SongSort.NAME }
 
@@ -4292,11 +4301,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
             } else {
                 val (loadedSongs, totalDisplayCount) = if (isPlaylist) {
-                    val favSongs = currentFavIds.mapNotNull { id -> songs.firstOrNull { it.messageId == id } }
-                    val filtered = if (q.isBlank()) favSongs else favSongs.filter {
+                    val entries = resolvePlaylistEntries(userId, db, currentFavList, loadedSongsSnapshot)
+                    val known = entries.mapNotNull { it.item }
+                    val filtered = if (q.isBlank()) known else known.filter {
                         MeloComponentPolicy.matchesSearch(q, it.title, it.performer, it.filename)
                     }
-                    Pair(sortSongs(filtered, currentSort), filtered.size)
+                    // Saved songs the library does not know yet stay in the list (last), never dropped.
+                    val unknown = if (q.isBlank()) entries.filter { it.isPlaceholder }.map { placeholderSong(it.key) } else emptyList()
+                    val shown = sortSongs(filtered, currentSort) + unknown
+                    Pair(shown, shown.size)
                 } else if (isAllChats && db != null && userId > 0L) {
                     val filterQuery = q.takeIf { it.isNotBlank() }
                     val count = db.getSongCount(userId, chatId = currentChatId, searchQuery = filterQuery)
@@ -4364,6 +4377,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     })
                     val chatId = currentChatId
                     libraryTitle.text = when {
+                        isPlaylist && playlistUnreadable -> "PLAYLIST  ·  KHÔNG ĐỌC ĐƯỢC DỮ LIỆU ĐÃ LƯU"
                         isPlaylist -> "PLAYLIST  ·  BÀI ĐÃ LƯU (${shownSongs.size})"
                         !isAllChats -> "THƯ VIỆN NHẠC  ·  SAVED MESSAGES (${shownSongs.size})"
                         chatId != null -> "‹ " + (sourceNames[chatId] ?: "Nguồn Telegram $chatId") + " ($totalDisplayCount bài)"
@@ -4392,17 +4406,121 @@ class TelegramPreviewActivity : AppCompatActivity() {
         if (!auth.isReady()) return
         val target = currentTelegramMessageId() ?: return
         if (songs.none { it.messageId == target } &&
-            queueSongOrder.none { it.messageId == target }) return
-        val next = TelegramPlaylistPolicy.toggle(favoriteIds, target)
-        val result = runCatching { playlistStore.save(account, next) }
-        if (result.isFailure) {
-            showMessage("Không lưu được playlist an toàn trên thiết bị.")
+            queueSongOrder.none { it.messageId == target }) {
+            showMessage("Chưa xác định được bài đang phát để lưu. Hãy mở bài từ danh sách rồi thử lại.")
             return
         }
-        favoriteIds = next
+        requestPlaylistToggle(account, target, null)
+    }
+
+    /**
+     * The one Save/Unsave path (now-playing button and song menu). The write runs on the playlist
+     * thread, never on the UI thread; the screen changes and a success message appears only after
+     * the file was really written. [title] null = short "N bài đã lưu" wording.
+     */
+    private fun requestPlaylistToggle(account: TelegramUserId, target: Long, title: String?) {
+        TelegramPlaylistRuntime.submit {
+            val outcome = playlistSession.toggle(account, target)
+            runOnUiThread { onPlaylistToggled(account, outcome, title) }
+        }
+    }
+
+    private fun onPlaylistToggled(
+        account: TelegramUserId, outcome: TelegramPlaylistSession.ToggleOutcome, title: String?
+    ) {
+        if (isDestroyed || library.authorizedUser() != account) return
+        when (outcome) {
+            is TelegramPlaylistSession.ToggleOutcome.Added -> {
+                applySavedPlaylist(outcome.ids)
+                showMessage(if (title != null) "Đã thêm '$title' vào Playlist." else "Playlist cá nhân: ${outcome.ids.size} bài đã lưu.")
+            }
+            is TelegramPlaylistSession.ToggleOutcome.Removed -> {
+                applySavedPlaylist(outcome.ids)
+                showMessage(if (title != null) "Đã xóa '$title' khỏi Playlist." else "Playlist cá nhân: ${outcome.ids.size} bài đã lưu.")
+            }
+            is TelegramPlaylistSession.ToggleOutcome.Full -> {
+                val message = "Playlist đã đủ ${TelegramPlaylistPolicy.MAX_IDS} bài. Hãy xóa bớt một bài trước khi thêm bài mới."
+                showMessage(message)
+                toast(message)
+            }
+            is TelegramPlaylistSession.ToggleOutcome.Blocked -> {
+                playlistUnreadable = true
+                showPlaylistUnreadable()
+            }
+            is TelegramPlaylistSession.ToggleOutcome.NotOpen ->
+                showMessage("Playlist chưa sẵn sàng. Hãy thử lại sau giây lát.")
+            is TelegramPlaylistSession.ToggleOutcome.Failed ->
+                showMessage("Không lưu được playlist an toàn trên thiết bị.")
+        }
+    }
+
+    private fun applySavedPlaylist(ids: List<Long>) {
+        favoriteIds = ids
+        playlistUnreadable = false
         updatePlaylistButtons()
         refreshSongRows()
-        showMessage("Playlist cá nhân: ${favoriteIds.size} bài đã lưu.")
+    }
+
+    private fun showPlaylistUnreadable() {
+        val message = "Không đọc được Playlist đã lưu trên máy này. Để không mất dữ liệu, ứng dụng sẽ không ghi đè lên nó. " +
+            "Hãy giữ nguyên ứng dụng và báo cho người hỗ trợ."
+        showMessage(message)
+        toast(message)
+    }
+
+    /** Opens the signed-in account's saved playlist off the UI thread; queued behind any pending Save. */
+    private fun loadSavedPlaylist(user: TelegramUserId) {
+        TelegramPlaylistRuntime.submit {
+            val opened = playlistSession.open(user)
+            runOnUiThread {
+                if (isDestroyed || library.authorizedUser() != user) return@runOnUiThread
+                when (opened) {
+                    is TelegramPlaylistSession.OpenResult.Ready -> {
+                        favoriteIds = opened.ids
+                        playlistUnreadable = false
+                        updatePlaylistButtons()
+                        if (playlistMode) refreshSongRows()
+                    }
+                    is TelegramPlaylistSession.OpenResult.Blocked -> {
+                        favoriteIds = emptyList()
+                        playlistUnreadable = true
+                        updatePlaylistButtons()
+                        if (playlistMode) refreshSongRows()
+                        showPlaylistUnreadable()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun closeSavedPlaylist() {
+        playlistUnreadable = false
+        TelegramPlaylistRuntime.submit { playlistSession.close() }
+    }
+
+    private fun placeholderSong(songKey: Long) = Song(
+        fileId = 0, title = "Bài đã lưu · chưa có trong thư viện máy này", filename = "",
+        messageId = songKey, chatId = 0L, placeholder = true
+    )
+
+    private fun indexedToSong(row: IndexedTelegramSong) = Song(
+        row.fileId, row.title, row.filename, row.songKey, row.chatId, row.fileSize,
+        rawMessageId = row.messageId, performer = row.performer,
+        durationSeconds = row.durationSeconds, sourceTitle = row.sourceTitle
+    )
+
+    /** Database thread. Saved order; memory first, then one batched database lookup for the rest. */
+    private fun resolvePlaylistEntries(
+        userId: Long, db: TelegramLibraryDao?, keys: List<Long>, loaded: List<Song>
+    ): List<TelegramPlaylistViewPolicy.Entry<Song>> {
+        val byKey = HashMap<Long, Song>(loaded.size * 2)
+        for (song in loaded) byKey.putIfAbsent(song.messageId, song)
+        val missing = TelegramPlaylistViewPolicy.missingFromMemory(keys) { byKey[it] }
+        val indexed = if (db != null && userId > 0L && missing.isNotEmpty()) {
+            runCatching { db.getSongsByKeys(userId, missing) }.getOrDefault(emptyList())
+                .associate { it.songKey to indexedToSong(it) }
+        } else emptyMap()
+        return TelegramPlaylistViewPolicy.resolve(keys, { byKey[it] }, indexed)
     }
 
     // ---- New-screen layers (Gọn, Car Mode) ---------------------------------------------------
@@ -5280,6 +5398,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val themed = ContextThemeWrapper(this, R.style.Theme_MusicAssistantCar_Dialog)
         val popup = PopupMenu(themed, anchor)
         val isFav = song.messageId in favoriteIds
+        if (song.placeholder) {
+            // Not in this device's library yet: all that can be done is take it off the Playlist.
+            popup.menu.add(0, 3, 1, "★ Xóa khỏi Playlist")
+            popup.setOnMenuItemClickListener { toggleFavoriteSong(song); true }
+            popup.show()
+            return
+        }
         val manyVersions = versions?.takeIf { it.entries.size > 1 }
         popup.menu.add(0, 1, 1, "▶ Phát bài này")
         if (manyVersions != null) popup.menu.add(0, 6, 1, "☰ Chọn bản khác (${manyVersions.entries.size} bản)")
@@ -5343,18 +5468,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun toggleFavoriteSong(song: Song) {
         val account = library.authorizedUser() ?: return
         if (!auth.isReady()) return
-        val target = song.messageId
-        val next = TelegramPlaylistPolicy.toggle(favoriteIds, target)
-        val result = runCatching { playlistStore.save(account, next) }
-        if (result.isFailure) {
-            showMessage("Không lưu được playlist an toàn trên thiết bị.")
-            return
-        }
-        favoriteIds = next
-        updatePlaylistButtons()
-        refreshSongRows()
-        val isAdded = target in next
-        showMessage(if (isAdded) "Đã thêm '${song.title}' vào Playlist." else "Đã xóa '${song.title}' khỏi Playlist.")
+        requestPlaylistToggle(account, song.messageId, song.title)
     }
 
     private fun showSongDetailsDialog(song: Song, isDownloaded: Boolean) {
@@ -5667,8 +5781,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 if (auth.onGetMe(authEpoch, verified)) {
                     ShareableTdlibOwner.markGetMeVerified(verified.value)
                     showMessage("Đã đăng nhập Telegram. Tải nhạc trong Saved Messages.")
-                    favoriteIds = runCatching { playlistStore.load(verified) }
-                        .getOrDefault(emptyList())
+                    // Never fall back to an empty list on a read error: the file is read (and, if it
+                    // cannot be, protected) by the playlist session, off this receiver thread.
+                    favoriteIds = emptyList()
+                    loadSavedPlaylist(verified)
                     playlistMode = false
                     runOnUiThread {
                         updatePlaylistButtons()
@@ -5897,6 +6013,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     songs.clear()
                     adapter.clear()
                     favoriteIds = emptyList()
+                    closeSavedPlaylist()
                     playlistMode = false
                     shownSongs = emptyList()
                     updatePlaylistButtons()
@@ -6627,6 +6744,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun downloadAndPlay(song: Song) {
+        if (song.placeholder) {
+            // A saved song this device's library does not list (yet) has no message to open.
+            toast("Bài này chưa có trong thư viện máy. Hãy chờ đồng bộ thư viện xong rồi thử lại.")
+            return
+        }
         if (!auth.isReady()) return
         val effectiveChatId = if (song.chatId != 0L) song.chatId else (savedChatId.takeIf { it != 0L } ?: (library.authorizedUser()?.value ?: 0L))
         val rawMsgId = song.genuineMessageId
@@ -6796,6 +6918,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         adapter.clear()
         queueSongOrder = emptyList()
         favoriteIds = emptyList()
+        closeSavedPlaylist()
         playlistMode = false
         shownSongs = emptyList()
         updatePlaylistButtons()

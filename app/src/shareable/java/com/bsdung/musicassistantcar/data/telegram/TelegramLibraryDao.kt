@@ -54,6 +54,13 @@ interface TelegramLibraryDao {
     fun getSongByKey(accountId: Long, songKey: Long): IndexedTelegramSong?
 
     /**
+     * READ-ONLY (E96 P0): the live songs of [songKeys] for one account, in one pass instead of one
+     * query per key. Keys that are not indexed (or whose song is deleted) are simply absent from the
+     * result; the caller decides what to show for them. At most one song per key.
+     */
+    fun getSongsByKeys(accountId: Long, songKeys: Collection<Long>): List<IndexedTelegramSong>
+
+    /**
      * Updates the session-scoped file_id for a specific indexed song.
      */
     fun updateSongFileId(accountId: Long, chatId: Long, messageId: Long, fileId: Int)
@@ -115,6 +122,17 @@ interface TelegramLibraryDao {
     fun deleteAccountData(accountId: Long)
 
     companion object {
+        /** SQLite allows 999 bound variables; one is the account, the rest are keys. */
+        const val SONGS_BY_KEYS_CHUNK = 400
+
+        /** The statement behind [getSongsByKeys] for [count] keys. Kept here so the SQLite test runs the very same text. */
+        fun songsByKeysSql(count: Int): String {
+            require(count in 1..SONGS_BY_KEYS_CHUNK)
+            return "SELECT * FROM ${TelegramLibrarySql.TABLE_SONGS} " +
+                "WHERE ${TelegramLibrarySql.COL_ACCOUNT_ID} = ? AND ${TelegramLibrarySql.COL_IS_DELETED} = 0 " +
+                "AND ${TelegramLibrarySql.COL_SONG_KEY} IN (${List(count) { "?" }.joinToString(",")})"
+        }
+
         /**
          * The one statement behind [getLiveSourceCounts]: a SELECT over the existing index
          * `idx_tg_songs_chat (account_id, chat_id, is_deleted)`, which covers it entirely (no table
