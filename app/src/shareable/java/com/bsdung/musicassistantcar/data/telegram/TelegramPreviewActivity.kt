@@ -4489,6 +4489,18 @@ class TelegramPreviewActivity : AppCompatActivity() {
         toast(message)
     }
 
+    /** The stored playlist is shown as it is; changes made by an older app version are kept and imported at a later start. */
+    private fun showPlaylistImportDeferred(warning: PlaylistWarning) {
+        val message = when (warning) {
+            PlaylistWarning.IMPORT_DEFERRED_OUTBOX_FULL ->
+                "Playlist có bài do bản ứng dụng cũ thêm nhưng chưa nhập được vì hàng đợi thay đổi đang đầy. Không bài nào bị mất; ứng dụng sẽ thử lại ở lần mở sau."
+            PlaylistWarning.IMPORT_NOT_SAVED ->
+                "Chưa lưu được các thay đổi Playlist từ bản ứng dụng cũ. Không bài nào bị mất; hãy mở lại ứng dụng để thử lại."
+        }
+        showMessage(message)
+        toast(message)
+    }
+
     /** Opens the signed-in account's saved playlist off the UI thread; queued behind any pending Save. */
     private fun loadSavedPlaylist(user: TelegramUserId) {
         TelegramPlaylistRuntime.submit {
@@ -4502,6 +4514,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         playlistUnreadable = false
                         updatePlaylistButtons()
                         if (playlistMode) refreshSongRows()
+                        opened.warning?.let { showPlaylistImportDeferred(it) }
                     }
                     is TelegramPlaylistSession.OpenResult.Blocked -> {
                         favoriteIds = emptyList()

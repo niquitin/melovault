@@ -19,7 +19,8 @@ import java.util.concurrent.RejectedExecutionException
 internal class TelegramPlaylistSession(private val persistence: PlaylistPersistence) : PlaylistSessionApi {
 
     sealed class OpenResult {
-        data class Ready(val ids: List<Long>) : OpenResult()
+        /** [warning]: set when part of the work had to wait (V2 only); the playlist shown is still the stored one. */
+        data class Ready(val ids: List<Long>, val warning: PlaylistWarning? = null) : OpenResult()
         data class Blocked(val reason: PlaylistUnreadableReason) : OpenResult()
     }
 

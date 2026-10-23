@@ -515,6 +515,123 @@ class TelegramPlaylistV2SessionTest {
         assertEquals(listOf(saved(1), saved(2)), v1Ids())
     }
 
+    // ---- E96-P1-REWORK-01: importing the old app's V1 changes when it cannot be done now ---------------
+
+    private fun fillOutbox() {
+        val waiting = (1..PlaylistState.MAX_OUTBOX).map { n ->
+            val dot = Dot("dev-1", 100L + n)
+            OutboxEntry(PlaylistOp(dot.key, OpType.ADD, PlaylistItemId.Telegram(a.value, saved(n)), setOf(dot), n.toLong()), OutboxStatus.PENDING, 0)
+        }
+        v2Store().save(a, v2State().copy(outbox = waiting, opCounter = 100_000L))
+    }
+
+    @Test fun aFullOutboxWithANewSongInV1IsDeferredWithAWarningNotAnExceptionAndRecoversAfterARestart() {
+        val index = FakeIndex(savedItems(1, 10), a.value)
+        v1Store().save(a, listOf(saved(1)))
+        session(index = index).open(a)
+        fillOutbox()
+        v1Store().save(a, listOf(saved(1), saved(4))) // the older app added song 4 (resolvable) to V1
+        val v1Before = v1File(a).readBytes()
+        val v2Before = v2File(a).readBytes()
+
+        val s = session(index = index)
+        val opened = s.open(a) // used to throw OutboxFullException out of open()
+        assertEquals(OpenResult.Ready(listOf(saved(1)), PlaylistWarning.IMPORT_DEFERRED_OUTBOX_FULL), opened)
+        assertEquals("the stored playlist stays on screen", listOf(saved(1)), s.snapshot())
+        assertArrayEquals("V1 untouched: the song is kept for later", v1Before, v1File(a).readBytes())
+        assertArrayEquals("V2 untouched: not one waiting operation lost", v2Before, v2File(a).readBytes())
+        assertEquals(PlaylistState.MAX_OUTBOX, v2State().outbox.size)
+
+        // While the import waits, V1 is never replaced - not even by a change that needs no queue slot.
+        val unverifiable = TelegramSongKey.forMessage(-100500L, 321L, a.value)
+        assertTrue(s.toggle(a, PlaylistTarget(unverifiable)) is ToggleOutcome.Added)
+        assertEquals(listOf(saved(1), saved(4)), v1Ids())
+        // A change that does need a slot is refused loudly instead of dropping anything.
+        assertEquals(ToggleOutcome.OutboxFull, s.toggle(a, PlaylistTarget(saved(2), a.value, saved(2))))
+        assertEquals(PlaylistState.MAX_OUTBOX, v2State().outbox.size)
+
+        // Later (P2 will do this by acknowledging) the queue has room; the next start imports and finishes.
+        v2Store().save(a, v2State().copy(outbox = emptyList()))
+        val again = session(index = index)
+        assertEquals(OpenResult.Ready(listOf(saved(1), unverifiable, saved(4)), null), again.open(a))
+        assertEquals(listOf(saved(1), unverifiable, saved(4)), v1Ids())
+        assertEquals(1, v2State().projection.conflictImported)
+        assertEquals(1, v2State().outbox.size) // exactly the one new song
+    }
+
+    @Test fun aV2WriteFailureWhileImportingIsReportedLeavesBothFilesAloneAndRecovers() {
+        val index = FakeIndex(savedItems(1, 10), a.value)
+        v1Store().save(a, listOf(saved(1)))
+        session(index = index).open(a)
+        v1Store().save(a, listOf(saved(1), saved(4))) // older app added song 4
+        val v1Before = v1File(a).readBytes()
+        val v2Before = v2File(a).readBytes()
+
+        v2Io.writesAllowed = v2Io.writes // the next V2 write fails (disk error)
+        val failed = session(index = index)
+        assertEquals(OpenResult.Ready(listOf(saved(1)), PlaylistWarning.IMPORT_NOT_SAVED), failed.open(a))
+        assertEquals(listOf(saved(1)), failed.snapshot())
+        assertArrayEquals(v1Before, v1File(a).readBytes())
+        assertArrayEquals(v2Before, v2File(a).readBytes())
+
+        v2Io.writesAllowed = Int.MAX_VALUE
+        val recovered = session(index = index)
+        assertEquals(OpenResult.Ready(listOf(saved(1), saved(4)), null), recovered.open(a))
+        assertEquals(listOf(saved(1), saved(4)), v1Ids())
+        assertEquals(1, v2State().projection.conflictImported)
+    }
+
+    @Test fun anEncryptionFailureWhileImportingIsReportedLeavesBothFilesAloneAndRecovers() {
+        val index = FakeIndex(savedItems(1, 10), a.value)
+        v1Store().save(a, listOf(saved(1), saved(2)))
+        session(index = index).open(a)
+        v1Store().save(a, listOf(saved(1), saved(2), saved(5)))
+        val v1Before = v1File(a).readBytes()
+        val v2Before = v2File(a).readBytes()
+
+        val good = TestAesGcmCipher(2)
+        val cannotEncrypt = object : PlaylistCipher {
+            override fun encrypt(aad: ByteArray, plain: ByteArray): ByteArray = throw java.security.GeneralSecurityException("keystore")
+            override fun decrypt(aad: ByteArray, blob: ByteArray): ByteArray = good.decrypt(aad, blob)
+        }
+        val failed = session(v2 = v2Store(cipher = cannotEncrypt), index = index)
+        assertEquals(OpenResult.Ready(listOf(saved(1), saved(2)), PlaylistWarning.IMPORT_NOT_SAVED), failed.open(a))
+        assertArrayEquals(v1Before, v1File(a).readBytes())
+        assertArrayEquals(v2Before, v2File(a).readBytes())
+
+        val recovered = session(index = index)
+        assertEquals(OpenResult.Ready(listOf(saved(1), saved(2), saved(5)), null), recovered.open(a))
+        assertEquals(listOf(saved(1), saved(2), saved(5)), v1Ids())
+    }
+
+    @Test fun anUnexpectedErrorWhileOpeningComesBackAsAnAnswerAndWritesNothing() {
+        val explodes = object : PlaylistPersistence {
+            override fun load(user: TelegramUserId): PlaylistLoadResult = throw IllegalStateException("boom")
+            override fun save(user: TelegramUserId, ids: List<Long>) = throw AssertionError("must not write")
+        }
+        val s = session(v1 = explodes)
+        assertEquals(OpenResult.Blocked(PlaylistUnreadableReason.IO), s.open(a))
+        assertFalse(v2File(a).exists())
+    }
+
+    @Test fun theReconcilerReportsAFullQueueInsteadOfThrowingAndLeavesTheStateAlone() {
+        var st = PlaylistState.empty(a.value, "dev-1").addTelegram(PlaylistItemId.Telegram(a.value, saved(1))).state
+        val filler = st.outbox.single()
+        st = st.copy(outbox = List(PlaylistState.MAX_OUTBOX) { n ->
+            filler.copy(op = filler.op.copy(opId = "dev-1#${n + 10}"))
+        })
+        val resolvable = mapOf(saved(4) to PlaylistItemId.Telegram(a.value, saved(4)))
+        assertEquals(
+            PlaylistV1Reconciler.Outcome.OutboxFull,
+            PlaylistV1Reconciler.reconcile(st, listOf(saved(1), saved(4)), a.value, resolvable)
+        )
+        // Songs that need no queue slot (unverifiable keys) are still imported.
+        val merged = PlaylistV1Reconciler.reconcile(st, listOf(saved(1), 777L), a.value, emptyMap())
+        assertTrue(merged is PlaylistV1Reconciler.Outcome.Merged)
+        assertEquals(listOf(saved(1), 777L), (merged as PlaylistV1Reconciler.Outcome.Merged).state.presentSongKeys(a.value))
+        assertEquals(PlaylistState.MAX_OUTBOX, merged.state.outbox.size)
+    }
+
     @Test fun theCodeLevelSwitchStartsOn() {
         assertTrue(TelegramPlaylistFlags.V2_ENABLED)
     }

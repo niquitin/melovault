@@ -28,22 +28,36 @@ internal interface PlaylistSessionApi {
     fun resolveLegacyKeys(account: TelegramUserId): Boolean
 }
 
+/** Why importing the changes an older app made to V1 was put off. Nothing is lost: V1 and V2 are left as they were. */
+internal enum class PlaylistWarning {
+    /** The sync queue already holds its maximum of waiting operations, so the new songs cannot be queued yet. */
+    IMPORT_DEFERRED_OUTBOX_FULL,
+    /** The merged playlist could not be written (disk or encryption error). */
+    IMPORT_NOT_SAVED,
+}
+
 /** Pure rules for reading a V1 file that something else changed after we last wrote it. */
 internal object PlaylistV1Reconciler {
-    data class Result(val state: PlaylistState, val imported: Int, val skipped: Int, val ignoredRemovals: Int)
+    sealed class Outcome {
+        data class Merged(val state: PlaylistState, val imported: Int, val skipped: Int, val ignoredRemovals: Int) : Outcome()
+
+        /** Not even one song was imported: it is all or nothing, so V1 can safely stay as it is until later. */
+        object OutboxFull : Outcome()
+    }
 
     /**
      * [current] is what the V1 file holds now. Songs the old app added are imported as new additions.
      * A song V2 has removed (or ever knew and removed) is never brought back. Songs the old app took
      * out of V1 are NOT removed from V2: losing a song is worse than showing one the user already
-     * deleted, so those are only counted.
+     * deleted, so those are only counted. If the queue of waiting operations has no room for the
+     * additions, nothing at all is imported ([Outcome.OutboxFull]); the caller must then leave V1 alone.
      */
     fun reconcile(
         state: PlaylistState,
         current: List<Long>,
         selfChatId: Long,
         resolved: Map<Long, PlaylistItemId.Telegram>,
-    ): Result {
+    ): Outcome {
         val present = state.presentSongKeys(selfChatId).toSet()
         val known = state.orSet.knownItems().map { it.songKey(selfChatId) }.toSet()
         var next = state
@@ -56,12 +70,16 @@ internal object PlaylistV1Reconciler {
                 continue
             }
             val item = resolved[key]
-            next = if (item != null) next.addTelegram(item).state else next.addLegacy(key)
+            next = try {
+                if (item != null) next.addTelegram(item).state else next.addLegacy(key)
+            } catch (_: OutboxFullException) {
+                return Outcome.OutboxFull
+            }
             imported++
         }
         val window = TelegramPlaylistV2Session.projectionIds(state, selfChatId).toSet()
         val ignored = window.count { it !in current.toSet() }
-        return Result(next, imported, skipped, ignored)
+        return Outcome.Merged(next, imported, skipped, ignored)
     }
 }
 
@@ -85,6 +103,9 @@ internal class TelegramPlaylistV2Session(
     private var blocked: PlaylistUnreadableReason? = null
     private var index: PlaylistIndex? = null
 
+    /** Set while changes an older app made to V1 are waiting to be imported: V1 must not be replaced meanwhile. */
+    private var importDeferred: PlaylistWarning? = null
+
     @Synchronized
     override fun attachIndex(index: PlaylistIndex) {
         this.index = index
@@ -100,7 +121,14 @@ internal class TelegramPlaylistV2Session(
         user = account
         state = null
         blocked = null
-        return load(account)
+        importDeferred = null
+        // Whatever goes wrong while opening must come back as an answer the screen can show, never as a
+        // swallowed exception. Nothing has been written at the point an unexpected error can occur here.
+        return try {
+            load(account)
+        } catch (_: Exception) {
+            block(PlaylistUnreadableReason.IO)
+        }
     }
 
     @Synchronized
@@ -108,6 +136,7 @@ internal class TelegramPlaylistV2Session(
         user = null
         state = null
         blocked = null
+        importDeferred = null
     }
 
     @Synchronized
@@ -127,17 +156,22 @@ internal class TelegramPlaylistV2Session(
         return OpenResult.Blocked(reason)
     }
 
-    private fun ready(account: TelegramUserId, s: PlaylistState): OpenResult {
+    private fun ready(account: TelegramUserId, s: PlaylistState, warning: PlaylistWarning? = null): OpenResult {
         state = s
         blocked = null
-        return OpenResult.Ready(s.presentSongKeys(account.value))
+        importDeferred = warning
+        return OpenResult.Ready(s.presentSongKeys(account.value), warning)
     }
 
     private fun adopt(account: TelegramUserId, stored: PlaylistState): OpenResult {
         var s = stored
         if (s.migration.status != MigrationStatus.COMPLETE) s = completeMigration(account, s) ?: return block(PlaylistUnreadableReason.FORMAT)
-        return ready(account, reconcileProjection(account, s))
+        val pass = reconcileProjection(account, s)
+        return ready(account, pass.state, pass.warning)
     }
+
+    /** The playlist after looking at the V1 copy, and whether importing the old app's changes had to wait. */
+    private class Pass(val state: PlaylistState, val warning: PlaylistWarning? = null)
 
     /** V2 exists but its migration was never marked complete (killed after step 2). V1 is only read. */
     private fun completeMigration(account: TelegramUserId, s: PlaylistState): PlaylistState? {
@@ -188,28 +222,37 @@ internal class TelegramPlaylistV2Session(
     // ---- the V1 copy ---------------------------------------------------------------------------
 
     /** Compares the V1 file with what we last put there and repairs or reconciles it. V1 unreadable is left alone. */
-    private fun reconcileProjection(account: TelegramUserId, s: PlaylistState): PlaylistState {
+    private fun reconcileProjection(account: TelegramUserId, s: PlaylistState): Pass {
         val self = account.value
         val expected = projectionIds(s, self)
         val expectedDigest = TelegramPlaylistCodec.listDigest(expected)
         val truncated = s.presentSongKeys(self).size > TelegramPlaylistPolicy.MAX_IDS
         val onDisk = v1.load(account)
-        if (onDisk is PlaylistLoadResult.Unreadable) return withProjection(s, ProjectionStatus.STALE, truncated)
+        if (onDisk is PlaylistLoadResult.Unreadable) return Pass(withProjection(s, ProjectionStatus.STALE, truncated))
         val cur = (onDisk as? PlaylistLoadResult.Ok)?.ids.orEmpty()
         val curDigest = TelegramPlaylistCodec.listDigest(cur)
         val p = s.projection
         return when {
             onDisk is PlaylistLoadResult.Ok && curDigest == expectedDigest ->
-                s.copy(projection = p.copy(lastDigest = curDigest, pendingDigest = curDigest, status = ProjectionStatus.IN_SYNC, truncated = truncated))
+                Pass(s.copy(projection = p.copy(lastDigest = curDigest, pendingDigest = curDigest, status = ProjectionStatus.IN_SYNC, truncated = truncated)))
             onDisk is PlaylistLoadResult.Missing || curDigest == p.lastDigest || curDigest == p.pendingDigest ->
-                writeProjection(account, s.copy(projection = p.copy(truncated = truncated)))
+                Pass(writeProjection(account, s.copy(projection = p.copy(truncated = truncated))))
             else -> reconcileDivergence(account, s, cur, truncated)
         }
     }
 
-    private fun reconcileDivergence(account: TelegramUserId, s: PlaylistState, cur: List<Long>, truncated: Boolean): PlaylistState {
+    /**
+     * V1 holds something neither we nor our last write put there. Import it into V2 first (V2 saved,
+     * then V1 replaced). If that cannot be done now - the sync queue is full, or V2 cannot be written -
+     * BOTH files stay exactly as they were, the stored playlist is still shown, and the caller is told
+     * to warn the user; the next start tries again from the same V1.
+     */
+    private fun reconcileDivergence(account: TelegramUserId, s: PlaylistState, cur: List<Long>, truncated: Boolean): Pass {
         val self = account.value
-        val result = PlaylistV1Reconciler.reconcile(s, cur, self, resolveKeys(account, cur))
+        val result = when (val outcome = PlaylistV1Reconciler.reconcile(s, cur, self, resolveKeys(account, cur))) {
+            is PlaylistV1Reconciler.Outcome.OutboxFull -> return Pass(s, PlaylistWarning.IMPORT_DEFERRED_OUTBOX_FULL)
+            is PlaylistV1Reconciler.Outcome.Merged -> outcome
+        }
         val merged = result.state.copy(
             projection = s.projection.copy(
                 lastDigest = TelegramPlaylistCodec.listDigest(cur),
@@ -222,8 +265,8 @@ internal class TelegramPlaylistV2Session(
             )
         )
         // Commit the merged V2 first; only then is V1 (a copy) replaced, so nothing the old app added is lost.
-        if (!trySave(account, merged)) return s
-        return writeProjection(account, merged)
+        if (!trySave(account, merged)) return Pass(s, PlaylistWarning.IMPORT_NOT_SAVED)
+        return Pass(writeProjection(account, merged))
     }
 
     /** Writes the V1 copy. A failure never touches the committed V2; it only marks the copy stale (in memory). */
@@ -291,7 +334,8 @@ internal class TelegramPlaylistV2Session(
         } catch (_: Exception) {
             return ToggleOutcome.Failed
         }
-        state = writeProjection(account, toSave)
+        // While the old app's changes to V1 still wait to be imported, V1 is not replaced: they would be lost.
+        state = if (importDeferred == null) writeProjection(account, toSave) else toSave
         return if (key in newPresent) ToggleOutcome.Added(newPresent) else ToggleOutcome.Removed(newPresent)
     }
 
