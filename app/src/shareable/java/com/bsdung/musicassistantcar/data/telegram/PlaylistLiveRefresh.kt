@@ -25,6 +25,8 @@ internal class PlaylistLiveRefresh(
     private val apply: (List<Long>) -> Unit,
     /** Sanitised evidence for the log: how many songs the committed list has (null = no readable list) and whether the screen had to change. */
     private val onResult: (count: Int?, changed: Boolean) -> Unit = { _, _ -> },
+    /** Runs on the playlist thread on what was read; identity in production. QA builds use it for the display-only simulation. */
+    private val transform: (List<Long>?) -> List<Long>? = { it },
 ) {
     private val generation = AtomicLong()
 
@@ -37,7 +39,7 @@ internal class PlaylistLiveRefresh(
     fun requestRefresh(account: TelegramUserId) {
         val mine = generation.incrementAndGet()
         submit {
-            val ids = session.snapshotFor(account)
+            val ids = transform(session.snapshotFor(account))
             toUi {
                 if (!alive() || generation.get() != mine || currentAccount() != account) return@toUi
                 if (ids == null || ids == shown()) {

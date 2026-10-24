@@ -310,6 +310,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
             apply = { ids -> applyRemoteSavedPlaylist(ids) },
             // Counts only, never ids or titles (Sony hides Log.i, hence warn).
             onResult = { count, changed -> android.util.Log.w("MeloPlaylist", "resume-refresh count=$count changed=$changed") },
+            // Sync-QA debug builds only: an optional marker file in the cache dir adds one unknown song to what is READ (never written).
+            transform = { ids ->
+                PlaylistQaSimulation.apply(
+                    ids, TelegramPlaylistFlags.SYNC_ENABLED, java.io.File(cacheDir, PlaylistQaSimulation.MARKER_FILE).exists(),
+                )
+            },
         )
     }
     /** True while the saved playlist file exists but cannot be read; Save is then refused, nothing is overwritten. */

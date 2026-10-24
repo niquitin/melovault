@@ -135,7 +135,9 @@ internal class FakeTdlibJsonGateway(val world: FakeTdlibWorld, var userId: Long)
     private val failures = HashMap<String, java.util.ArrayDeque<Pair<Int, String>>>()
     private val silent = HashSet<String>()
     private var clientId = 0
-    private var provisional = 0L
+    // Thread-safe on purpose (REWORK-04): two sendMessage requests can arrive at the same moment, exactly as with the real client,
+    // and each must get its own temporary message id. A plain counter handed both the same id and made a healthy send look foreign.
+    private val provisional = java.util.concurrent.atomic.AtomicLong()
 
     fun failNext(type: String, code: Int, message: String) {
         failures.getOrPut(type) { java.util.ArrayDeque() }.add(code to message)
@@ -294,18 +296,20 @@ internal class FakeTdlibJsonGateway(val world: FakeTdlibWorld, var userId: Long)
     private fun sendMessage(r: JSONObject) {
         sendHook?.invoke()
         val content = r.optJSONObject("input_message_content")
-        if (content?.optString("@type") != "inputMessageText") nonTextSends++
+        if (content?.optString("@type") != "inputMessageText") synchronized(this) { nonTextSends++ }
         // Real TDLib cleans the text on the way in (clean_input_string + trim): tabs become spaces. The fake must too,
         // otherwise a protocol that only works with raw text looks fine here and fails against Telegram.
         val text = FakeTdlibClientText.clean(content?.optJSONObject("text")?.optString("text").orEmpty())
         val chatId = r.optLong("chat_id")
         if (!world.chats.containsKey(chatId)) return error(r, 400, "Chat not found")
-        val mode = sendModes.poll() ?: defaultSendMode
-        val old = ++provisional + 1_000L
+        val mode = synchronized(sendModes) { sendModes.poll() } ?: defaultSendMode
+        val old = provisional.incrementAndGet() + 1_000L
         fun provisionalMessage() = msgJson(FakeMsg(old, chatId, text)).put("sending_state", JSONObject().put("@type", "messageSendingStatePending"))
         fun success(finalMessage: JSONObject) =
             JSONObject().put("@type", "updateMessageSendSucceeded").put("message", finalMessage).put("old_message_id", old)
-        fun store(): FakeMsg = world.post(chatId, text).let { world.chats.getValue(chatId).messages.getValue(it) }
+        // One lock for the whole step: post() is synchronized on the world, but reading the message back from the TreeMap while the
+        // other request inserts into it is not safe (REWORK-04: second race in the fake, found by the barrier stress test).
+        fun store(): FakeMsg = synchronized(world) { world.post(chatId, text).let { world.chats.getValue(chatId).messages.getValue(it) } }
         when (mode) {
             SendMode.OK_UPDATE_AFTER -> {
                 val m = store()

@@ -49,7 +49,8 @@ internal class MeloCompactScreen(
     private val libraryPage = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     private val title = c.text("", s.titleText, p.text, bold = true)
     private val note = c.text("", s.secondaryText, p.textSecondary, maxLines = 2)
-    private val downloadedLine = c.text("", s.secondaryText, MeloCompactPolicy.DOWNLOADED_LINE_COLOR)
+    // Two lines: the Playlist status sentence is longer than one line on a narrow screen (REWORK-04, M3 showed "Chưa kiểm tra đồng ...").
+    private val downloadedLine = c.text("", s.secondaryText, MeloCompactPolicy.DOWNLOADED_LINE_COLOR, maxLines = 2)
     private val list = ListView(context)
     private val adapter = RowsAdapter()
     private val bar = MeloBottomBar(context, c, host, onTab = ::onBarTab, onOpenNowPlaying = ::openNowPlaying)
