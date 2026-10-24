@@ -24,6 +24,8 @@ internal enum class SyncStage {
     FETCH_SCAN, FETCH_CROSSCHECK, FETCH_CORRUPT,
     SEND_BUDGET_ZERO, SEND_PLAN_BLOCKED,
     SEND_PRECHECK_CONSENT, SEND_PRECHECK_IDENTITY, SEND_PRECHECK_CONNECTION, SEND_PRECHECK_TEXT,
+    /** The doubt could not be written down BEFORE dispatch, so nothing was sent. */
+    SEND_PRECHECK_PERSIST,
     SEND_DISPATCH_ERROR, SEND_DISPATCH_TIMEOUT, SEND_DISPATCH_ABORTED,
     SEND_PROVISIONAL_MISMATCH_TYPE, SEND_PROVISIONAL_MISMATCH_CHAT, SEND_PROVISIONAL_MISMATCH_TEXT,
     SEND_ACK_TIMEOUT, SEND_ACK_FAILED, SEND_ACK_MISMATCH, SEND_IDENTITY_LOST,
@@ -93,7 +95,7 @@ internal sealed class SendResult {
      * server may or may not have it. Never counts as sent and NEVER lets the same operations be sent again by itself.
      * [stage] is the sanitised reason, a diagnostic that takes no part in equality.
      */
-    class Unknown(val stage: SyncStage = SyncStage.SEND_DISPATCH_TIMEOUT) : SendResult() {
+    class Unknown(val stage: SyncStage = SyncStage.SEND_DISPATCH_TIMEOUT, val bucket: ErrorBucket = ErrorBucket.NONE) : SendResult() {
         override fun equals(other: Any?): Boolean = other is Unknown
         override fun hashCode(): Int = 1
         override fun toString(): String = "Unknown($stage)"

@@ -317,6 +317,16 @@ internal data class PlaylistState(
     fun markRetryRequired(opId: String): PlaylistState =
         mapOutbox(opId) { if (it.status == OutboxStatus.ACKNOWLEDGED) it else it.copy(status = OutboxStatus.RETRY_REQUIRED, attempts = it.attempts + 1) }
 
+    /**
+     * Undoes the write-ahead flag of [markRetryRequired] for an operation whose send was DEFINITELY refused (nothing was
+     * stored, or nothing was even handed over): it goes back to exactly what it was before (PENDING, one attempt less).
+     * Only the sync coordinator calls this, only for operations it flagged itself a moment earlier in the same step.
+     */
+    fun revertRefusedDispatch(opId: String): PlaylistState =
+        mapOutbox(opId) {
+            if (it.status == OutboxStatus.RETRY_REQUIRED) it.copy(status = OutboxStatus.PENDING, attempts = maxOf(0, it.attempts - 1)) else it
+        }
+
     /** Drops only acknowledged entries. Pending and retry entries are never dropped. */
     fun pruneAcknowledged(): PlaylistState = copy(outbox = outbox.filter { it.status != OutboxStatus.ACKNOWLEDGED })
 

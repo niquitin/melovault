@@ -112,8 +112,9 @@ internal class TdlibPlaylistSyncService(
 
     /**
      * One synchronisation run of the P2 coordinator over TDLib. Manual: [SyncMode.FULL_REPLAY] is the hook for the
-     * "late message below the cursor" policy (P4 decides when). Without consent (c) and with something waiting to be
-     * sent, nothing is called at all.
+     * "late message below the cursor" policy (P4 decides when). A run that may SEND ([sendBudget] above zero) with
+     * something waiting needs consent (c): without it nothing is called at all. A read-only run (budget 0) needs only (a)
+     * and a bound channel; it reads the history and acknowledges what is already there.
      */
     fun runSync(account: TelegramUserId, mode: SyncMode = SyncMode.INCREMENTAL, sendBudget: Int = 0): Gated<SyncReport> {
         gate.mayRun(account)?.let { return denied(it) }
@@ -123,7 +124,10 @@ internal class TdlibPlaylistSyncService(
         val channel = view.state.checkpoint.channelId
         if (channel == 0L) return Gated.Done(SyncReport(SyncStatus.NO_CHANNEL)) // never creates one, never touches TDLib
         val waiting = view.state.outbox.any { it.status != OutboxStatus.ACKNOWLEDGED }
-        if (waiting && gate.mayTransmit(account) != null) return denied(SyncDenied.TRANSMIT_NOT_ALLOWED)
+        // Only a run that may SEND needs consent (c). A read-only run (budget 0) needs just (a) and a bound channel: it reads the
+        // history and acknowledges what is already there, which is how the doubt about earlier sends is ended. Consent (c) is
+        // never switched on by this, and the transport checks it again on every dispatch.
+        if (waiting && budget > 0 && gate.mayTransmit(account) != null) return denied(SyncDenied.TRANSMIT_NOT_ALLOWED)
         return session(account, { null }) { epoch ->
             metrics.count(SyncMetrics.Event.RUN_STARTED)
             val started = clock()

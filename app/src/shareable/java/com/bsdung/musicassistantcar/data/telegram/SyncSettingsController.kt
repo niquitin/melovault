@@ -427,9 +427,12 @@ internal class SyncSettingsController(
         try {
             // The whole grant is taken out BEFORE the call and only what was not dispatched is put back afterwards: if the
             // call dies half way nothing comes back, so an unexpected failure can never leave a grant to be used again.
+            val startEpoch = epoch()
             val granted = synchronized(this) { sendGrant.also { sendGrant = 0 } }
             val answer = actions.run(who, mode, granted)
-            if (viewAccount == who.value && store.load(who).mayTransmitInitial) {
+            // What is left is put back only if the very same sign-in epoch is still live: A -> B -> A during the call (a new
+            // epoch of the same account) must not bring a grant back to life.
+            if (viewAccount == who.value && epoch() == startEpoch && store.load(who).mayTransmitInitial) {
                 val spent = when (answer) {
                     is Gated.Denied -> 0 // refused at the gate: nothing was handed to Telegram
                     is Gated.Done -> answer.value.opsDispatched

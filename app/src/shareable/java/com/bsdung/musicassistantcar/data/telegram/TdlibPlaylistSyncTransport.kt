@@ -78,10 +78,13 @@ internal class TdlibPlaylistSyncTransport(
                 )
             }
             val provisional = when (reply) {
-                // TDLib refused the request itself: no message was created, nothing was handed to Telegram.
+                // TDLib answered the request with an error. Only a definite 4xx (flood wait included) is a refusal. A 5xx, a
+                // timeout-like code or any other number can come from a request that Telegram DID process (REWORK-02):
+                // that is doubt, so it is never reported as "not stored".
                 is TdlibSyncHub.Reply.Err -> {
                     hub.metrics.count(SyncMetrics.Event.SEND_FAILED)
-                    return failed(reply.code, reply.message, SyncStage.SEND_DISPATCH_ERROR)
+                    return if (reply.code in 400..499) failed(reply.code, reply.message, SyncStage.SEND_DISPATCH_ERROR)
+                    else unknown(SyncStage.SEND_DISPATCH_ERROR, ErrorBucket.of(reply.code))
                 }
                 // Handed over, no answer (or the identity changed meanwhile): it may or may not be stored.
                 TdlibSyncHub.Reply.Timeout -> return unknown(SyncStage.SEND_DISPATCH_TIMEOUT)
@@ -110,7 +113,7 @@ internal class TdlibPlaylistSyncTransport(
                     // Only a definite client-side refusal (4xx, flood wait included) means "not stored". Anything else
                     // (5xx, odd codes) may have been processed by the server before it failed: that is doubt, not failure.
                     if (outcome.code in 400..499) failed(outcome.code, outcome.message, SyncStage.SEND_ACK_FAILED)
-                    else unknown(SyncStage.SEND_ACK_FAILED)
+                    else unknown(SyncStage.SEND_ACK_FAILED, ErrorBucket.of(outcome.code))
                 }
                 is SendOutcome.Succeeded -> {
                     val finalMessage = outcome.message
@@ -130,9 +133,9 @@ internal class TdlibPlaylistSyncTransport(
         }
     }
 
-    private fun unknown(stage: SyncStage): SendResult {
+    private fun unknown(stage: SyncStage, bucket: ErrorBucket = ErrorBucket.NONE): SendResult {
         hub.metrics.count(SyncMetrics.Event.SEND_UNKNOWN)
-        return SendResult.Unknown(stage)
+        return SendResult.Unknown(stage, bucket)
     }
 
     private fun failed(code: Int, message: String, stage: SyncStage): SendResult =

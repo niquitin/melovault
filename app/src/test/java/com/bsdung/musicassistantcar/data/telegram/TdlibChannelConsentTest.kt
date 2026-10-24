@@ -268,8 +268,13 @@ class TdlibChannelConsentTest {
         val r = rig(channelId = mine.id, consent = false)
         r.actions.enable(acct, true)
         r.device.toggle(acct.value, songId(1))
-        assertEquals(Gated.Denied(SyncDenied.TRANSMIT_NOT_ALLOWED), r.service.runSync(acct))
+        // (REWORK-02) only a run that may SEND needs (c); it is refused before TDLib is asked anything
+        assertEquals(Gated.Denied(SyncDenied.TRANSMIT_NOT_ALLOWED), r.service.runSync(acct, SyncMode.INCREMENTAL, 1))
         assertEquals(emptyList<String>(), r.tdlib.gateway.typesSeen())
+        assertEquals(1, r.device.pendingIds().size)
+        // a read-only run (budget 0) is allowed with (a) alone and sends nothing
+        assertTrue(r.service.runSync(acct) is Gated.Done)
+        assertEquals(0, r.tdlib.gateway.count("sendMessage"))
         assertEquals(1, r.device.pendingIds().size)
         r.actions.allowInitialTransmit(acct)
         assertEquals(SyncStatus.OK, r.run().status)

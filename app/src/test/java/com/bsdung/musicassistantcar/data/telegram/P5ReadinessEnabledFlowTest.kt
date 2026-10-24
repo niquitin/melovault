@@ -93,7 +93,9 @@ class P5ReadinessEnabledFlowTest {
         // (b) given, (c) still missing: a bound channel with waiting songs must not be written to.
         assertEquals(ActionResult.Done, s.ui.setAllowCreate(true))
         s.boundWithSongs(2)
-        assertEquals(ActionResult.Denied(SyncDenied.TRANSMIT_NOT_ALLOWED), s.ui.syncNow())
+        // (REWORK-02) "Đồng bộ ngay" without a grant is a READ-ONLY run: allowed with (a), it sends nothing; a grant needs (c).
+        assertEquals(ActionResult.Refused(ActionResult.Reason.TRANSMIT_NOT_ALLOWED), s.ui.grantSend(3, true))
+        assertEquals(ActionResult.Done, s.ui.syncNow())
         assertEquals(0, s.requests("sendMessage"))
         assertEquals(Kind.NEEDS_TRANSMIT_CONSENT, s.line().kind)
     }

@@ -414,6 +414,19 @@ internal class PlaylistSyncCoordinator(
             val envelope = PlaylistSyncProtocol.planFirstEnvelope(scope, view.state.deviceId, planned)
                 ?: return stop(recovery(c, account, RecoveryReason.OP_TOO_LARGE))
             val ids = envelope.ops.map { it.opId }.toSet()
+            // WRITE-AHEAD (REWORK-02): the doubt is written down BEFORE anything is handed over. From this write on, until a
+            // read-back finds them, these operations are "possibly sent": a crash, a lost answer, a failed later write or a
+            // session switch can only leave them flagged, never in a state that could be sent again. If this write does not
+            // commit, NOTHING is sent. (A crash between this write and the dispatch leaves them flagged although nothing left
+            // the device: blocked, never duplicated - the safe side of the trade.)
+            when (host.update(account, epoch) { s -> ids.fold(s) { acc, id -> acc.markRetryRequired(id) } }) {
+                is UpdateResult.Committed -> Unit
+                is UpdateResult.Stale -> return stop(report(c, account, SyncStatus.STALE_SESSION))
+                else -> {
+                    c.stage = SyncStage.SEND_PRECHECK_PERSIST
+                    return stop(report(c, account, SyncStatus.SAVE_FAILED))
+                }
+            }
             val startedAt = clock()
             val result = try {
                 transport.send(channel, PlaylistSyncProtocol.encode(envelope))
@@ -440,13 +453,15 @@ internal class PlaylistSyncCoordinator(
                     else -> return stop(report(c, account, SyncStatus.SAVE_FAILED))
                 }
                 is SendResult.Unknown -> {
-                    // Delivery unknown: they stay waiting under the very same ids, flagged, and are NOT sent again by this code.
-                    host.update(account, epoch) { s -> ids.fold(s) { acc, id -> acc.markRetryRequired(id) } }
+                    // Delivery unknown: they are already flagged on disk (write-ahead), keep their ids and are NOT sent again.
                     c.stage = result.stage
+                    c.errorBucket = result.bucket
                     return stop(deliveryUnconfirmed(c, account))
                 }
                 is SendResult.Failed -> {
-                    // A definite refusal: nothing was stored, so the operations stay PENDING exactly as they were.
+                    // A definite refusal: nothing was stored, so the flag is taken back and the operations are exactly as they
+                    // were (PENDING, same attempts). If that write fails they simply stay flagged: blocked, never duplicated.
+                    host.update(account, epoch) { s -> ids.fold(s) { acc, id -> acc.revertRefusedDispatch(id) } }
                     c.stage = result.stage
                     c.errorBucket = result.bucket
                     return stop(failure(c, account, result.kind, result.retryAfterSeconds))
