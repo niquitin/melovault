@@ -915,6 +915,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             if (playlistLoaded) {
                 reloadSavedPlaylistLive(it)
                 refreshPlaylistStatus(it)
+                runQaFixtureIfRequested(it)
             }
         }
         if (auth.isReady()) {
@@ -4548,6 +4549,48 @@ class TelegramPreviewActivity : AppCompatActivity() {
         playlistUnreadable = false
         updatePlaylistButtons()
         refreshSongRows()
+    }
+
+    /**
+     * E96 P5B3 FINAL LIVE QA, Sync-QA debug builds only ([PlaylistQaFixture]): a marker file in the cache dir asks for ONE change of
+     * the synthetic QA item in the Playlist (add or remove). It only queues one outbox operation through the normal Save path;
+     * nothing is sent here (consent (c) and a send grant in Settings decide that). The marker is always consumed.
+     */
+    private fun runQaFixtureIfRequested(account: TelegramUserId) {
+        if (!TelegramPlaylistFlags.SYNC_ENABLED) return
+        val addMarker = java.io.File(cacheDir, PlaylistQaFixture.ADD_MARKER)
+        val removeMarker = java.io.File(cacheDir, PlaylistQaFixture.REMOVE_MARKER)
+        if (!addMarker.exists() && !removeMarker.exists()) return
+        val usedFile = java.io.File(cacheDir, PlaylistQaFixture.USED_FILE)
+        TelegramPlaylistRuntime.submit {
+            // No readable list yet: the marker stays for the next resume (nothing is written blindly).
+            val saved = playlistSession.snapshotFor(account) ?: return@submit
+            val target = PlaylistQaFixture.target(account)
+            val used = runCatching {
+                usedFile.readText().split(',').mapNotNull { runCatching { PlaylistQaFixture.Step.valueOf(it.trim()) }.getOrNull() }.toSet()
+            }.getOrDefault(emptySet())
+            val step = PlaylistQaFixture.decide(true, addMarker.exists(), removeMarker.exists(), saved, target.songKey, used)
+            addMarker.delete()
+            removeMarker.delete()
+            if (step == null) {
+                android.util.Log.w("MeloPlaylist", "qa-fixture step=none")
+                return@submit
+            }
+            // Recorded BEFORE the change: a crash in between can never allow a second operation of the same kind.
+            runCatching { usedFile.writeText((used + step).joinToString(",") { it.name }) }
+            val outcome = playlistSession.toggle(account, target)
+            android.util.Log.w("MeloPlaylist", "qa-fixture step=${step.name} outcome=${outcome::class.simpleName}")
+            val ids = when (outcome) {
+                is TelegramPlaylistSession.ToggleOutcome.Added -> outcome.ids
+                is TelegramPlaylistSession.ToggleOutcome.Removed -> outcome.ids
+                else -> null
+            }
+            if (ids != null) runOnUiThread {
+                if (isDestroyed || library.authorizedUser() != account) return@runOnUiThread
+                applyRemoteSavedPlaylist(ids)
+                refreshPlaylistStatus(account)
+            }
+        }
     }
 
     /** Local only: asks the playlist thread for the committed list of this account and redraws if it differs from what is shown. */
