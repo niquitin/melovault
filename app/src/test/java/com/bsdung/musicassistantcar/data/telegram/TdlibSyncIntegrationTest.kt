@@ -82,7 +82,8 @@ class TdlibSyncIntegrationTest {
         val idsBefore = a.device.pendingIds()
         a.tdlib.gateway.sendModes.add(SendMode.NO_UPDATE_STORED)
         val first = a.run()
-        assertEquals("not acknowledged on a provisional answer", SyncStatus.BACKOFF, first.status)
+        assertEquals("not acknowledged on a provisional answer", SyncStatus.DELIVERY_UNCONFIRMED, first.status)
+        assertEquals(SyncStage.SEND_ACK_TIMEOUT, first.stage)
         assertEquals("same operation ids, still waiting", idsBefore, a.device.pendingIds())
         // The process is killed and restarted; the next run reads the history and finds its own operation.
         a.restart()

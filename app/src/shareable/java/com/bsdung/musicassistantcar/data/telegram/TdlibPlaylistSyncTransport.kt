@@ -18,10 +18,12 @@ internal data class TdlibTransportTimeouts(
  *    server stored it. [SendResult.Sent] is returned only on the correlated `updateMessageSendSucceeded`: same chat, its
  *    `old_message_id` equal to the provisional id, a final server id different from it, and the very same text. The
  *    update may arrive before or after the provisional answer; both orders are handled.
- *  - No update in time, a lost answer, an abort, a payload that is not ours: [SendResult.Unknown]. The operation ids stay
- *    unchanged and the coordinator finds the message again by reading the history.
- *  - `updateMessageSendFailed`, or an error answer, is a clear failure; 429 / FLOOD_WAIT is passed on with the server's
- *    own number of seconds.
+ *  - TDLib cleans the text it is given (a TAB becomes a space), so what comes back is compared with [TdlibText.normalize] of
+ *    what was sent; a text that cleaning would change is never sent.
+ *  - No update in time, a lost answer, an abort, a payload that is not ours: [SendResult.Unknown], with a sanitised stage. The
+ *    operation ids stay unchanged; the coordinator never sends them again and only finds them by reading the history.
+ *  - An error answer to sendMessage, or `updateMessageSendFailed` with a 4xx code, is a definite refusal ([SendResult.Failed]);
+ *    429 / FLOOD_WAIT is passed on with the server's own number of seconds. A failure with any other code is doubt.
  *
  * Every send and fetch is gated on the live identity (account + epoch) before dispatch and again when the answer arrives.
  * It must run on a worker thread: it blocks (bounded) and refuses to run on the TDLib dispatch thread.
@@ -56,10 +58,13 @@ internal class TdlibPlaylistSyncTransport(
     override fun send(channelId: Long, text: String): SendResult {
         require(text.startsWith(PlaylistSyncProtocol.MARKER)) { "only sync messages are ever sent" }
         require(text.length <= PlaylistSyncProtocol.MAX_TEXT_CHARS)
-        if (channelId != this.channelId) return SendResult.Failed(SyncErrorKind.CHANNEL_MISSING)
-        if (!sendAllowed()) return SendResult.Failed(SyncErrorKind.UNAUTHORIZED)
-        verifyIdentity()?.let { return SendResult.Failed(it) }
-        if (!hub.connectionIsUsable()) return SendResult.Failed(SyncErrorKind.NETWORK) // nothing was handed over
+        if (channelId != this.channelId) return SendResult.Failed(SyncErrorKind.CHANNEL_MISSING, stage = SyncStage.SEND_PRECHECK_IDENTITY)
+        if (!sendAllowed()) return SendResult.Failed(SyncErrorKind.UNAUTHORIZED, stage = SyncStage.SEND_PRECHECK_CONSENT)
+        // A text TDLib would change can never be told apart from a foreign one afterwards: do not hand it over at all.
+        if (TdlibText.normalize(text) != text) return SendResult.Failed(SyncErrorKind.REJECTED, stage = SyncStage.SEND_PRECHECK_TEXT)
+        verifyIdentity()?.let { return SendResult.Failed(it, stage = SyncStage.SEND_PRECHECK_IDENTITY) }
+        // nothing was handed over
+        if (!hub.connectionIsUsable()) return SendResult.Failed(SyncErrorKind.NETWORK, stage = SyncStage.SEND_PRECHECK_CONNECTION)
         val watch = hub.openSendWatch(channelId)
         try {
             val reply = hub.call(account, epoch, "sendMessage", timeouts.requestMs) { request ->
@@ -73,34 +78,47 @@ internal class TdlibPlaylistSyncTransport(
                 )
             }
             val provisional = when (reply) {
+                // TDLib refused the request itself: no message was created, nothing was handed to Telegram.
                 is TdlibSyncHub.Reply.Err -> {
                     hub.metrics.count(SyncMetrics.Event.SEND_FAILED)
-                    return TdlibSyncErrors.kindOf(reply.code, reply.message).let { SendResult.Failed(it.first, it.second) }
+                    return failed(reply.code, reply.message, SyncStage.SEND_DISPATCH_ERROR)
                 }
                 // Handed over, no answer (or the identity changed meanwhile): it may or may not be stored.
-                TdlibSyncHub.Reply.Timeout, TdlibSyncHub.Reply.Aborted -> return unknown()
+                TdlibSyncHub.Reply.Timeout -> return unknown(SyncStage.SEND_DISPATCH_TIMEOUT)
+                TdlibSyncHub.Reply.Aborted -> return unknown(SyncStage.SEND_DISPATCH_ABORTED)
                 is TdlibSyncHub.Reply.Ok -> reply.json
             }
+            // TDLib cleans the text on the way in, so what comes back is compared with the CLEANED text.
+            val expected = TdlibText.normalize(text)
             val oldId = provisional.optLong("id", 0L)
-            if (provisional.optString("@type") != "message" || oldId == 0L || provisional.optLong("chat_id") != channelId || !sameText(provisional, text)) {
-                hub.metrics.count(SyncMetrics.Event.SEND_PAYLOAD_MISMATCH)
-                return unknown()
+            val provisionalStage = when {
+                provisional.optString("@type") != "message" || oldId == 0L -> SyncStage.SEND_PROVISIONAL_MISMATCH_TYPE
+                provisional.optLong("chat_id") != channelId -> SyncStage.SEND_PROVISIONAL_MISMATCH_CHAT
+                !sameText(provisional, expected) -> SyncStage.SEND_PROVISIONAL_MISMATCH_TEXT
+                else -> null
             }
-            val outcome = watch.await(oldId, timeouts.sendAckMs) ?: return unknown()
+            if (provisionalStage != null) {
+                hub.metrics.count(SyncMetrics.Event.SEND_PAYLOAD_MISMATCH)
+                return unknown(provisionalStage)
+            }
+            val outcome = watch.await(oldId, timeouts.sendAckMs) ?: return unknown(SyncStage.SEND_ACK_TIMEOUT)
             // Callback-time gate: nothing is acknowledged for an identity that is gone.
-            if (!hub.identityHolds(account, epoch)) return unknown()
+            if (!hub.identityHolds(account, epoch)) return unknown(SyncStage.SEND_IDENTITY_LOST)
             return when (outcome) {
                 is SendOutcome.Failed -> {
                     hub.metrics.count(SyncMetrics.Event.SEND_FAILED)
-                    TdlibSyncErrors.kindOf(outcome.code, outcome.message).let { SendResult.Failed(it.first, it.second) }
+                    // Only a definite client-side refusal (4xx, flood wait included) means "not stored". Anything else
+                    // (5xx, odd codes) may have been processed by the server before it failed: that is doubt, not failure.
+                    if (outcome.code in 400..499) failed(outcome.code, outcome.message, SyncStage.SEND_ACK_FAILED)
+                    else unknown(SyncStage.SEND_ACK_FAILED)
                 }
                 is SendOutcome.Succeeded -> {
                     val finalMessage = outcome.message
                     val finalId = finalMessage.optLong("id", 0L)
                     val stillPending = finalMessage.optJSONObject("sending_state") != null
-                    if (finalId <= 0L || finalId == oldId || stillPending || finalMessage.optLong("chat_id") != channelId || !sameText(finalMessage, text)) {
+                    if (finalId <= 0L || finalId == oldId || stillPending || finalMessage.optLong("chat_id") != channelId || !sameText(finalMessage, expected)) {
                         hub.metrics.count(SyncMetrics.Event.SEND_PAYLOAD_MISMATCH)
-                        unknown()
+                        unknown(SyncStage.SEND_ACK_MISMATCH)
                     } else {
                         hub.metrics.count(SyncMetrics.Event.SEND_ACKED)
                         SendResult.Sent(finalId)
@@ -112,10 +130,13 @@ internal class TdlibPlaylistSyncTransport(
         }
     }
 
-    private fun unknown(): SendResult {
+    private fun unknown(stage: SyncStage): SendResult {
         hub.metrics.count(SyncMetrics.Event.SEND_UNKNOWN)
-        return SendResult.Unknown
+        return SendResult.Unknown(stage)
     }
+
+    private fun failed(code: Int, message: String, stage: SyncStage): SendResult =
+        TdlibSyncErrors.kindOf(code, message).let { SendResult.Failed(it.first, it.second, stage, ErrorBucket.of(code)) }
 
     private fun sameText(message: JSONObject, expected: String): Boolean {
         val content = message.optJSONObject("content") ?: return false

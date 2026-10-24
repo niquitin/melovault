@@ -41,8 +41,9 @@ class P5ReadinessEnabledFlowTest {
             clock = { r.device.nowMs }, config = config,
             timeouts = TdlibTransportTimeouts(requestMs = 2_000L, sendAckMs = 400L),
             historyLimits = HistoryLimits(requestTimeoutMs = 2_000L),
+            channelCreationUnlocked = true,
         )
-        val ui = SyncSettingsController(r.consentStore, true, p.actions(), { acct }, { r.device.session.statusFacts(acct) }, log)
+        val ui = SyncSettingsController(r.consentStore, true, p.actions(), { acct }, { r.device.session.statusFacts(acct) }, log, channelCreationUnlocked = true)
         return Stack(r, p, log, ui)
     }
 
@@ -59,6 +60,9 @@ class P5ReadinessEnabledFlowTest {
         for (i in 1..songs) rig.device.toggle(chat, songId(i))
         return channel
     }
+
+    /** The person allows the next run to send up to [n] operations (the production cap is 3). */
+    private fun Stack.grant(n: Int = 3) = assertEquals(ActionResult.Done, ui.grantSend(n, true))
 
     private fun Stack.line(): PlaylistSyncStatusPolicy.Line =
         PlaylistSyncStatusPolicy.evaluate(acct.value, rig.device.session.statusFacts(acct), SyncContext(true, ui.consent(), false, log.last(acct.value)))
@@ -131,6 +135,7 @@ class P5ReadinessEnabledFlowTest {
         val s = stack()
         s.optIn()
         s.boundWithSongs(1)
+        s.grant()
         val before = s.rig.tdlib.core.authEpoch()
         s.rig.tdlib.relogin(other.value)
         assertEquals(ActionResult.Denied(SyncDenied.NOT_AUTHORIZED), s.ui.syncNow())
@@ -150,6 +155,7 @@ class P5ReadinessEnabledFlowTest {
         assertEquals(ActionResult.Done, s.ui.createChannel(true))
         assertEquals(ActionResult.Done, s.ui.discover())
         assertEquals(ActionResult.Done, s.ui.bindFoundChannel(true))
+        s.grant()
         assertEquals(ActionResult.Done, s.ui.syncNow())
         assertEquals(1, s.requests("createNewSupergroupChat"))
         assertEquals(Kind.SYNCED, s.line().kind)
@@ -189,6 +195,7 @@ class P5ReadinessEnabledFlowTest {
         val s = stack()
         s.optIn()
         s.boundWithSongs(1)
+        s.grant()
         s.rig.tdlib.gateway.defaultSendMode = SendMode.ERROR_REPLY // 429, retry after 35 s
         assertEquals(ActionResult.Done, s.ui.syncNow())
         assertEquals(SyncStatus.BACKOFF, s.lastStatus())
@@ -292,6 +299,7 @@ class P5ReadinessEnabledFlowTest {
         val s = stack()
         s.optIn()
         s.boundWithSongs(1)
+        s.grant()
         s.rig.tdlib.gateway.defaultSendMode = SendMode.NO_REPLY_STORED // the server has it, the answer never came
         assertEquals(ActionResult.Done, s.ui.syncNow())
         assertNotEquals("silence is not an ACK", Kind.SYNCED, s.line().kind)
@@ -307,6 +315,7 @@ class P5ReadinessEnabledFlowTest {
         val s = stack()
         s.optIn()
         s.boundWithSongs(1)
+        s.grant()
         s.rig.tdlib.gateway.defaultSendMode = SendMode.ERROR_REPLY
         s.ui.syncNow()
         val line = s.line()
@@ -318,25 +327,34 @@ class P5ReadinessEnabledFlowTest {
         assertEquals(SyncStatus.BACKOFF_ACTIVE, s.lastStatus())
     }
 
-    @Test fun c09_aTimedOutSendThatWasNotStoredIsRetriedLaterWithoutDuplicates() {
+    @Test fun c09_aTimedOutSendThatWasNotSeenIsNeverSentAgainEvenWithAFreshGrant() {
+        // REWORK-01: "the message is not in the channel" is not proof that it never left. Only reading it back ends the doubt.
         val s = stack()
         s.optIn()
         s.boundWithSongs(1)
+        s.grant()
         s.rig.tdlib.gateway.defaultSendMode = SendMode.NO_REPLY_NOT_STORED
         s.ui.syncNow()
         assertNotEquals(Kind.SYNCED, s.line().kind)
+        assertEquals(SyncStatus.DELIVERY_UNCONFIRMED, s.lastStatus())
+        assertEquals(Kind.DELIVERY_UNCONFIRMED, s.line().kind)
         assertTrue(s.rig.device.session.statusFacts(acct)!!.pendingCount > 0)
+        val sends = s.requests("sendMessage")
         s.rig.tdlib.gateway.defaultSendMode = SendMode.OK_UPDATE_AFTER
         s.rig.device.nowMs += 10 * 60_000L
+        s.grant()
         s.ui.syncNow()
-        assertEquals(SyncStatus.OK, s.lastStatus())
-        assertEquals(1, world.texts(s.rig.device.stored().checkpoint.channelId).size)
+        assertEquals(SyncStatus.DELIVERY_UNCONFIRMED, s.lastStatus())
+        assertEquals("nothing was sent again", sends, s.requests("sendMessage"))
+        assertEquals(0, world.texts(s.rig.device.stored().checkpoint.channelId).size)
+        assertEquals("the operation is kept, flagged, unchanged", 1, s.rig.device.stored().outbox.count { it.status == OutboxStatus.RETRY_REQUIRED })
     }
 
     @Test fun c10_aProvisionalAnswerWithoutTheServersSuccessUpdateIsNotAnAck() {
         val s = stack()
         s.optIn()
         s.boundWithSongs(1)
+        s.grant()
         s.rig.tdlib.gateway.defaultSendMode = SendMode.NO_UPDATE_NOT_STORED
         s.ui.syncNow()
         assertNotEquals(Kind.SYNCED, s.line().kind)

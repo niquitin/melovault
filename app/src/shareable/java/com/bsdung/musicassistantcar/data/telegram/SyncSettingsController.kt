@@ -9,7 +9,8 @@ internal interface SyncActionsPort {
     fun discover(account: TelegramUserId): Gated<ChannelDiscovery>
     fun create(account: TelegramUserId): Gated<CreateOutcome>
     fun bind(account: TelegramUserId, chatId: Long): Gated<BindResult>
-    fun run(account: TelegramUserId, mode: SyncMode): Gated<SyncReport>
+    /** [sendBudget] = how many OPERATIONS the run may send. Zero (the default) reads and acknowledges only. There is no "unlimited". */
+    fun run(account: TelegramUserId, mode: SyncMode, sendBudget: Int = 0): Gated<SyncReport>
     fun close() = Unit
 }
 
@@ -18,7 +19,7 @@ internal object DisabledSyncActions : SyncActionsPort {
     override fun discover(account: TelegramUserId): Gated<ChannelDiscovery> = Gated.Denied(SyncDenied.BUILD_OFF)
     override fun create(account: TelegramUserId): Gated<CreateOutcome> = Gated.Denied(SyncDenied.BUILD_OFF)
     override fun bind(account: TelegramUserId, chatId: Long): Gated<BindResult> = Gated.Denied(SyncDenied.BUILD_OFF)
-    override fun run(account: TelegramUserId, mode: SyncMode): Gated<SyncReport> = Gated.Denied(SyncDenied.BUILD_OFF)
+    override fun run(account: TelegramUserId, mode: SyncMode, sendBudget: Int): Gated<SyncReport> = Gated.Denied(SyncDenied.BUILD_OFF)
 }
 
 internal object SyncPrivacyText {
@@ -36,6 +37,8 @@ internal object SyncPrivacyText {
     const val CONSENT_ENABLE = "Tôi đã đọc và đồng ý. Bật đồng bộ Playlist"
     const val CONSENT_CREATE = "Cho phép tạo kênh Telegram riêng (khi chưa có)"
     const val CONSENT_TRANSMIT = "Cho phép gửi danh sách lên kênh lần đầu"
+    const val GRANT_NOTE = "Mỗi lần chỉ gửi tối đa ${SyncSendBudget.PRODUCTION_MAX} thay đổi, do bạn cho phép từng lần. Không có gửi tự động. " +
+        "Nếu một thay đổi đã gửi mà chưa biết có tới nơi hay chưa, ứng dụng KHÔNG gửi lại."
     const val OFF_NOTE = "Tắt đồng bộ chỉ dừng việc gửi/nhận mới. Playlist, hàng đợi và kênh trên Telegram được giữ nguyên."
 }
 
@@ -93,6 +96,7 @@ internal sealed class ChannelView {
             SyncErrorKind.CHANNEL_MISSING -> "kênh không còn"
             SyncErrorKind.UNAUTHORIZED -> "chưa được phép"
             SyncErrorKind.SESSION_REVOKED -> "phiên đã bị thu hồi"
+            SyncErrorKind.REJECTED -> "Telegram từ chối yêu cầu"
         }
     }
 }
@@ -111,6 +115,9 @@ internal data class SyncSettingsScreen(
     val fullReplay: ControlState,
     val channel: ChannelView,
     val busy: Boolean,
+    /** Operations the person has allowed the NEXT run to send (0 = none: runs only read). In memory; gone when the screen closes. */
+    val sendGrant: Int = 0,
+    val grantSend: ControlState = ControlState.LOCKED,
 )
 
 internal sealed class ActionResult {
@@ -119,7 +126,13 @@ internal sealed class ActionResult {
     data class Denied(val reason: SyncDenied) : ActionResult()
     object NotSaved : ActionResult()
 
-    enum class Reason { BUILD_OFF, NO_ACCOUNT, WARNING_NOT_ACCEPTED, NOT_ENABLED, NOT_CONFIRMED, NEEDS_DISCOVERY, NO_CHANNEL, BUSY }
+    enum class Reason {
+        BUILD_OFF, NO_ACCOUNT, WARNING_NOT_ACCEPTED, NOT_ENABLED, NOT_CONFIRMED, NEEDS_DISCOVERY, NO_CHANNEL, BUSY,
+        /** A send grant needs consent (c) first. */
+        TRANSMIT_NOT_ALLOWED,
+        /** A send grant is a whole number from 1 to [SyncSendBudget.PRODUCTION_MAX]. */
+        BAD_SEND_BUDGET,
+    }
 }
 
 /**
@@ -139,11 +152,19 @@ internal class SyncSettingsController(
     private val facts: () -> PlaylistStatusFacts?,
     /** Where the last manual run of each account is kept, shared with the screens that show the Playlist status line. */
     private val runLog: SyncRunLog = SyncRunLog(),
+    /** [TelegramPlaylistFlags.SYNC_CREATE_ALLOWED]: false = the screen can find and bind an existing channel, never create one. */
+    private val channelCreationUnlocked: Boolean = false,
 ) {
     private var viewAccount: Long = 0L
     private var channel: ChannelView = ChannelView.Unchecked
     private val lastRun: LastSyncRun? get() = runLog.last(viewAccount)
     private var running = false
+    /**
+     * How many OPERATIONS the next run may send; 0 = none (runs only read and acknowledge). Memory only, for the account
+     * on screen: it is never written anywhere, it is zeroed by turning sync off, withdrawing consent (c), any account
+     * change or logout, and it is gone with the screen and with the process.
+     */
+    private var sendGrant = 0
 
     /** Screen closed: release the TDLib binding of the sync and stop unfinished work. Deletes and sends nothing. */
     fun close() = actions.close()
@@ -156,6 +177,7 @@ internal class SyncSettingsController(
             viewAccount = id
             channel = ChannelView.Unchecked
             running = false
+            sendGrant = 0
         }
     }
 
@@ -195,12 +217,16 @@ internal class SyncSettingsController(
             allowCreate = gated(opted, active = opted && c.mayCreateChannel),
             allowTransmit = gated(opted, active = opted && c.mayTransmitInitial),
             discover = gated(opted && !running),
-            createNow = gated(opted && c.mayCreateChannel && channel == ChannelView.NotFound && !bound && !running),
+            // Locked for good unless the build unlocks it: a channel already exists (REWORK-01) and no other is ever made.
+            createNow = if (!channelCreationUnlocked && buildEnabled) ControlState.LOCKED
+            else gated(opted && c.mayCreateChannel && channel == ChannelView.NotFound && !bound && !running),
             bindNow = gated(opted && channel is ChannelView.Found && !bound && !running),
             syncNow = gated(opted && bound && !running),
             fullReplay = gated(opted && bound && !running),
             channel = if (bound) ChannelView.Bound else channel,
             busy = running,
+            sendGrant = if (opted && c.mayTransmitInitial) sendGrant else 0,
+            grantSend = gated(opted && c.mayTransmitInitial && bound && !running, active = opted && c.mayTransmitInitial && sendGrant > 0),
         )
     }
 
@@ -238,7 +264,10 @@ internal class SyncSettingsController(
     fun setAllowTransmit(allowed: Boolean): ActionResult = guarded { who ->
         val c = store.load(who)
         when {
-            !allowed -> saved(store.save(who, c.copy(mayTransmitInitial = false)))
+            !allowed -> {
+                synchronized(this) { sendGrant = 0 }
+                saved(store.save(who, c.copy(mayTransmitInitial = false)))
+            }
             !optedIn(c) -> ActionResult.Refused(ActionResult.Reason.NOT_ENABLED)
             else -> saved(store.save(who, c.copy(mayTransmitInitial = true)))
         }
@@ -246,9 +275,37 @@ internal class SyncSettingsController(
 
     /** Turns everything off. Deletes no playlist, outbox or cloud message. */
     fun turnOff(): ActionResult = guarded { who ->
+        // The grant goes first and unconditionally: even if the consent file cannot be written, nothing more is sent.
+        synchronized(this) { sendGrant = 0 }
         val ok = store.save(who, SyncConsent())
         if (ok) synchronized(this) { channel = ChannelView.Unchecked }
         saved(ok)
+    }
+
+    /** The send grant, for the screen. */
+    @Synchronized
+    fun sendGrant(): Int = sendGrant
+
+    /**
+     * Allows the NEXT run(s) to send up to [operations] (1..[SyncSendBudget.PRODUCTION_MAX]) outbox OPERATIONS in total.
+     * [confirmed] must be a fresh tap after the person saw how many changes wait. Needs consent (a) and (c) and a bound
+     * channel. It replaces any earlier grant (it never adds up), is charged at dispatch and never carries over.
+     */
+    fun grantSend(operations: Int, confirmed: Boolean): ActionResult = guarded { who ->
+        optedIn(who)?.let { return@guarded it }
+        if (!confirmed) return@guarded ActionResult.Refused(ActionResult.Reason.NOT_CONFIRMED)
+        if (operations !in 1..SyncSendBudget.PRODUCTION_MAX) return@guarded ActionResult.Refused(ActionResult.Reason.BAD_SEND_BUDGET)
+        if (!store.load(who).mayTransmitInitial) return@guarded ActionResult.Refused(ActionResult.Reason.TRANSMIT_NOT_ALLOWED)
+        val snapshot = facts()?.takeIf { it.accountId == who.value }
+        if (snapshot?.channelBound != true) return@guarded ActionResult.Refused(ActionResult.Reason.NO_CHANNEL)
+        synchronized(this) { sendGrant = operations }
+        ActionResult.Done
+    }
+
+    /** Takes the grant back. */
+    fun revokeSendGrant(): ActionResult = guarded { _ ->
+        synchronized(this) { sendGrant = 0 }
+        ActionResult.Done
     }
 
     // ---- channel ---------------------------------------------------------------------------------------
@@ -284,6 +341,8 @@ internal class SyncSettingsController(
     /** Creates the private channel. [confirmed] must be a fresh explicit tap; the last discovery must have PROVEN absence. */
     fun createChannel(confirmed: Boolean): ActionResult = guarded { who ->
         optedIn(who)?.let { return@guarded it }
+        // Before anything else: this build never creates a channel (the person's one real channel already exists).
+        if (!channelCreationUnlocked) return@guarded ActionResult.Denied(SyncDenied.CREATE_LOCKED)
         if (!confirmed) return@guarded ActionResult.Refused(ActionResult.Reason.NOT_CONFIRMED)
         if (!store.load(who).mayCreateChannel) return@guarded ActionResult.Denied(SyncDenied.CREATE_NOT_ALLOWED)
         if (synchronized(this) { channel } != ChannelView.NotFound) return@guarded ActionResult.Refused(ActionResult.Reason.NEEDS_DISCOVERY)
@@ -358,7 +417,17 @@ internal class SyncSettingsController(
         if (snapshot?.channelBound != true) return@guarded ActionResult.Refused(ActionResult.Reason.NO_CHANNEL)
         if (!begin()) return@guarded ActionResult.Refused(ActionResult.Reason.BUSY)
         try {
-            val answer = actions.run(who, mode)
+            // The whole grant is taken out BEFORE the call and only what was not dispatched is put back afterwards: if the
+            // call dies half way nothing comes back, so an unexpected failure can never leave a grant to be used again.
+            val granted = synchronized(this) { sendGrant.also { sendGrant = 0 } }
+            val answer = actions.run(who, mode, granted)
+            if (viewAccount == who.value && store.load(who).mayTransmitInitial) {
+                val spent = when (answer) {
+                    is Gated.Denied -> 0 // refused at the gate: nothing was handed to Telegram
+                    is Gated.Done -> answer.value.opsDispatched
+                }
+                synchronized(this) { if (viewAccount == who.value) sendGrant = (granted - spent).coerceAtLeast(0) }
+            }
             val opCounterNow = facts()?.takeIf { it.accountId == who.value }?.opCounter ?: snapshot.opCounter
             synchronized(this) {
                 if (viewAccount == who.value) runLog.record(LastSyncRun.of(who.value, answer, opCounterNow))

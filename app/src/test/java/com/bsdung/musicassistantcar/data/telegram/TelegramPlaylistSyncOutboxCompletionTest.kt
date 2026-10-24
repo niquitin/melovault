@@ -192,11 +192,11 @@ class TelegramPlaylistSyncOutboxCompletionTest {
             RacingHost(d.session) { if (armed) { armed = false; d.toggle(acct.value, saved(500)) } },
             channel.transport(d.hooks), { 0L }, SyncConfig(maxEnvelopesPerRun = 5),
         )
-        val r = racing.runOnce(acct)
+        val r = racing.runOnce(acct, SyncMode.INCREMENTAL, TEST_SEND_BUDGET)
         assertEquals("the last write of the run was followed by a Save", 1, d.pendingIds().size)
         assertEquals(SyncStatus.OUTBOX_INCOMPLETE, r.status)
         assertEquals(1, r.pendingLeft)
-        assertEquals(SyncStatus.OK, racing.runOnce(acct).status)
+        assertEquals(SyncStatus.OK, racing.runOnce(acct, SyncMode.INCREMENTAL, TEST_SEND_BUDGET).status)
     }
 
     @Test fun o07_aBudgetThatCouldNeverDoAnyWorkIsRejectedNotReportedAsOk() {

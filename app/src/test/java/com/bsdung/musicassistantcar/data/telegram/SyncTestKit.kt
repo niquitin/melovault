@@ -5,6 +5,9 @@ import java.io.IOException
 import java.util.ArrayDeque
 import java.util.Random
 
+/** The send budget of tests that drive a coordinator or service with a FAKE transport: effectively unbounded, never used in production code. */
+internal const val TEST_SEND_BUDGET = 10_000
+
 /** Stands for "the process was killed here". An Error on purpose: the coordinator catches Exceptions only, as a real crash would not be caught. */
 internal class SimulatedCrash(message: String = "power lost") : Error(message)
 
@@ -98,11 +101,11 @@ internal class FakeTelegramChannel(seed: Long = 7L, val channelId: Long = -1_001
             SendFault.NETWORK -> return SendResult.Failed(SyncErrorKind.NETWORK)
             SendFault.FLOOD_35 -> return SendResult.Failed(SyncErrorKind.FLOOD_WAIT, 35)
             SendFault.UNAUTHORIZED -> return SendResult.Failed(SyncErrorKind.UNAUTHORIZED)
-            SendFault.TIMEOUT_NOT_STORED -> return SendResult.Unknown
+            SendFault.TIMEOUT_NOT_STORED -> return SendResult.Unknown()
             SendFault.LOST_ACK -> {
                 inject(text, lostAckHiddenFetches)
                 afterStoreBeforeReply()
-                return SendResult.Unknown
+                return SendResult.Unknown()
             }
         }
         val id = inject(text)
@@ -204,7 +207,7 @@ internal class FakeSyncDevice(
     /** Save or unsave (it is a toggle, as in the app). */
     fun toggle(chat: Long, message: Long): TelegramPlaylistSession.ToggleOutcome = session.toggle(account, target(chat, message))
 
-    fun sync(mode: SyncMode = SyncMode.INCREMENTAL): SyncReport = coordinator.runOnce(account, mode)
+    fun sync(mode: SyncMode = SyncMode.INCREMENTAL): SyncReport = coordinator.runOnce(account, mode, TEST_SEND_BUDGET)
 
     fun present(): List<Long> = session.snapshot()
 

@@ -31,11 +31,12 @@ class SyncSettingsControllerTest {
         var bound: Gated<BindResult> = Gated.Done(BindResult.Bound)
         var report: Gated<SyncReport> = Gated.Done(SyncReport(SyncStatus.OK))
         var modes = ArrayList<SyncMode>()
+        val budgets = ArrayList<Int>()
         var onRun: (() -> Unit)? = null
         override fun discover(account: TelegramUserId): Gated<ChannelDiscovery> { calls += "discover"; return discovery }
         override fun create(account: TelegramUserId): Gated<CreateOutcome> { calls += "create"; return created }
         override fun bind(account: TelegramUserId, chatId: Long): Gated<BindResult> { calls += "bind:$chatId"; return bound }
-        override fun run(account: TelegramUserId, mode: SyncMode): Gated<SyncReport> { calls += "run"; modes += mode; onRun?.invoke(); return report }
+        override fun run(account: TelegramUserId, mode: SyncMode, sendBudget: Int): Gated<SyncReport> { calls += "run"; modes += mode; budgets += sendBudget; onRun?.invoke(); return report }
     }
 
     private var factsNow: PlaylistStatusFacts? = PlaylistStatusFacts(1001L, 2, 1, 0, 0, true, 3L, false, false, null, null)
@@ -44,7 +45,7 @@ class SyncSettingsControllerTest {
     private val actions = FakeActions()
 
     private fun controller(build: Boolean = true, port: SyncActionsPort = actions, s: SyncConsentStore = store) =
-        SyncSettingsController(s, build, port, { current }, { factsNow })
+        SyncSettingsController(s, build, port, { current }, { factsNow }, channelCreationUnlocked = true)
 
     private fun SyncSettingsController.optIn(create: Boolean = false, transmit: Boolean = false) {
         assertEquals(ActionResult.Done, enable(true))
@@ -335,7 +336,7 @@ class SyncSettingsControllerTest {
         val r = rig(build = false, consent = true) // consent granted AND service built: only the flag stands in the way
         val before = r.tdlib.gateway.requests.size
         // The UI's controller is allowed to try (a test-only gate), as are the service's own entry points.
-        val ui = SyncSettingsController(r.consentStore, true, TdlibSyncActions(r.service), { acct }, { r.device.session.statusFacts(acct) })
+        val ui = SyncSettingsController(r.consentStore, true, TdlibSyncActions(r.service), { acct }, { r.device.session.statusFacts(acct) }, channelCreationUnlocked = true)
         assertEquals(ActionResult.Denied(SyncDenied.BUILD_OFF), ui.discover())
         assertEquals(ActionResult.Refused(ActionResult.Reason.NEEDS_DISCOVERY), ui.createChannel(true))
         assertEquals(ActionResult.Refused(ActionResult.Reason.NO_CHANNEL), ui.syncNow())
@@ -349,7 +350,7 @@ class SyncSettingsControllerTest {
 
     @Test fun k22_withTheFlagOnAndThreeConsentsTheScreenDrivesDiscoverCreateBindAndSyncOnTheFakeCloud() {
         val r = rig(build = true, consent = false)
-        val ui = SyncSettingsController(r.consentStore, true, TdlibSyncActions(r.service), { acct }, { r.device.session.statusFacts(acct) })
+        val ui = SyncSettingsController(r.consentStore, true, TdlibSyncActions(r.service), { acct }, { r.device.session.statusFacts(acct) }, channelCreationUnlocked = true)
         ui.optIn(create = true, transmit = true)
         assertEquals(ActionResult.Done, ui.discover())
         assertEquals(ChannelView.NotFound, ui.screen().channel)

@@ -94,6 +94,8 @@ internal class FakeTdlibWorld(seed: Long = 11L) {
 internal enum class SendMode {
     OK_UPDATE_AFTER, OK_UPDATE_BEFORE, NO_UPDATE_STORED, NO_UPDATE_NOT_STORED, NO_REPLY_STORED, NO_REPLY_NOT_STORED,
     FAIL_UPDATE, ERROR_REPLY, DUPLICATE_SUCCESS, FAIL_AFTER_SUCCESS, WRONG_TEXT, WRONG_CHAT, SAME_ID,
+    /** The provisional answer itself is wrong: another type, another chat, another text. */
+    WRONG_PROVISIONAL_TYPE, WRONG_PROVISIONAL_CHAT, WRONG_PROVISIONAL_TEXT,
 }
 
 /**
@@ -293,7 +295,9 @@ internal class FakeTdlibJsonGateway(val world: FakeTdlibWorld, var userId: Long)
         sendHook?.invoke()
         val content = r.optJSONObject("input_message_content")
         if (content?.optString("@type") != "inputMessageText") nonTextSends++
-        val text = content?.optJSONObject("text")?.optString("text").orEmpty()
+        // Real TDLib cleans the text on the way in (clean_input_string + trim): tabs become spaces. The fake must too,
+        // otherwise a protocol that only works with raw text looks fine here and fails against Telegram.
+        val text = FakeTdlibClientText.clean(content?.optJSONObject("text")?.optString("text").orEmpty())
         val chatId = r.optLong("chat_id")
         if (!world.chats.containsKey(chatId)) return error(r, 400, "Chat not found")
         val mode = sendModes.poll() ?: defaultSendMode
@@ -346,12 +350,40 @@ internal class FakeTdlibJsonGateway(val world: FakeTdlibWorld, var userId: Long)
                 reply(r, provisionalMessage())
                 emit(success(msgJson(m).put("chat_id", chatId + 1)))
             }
+            SendMode.WRONG_PROVISIONAL_TYPE -> { store(); reply(r, JSONObject().put("@type", "ok")) }
+            SendMode.WRONG_PROVISIONAL_CHAT -> { store(); reply(r, provisionalMessage().put("chat_id", chatId + 1)) }
+            SendMode.WRONG_PROVISIONAL_TEXT -> {
+                store()
+                reply(r, provisionalMessage().also { it.getJSONObject("content").getJSONObject("text").put("text", text + " x") })
+            }
             SendMode.SAME_ID -> {
                 store()
                 reply(r, provisionalMessage())
                 emit(success(provisionalMessage().also { it.remove("sending_state") }))
             }
         }
+    }
+}
+
+/**
+ * An INDEPENDENT copy of what TDLib (pinned c15d3f5) does to an outgoing text: td/telegram/misc.cpp clean_input_string()
+ * - every byte 0..32 except '\n' becomes ' ' (so TAB becomes a space), '\r' is dropped, U+2028..U+202E are dropped -
+ * then fix_formatted_text() trims spaces and newlines at both ends. Kept apart from production code on purpose.
+ */
+internal object FakeTdlibClientText {
+    fun clean(text: String): String {
+        val out = StringBuilder(text.length)
+        for (ch in text) {
+            val c = ch.code
+            when {
+                ch == '\n' -> out.append(ch)
+                ch == '\r' -> Unit
+                c <= 32 -> out.append(' ')
+                c in 0x2028..0x202E -> Unit
+                else -> out.append(ch)
+            }
+        }
+        return out.toString().trim { it == ' ' || it == '\n' }
     }
 }
 
@@ -418,6 +450,9 @@ internal class SyncRig(
     private val timeouts: TdlibTransportTimeouts = TdlibTransportTimeouts(requestMs = 2_000L, sendAckMs = 400L),
     private val limits: HistoryLimits = HistoryLimits(requestTimeoutMs = 2_000L),
     private val discoveryLimits: DiscoveryLimits = DiscoveryLimits(),
+    /** A fake TDLib may be driven past the production cap of 3 operations; tests of the cap itself pass the real one. */
+    private val sendBudgetCap: Int = TEST_SEND_BUDGET,
+    private val createUnlocked: Boolean = true,
 ) {
     val tdlib = TdlibRig(world, account.value, File(root, "tdlib-slot").apply { mkdirs() }).start()
     val device = FakeSyncDevice(
@@ -439,6 +474,7 @@ internal class SyncRig(
 
     private fun newService() = TdlibPlaylistSyncService(
         tdlib.core, device.session, SyncGate(build, consentStore), { device.nowMs }, config, timeouts, limits, discoveryLimits,
+        sendBudgetCap = sendBudgetCap, channelCreationUnlocked = createUnlocked,
     )
 
     fun restart() {
@@ -446,8 +482,8 @@ internal class SyncRig(
         service = newService()
     }
 
-    fun run(mode: SyncMode = SyncMode.INCREMENTAL): SyncReport =
-        (service.runSync(account, mode) as Gated.Done).value
+    fun run(mode: SyncMode = SyncMode.INCREMENTAL, budget: Int = TEST_SEND_BUDGET): SyncReport =
+        (service.runSync(account, mode, budget) as Gated.Done).value
 
     fun stop() = tdlib.stop()
 }

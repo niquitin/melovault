@@ -183,7 +183,8 @@ class PlaylistSyncStatusPolicyTest {
         assertTrue("nothing past 300 is hidden: the full count stays", full.contains("450 bài đã lưu"))
         assertTrue(full.contains("${TelegramPlaylistPolicy.MAX_IDS} bài mới nhất"))
         assertTrue(full.contains("chưa cập nhật kịp"))
-        assertTrue(full.contains("2 thay đổi cần gửi lại"))
+        assertTrue(full.contains("2 thay đổi đã gửi nhưng chưa rõ đã tới kênh chưa"))
+        assertTrue("it never promises a resend", full.contains("không tự gửi lại"))
     }
 
     @Test fun s19_aLocalSongIsNeverCloudSyncedAndAnUnsavedSongSaysSo() {

@@ -21,6 +21,8 @@ internal class SyncServiceProvider(
     private val timeouts: TdlibTransportTimeouts = TdlibTransportTimeouts(),
     private val historyLimits: HistoryLimits = HistoryLimits(),
     private val discoveryLimits: DiscoveryLimits = DiscoveryLimits(),
+    /** [TelegramPlaylistFlags.SYNC_CREATE_ALLOWED]. False unless a QA build was started with the extra create flag. */
+    private val channelCreationUnlocked: Boolean = false,
 ) {
     private var cached: SyncActionsPort? = null
 
@@ -36,6 +38,7 @@ internal class SyncServiceProvider(
         val playlist = host() ?: return DisabledSyncActions
         val service = TdlibPlaylistSyncService(
             owner(), playlist, SyncGate(buildEnabled, store), clock, config, timeouts, historyLimits, discoveryLimits,
+            channelCreationUnlocked = channelCreationUnlocked,
         )
         return TdlibSyncActions(service).also { cached = it }
     }
@@ -46,7 +49,7 @@ internal class TdlibSyncActions(private val service: TdlibPlaylistSyncService) :
     override fun discover(account: TelegramUserId) = service.discoverChannel(account)
     override fun create(account: TelegramUserId) = service.createChannel(account)
     override fun bind(account: TelegramUserId, chatId: Long) = service.bindChannel(account, chatId)
-    override fun run(account: TelegramUserId, mode: SyncMode) = service.runSync(account, mode)
+    override fun run(account: TelegramUserId, mode: SyncMode, sendBudget: Int) = service.runSync(account, mode, sendBudget)
 
     override fun close() {
         service.cancel()
@@ -83,5 +86,6 @@ internal object SyncRuntime {
         owner = { ShareableTdlibOwner },
         host = { TelegramPlaylistRuntime.session(noBackupDir) as? PlaylistSyncHost },
         store = FileSyncConsentStore(noBackupDir),
+        channelCreationUnlocked = TelegramPlaylistFlags.SYNC_CREATE_ALLOWED,
     ).also { provider = it }
 }

@@ -52,6 +52,16 @@ internal enum class SyncStatus {
      * with the same ids. Not synchronised: call again. Distinct from [CATCH_UP_INCOMPLETE], which is about reading.
      */
     OUTBOX_INCOMPLETE,
+    /**
+     * The history was read; operations still wait and this run's SEND BUDGET (a number of operations, never "all") is
+     * spent or was never given. Nothing more was sent; what is left is untouched. Not synchronised.
+     */
+    SEND_LIMIT_REACHED,
+    /**
+     * An operation was handed to Telegram earlier and nobody knows whether it arrived. Everything that waits is kept as
+     * it is and NOTHING is sent again, whatever the budget, until the operation shows up in the channel history.
+     */
+    DELIVERY_UNCONFIRMED,
     /** Called again before the wait is over: no transport call was made. */
     BACKOFF_ACTIVE,
     /** Temporary trouble (network, timeout, FLOOD_WAIT, lost answer). Retry after [SyncReport.retryAfterMs]. */
@@ -67,6 +77,10 @@ internal enum class RecoveryReason {
     CHANNEL_MISSING, UNAUTHORIZED, SESSION_REVOKED, CORRUPT_MESSAGE, FUTURE_PROTOCOL, WRONG_ACCOUNT, OP_TOO_LARGE,
     /** A page was not the proven next part of the history. Refused without moving the cursor. */
     TRANSPORT_CONTRACT,
+    /** Telegram refused a request outright (a 400 nobody here knows). Asking again changes nothing. */
+    REJECTED_BY_TELEGRAM,
+    /** The chosen operations would reach the channel in an order that breaks a removal. Nothing was sent. */
+    DEPENDENCY_BLOCKED,
 }
 
 internal data class SyncReport(
@@ -86,6 +100,12 @@ internal data class SyncReport(
     val replayPosition: Long = SyncCheckpoint.NO_REPLAY,
     val pendingLeft: Int = 0,
     val retryAfterMs: Long = 0L,
+    /** Sanitised diagnostic: where the run stopped. Never carries an id, a text or a name. */
+    val stage: SyncStage = SyncStage.NONE,
+    /** Operations handed to TDLib in this run - counted at dispatch, also when the answer was lost. This is what a send grant is charged. */
+    val opsDispatched: Int = 0,
+    val errorBucket: ErrorBucket = ErrorBucket.NONE,
+    val sendDuration: DurationBucket? = null,
 )
 
 internal data class SyncConfig(
@@ -155,10 +175,17 @@ internal fun PlaylistState.applyRemoteBatch(
  *  - Running out of the SEND budget with operations still waiting is [SyncStatus.OUTBOX_INCOMPLETE], never OK
  *    (also when a Save arrived while the run was in flight). Everything sent was acknowledged; what is left is
  *    not touched - same ids, same order, still waiting - and the next run continues with it. OK needs the
- *    history read AND an empty queue. A budget of zero or less is refused when the configuration is made.
+ *    history read AND an empty queue. A per-run envelope count of zero or less is refused when the configuration is made.
+ *  - The number of OPERATIONS a run may send is an explicit argument of [runOnce] (REWORK-01): there is no unlimited
+ *    value, the default and anything below one mean "read and acknowledge only" ([SyncStatus.SEND_LIMIT_REACHED]).
+ *    It is charged when the envelope is handed to the transport, also when the answer is lost, never refunded.
+ *    The operations sent are always the first k waiting ones, in outbox order ([TransmitPlanner]).
  *  - ACK only on evidence: the server's own answer to the send ([SendResult.Sent]) or finding the very same
- *    operation id again in the fetched history. A send whose answer was lost is never an ACK; its
- *    operations stay waiting (RETRY_REQUIRED) and keep their ids, so the retry is the identical message.
+ *    operation id again in the fetched history (the first TAB format too, after TDLib cleaned it, if its original
+ *    checksum fits). A send whose answer was lost is never an ACK; its operations stay waiting (RETRY_REQUIRED) with
+ *    their ids and are NEVER sent again by this code: not seeing a message is no proof it never left, so while any
+ *    operation is in doubt nothing is sent at all ([SyncStatus.DELIVERY_UNCONFIRMED]). Only a later read that
+ *    finds the operation ends the doubt. A definite refusal ([SendResult.Failed]) leaves the operations PENDING.
  *  - FETCH comes before SEND, so an operation the server already has is acknowledged, not sent twice.
  *  - A page is committed as ONE write: applied operations + acknowledgements + cursor. If that write fails,
  *    nothing and no cursor moved. The cursor never passes a message that was not applied or deliberately
@@ -185,6 +212,10 @@ internal class PlaylistSyncCoordinator(
         var applied = 0
         var acked = 0
         var sent = 0
+        var dispatched = 0
+        var sendMs = 0L
+        var stage = SyncStage.NONE
+        var errorBucket = ErrorBucket.NONE
     }
 
     private sealed class FetchOutcome {
@@ -197,16 +228,24 @@ internal class PlaylistSyncCoordinator(
         class Stop(val report: SyncReport) : SendOutcome()
         /** Nothing waits any more. */
         object Drained : SendOutcome()
-        /** The send budget is spent and [left] operations still wait (untouched). */
+        /** The per-run envelope budget is spent and [left] operations still wait (untouched). */
         class BudgetSpent(val left: Int) : SendOutcome()
+        /** The operation budget is spent or was never given; operations still wait (untouched). */
+        object LimitReached : SendOutcome()
     }
 
     /** For a person pressing "try again": forget the wait. */
     @Synchronized
     fun resetBackoff() = backoff.reset()
 
+    /**
+     * [sendBudget] is the number of OPERATIONS this run may hand to the transport. It has no "unlimited" value: the
+     * default and every number below one mean read-and-acknowledge only, nothing is sent. Production callers pass
+     * [SyncSendBudget.clamp]ed numbers (at most [SyncSendBudget.PRODUCTION_MAX]); only a unit test with a fake transport
+     * passes more.
+     */
     @Synchronized
-    fun runOnce(account: TelegramUserId, mode: SyncMode = SyncMode.INCREMENTAL): SyncReport {
+    fun runOnce(account: TelegramUserId, mode: SyncMode = SyncMode.INCREMENTAL, sendBudget: Int = 0): SyncReport {
         val c = Counters()
         val now = clock()
         if (now < backoff.notBeforeMs) {
@@ -223,7 +262,7 @@ internal class PlaylistSyncCoordinator(
             is FetchOutcome.Stop -> return fetched.report
             is FetchOutcome.Done -> if (fetched.more) return report(c, account, SyncStatus.CATCH_UP_INCOMPLETE)
         }
-        val sent = sendPhase(account, epoch, channel, scope, c)
+        val sent = sendPhase(account, epoch, channel, scope, sendBudget.coerceAtLeast(0), c)
         if (sent is SendOutcome.Stop) return sent.report
         prune(account, epoch)
         backoff.onSuccess()
@@ -231,6 +270,7 @@ internal class PlaylistSyncCoordinator(
         // waiting. A spent budget, or a Save that arrived while the run was in flight, leaves operations waiting.
         val waiting = current(account, epoch)?.state?.outbox?.count { it.status != OutboxStatus.ACKNOWLEDGED }
             ?: return report(c, account, SyncStatus.STALE_SESSION)
+        if (sent is SendOutcome.LimitReached && waiting > 0) return report(c, account, SyncStatus.SEND_LIMIT_REACHED)
         return report(c, account, if (sent is SendOutcome.BudgetSpent || waiting > 0) SyncStatus.OUTBOX_INCOMPLETE else SyncStatus.OK)
     }
 
@@ -345,22 +385,50 @@ internal class PlaylistSyncCoordinator(
 
     // ---- send ----------------------------------------------------------------------------------
 
-    private fun sendPhase(account: TelegramUserId, epoch: Long, channel: Long, scope: String, c: Counters): SendOutcome {
+    private fun sendPhase(
+        account: TelegramUserId, epoch: Long, channel: Long, scope: String, budget: Int, c: Counters,
+    ): SendOutcome {
         fun stop(report: SyncReport) = SendOutcome.Stop(report)
+        var budgetLeft = budget
         var envelopes = 0
         while (envelopes < config.maxEnvelopesPerRun) {
             val view = current(account, epoch) ?: return stop(report(c, account, SyncStatus.STALE_SESSION))
-            val waiting = view.state.outbox.filter { it.status != OutboxStatus.ACKNOWLEDGED }.map { it.op }
-            if (waiting.isEmpty()) return SendOutcome.Drained
-            val envelope = PlaylistSyncProtocol.planFirstEnvelope(scope, view.state.deviceId, waiting)
+            val waitingEntries = view.state.outbox.filter { it.status != OutboxStatus.ACKNOWLEDGED }
+            if (waitingEntries.isEmpty()) return SendOutcome.Drained
+            val planned = when (val plan = TransmitPlanner.plan(waitingEntries, budgetLeft, view.state.deviceId)) {
+                // Nothing at all is sent while a delivery is unknown, whatever the budget: the outbox stays as it is.
+                TransmitPlan.UnconfirmedBlocked -> {
+                    c.stage = SyncStage.READBACK_ABSENT
+                    return stop(deliveryUnconfirmed(c, account))
+                }
+                TransmitPlan.DependencyBlocked -> {
+                    c.stage = SyncStage.SEND_PLAN_BLOCKED
+                    return stop(recovery(c, account, RecoveryReason.DEPENDENCY_BLOCKED))
+                }
+                TransmitPlan.LimitReached -> {
+                    c.stage = SyncStage.SEND_BUDGET_ZERO
+                    return SendOutcome.LimitReached
+                }
+                is TransmitPlan.Planned -> plan.ops
+            }
+            val envelope = PlaylistSyncProtocol.planFirstEnvelope(scope, view.state.deviceId, planned)
                 ?: return stop(recovery(c, account, RecoveryReason.OP_TOO_LARGE))
             val ids = envelope.ops.map { it.opId }.toSet()
+            val startedAt = clock()
             val result = try {
                 transport.send(channel, PlaylistSyncProtocol.encode(envelope))
             } catch (_: Exception) {
-                SendResult.Unknown
+                SendResult.Unknown(SyncStage.SEND_DISPATCH_ABORTED)
             }
+            c.sendMs += (clock() - startedAt).coerceAtLeast(0L)
             envelopes++
+            // Charged at the moment of dispatch, whatever the answer: a lost answer does not give the budget back. Only a
+            // refusal BEFORE anything was handed over (consent, identity, connection, text) is free.
+            val refusedBeforeDispatch = result is SendResult.Failed && result.stage in PRE_DISPATCH_STAGES
+            if (!refusedBeforeDispatch) {
+                budgetLeft -= ids.size
+                c.dispatched += ids.size
+            }
             when (result) {
                 is SendResult.Sent -> when (host.update(account, epoch) { s -> ids.fold(s) { acc, id -> acc.acknowledge(id) } }) {
                     is UpdateResult.Committed -> {
@@ -372,13 +440,15 @@ internal class PlaylistSyncCoordinator(
                     else -> return stop(report(c, account, SyncStatus.SAVE_FAILED))
                 }
                 is SendResult.Unknown -> {
+                    // Delivery unknown: they stay waiting under the very same ids, flagged, and are NOT sent again by this code.
                     host.update(account, epoch) { s -> ids.fold(s) { acc, id -> acc.markRetryRequired(id) } }
-                    return stop(failure(c, account, SyncErrorKind.TIMEOUT, 0))
+                    c.stage = result.stage
+                    return stop(deliveryUnconfirmed(c, account))
                 }
                 is SendResult.Failed -> {
-                    if (result.kind == SyncErrorKind.NETWORK || result.kind == SyncErrorKind.TIMEOUT || result.kind == SyncErrorKind.FLOOD_WAIT) {
-                        host.update(account, epoch) { s -> ids.fold(s) { acc, id -> acc.markRetryRequired(id) } }
-                    }
+                    // A definite refusal: nothing was stored, so the operations stay PENDING exactly as they were.
+                    c.stage = result.stage
+                    c.errorBucket = result.bucket
                     return stop(failure(c, account, result.kind, result.retryAfterSeconds))
                 }
             }
@@ -404,9 +474,17 @@ internal class PlaylistSyncCoordinator(
     private fun stale(c: Counters, account: TelegramUserId): FetchOutcome.Stop =
         FetchOutcome.Stop(report(c, account, SyncStatus.STALE_SESSION))
 
+    /** Delivery of something already handed over is unknown. A short wait before the history is looked at again; never a resend. */
+    private fun deliveryUnconfirmed(c: Counters, account: TelegramUserId): SyncReport {
+        val delay = backoff.onFailure(clock(), SyncErrorKind.TIMEOUT, 0)
+        return report(c, account, SyncStatus.DELIVERY_UNCONFIRMED, retryAfterMs = delay)
+    }
+
     private fun failure(c: Counters, account: TelegramUserId, kind: SyncErrorKind, retryAfterSeconds: Int): SyncReport {
+        if (c.stage == SyncStage.NONE) c.stage = SyncStage.FETCH_SCAN
         val delay = backoff.onFailure(clock(), kind, retryAfterSeconds)
         return when (kind) {
+            SyncErrorKind.REJECTED -> report(c, account, SyncStatus.RECOVERY_REQUIRED, RecoveryReason.REJECTED_BY_TELEGRAM, retryAfterMs = delay)
             SyncErrorKind.NETWORK, SyncErrorKind.TIMEOUT, SyncErrorKind.FLOOD_WAIT ->
                 report(c, account, SyncStatus.BACKOFF, retryAfterMs = delay)
             SyncErrorKind.CHANNEL_MISSING -> report(c, account, SyncStatus.RECOVERY_REQUIRED, RecoveryReason.CHANNEL_MISSING, retryAfterMs = delay)
@@ -420,10 +498,13 @@ internal class PlaylistSyncCoordinator(
         return report(c, account, SyncStatus.RECOVERY_REQUIRED, reason, retryAfterMs = delay)
     }
 
-    private fun contractViolation(c: Counters, account: TelegramUserId): SyncReport =
-        recovery(c, account, RecoveryReason.TRANSPORT_CONTRACT)
+    private fun contractViolation(c: Counters, account: TelegramUserId): SyncReport {
+        c.stage = SyncStage.FETCH_CROSSCHECK
+        return recovery(c, account, RecoveryReason.TRANSPORT_CONTRACT)
+    }
 
     private fun corrupt(c: Counters, account: TelegramUserId, messageId: Long, error: PlaylistSyncProtocol.Error): SyncReport {
+        c.stage = SyncStage.FETCH_CORRUPT
         val delay = backoff.onFailure(clock(), SyncErrorKind.NETWORK, 0)
         val reason = when (error) {
             PlaylistSyncProtocol.Error.FUTURE_VERSION -> RecoveryReason.FUTURE_PROTOCOL
@@ -447,6 +528,13 @@ internal class PlaylistSyncCoordinator(
             replayPosition = state?.checkpoint?.replayPosition ?: SyncCheckpoint.NO_REPLAY,
             pendingLeft = state?.outbox?.count { it.status != OutboxStatus.ACKNOWLEDGED } ?: 0,
             retryAfterMs = retryAfterMs,
+            stage = c.stage, opsDispatched = c.dispatched, errorBucket = c.errorBucket,
+            sendDuration = if (c.dispatched > 0) DurationBucket.of(c.sendMs) else null,
         )
     }
 }
+
+/** Refusals that happen BEFORE anything is handed to TDLib: they do not use up a send budget. */
+private val PRE_DISPATCH_STAGES = setOf(
+    SyncStage.SEND_PRECHECK_CONSENT, SyncStage.SEND_PRECHECK_IDENTITY, SyncStage.SEND_PRECHECK_CONNECTION, SyncStage.SEND_PRECHECK_TEXT,
+)

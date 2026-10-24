@@ -157,7 +157,8 @@ class TelegramPlaylistSyncCoordinatorTest {
         val opId = a.stored().outbox.single().op.opId
         channel.sendFaults.add(FakeTelegramChannel.SendFault.LOST_ACK)
         val r1 = a.sync()
-        assertEquals(SyncStatus.BACKOFF, r1.status)
+        assertEquals(SyncStatus.DELIVERY_UNCONFIRMED, r1.status)
+        assertEquals(1, r1.opsDispatched)
         assertEquals(1, channel.count())
         assertEquals("not acknowledged by a send whose answer was lost", OutboxStatus.RETRY_REQUIRED, a.stored().outbox.single().status)
         assertEquals(opId, a.stored().outbox.single().op.opId)
@@ -172,16 +173,25 @@ class TelegramPlaylistSyncCoordinatorTest {
         assertEquals(listOf(saved(1)), b.present())
     }
 
-    @Test fun t09b_ifTheStoredCopyCannotBeSeenYetTheRetryIsAnIdenticalDuplicateAndStillOneSong() {
+    @Test fun t09b_ifTheStoredCopyCannotBeSeenYetNothingIsSentAgainAndItIsAcknowledgedWhenItShowsUp() {
+        // REWORK-01: the old rule re-sent an identical duplicate here. Not seeing a message is NOT proof it is absent.
         val a = device("dev-a"); val b = device("dev-b")
         a.song(1)
         channel.lostAckHiddenFetches = 2
         channel.sendFaults.add(FakeTelegramChannel.SendFault.LOST_ACK)
         a.waitOut(a.sync())
-        val r2 = a.sync() // the stored copy is still invisible: sent again with the same operation id
-        assertEquals(SyncStatus.OK, r2.status)
-        assertEquals(2, channel.count())
-        assertEquals("the two messages are the very same text", channel.texts()[0], channel.texts()[1])
+        val r2 = a.sync() // the stored copy is still invisible: NOT sent again, even with a budget
+        assertEquals(SyncStatus.DELIVERY_UNCONFIRMED, r2.status)
+        assertEquals(SyncStage.READBACK_ABSENT, r2.stage)
+        assertEquals(0, r2.opsDispatched)
+        assertEquals("nothing was sent", 1, channel.sendCalls)
+        assertEquals(1, channel.count())
+        assertEquals(OutboxStatus.RETRY_REQUIRED, a.stored().outbox.single().status)
+        a.waitOut(r2)
+        val r3 = a.sync() // visible now: found, acknowledged, still never sent twice
+        assertEquals(SyncStatus.OK, r3.status)
+        assertEquals(1, r3.opsAcknowledged)
+        assertEquals(1, channel.sendCalls)
         b.sync()
         assertEquals(listOf(saved(1)), b.present())
         assertEquals("one tag, not two", 1, b.stored().orSet.liveDots(item(1)).size)
@@ -331,7 +341,7 @@ class TelegramPlaylistSyncCoordinatorTest {
         }
         val c = PlaylistSyncCoordinator(a.session, spinning, { 0L })
         // E96-P2-REWORK-01: an empty page that claims more but proves no progress is refused (it used to be reported OK)
-        val r = c.runOnce(acct)
+        val r = c.runOnce(acct, SyncMode.INCREMENTAL, TEST_SEND_BUDGET)
         assertEquals(SyncStatus.RECOVERY_REQUIRED, r.status)
         assertEquals(RecoveryReason.TRANSPORT_CONTRACT, r.recovery)
         assertEquals("it did not spin", 1, calls)
@@ -388,7 +398,7 @@ class TelegramPlaylistSyncCoordinatorTest {
         val a = device("dev-a")
         a.song(2)
         a.hooks.beforeFetch = { a.session.close(); a.session.open(other) } // logout + login as B while A's fetch is in flight
-        val r = a.coordinator.runOnce(acct)
+        val r = a.coordinator.runOnce(acct, SyncMode.INCREMENTAL, TEST_SEND_BUDGET)
         assertEquals(SyncStatus.STALE_SESSION, r.status)
         a.hooks.beforeFetch = null
         val b = a.session.view(other)!!.state
@@ -411,7 +421,7 @@ class TelegramPlaylistSyncCoordinatorTest {
         a.song(2)
         // A -> B -> A while A's fetch is in flight: same account, but a different session
         a.hooks.beforeFetch = { a.session.close(); a.session.open(other); a.session.close(); a.session.open(acct) }
-        val r = a.coordinator.runOnce(acct)
+        val r = a.coordinator.runOnce(acct, SyncMode.INCREMENTAL, TEST_SEND_BUDGET)
         assertEquals(SyncStatus.STALE_SESSION, r.status)
         a.hooks.beforeFetch = null
         assertEquals("the late page was not applied", 0L, a.stored().checkpoint.lastAppliedServerId)
@@ -427,7 +437,7 @@ class TelegramPlaylistSyncCoordinatorTest {
         val a = device("dev-a")
         a.song(1)
         a.hooks.afterStoreBeforeReply = { a.session.close(); a.session.open(other) }
-        val r = a.coordinator.runOnce(acct)
+        val r = a.coordinator.runOnce(acct, SyncMode.INCREMENTAL, TEST_SEND_BUDGET)
         assertEquals(SyncStatus.STALE_SESSION, r.status)
         a.hooks.afterStoreBeforeReply = null
         val b = a.session.view(other)!!.state
@@ -590,12 +600,13 @@ class TelegramPlaylistSyncCoordinatorTest {
         assertEquals("the server's 35 seconds are obeyed exactly", 35_000L, r2.retryAfterMs)
         a.waitOut(r2)
 
-        channel.sendFaults.add(FakeTelegramChannel.SendFault.TIMEOUT_NOT_STORED)
+        // A refusal that is definite (nothing handed over) is a plain backoff; the operation stays PENDING and is sent later.
+        channel.sendFaults.add(FakeTelegramChannel.SendFault.NETWORK)
         val r3 = a.sync()
         assertEquals(SyncStatus.BACKOFF, r3.status)
         assertTrue("grows with repeated failures", r3.retryAfterMs > 5_000L)
         assertEquals(0, channel.count())
-        assertEquals(OutboxStatus.RETRY_REQUIRED, a.stored().outbox.single().status)
+        assertEquals(OutboxStatus.PENDING, a.stored().outbox.single().status)
         a.waitOut(r3)
 
         assertEquals(SyncStatus.OK, a.sync().status)
@@ -663,7 +674,15 @@ class TelegramPlaylistSyncCoordinatorTest {
         channel.sendFaults.add(FakeTelegramChannel.SendFault.NETWORK)
         a.sync()
         assertEquals(2, a.pendingIds().size)
-        assertTrue(a.stored().outbox.all { it.status == OutboxStatus.RETRY_REQUIRED })
+        // a send refused outright was never stored: the operations simply stay PENDING, in order
+        assertTrue(a.stored().outbox.all { it.status == OutboxStatus.PENDING })
+        // and one whose delivery is unknown is kept too, flagged, never dropped
+        val u = device("dev-u")
+        u.song(1); u.song(2)
+        channel.sendFaults.add(FakeTelegramChannel.SendFault.TIMEOUT_NOT_STORED)
+        assertEquals(SyncStatus.DELIVERY_UNCONFIRMED, u.sync().status)
+        assertEquals(2, u.pendingIds().size)
+        assertTrue(u.stored().outbox.all { it.status == OutboxStatus.RETRY_REQUIRED })
     }
 
     // ---- 27-28: long offline, joining late, no snapshot ---------------------------------------

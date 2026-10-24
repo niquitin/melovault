@@ -200,7 +200,7 @@ class TdlibChannelConsentTest {
         val r = rig()
         r.tdlib.gateway.staySilent("createNewSupergroupChat")
         val svc = TdlibPlaylistSyncService(r.tdlib.core, r.device.session, SyncGate(true, r.consentStore), { 0L },
-            timeouts = TdlibTransportTimeouts(requestMs = 150L, sendAckMs = 100L))
+            timeouts = TdlibTransportTimeouts(requestMs = 150L, sendAckMs = 100L), channelCreationUnlocked = true)
         assertEquals(CreateOutcome.Unknown, (svc.createChannel(acct) as Gated.Done).value)
         assertEquals(1, creates)
         // Nothing retries by itself; a later look finds whatever exists.

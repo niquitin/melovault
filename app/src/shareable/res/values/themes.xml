@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        E96 P5B3 REWORK-01: every AlertDialog.Builder(this) in the Shareable screens must be readable. The plain
+        Theme.MusicAssistantCar sets white text (textColorPrimary) but no dialog theme, so on a light system theme the
+        dialog surface was white and its text white. Here the dialog theme is explicit: a dark elevated surface,
+        light text, and a button colour of at least 4.5:1 on that surface (accent_primary is only about 4.2:1).
+        Shareable only; the Personal flavor does not use these styles.
+    -->
+    <color name="melo_dialog_button">#60A5FA</color>
+
+    <style name="Theme.MeloVault.Dialog" parent="Theme.MusicAssistantCar.Dialog">
+        <item name="colorPrimary">@color/melo_dialog_button</item>
+        <item name="colorAccent">@color/melo_dialog_button</item>
+        <item name="colorSecondary">@color/melo_dialog_button</item>
+    </style>
+
+    <style name="Theme.MeloVault.Shareable" parent="Theme.MusicAssistantCar">
+        <item name="alertDialogTheme">@style/Theme.MeloVault.Dialog</item>
+        <item name="materialAlertDialogTheme">@style/Theme.MeloVault.Dialog</item>
+    </style>
+</resources>

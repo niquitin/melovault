@@ -349,7 +349,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         if (!MeloMediaControlPolicy.shouldAskNotificationPermission(
                 Build.VERSION.SDK_INT, granted, MeloMediaControlPolicy.notificationAsked(prefs), auth.isReady())) return
         MeloMediaControlPolicy.markNotificationAsked(prefs)
-        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+        AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
             .setTitle("Cho phép thông báo phát nhạc?")
             .setMessage("Thông báo giúp điều khiển nhạc từ màn hình khoá, đồng hồ và tai nghe Bluetooth. " +
                 "Bạn có thể đổi lại trong Cài đặt Android.")
@@ -429,7 +429,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             showRationale = shouldShowRequestPermissionRationale(permission)
         )) {
             MeloLocalSourcePolicy.PermissionStep.OPEN -> enterLocal()
-            MeloLocalSourcePolicy.PermissionStep.EXPLAIN_THEN_ASK -> AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            MeloLocalSourcePolicy.PermissionStep.EXPLAIN_THEN_ASK -> AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
                 .setTitle("Cho phép đọc nhạc trên máy?")
                 .setMessage("MeloVault cần quyền đọc tệp âm thanh trên máy để liệt kê và phát nhạc của bạn. " +
                     "Ứng dụng chỉ đọc, không sửa, xóa hay gửi tệp đi đâu.")
@@ -439,7 +439,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     localPermissionResult.launch(permission)
                 }
                 .show()
-            MeloLocalSourcePolicy.PermissionStep.OPEN_SETTINGS -> AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            MeloLocalSourcePolicy.PermissionStep.OPEN_SETTINGS -> AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
                 .setTitle("Quyền đọc nhạc đang tắt")
                 .setMessage("Bật quyền đọc nhạc/âm thanh cho MeloVault trong Cài đặt Android để xem nhạc trên máy.")
                 .setNegativeButton("Để sau", null)
@@ -645,7 +645,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun showLocalSongMenu(anchor: View, onPlay: () -> Unit, onInfo: () -> Unit) {
-        val popup = PopupMenu(ContextThemeWrapper(this, R.style.Theme_MusicAssistantCar_Dialog), anchor)
+        val popup = PopupMenu(ContextThemeWrapper(this, R.style.Theme_MeloVault_Dialog), anchor)
         popup.menu.add(0, 1, 1, "▶ Phát bài này")
         popup.menu.add(0, 2, 2, "ℹ Thông tin")
         popup.setOnMenuItemClickListener { item ->
@@ -671,7 +671,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             append("• Thời lượng: ${TelegramSongDisplayPolicy.formatDuration((durationMs / 1000L).toInt()) ?: "Không xác định"}")
             folder?.takeIf { it.isNotBlank() }?.let { append("\n• Thư mục: $it") }
         }
-        AlertDialog.Builder(ContextThemeWrapper(this, R.style.Theme_MusicAssistantCar_Dialog))
+        AlertDialog.Builder(ContextThemeWrapper(this, R.style.Theme_MeloVault_Dialog))
             .setTitle("Thông tin chi tiết")
             .setMessage(info)
             .setPositiveButton("Đóng", null)
@@ -710,7 +710,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val title = controller.getMediaItemAt(i).mediaMetadata.title?.toString().orEmpty().ifBlank { "Nhạc trên máy" }
             (if (i == at) "▶ " else "") + title
         }
-        val dialog = AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+        val dialog = AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
             .setTitle("Danh sách phát · $count bài")
             .setItems(names) { _, which -> playLocalQueueAt(which) }
             .setPositiveButton("Xong", null)
@@ -817,7 +817,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setTheme(R.style.Theme_MusicAssistantCar)
+        setTheme(R.style.Theme_MeloVault_Shareable)
         val prefs = getSharedPreferences(UiThemePolicy.PREFS_NAME, Context.MODE_PRIVATE)
         currentThemePreset = UiThemePolicy.getSavedPreset(prefs)
         currentSourceDisplayMode = TelegramVaultBentoPolicy.getSavedSourceDisplayMode(prefs)
@@ -1357,7 +1357,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }.toTypedArray()
         val currentIndex = presets.indexOf(currentThemePreset).coerceAtLeast(0)
 
-        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+        AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
             .setTitle("Chọn giao diện MeloVault")
             .setSingleChoiceItems(names, currentIndex) { dialog, which ->
                 val chosen = presets[which]
@@ -1420,7 +1420,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }.toTypedArray()
         val currentIndex = modes.indexOf(currentSourceDisplayMode).coerceAtLeast(0)
 
-        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+        AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
             .setTitle("Chế độ hiển thị nguồn Telegram")
             .setSingleChoiceItems(names, currentIndex) { dialog, which ->
                 val chosen = modes[which]
@@ -3310,7 +3310,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun showLibraryOverflow(anchor: View) {
-        val themed = ContextThemeWrapper(this, R.style.Theme_MusicAssistantCar_Dialog)
+        val themed = ContextThemeWrapper(this, R.style.Theme_MeloVault_Dialog)
         val menu = PopupMenu(themed, anchor)
         menu.menu.add(0, 1, 1, "☆ Tin đã lưu")
         menu.menu.add(0, 2, 2, "Đồng bộ nhanh (Cập nhật bài mới)")
@@ -3365,7 +3365,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
                 6 -> if (auth.isReady()) openAudioDocument()
                 7 -> if (auth.isReady()) {
-                    AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                    AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
                         .setTitle("Đăng xuất tài khoản Telegram?")
                         .setMessage("Bài đã tải và phiên đăng nhập trên thiết bị sẽ thay đổi.")
                         .setNegativeButton("Hủy", null)
@@ -3930,7 +3930,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 playing = s.songKey == currentTelegramMessageId()
             )
         }.toTypedArray()
-        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog).setTitle(group.label).setItems(labels) { _, index ->
+        AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog).setTitle(group.label).setItems(labels) { _, index ->
             val selected = group.entries[index].song
             val entry = group.selected(account, selected.chatId, selected.messageId) ?: return@setItems
             if (library.authorizedUser()?.value != account || !auth.isReady()) return@setItems
@@ -4833,7 +4833,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 setting, MeloCarPolicy.asked(prefs), display.widthDp, display.heightDp, auth.isReady())) return
         carPromptShown = true
         MeloCarPolicy.markAsked(prefs)
-        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+        AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
             .setTitle("Bật Car Mode?")
             .setMessage("Màn hình này rộng như màn hình ô tô. Car Mode dùng nút to, chữ lớn, 5 bài mỗi trang và ẩn thanh hệ thống. " +
                 "Có thể đổi lại trong ⋮ → Cài đặt giao diện.")
@@ -5517,7 +5517,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         song: Song, isDownloaded: Boolean, anchor: View,
         versions: TelegramOfflineLibrary.Group? = null
     ) {
-        val themed = ContextThemeWrapper(this, R.style.Theme_MusicAssistantCar_Dialog)
+        val themed = ContextThemeWrapper(this, R.style.Theme_MeloVault_Dialog)
         val popup = PopupMenu(themed, anchor)
         val isFav = song.messageId in favoriteIds
         if (song.placeholder) {
@@ -5594,7 +5594,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun showSongDetailsDialog(song: Song, isDownloaded: Boolean) {
-        val themed = ContextThemeWrapper(this, R.style.Theme_MusicAssistantCar_Dialog)
+        val themed = ContextThemeWrapper(this, R.style.Theme_MeloVault_Dialog)
         val source = song.sourceTitle ?: (sourceNames[song.chatId] ?: "Telegram")
         val performer = song.performer?.takeIf { it.isNotBlank() } ?: "Không xác định"
         val dur = TelegramSongDisplayPolicy.formatDuration(song.durationSeconds) ?: "Không xác định"

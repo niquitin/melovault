@@ -174,7 +174,7 @@ class MeloUiLabActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setTheme(R.style.Theme_MusicAssistantCar)
+        setTheme(R.style.Theme_MeloVault_Shareable)
         title = "Cài đặt giao diện"
         render()
     }

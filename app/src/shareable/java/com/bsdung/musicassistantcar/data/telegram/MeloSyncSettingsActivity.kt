@@ -2,6 +2,7 @@ package com.bsdung.musicassistantcar.data.telegram
 
 import android.graphics.Typeface
 import android.os.Bundle
+import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -40,7 +41,7 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setTheme(R.style.Theme_MusicAssistantCar)
+        setTheme(R.style.Theme_MeloVault_Shareable)
         title = "Đồng bộ Playlist"
         // The id of the signed-in account is only read from the owner's memory; nothing is asked of TDLib.
         account = ShareableTdlibOwner.authorizedAccount()?.let { runCatching { TelegramUserId(it) }.getOrNull() }
@@ -52,6 +53,7 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
             account = { account },
             facts = { lastFacts },
             runLog = SyncRuntime.runLog,
+            channelCreationUnlocked = TelegramPlaylistFlags.SYNC_CREATE_ALLOWED,
         )
         buildFrame()
         refresh()
@@ -167,7 +169,27 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
         content.addView(card { addView(note(screen.channel.text())) })
         content.addView(button("Tìm kênh (chỉ đọc)", screen.discover) { act { controller.discover() } })
         content.addView(button("Tạo kênh riêng", screen.createNow) { confirmCreate() })
+        if (screen.createNow == ControlState.LOCKED && !TelegramPlaylistFlags.SYNC_CREATE_ALLOWED) {
+            content.addView(note("Bản này không tạo kênh mới: chỉ tìm và gắn kênh Telegram đã có."))
+        }
         content.addView(button("Dùng kênh này", screen.bindNow) { confirmBind() })
+
+        content.addView(c.sectionTitle("Lượt gửi (do bạn cho phép từng lần)"))
+        content.addView(card {
+            addView(c.text(
+                if (screen.sendGrant > 0) "Còn ${screen.sendGrant} thay đổi được phép gửi" else "Chưa cho phép gửi thay đổi nào",
+                s.titleText, if (screen.sendGrant > 0) p.accent else p.text, bold = true, maxLines = 2,
+            ))
+            addView(note(SyncPrivacyText.GRANT_NOTE))
+        })
+        for (n in 1..SyncSendBudget.PRODUCTION_MAX) {
+            content.addView(button("Cho phép gửi $n thay đổi", screen.grantSend.takeUnless { it == ControlState.ACTIVE } ?: ControlState.AVAILABLE) {
+                confirmGrant(n)
+            })
+        }
+        content.addView(button("Thu hồi lượt gửi", if (screen.sendGrant > 0) ControlState.AVAILABLE else ControlState.LOCKED) {
+            act { controller.revokeSendGrant() }
+        })
 
         content.addView(c.sectionTitle("Đồng bộ thủ công"))
         content.addView(button("Đồng bộ ngay", screen.syncNow) { act { controller.syncNow() } })
@@ -184,6 +206,10 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
         try {
             worker.execute {
                 val result = call()
+                // Only a closed list of names is logged (Sony hides Log.i, hence warn): never an id, a text or a song.
+                account?.let { SyncRuntime.runLog.last(it.value) }?.takeIf { it.stage != SyncStage.NONE }?.let {
+                    Log.w("MeloSync", "stage=${it.stage.name} status=${it.status?.name}")
+                }
                 runOnUiThread {
                     if (isDestroyed) return@runOnUiThread
                     resultText(result)?.let { Toast.makeText(this, it, Toast.LENGTH_LONG).show() }
@@ -199,6 +225,7 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
         ActionResult.NotSaved -> "Chưa lưu được thay đổi. Không có gì bị mất."
         is ActionResult.Denied -> when (result.reason) {
             SyncDenied.BUILD_OFF -> PlaylistSyncStatusPolicy.BUILD_OFF_NOTICE
+            SyncDenied.CREATE_LOCKED -> "Bản này không tạo kênh mới; chỉ tìm và gắn kênh đã có."
             else -> "Chưa được phép (${result.reason.name.lowercase().replace('_', ' ')})."
         }
         is ActionResult.Refused -> when (result.reason) {
@@ -210,7 +237,22 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
             ActionResult.Reason.NEEDS_DISCOVERY -> "Hãy bấm \"Tìm kênh\" trước."
             ActionResult.Reason.NO_CHANNEL -> "Chưa có kênh đồng bộ."
             ActionResult.Reason.BUSY -> "Đang bận, thử lại sau giây lát."
+            ActionResult.Reason.TRANSMIT_NOT_ALLOWED -> "Hãy bật quyền gửi danh sách trước."
+            ActionResult.Reason.BAD_SEND_BUDGET -> "Chỉ cho phép từ 1 đến ${SyncSendBudget.PRODUCTION_MAX} thay đổi."
         }
+    }
+
+    private fun confirmGrant(n: Int) {
+        val waiting = lastFacts?.pendingCount ?: 0
+        AlertDialog.Builder(this)
+            .setTitle("Cho phép gửi $n thay đổi?")
+            .setMessage(
+                "Hiện có $waiting thay đổi chờ gửi. Lần \"Đồng bộ ngay\" kế tiếp được gửi tối đa $n thay đổi đầu hàng đợi, theo đúng thứ tự, " +
+                    "rồi lượt này hết. Nếu thay đổi nào đã gửi mà chưa biết có tới nơi, ứng dụng không gửi lại.\n\n" + SyncPrivacyText.GRANT_NOTE
+            )
+            .setNegativeButton("Hủy", null)
+            .setPositiveButton("Cho phép $n") { _, _ -> act { controller.grantSend(n, confirmed = true) } }
+            .show()
     }
 
     private fun confirmEnable() {

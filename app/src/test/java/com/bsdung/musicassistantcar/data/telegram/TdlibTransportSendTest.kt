@@ -181,17 +181,17 @@ class TdlibTransportSendTest {
 
     @Test fun s03_aProvisionalAnswerWithoutAnySuccessIsUnknownNeverSent() {
         rig.gateway.sendModes.add(SendMode.NO_UPDATE_STORED)
-        assertEquals(SendResult.Unknown, transport().send(chat, text()))
+        assertEquals(SendResult.Unknown(), transport().send(chat, text()))
         assertEquals(1, hub.metrics.get(SyncMetrics.Event.SEND_UNKNOWN))
     }
 
     @Test fun s04_aLostAnswerAndAnUnstoredMessageAreBothUnknown() {
         rig.gateway.sendModes.add(SendMode.NO_REPLY_STORED)
-        assertEquals(SendResult.Unknown, transport(sendAckMs = 100L).send(chat, text(1)))
+        assertEquals(SendResult.Unknown(), transport(sendAckMs = 100L).send(chat, text(1)))
         rig.gateway.sendModes.add(SendMode.NO_REPLY_NOT_STORED)
         val t = TdlibPlaylistSyncTransport(hub, user, rig.core.authEpoch(), chat,
             TdlibHistoryReader(hub, user, rig.core.authEpoch(), chat), TdlibTransportTimeouts(requestMs = 150L, sendAckMs = 100L))
-        assertEquals(SendResult.Unknown, t.send(chat, text(2)))
+        assertEquals(SendResult.Unknown(), t.send(chat, text(2)))
     }
 
     @Test fun s05_aFailedSendIsAClearFailureAndAFloodWaitKeepsTheServersNumber() {
@@ -199,7 +199,17 @@ class TdlibTransportSendTest {
         assertEquals(SendResult.Failed(SyncErrorKind.FLOOD_WAIT, 35), transport().send(chat, text()))
         rig.gateway.sendError = 500 to "Internal error"
         rig.gateway.sendModes.add(SendMode.FAIL_UPDATE)
-        assertEquals(SendResult.Failed(SyncErrorKind.NETWORK, 0), transport().send(chat, text(2)))
+        // A 5xx after the message was handed over may have been processed by the server: doubt, never "failed".
+        val doubtful = transport().send(chat, text(2))
+        assertEquals(SendResult.Unknown(), doubtful)
+        assertEquals(SyncStage.SEND_ACK_FAILED, (doubtful as SendResult.Unknown).stage)
+        // A definite refusal (4xx) after the provisional answer is a failure, with its stage and error class.
+        rig.gateway.sendError = 400 to "Bad Request: message is too long"
+        rig.gateway.sendModes.add(SendMode.FAIL_UPDATE)
+        val refused = transport().send(chat, text(3))
+        assertEquals(SendResult.Failed(SyncErrorKind.REJECTED, 0), refused)
+        assertEquals(SyncStage.SEND_ACK_FAILED, (refused as SendResult.Failed).stage)
+        assertEquals(ErrorBucket.E400, refused.bucket)
         assertEquals("nothing stored", 0, syncMessages().size)
     }
 
@@ -225,11 +235,11 @@ class TdlibTransportSendTest {
 
     @Test fun s08_aSuccessThatIsNotOurMessageIsNeverAnAck() {
         rig.gateway.sendModes.add(SendMode.WRONG_TEXT)
-        assertEquals(SendResult.Unknown, transport().send(chat, text(1)))
+        assertEquals(SendResult.Unknown(), transport().send(chat, text(1)))
         rig.gateway.sendModes.add(SendMode.WRONG_CHAT)
-        assertEquals(SendResult.Unknown, transport().send(chat, text(2)))
+        assertEquals(SendResult.Unknown(), transport().send(chat, text(2)))
         rig.gateway.sendModes.add(SendMode.SAME_ID)
-        assertEquals("a final id equal to the temporary one is not final", SendResult.Unknown, transport().send(chat, text(3)))
+        assertEquals("a final id equal to the temporary one is not final", SendResult.Unknown(), transport().send(chat, text(3)))
         // The wrong-chat success is not even correlated (it belongs to no watch), so only two count as a payload mismatch.
         assertEquals(2, hub.metrics.get(SyncMetrics.Event.SEND_PAYLOAD_MISMATCH))
         assertEquals(3, hub.metrics.get(SyncMetrics.Event.SEND_UNKNOWN))
@@ -270,7 +280,7 @@ class TdlibTransportSendTest {
         rig.relogin(user)
         rig.gateway.held = false
         rig.gateway.release()
-        assertEquals(SendResult.Unknown, result.get(3, TimeUnit.SECONDS))
+        assertEquals(SendResult.Unknown(), result.get(3, TimeUnit.SECONDS))
     }
 
     @Test fun s13_twoSendsAtTheSameTimeEachGetTheirOwnServerId() {
@@ -306,7 +316,7 @@ class TdlibTransportSendTest {
         val t = TdlibPlaylistSyncTransport(hub, user, rig.core.authEpoch(), chat, TdlibHistoryReader(hub, user, rig.core.authEpoch(), chat),
             TdlibTransportTimeouts(requestMs = 100L, sendAckMs = 100L))
         val started = System.nanoTime()
-        assertEquals(SendResult.Unknown, t.send(chat, text()))
+        assertEquals(SendResult.Unknown(), t.send(chat, text()))
         assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) < 1_500)
         assertNotNull(rig.gateway.requests.firstOrNull { it.optString("@type") == "sendMessage" })
     }

@@ -28,6 +28,10 @@ internal class TdlibPlaylistSyncService(
     private val discoveryLimits: DiscoveryLimits = DiscoveryLimits(),
     val metrics: SyncMetrics = SyncMetrics(),
     val alerts: ContinuityAlerts = ContinuityAlerts(),
+    /** The most operations ONE run may send, whatever a caller asks for. Production keeps the default; only a unit fake raises it. */
+    private val sendBudgetCap: Int = SyncSendBudget.PRODUCTION_MAX,
+    /** Creating a Telegram channel is LOCKED unless the build explicitly unlocks it (never in Release, off by default in QA). */
+    private val channelCreationUnlocked: Boolean = false,
 ) {
     private val hub = TdlibSyncHub(owner, metrics, alerts)
     private val lock = ReentrantLock()
@@ -97,7 +101,7 @@ internal class TdlibPlaylistSyncService(
 
     /** Needs consent (b) as well as (a). Creates nothing if a channel already exists or is ambiguous. */
     fun createChannel(account: TelegramUserId): Gated<CreateOutcome> =
-        session(account, { gate.mayCreate(account) }) { epoch ->
+        session(account, { if (!channelCreationUnlocked) SyncDenied.CREATE_LOCKED else gate.mayCreate(account) }) { epoch ->
             directory(account, epoch).create(boundChannel(account))
         }
 
@@ -111,8 +115,10 @@ internal class TdlibPlaylistSyncService(
      * "late message below the cursor" policy (P4 decides when). Without consent (c) and with something waiting to be
      * sent, nothing is called at all.
      */
-    fun runSync(account: TelegramUserId, mode: SyncMode = SyncMode.INCREMENTAL): Gated<SyncReport> {
+    fun runSync(account: TelegramUserId, mode: SyncMode = SyncMode.INCREMENTAL, sendBudget: Int = 0): Gated<SyncReport> {
         gate.mayRun(account)?.let { return denied(it) }
+        // Never unlimited: no number, zero or a negative number is a read-and-acknowledge run; a big number is cut to the cap.
+        val budget = SyncSendBudget.clamp(sendBudget, sendBudgetCap)
         val view = host.view(account) ?: return denied(SyncDenied.NOT_OPEN)
         val channel = view.state.checkpoint.channelId
         if (channel == 0L) return Gated.Done(SyncReport(SyncStatus.NO_CHANNEL)) // never creates one, never touches TDLib
@@ -130,7 +136,7 @@ internal class TdlibPlaylistSyncService(
                     hub, account.value, epoch, channel, reader, timeouts,
                     sendAllowed = { gate.mayTransmit(account) == null },
                 )
-                val report = PlaylistSyncCoordinator(host, transport, clock, config, backoff).runOnce(account, mode)
+                val report = PlaylistSyncCoordinator(host, transport, clock, config, backoff).runOnce(account, mode, budget)
                 metrics.runFinished(clock() - started, backoff.failures)
                 metrics.count(SyncMetrics.Event.RUN_FINISHED)
                 report

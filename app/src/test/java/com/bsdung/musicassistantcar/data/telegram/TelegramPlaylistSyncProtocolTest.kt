@@ -20,9 +20,9 @@ class TelegramPlaylistSyncProtocolTest {
         PlaylistSyncProtocol.encode(PlaylistSyncProtocol.Envelope(scope, sender, "dev-a-${ops.first().opId.substringAfter('#')}", ops.toList()))
 
     /** Re-seals a hand-edited body so only the thing under test is wrong, not the checksum. */
-    private fun seal(body: String) = body + "sum\t" + TelegramPlaylistCodec.sha256Hex(body)
+    private fun seal(body: String) = body + "sum " + TelegramPlaylistCodec.sha256Hex(body)
 
-    private fun body(text: String) = text.substring(0, text.lastIndexOf("sum\t"))
+    private fun body(text: String) = text.substring(0, text.lastIndexOf("sum "))
 
     private fun invalid(text: String, expectedScope: String = scope): Error =
         (PlaylistSyncProtocol.decode(text, expectedScope) as Decoded.Invalid).error
@@ -58,7 +58,7 @@ class TelegramPlaylistSyncProtocolTest {
 
     @Test fun anyTamperedCharacterIsRejectedByTheChecksum() {
         val text = encode(add(1), add(2))
-        for (at in listOf(15, 40, 80, text.indexOf("op\t") + 5, text.length - 70)) {
+        for (at in listOf(15, 40, 80, text.indexOf("op ") + 5, text.length - 70)) {
             val broken = text.substring(0, at) + (if (text[at] == 'a') 'b' else 'a') + text.substring(at + 1)
             val error = invalid(broken)
             assertTrue("at=$at error=$error", error == Error.BAD_CHECKSUM || error == Error.BAD_FORMAT)
@@ -96,17 +96,17 @@ class TelegramPlaylistSyncProtocolTest {
         val good = encode(add(1))
         val goodBody = body(good)
         val cases = mapOf(
-            "no ops" to goodBody.substringBefore("op\t"),
-            "bad scope" to goodBody.replace("scope\t$scope", "scope\tNOTHEX"),
-            "bad sender" to goodBody.replace("sender\tdev-a", "sender\tdev a"),
-            "extra field" to goodBody.replace("\n", "\textra\n").replaceFirst("\textra\n", "\n"),
-            "op line short" to goodBody.replace(Regex("op\t[^\n]*"), "op\tdev-a#1\tADD"),
-            "bad type" to goodBody.replace("\tADD\t", "\tMOVE\t"),
+            "no ops" to goodBody.substringBefore("op "),
+            "bad scope" to goodBody.replace("scope $scope", "scope NOTHEX"),
+            "bad sender" to goodBody.replace("sender dev-a", "sender dev a"),
+            "extra field" to goodBody.replace("\n", " extra\n").replaceFirst(" extra\n", "\n"),
+            "op line short" to goodBody.replace(Regex("op [^\n]*"), "op dev-a#1 ADD"),
+            "bad type" to goodBody.replace(" ADD ", " MOVE "),
             "bad dot" to goodBody.replace("dev-a#1\n", "dev-a-1\n").let { it },
             "item is legacy" to goodBody.replace("tg:-100123:1000", "legacy:1000"),
             "item is local" to goodBody.replace("tg:-100123:1000", "local:1000"),
             "item is not a song" to goodBody.replace("tg:-100123:1000", "tg:0:1000"),
-            "negative seq" to goodBody.replace("\t1\tdev-a#1", "\t-1\tdev-a#1"),
+            "negative seq" to goodBody.replace(" 1 dev-a#1", " -1 dev-a#1"),
         )
         for ((name, text) in cases) {
             val result = PlaylistSyncProtocol.decode(seal(text), scope)
@@ -115,24 +115,24 @@ class TelegramPlaylistSyncProtocolTest {
     }
 
     @Test fun anOperationNotWrittenByTheSenderIsRejected() {
-        val foreignOpId = body(encode(add(1))).replace("op\tdev-a#1", "op\tdev-z#1")
+        val foreignOpId = body(encode(add(1))).replace("op dev-a#1", "op dev-z#1")
         assertEquals(Error.BAD_FORMAT, invalid(seal(foreignOpId)))
-        val foreignTag = body(encode(add(1))).replace("\tdev-a#1\n", "\tdev-z#1\n")
+        val foreignTag = body(encode(add(1))).replace(" dev-a#1\n", " dev-z#1\n")
         assertEquals(Error.BAD_FORMAT, invalid(seal(foreignTag)))
     }
 
     @Test fun aRepeatedOperationIdInOneMessageIsRejected() {
         val text = body(encode(add(1), add(2)))
-        val dup = text.replace("op\tdev-a#2", "op\tdev-a#1")
+        val dup = text.replace("op dev-a#2", "op dev-a#1")
         assertEquals(Error.DUPLICATE_OP, invalid(seal(dup)))
     }
 
     @Test fun tooManyOperationsOrTagsAreRejected() {
-        val many = (1L..21L).joinToString("") { n -> "op\tdev-a#$n\tADD\ttg:-100123:${n * 10}\t$n\tdev-a#$n\n" }
-        val header = "#mvsync v1\nscope\t$scope\nsender\tdev-a\nbatch\tdev-a-1\n"
+        val many = (1L..21L).joinToString("") { n -> "op dev-a#$n ADD tg:-100123:${n * 10} $n dev-a#$n\n" }
+        val header = "#mvsync v1\nscope $scope\nsender dev-a\nbatch dev-a-1\n"
         assertEquals(Error.TOO_MANY_OPS, invalid(seal(header + many)))
         val dots = (1L..33L).joinToString(",") { "dev-b#$it" }
-        val tags = header + "op\tdev-a#1\tREMOVE\ttg:-100123:10\t5\t$dots\n"
+        val tags = header + "op dev-a#1 REMOVE tg:-100123:10 5 $dots\n"
         assertEquals(Error.TOO_MANY_DOTS, invalid(seal(tags)))
     }
 
@@ -187,7 +187,7 @@ class TelegramPlaylistSyncProtocolTest {
 
     @Test fun theChecksumIsNotASignatureAnyoneCanWriteAValidMessage() {
         // Documented limit: integrity against damage only. A message made by hand with the right sum is accepted.
-        val handMade = seal("#mvsync v1\nscope\t$scope\nsender\tdev-evil\nbatch\tdev-evil-1\nop\tdev-evil#1\tADD\ttg:-100123:1\t1\tdev-evil#1\n")
+        val handMade = seal("#mvsync v1\nscope $scope\nsender dev-evil\nbatch dev-evil-1\nop dev-evil#1 ADD tg:-100123:1 1 dev-evil#1\n")
         assertTrue(PlaylistSyncProtocol.decode(handMade, scope) is Decoded.Ok)
     }
 }

@@ -13,6 +13,12 @@ internal object TelegramPlaylistFlags {
      * Release BuildConfig hardcodes false; this flag alone NEVER grants per-account consent.
      */
     val SYNC_ENABLED: Boolean get() = com.bsdung.musicassistantcar.BuildConfig.MELO_SYNC_QA_BUILD
+
+    /**
+     * E96 P5B3 REWORK-01: creating a Telegram channel is locked in EVERY build, QA included. Only a Debug build started with
+     * both -PmeloSyncQa=true and -PmeloSyncQaAllowCreate=true can unlock it; Release hardcodes false. Needs [SYNC_ENABLED] too.
+     */
+    val SYNC_CREATE_ALLOWED: Boolean get() = SYNC_ENABLED && com.bsdung.musicassistantcar.BuildConfig.MELO_SYNC_QA_ALLOW_CREATE
 }
 
 /** What the UI knows about the song the user taps. [chatId]/[rawMessageId] are 0 when unknown. */

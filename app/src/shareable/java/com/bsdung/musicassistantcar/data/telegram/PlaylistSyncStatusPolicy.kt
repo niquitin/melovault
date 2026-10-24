@@ -52,13 +52,15 @@ internal data class LastSyncRun(
     val pendingLeft: Int = 0,
     /** [PlaylistStatusFacts.opCounter] when the run ended. */
     val opCounterAtRun: Long = 0L,
+    /** Sanitised diagnostic of where the run stopped (an enum name, never data). */
+    val stage: SyncStage = SyncStage.NONE,
 ) {
     companion object {
         fun of(accountId: Long, result: Gated<SyncReport>, opCounterNow: Long): LastSyncRun = when (result) {
             is Gated.Denied -> LastSyncRun(accountId, denied = result.reason, opCounterAtRun = opCounterNow)
             is Gated.Done -> LastSyncRun(
                 accountId, result.value.status, result.value.recovery, null,
-                result.value.retryAfterMs, result.value.pendingLeft, opCounterNow,
+                result.value.retryAfterMs, result.value.pendingLeft, opCounterNow, result.value.stage,
             )
         }
     }
@@ -87,8 +89,13 @@ internal object PlaylistSyncStatusPolicy {
         LOADING, UNREADABLE, IMPORT_DEFERRED,
         LOCAL_SYNC_OFF, LOCAL_PENDING, NEVER_SYNCED,
         SYNCING, CATCHING_UP, SENDING_OUTBOX, SYNCED,
+        /** Operations wait and this run's send grant (a number of operations) is spent or was never given. */
+        SEND_LIMIT,
+        /** Something was sent and nobody knows if it arrived: kept, never sent again by itself. */
+        DELIVERY_UNCONFIRMED,
         OFFLINE_BACKOFF, NO_CHANNEL, NEEDS_TRANSMIT_CONSENT, NEEDS_LOGIN, BUSY, ATTENTION,
         RECOVERY_CHANNEL_MISSING, RECOVERY_ACCESS, RECOVERY_HISTORY, RECOVERY_WRONG_ACCOUNT, RECOVERY_FUTURE_PROTOCOL,
+        RECOVERY_REJECTED, CREATE_LOCKED,
         /** Per song only. */
         NOT_SAVED, LOCAL_SONG, SAVED_DEVICE_ONLY,
     }
@@ -115,7 +122,8 @@ internal object PlaylistSyncStatusPolicy {
             return Line(Kind.LOADING, "Đang đọc Playlist…", "", Severity.INFO)
         }
         facts.unreadable?.let { return unreadable(it) }
-        val notes = notesOf(facts)
+        val run = sync.lastRun?.takeIf { it.accountId == facts.accountId }
+        val notes = notesOf(facts) + diagnosticNote(run)
         facts.importWarning?.let { warning ->
             return Line(
                 Kind.IMPORT_DEFERRED, "Đã lưu trên máy · Chưa nhập hết thay đổi từ bản cũ",
@@ -136,7 +144,6 @@ internal object PlaylistSyncStatusPolicy {
             }
             return Line(Kind.LOCAL_SYNC_OFF, "Đã lưu trên máy · Chưa bật đồng bộ", "$why Playlist vẫn dùng bình thường trên máy này.", Severity.INFO, notes)
         }
-        val run = sync.lastRun?.takeIf { it.accountId == facts.accountId }
         if (sync.running) {
             return when (run?.status) {
                 SyncStatus.CATCH_UP_INCOMPLETE -> catchingUp(notes)
@@ -171,6 +178,17 @@ internal object PlaylistSyncStatusPolicy {
             }
             SyncStatus.CATCH_UP_INCOMPLETE -> catchingUp(notes)
             SyncStatus.OUTBOX_INCOMPLETE -> sending(maxOf(run.pendingLeft, facts.pendingCount), notes)
+            SyncStatus.SEND_LIMIT_REACHED -> Line(
+                Kind.SEND_LIMIT, "Đã lưu trên máy · Chưa gửi hết",
+                "Còn ${maxOf(run.pendingLeft, facts.pendingCount)} thay đổi chờ gửi. Lượt gửi bạn cho phép đã dùng hết hoặc chưa được cấp; " +
+                    "ứng dụng không tự gửi thêm. Cho phép lượt mới trong Cài đặt nếu muốn gửi tiếp.", Severity.WARN, notes,
+            )
+            SyncStatus.DELIVERY_UNCONFIRMED -> Line(
+                Kind.DELIVERY_UNCONFIRMED, "Đã lưu trên máy · Chưa xác nhận đã tới kênh",
+                "Một số thay đổi đã được gửi nhưng chưa biết có tới kênh Telegram hay chưa. Ứng dụng giữ nguyên chúng " +
+                    "và KHÔNG gửi lại; chỉ khi đọc thấy chúng trong kênh thì mới tính là đã đồng bộ. Playlist trên máy không bị ảnh hưởng.",
+                Severity.WARN, notes,
+            )
             SyncStatus.NO_CHANNEL ->
                 Line(Kind.NO_CHANNEL, "Đã lưu trên máy · Chưa có kênh đồng bộ", "Chưa có kênh Telegram riêng để đồng bộ.", Severity.WARN, notes)
             SyncStatus.RECOVERY_REQUIRED -> recovery(run.recovery, notes)
@@ -223,6 +241,8 @@ internal object PlaylistSyncStatusPolicy {
         SyncDenied.NOT_ENABLED, SyncDenied.WARNING_NOT_ACCEPTED ->
             Line(Kind.LOCAL_SYNC_OFF, "Đã lưu trên máy · Chưa bật đồng bộ", "Cần bật đồng bộ và đồng ý cảnh báo trong Cài đặt.", Severity.INFO, notes)
         SyncDenied.CREATE_NOT_ALLOWED -> Line(Kind.NO_CHANNEL, "Đã lưu trên máy · Chưa có kênh đồng bộ", "Cần bạn cho phép tạo kênh riêng.", Severity.WARN, notes)
+        SyncDenied.CREATE_LOCKED ->
+            Line(Kind.CREATE_LOCKED, "Đã lưu trên máy · Không tạo kênh mới", "Bản này không tạo kênh Telegram mới; chỉ tìm và gắn kênh đã có.", Severity.INFO, notes)
         SyncDenied.TRANSMIT_NOT_ALLOWED ->
             Line(Kind.NEEDS_TRANSMIT_CONSENT, "Đã lưu trên máy · Chưa cho phép gửi", "Cần bạn cho phép gửi dữ liệu lần đầu trong Cài đặt.", Severity.WARN, notes)
         SyncDenied.NOT_AUTHORIZED -> Line(Kind.NEEDS_LOGIN, "Cần đăng nhập Telegram để đồng bộ", "Playlist trên máy vẫn dùng bình thường.", Severity.WARN, notes)
@@ -239,7 +259,9 @@ internal object PlaylistSyncStatusPolicy {
             Line(Kind.RECOVERY_WRONG_ACCOUNT, "Kênh đồng bộ thuộc tài khoản khác", "Ứng dụng không dùng kênh này.", Severity.ERROR, notes)
         RecoveryReason.FUTURE_PROTOCOL ->
             Line(Kind.RECOVERY_FUTURE_PROTOCOL, "Cần cập nhật ứng dụng để đồng bộ", "Kênh dùng định dạng mới hơn bản này hiểu. Không xóa gì.", Severity.ERROR, notes)
-        RecoveryReason.CORRUPT_MESSAGE, RecoveryReason.OP_TOO_LARGE, RecoveryReason.TRANSPORT_CONTRACT, null ->
+        RecoveryReason.REJECTED_BY_TELEGRAM ->
+            Line(Kind.RECOVERY_REJECTED, "Telegram từ chối yêu cầu đồng bộ", "Telegram trả lời từ chối nên thử lại cũng không đổi kết quả. Ứng dụng dừng lại, không xóa gì; Playlist trên máy vẫn nguyên.", Severity.ERROR, notes)
+        RecoveryReason.CORRUPT_MESSAGE, RecoveryReason.OP_TOO_LARGE, RecoveryReason.TRANSPORT_CONTRACT, RecoveryReason.DEPENDENCY_BLOCKED, null ->
             Line(Kind.RECOVERY_HISTORY, "Lịch sử đồng bộ cần kiểm tra", "Có dữ liệu trong kênh không đọc được hoặc không khớp. Ứng dụng dừng lại, không xóa gì.", Severity.ERROR, notes)
     }
 
@@ -247,8 +269,14 @@ internal object PlaylistSyncStatusPolicy {
         if (facts.legacyCount > 0) add("${facts.legacyCount} bài chưa xác định nguồn Telegram: chỉ có trên máy này, không đồng bộ.")
         if (facts.projectionTruncated) add("Bản sao cho ứng dụng cũ chỉ giữ ${TelegramPlaylistPolicy.MAX_IDS} bài mới nhất; danh sách đầy đủ vẫn nằm trong ${facts.savedCount} bài đã lưu.")
         if (facts.projectionStale) add("Bản sao cho ứng dụng cũ chưa cập nhật kịp; danh sách chính vẫn đúng.")
-        if (facts.retryRequiredCount > 0) add("${facts.retryRequiredCount} thay đổi cần gửi lại.")
+        if (facts.retryRequiredCount > 0) {
+            add("${facts.retryRequiredCount} thay đổi đã gửi nhưng chưa rõ đã tới kênh chưa. Ứng dụng giữ nguyên, không tự gửi lại.")
+        }
     }
+
+    /** "Mã chẩn đoán: SEND_ACK_TIMEOUT": a closed list of names, never an id, a text or a song. */
+    private fun diagnosticNote(run: LastSyncRun?): List<String> =
+        if (run == null || run.stage == SyncStage.NONE) emptyList() else listOf("Mã chẩn đoán: ${run.stage.name}")
 
     private fun waitText(ms: Long): String {
         val seconds = (ms + 999L) / 1000L

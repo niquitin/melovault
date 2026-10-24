@@ -30,20 +30,20 @@
         <!-- UI lab (docs/ui-spec.md step 1): screen info + device emulation, own prefs only. -->
         <activity android:name=".data.telegram.MeloUiLabActivity"
                   android:exported="false"
-                  android:theme="@style/Theme.MusicAssistantCar" />
+                  android:theme="@style/Theme.MeloVault.Shareable" />
         <!-- E96 P4: Settings > Đồng bộ Playlist (privacy notice, consents, status). Sync is off in this build. -->
         <activity android:name=".data.telegram.MeloSyncSettingsActivity"
                   android:exported="false"
-                  android:theme="@style/Theme.MusicAssistantCar" />
+                  android:theme="@style/Theme.MeloVault.Shareable" />
         <activity android:name=".data.telegram.MeloUiPreviewActivity"
                   android:exported="false"
                   android:resizeableActivity="true"
-                  android:theme="@style/Theme.MusicAssistantCar" />
+                  android:theme="@style/Theme.MeloVault.Shareable" />
         <activity android:name=".data.telegram.TelegramPreviewActivity"
                   android:exported="true"
                   android:resizeableActivity="true"
                   android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density"
-                  android:theme="@style/Theme.MusicAssistantCar">
+                  android:theme="@style/Theme.MeloVault.Shareable">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

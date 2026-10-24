@@ -130,6 +130,8 @@ internal class SyncConsentActions(private val store: SyncConsentStore) {
 
 internal enum class SyncDenied {
     BUILD_OFF, NOT_ENABLED, WARNING_NOT_ACCEPTED, CREATE_NOT_ALLOWED, TRANSMIT_NOT_ALLOWED,
+    /** The build does not unlock channel creation (see [TelegramPlaylistFlags.SYNC_CREATE_ALLOWED]): find and bind only. */
+    CREATE_LOCKED,
     NOT_AUTHORIZED, NOT_OPEN, SINK_BUSY, BUSY,
 }
 

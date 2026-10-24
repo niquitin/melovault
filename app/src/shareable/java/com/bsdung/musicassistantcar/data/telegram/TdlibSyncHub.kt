@@ -71,12 +71,14 @@ internal object TdlibSyncErrors {
         }
         if (listOf(
                 "CHAT NOT FOUND", "CHAT_ID_INVALID", "CHANNEL_PRIVATE", "CHANNEL_INVALID", "PEER_ID_INVALID",
-                "CHAT_WRITE_FORBIDDEN", "CHAT_ADMIN_REQUIRED", "CHAT_RESTRICTED", "CHANNEL_BANNED", "USER_BANNED_IN_CHANNEL",
+                "CHAT_WRITE_FORBIDDEN", "HAVE NO WRITE ACCESS", "CHAT_ADMIN_REQUIRED", "CHAT_RESTRICTED", "CHANNEL_BANNED", "USER_BANNED_IN_CHANNEL",
             ).any { it in upper }
         ) {
             return SyncErrorKind.CHANNEL_MISSING to 0
         }
         if (code == 403) return SyncErrorKind.UNAUTHORIZED to 0
+        // A 400 nobody here knows is a refusal of the request itself: asking again changes nothing, so it is not "the network".
+        if (code == 400) return SyncErrorKind.REJECTED to 0
         return SyncErrorKind.NETWORK to 0
     }
 }

@@ -11,6 +11,54 @@ internal enum class SyncErrorKind {
     CHANNEL_MISSING,
     UNAUTHORIZED,
     SESSION_REVOKED,
+    /** Telegram refused the request itself (a 400 nobody here knows). Asking again changes nothing: it is not "the network". */
+    REJECTED,
+}
+
+/**
+ * Where a sync run stopped, as a closed list. This is the ONLY diagnostic that is ever shown or logged: no chat, message
+ * or user id, no text, no song name, no TDLib message. Names carry no data on purpose.
+ */
+internal enum class SyncStage {
+    NONE,
+    FETCH_SCAN, FETCH_CROSSCHECK, FETCH_CORRUPT,
+    SEND_BUDGET_ZERO, SEND_PLAN_BLOCKED,
+    SEND_PRECHECK_CONSENT, SEND_PRECHECK_IDENTITY, SEND_PRECHECK_CONNECTION, SEND_PRECHECK_TEXT,
+    SEND_DISPATCH_ERROR, SEND_DISPATCH_TIMEOUT, SEND_DISPATCH_ABORTED,
+    SEND_PROVISIONAL_MISMATCH_TYPE, SEND_PROVISIONAL_MISMATCH_CHAT, SEND_PROVISIONAL_MISMATCH_TEXT,
+    SEND_ACK_TIMEOUT, SEND_ACK_FAILED, SEND_ACK_MISMATCH, SEND_IDENTITY_LOST,
+    READBACK_ABSENT,
+}
+
+/** The class of a TDLib/Telegram error code, never the code's message. */
+internal enum class ErrorBucket {
+    NONE, E400, E401, E403, E404, E429, E5XX, OTHER;
+
+    companion object {
+        fun of(code: Int): ErrorBucket = when (code) {
+            400 -> E400
+            401 -> E401
+            403 -> E403
+            404 -> E404
+            429 -> E429
+            in 500..599 -> E5XX
+            else -> OTHER
+        }
+    }
+}
+
+/** How long the send call took. Coarse on purpose. */
+internal enum class DurationBucket {
+    UNDER_1S, UNDER_20S, UNDER_60S, OVER_60S;
+
+    companion object {
+        fun of(ms: Long): DurationBucket = when {
+            ms < 1_000L -> UNDER_1S
+            ms < 20_000L -> UNDER_20S
+            ms < 60_000L -> UNDER_60S
+            else -> OVER_60S
+        }
+    }
 }
 
 /** A message of the channel with the id the SERVER gave it. */
@@ -24,11 +72,32 @@ internal sealed class SendResult {
         init { require(serverMessageId > 0L) }
     }
 
-    /** Clearly not stored. */
-    data class Failed(val kind: SyncErrorKind, val retryAfterSeconds: Int = 0) : SendResult()
+    /**
+     * Clearly NOT stored: the request was refused before anything was handed over, or Telegram/TDLib answered with a
+     * definite 4xx error. The operations stay PENDING (unchanged) and nothing about them is doubtful. Anything that is
+     * not that clear is [Unknown]. [stage] and [bucket] are diagnostics only and take no part in equality.
+     */
+    class Failed(
+        val kind: SyncErrorKind,
+        val retryAfterSeconds: Int = 0,
+        val stage: SyncStage = SyncStage.SEND_DISPATCH_ERROR,
+        val bucket: ErrorBucket = ErrorBucket.NONE,
+    ) : SendResult() {
+        override fun equals(other: Any?): Boolean = other is Failed && other.kind == kind && other.retryAfterSeconds == retryAfterSeconds
+        override fun hashCode(): Int = 31 * kind.hashCode() + retryAfterSeconds
+        override fun toString(): String = "Failed($kind, $retryAfterSeconds, $stage)"
+    }
 
-    /** Handed over but no answer (timeout, dropped reply): the server may or may not have it. Never counts as sent. */
-    object Unknown : SendResult()
+    /**
+     * Handed over but no usable answer (timeout, dropped reply, a text that is not ours, a late identity change): the
+     * server may or may not have it. Never counts as sent and NEVER lets the same operations be sent again by itself.
+     * [stage] is the sanitised reason, a diagnostic that takes no part in equality.
+     */
+    class Unknown(val stage: SyncStage = SyncStage.SEND_DISPATCH_TIMEOUT) : SendResult() {
+        override fun equals(other: Any?): Boolean = other is Unknown
+        override fun hashCode(): Int = 1
+        override fun toString(): String = "Unknown($stage)"
+    }
 }
 
 internal sealed class FetchResult {
