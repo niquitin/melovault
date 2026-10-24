@@ -69,6 +69,9 @@ internal class TelegramPlaylistSession(private val persistence: PlaylistPersiste
     @Synchronized
     override fun snapshot(): List<Long> = ids
 
+    @Synchronized
+    override fun snapshotFor(account: TelegramUserId): List<Long>? = if (user == account && blocked == null) ids else null
+
     // V1-only session: there is no index, no legacy keys and no outbox.
     override fun attachIndex(index: PlaylistIndex) = Unit
     override fun detachIndex(index: PlaylistIndex) = Unit

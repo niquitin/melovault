@@ -164,7 +164,7 @@ internal object PlaylistSyncStatusPolicy {
         }
         if (run == null) {
             return if (facts.pendingCount > 0) pending(facts, notes) else
-                Line(Kind.NEVER_SYNCED, "Đã lưu trên máy · Chưa đồng bộ lần nào", "Chưa có lần đồng bộ nào chạy trong phiên này. Bấm \"Đồng bộ ngay\" trong Cài đặt.", Severity.INFO, notes)
+                Line(Kind.NEVER_SYNCED, "Đã lưu trên máy · Chưa kiểm tra đồng bộ trong phiên này", "Phiên này chưa chạy lần đồng bộ nào nên chưa biết Playlist có khớp kênh hay không (lần trước có thể đã đồng bộ). Bấm \"Đồng bộ ngay\" trong Cài đặt để kiểm tra.", Severity.INFO, notes)
         }
         val attention = Line(Kind.ATTENTION, "Chưa đồng bộ được · Thử lại", "Lần đồng bộ vừa rồi không hoàn tất. Playlist trên máy vẫn nguyên vẹn.", Severity.WARN, notes)
         return when (run.status ?: return attention) {

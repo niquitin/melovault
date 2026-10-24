@@ -34,6 +34,11 @@ internal interface PlaylistSessionApi {
     fun open(account: TelegramUserId): OpenResult
     fun close()
     fun snapshot(): List<Long>
+    /**
+     * REWORK-03: the saved songs of [account] as they are committed RIGHT NOW (a sync that ran in Settings counts), or null
+     * if no readable playlist is open for exactly that account. In memory only: no file, no network. Call from the playlist thread.
+     */
+    fun snapshotFor(account: TelegramUserId): List<Long>?
     fun toggle(account: TelegramUserId, target: PlaylistTarget): ToggleOutcome
     fun attachIndex(index: PlaylistIndex)
     fun detachIndex(index: PlaylistIndex)
@@ -161,6 +166,13 @@ internal class TelegramPlaylistV2Session(
 
     @Synchronized
     override fun snapshot(): List<Long> = state?.presentSongKeys(user?.value ?: 0L).orEmpty()
+
+    @Synchronized
+    override fun snapshotFor(account: TelegramUserId): List<Long>? {
+        val current = state ?: return null
+        if (user != account || blocked != null || current.accountId != account.value) return null
+        return current.presentSongKeys(account.value)
+    }
 
     // ---- open / migrate ------------------------------------------------------------------------
 

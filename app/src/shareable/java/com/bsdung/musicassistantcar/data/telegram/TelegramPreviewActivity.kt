@@ -295,6 +295,21 @@ class TelegramPreviewActivity : AppCompatActivity() {
     // E96 P0: the single writer of the saved playlist is process-wide (see TelegramPlaylistRuntime).
     private val playlistSession by lazy { TelegramPlaylistRuntime.session(noBackupFilesDir) }
     @Volatile private var favoriteIds: List<Long> = emptyList()
+    /**
+     * REWORK-03: re-reads the committed saved list when the screen returns (e.g. from Settings > Đồng bộ Playlist), so a sync
+     * that ran there shows without restarting the app. Local, in memory, never starts a sync.
+     */
+    private val liveRefresh by lazy {
+        PlaylistLiveRefresh(
+            session = playlistSession,
+            submit = { task -> TelegramPlaylistRuntime.submit(task) },
+            toUi = { block -> runOnUiThread { block() } },
+            alive = { !isDestroyed },
+            currentAccount = { library.authorizedUser() },
+            shown = { favoriteIds },
+            apply = { ids -> applyRemoteSavedPlaylist(ids) },
+        )
+    }
     /** True while the saved playlist file exists but cannot be read; Save is then refused, nothing is overwritten. */
     private var playlistUnreadable = false
     private var playlistMode = false
@@ -888,7 +903,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // Picks up a changed "Bố cục Gọn" setting when returning from Cài đặt giao diện.
         applyMeloLayer()
         // E96 P5-A: coming back from Settings re-reads the Playlist status line (a local file read, no network).
-        library.authorizedUser()?.let { if (playlistLoaded) refreshPlaylistStatus(it) }
+        library.authorizedUser()?.let {
+            if (playlistLoaded) {
+                reloadSavedPlaylistLive(it)
+                refreshPlaylistStatus(it)
+            }
+        }
         if (auth.isReady()) {
             refreshLocalCount()
             val user = library.authorizedUser()?.value ?: 0L
@@ -4522,6 +4542,22 @@ class TelegramPreviewActivity : AppCompatActivity() {
         refreshSongRows()
     }
 
+    /** Local only: asks the playlist thread for the committed list of this account and redraws if it differs from what is shown. */
+    private fun reloadSavedPlaylistLive(account: TelegramUserId) {
+        liveRefresh.requestRefresh(account)
+    }
+
+    /**
+     * The committed list changed behind the screen (another device's songs were applied by a sync). A saved song that this
+     * device's library index does not know yet stays in the list as a placeholder row (see [placeholderSong]), it is not dropped.
+     */
+    private fun applyRemoteSavedPlaylist(ids: List<Long>) {
+        applySavedPlaylist(ids)
+        carScreen?.onPlaylistStatusChanged()
+        scheduleMeloLibraryRefresh()
+        notifyMeloPlayback()
+    }
+
     /**
      * E96 P4: recomputes the Playlist status line from the committed V2 state. The read runs on the playlist thread (it
      * waits behind a Save in progress), never on the UI thread. Nothing here starts a sync: with the build switch off
@@ -4595,6 +4631,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun closeSavedPlaylist() {
+        liveRefresh.invalidate()
         playlistUnreadable = false
         playlistLoaded = false
         playlistStatusLine = null
