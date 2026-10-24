@@ -224,10 +224,10 @@ class TelegramVaultBentoPolicyTest {
     @Test
     fun formatHeaderSubtitle_combinesSourceCountAndTotalTracksTruthfully() {
         val subtitleSynced = TelegramVaultBentoPolicy.formatHeaderSubtitle(sourceCount = 29, totalIndexedTracks = 25067, isSyncing = false)
-        assertEquals("29 nguồn  ·  25.067 bài  ·  Đã đồng bộ", subtitleSynced)
+        assertEquals("29 nguồn  ·  25.067 bài  ·  Đã cập nhật thư viện", subtitleSynced)
 
         val subtitleSyncing = TelegramVaultBentoPolicy.formatHeaderSubtitle(sourceCount = 29, totalIndexedTracks = 25067, isSyncing = true)
-        assertEquals("29 nguồn  ·  25.067 bài  ·  Đang đồng bộ…", subtitleSyncing)
+        assertEquals("29 nguồn  ·  25.067 bài  ·  Đang cập nhật thư viện…", subtitleSyncing)
     }
 
     @Test
@@ -358,6 +358,6 @@ class TelegramVaultBentoPolicyTest {
     fun countsUseTheVietnameseThousandsDot() {
         assertEquals("1.245 bài", TelegramVaultBentoPolicy.formatTrackCount(1245))
         assertEquals("0 bài", TelegramVaultBentoPolicy.formatTrackCount(0))
-        assertEquals("29 nguồn  ·  29.551 bài  ·  Đã đồng bộ", TelegramVaultBentoPolicy.formatHeaderSubtitle(29, 29551))
+        assertEquals("29 nguồn  ·  29.551 bài  ·  Đã cập nhật thư viện", TelegramVaultBentoPolicy.formatHeaderSubtitle(29, 29551))
     }
 }

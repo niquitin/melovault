@@ -9,6 +9,15 @@ package com.bsdung.musicassistantcar.data.telegram
 object TelegramLibrarySyncDisplayPolicy {
 
     /**
+     * E96 P5B3: what the library header says about the Telegram CATALOG INDEX (which songs the app has listed). It is never
+     * about the cloud copy of the saved Playlist, which has its own line ([PlaylistSyncStatusPolicy]); the word
+     * "đồng bộ" is therefore kept out of these two.
+     */
+    const val LIBRARY_UPDATED = "Đã cập nhật thư viện"
+    const val LIBRARY_UPDATING = "Đang cập nhật thư viện…"
+    const val LIBRARY_PAUSED = "Cập nhật thư viện tạm dừng"
+
+    /**
      * Formats the header sync subtitle.
      *
      * @param displayedCount number of songs currently loaded in memory / displayed in list
@@ -29,8 +38,8 @@ object TelegramLibrarySyncDisplayPolicy {
         selectedSourceTitle: String? = null
     ): String {
         val stateLabel = when {
-            isSyncing -> "Đang đồng bộ…"
-            isAuthenticated -> "Đã đồng bộ"
+            isSyncing -> LIBRARY_UPDATING
+            isAuthenticated -> LIBRARY_UPDATED
             else -> "Chờ kết nối"
         }
         if (!isAuthenticated) return "Telegram · $stateLabel"

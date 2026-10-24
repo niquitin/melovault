@@ -122,8 +122,8 @@ class MeloLibraryPolicyTest {
     @Test
     fun syncLineUsesRealCounts() {
         assertEquals("50 nhóm / 76 bản offline", MeloLibraryPolicy.syncLine("50 nhóm / 76 bản offline", 10, false))
-        assertEquals("27.971 bài · Đã đồng bộ", MeloLibraryPolicy.syncLine(null, 27_971, false))
-        assertEquals("Đang đồng bộ…", MeloLibraryPolicy.syncLine("", 27_971, true))
+        assertEquals("27.971 bài · Đã cập nhật thư viện", MeloLibraryPolicy.syncLine(null, 27_971, false))
+        assertEquals("Đang cập nhật thư viện…", MeloLibraryPolicy.syncLine("", 27_971, true))
         assertEquals("Chưa có bài", MeloLibraryPolicy.syncLine(null, 0, false))
     }
 

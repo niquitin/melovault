@@ -7,8 +7,12 @@ import com.bsdung.musicassistantcar.data.telegram.TelegramPlaylistSession.Toggle
 internal object TelegramPlaylistFlags {
     const val V2_ENABLED = true
 
-    /** E96 P2 sync core is only reachable from tests: nothing in the app starts it. P3 will connect it behind consent. */
-    const val SYNC_ENABLED = false
+    /**
+     * E96 P5B3: false for EVERY standard Debug/Release build. Only the separately requested
+     * -PmeloSyncQa=true Debug QA build may reach the user-consent and TDLib sync gates.
+     * Release BuildConfig hardcodes false; this flag alone NEVER grants per-account consent.
+     */
+    val SYNC_ENABLED: Boolean get() = com.bsdung.musicassistantcar.BuildConfig.MELO_SYNC_QA_BUILD
 }
 
 /** What the UI knows about the song the user taps. [chatId]/[rawMessageId] are 0 when unknown. */

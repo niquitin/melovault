@@ -117,7 +117,8 @@ class P5ReadinessInertnessTest {
         assertEquals("the service is constructed in exactly one place", listOf("SyncServiceProvider.kt"), offenders)
         val text = File(srcRoot, "shareable/java/com/bsdung/musicassistantcar/data/telegram/SyncServiceProvider.kt").readText()
         val guard = text.indexOf("if (!buildEnabled) return DisabledSyncActions")
-        val build = text.indexOf("TdlibPlaylistSyncService(\n")
+        // Match the constructor independent of Windows CRLF vs Unix LF checkout endings.
+        val build = text.indexOf("TdlibPlaylistSyncService(")
         assertTrue(guard in 0 until build)
         assertFalse("no trigger, timer or worker is created for sync", text.contains("SyncTrigger") || text.contains("WorkManager"))
     }

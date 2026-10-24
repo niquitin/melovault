@@ -115,7 +115,7 @@ object TelegramVaultBentoPolicy {
      */
     fun formatHeaderSubtitle(sourceCount: Int, totalIndexedTracks: Int, isSyncing: Boolean = false): String {
         val formattedTracks = MeloComponentPolicy.formatCount(totalIndexedTracks)
-        val syncLabel = if (isSyncing) "Đang đồng bộ…" else "Đã đồng bộ"
+        val syncLabel = if (isSyncing) TelegramLibrarySyncDisplayPolicy.LIBRARY_UPDATING else TelegramLibrarySyncDisplayPolicy.LIBRARY_UPDATED
         return "$sourceCount nguồn  ·  $formattedTracks bài  ·  $syncLabel"
     }
 

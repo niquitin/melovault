@@ -164,6 +164,9 @@ internal class MeloComponents(
         onMore: (() -> Unit)? = null
     ): View {
         val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local)
+        // E96 P5B3: lookalike/combining characters in channel names are drawn by a fallback font; show their plain form.
+        val shownTitle = DisplayTextPolicy.clean(model.title)
+        val shownSource = DisplayTextPolicy.cleanOrNull(model.sourceTitle)
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -175,7 +178,7 @@ internal class MeloComponents(
             )
             isClickable = true
             isFocusable = true
-            contentDescription = listOfNotNull(model.title, status.label, model.sourceTitle).joinToString(", ")
+            contentDescription = listOfNotNull(shownTitle, status.label, shownSource).joinToString(", ")
             if (onClick != null) setOnClickListener { onClick() }
             if (onLongClick != null) setOnLongClickListener { onLongClick(); true }
         }
@@ -185,7 +188,7 @@ internal class MeloComponents(
                 layoutParams = LinearLayout.LayoutParams(sizes.minTouch * 6 / 10, ViewGroup.LayoutParams.WRAP_CONTENT)
             })
         }
-        row.addView(artView(model.art, model.sourceTitle, model.title, sizes.rowArt))
+        row.addView(artView(model.art, shownSource, shownTitle, sizes.rowArt))
 
         val body = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -202,12 +205,12 @@ internal class MeloComponents(
                 layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply { marginEnd = sizes.gap }
                 contentDescription = status.label
             })
-            line.addView(text(model.title, sizes.titleText, palette.text, maxLines = 1).apply {
+            line.addView(text(shownTitle, sizes.titleText, palette.text, maxLines = 1).apply {
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             })
             body.addView(line)
         } else {
-            body.addView(text(model.title, sizes.titleText, palette.text, bold = status.highlightRow, maxLines = 2))
+            body.addView(text(shownTitle, sizes.titleText, palette.text, bold = status.highlightRow, maxLines = 2))
             val statusLine = LinearLayout(context).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
@@ -216,7 +219,7 @@ internal class MeloComponents(
             statusLine.addView(MeloStatusIconView(context, model.status, color(status.color), model.progressPercent, palette.onAccent).apply {
                 layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply { marginEnd = sizes.gap / 2 }
             })
-            val detail = listOfNotNull(status.label, model.sourceTitle?.takeIf { it.isNotBlank() }).joinToString(" · ")
+            val detail = listOfNotNull(status.label, shownSource?.takeIf { it.isNotBlank() }).joinToString(" · ")
             statusLine.addView(text(detail, sizes.secondaryText, color(status.color)).apply {
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             })
@@ -312,7 +315,9 @@ internal class MeloComponents(
                 if (status.highlightRow) palette.accentSoft else palette.surface,
                 stroke = if (status.highlightRow) palette.accent else null
             )
-            view.contentDescription = listOfNotNull(model.title, status.label, model.sourceTitle).joinToString(", ")
+            val shownTitle = DisplayTextPolicy.clean(model.title)
+            val shownSource = DisplayTextPolicy.cleanOrNull(model.sourceTitle)
+            view.contentDescription = listOfNotNull(shownTitle, status.label, shownSource).joinToString(", ")
             indexView.text = model.index?.toString().orEmpty()
             if (model.art != null) {
                 artImage.setImageBitmap(model.art)
@@ -321,17 +326,17 @@ internal class MeloComponents(
             } else {
                 artImage.setImageDrawable(null)
                 artImage.visibility = View.GONE
-                artInitial.text = MeloComponentPolicy.initialOf(model.sourceTitle, model.title)
+                artInitial.text = MeloComponentPolicy.initialOf(shownSource, shownTitle)
                 artInitial.background = roundedBackground(
-                    MeloComponentPolicy.placeholderColor(model.sourceTitle ?: model.title, palette),
+                    MeloComponentPolicy.placeholderColor(shownSource ?: shownTitle, palette),
                     radius = minOf(sizes.corner, sizes.rowArt / 4)
                 )
                 artInitial.visibility = View.VISIBLE
             }
-            title.text = model.title
+            title.text = shownTitle
             title.setTypeface(null, if (status.highlightRow) Typeface.BOLD else Typeface.NORMAL)
             icon.set(model.status, color(status.color), model.progressPercent)
-            detail.text = listOfNotNull(status.label, model.sourceTitle?.takeIf { it.isNotBlank() }).joinToString(" · ")
+            detail.text = listOfNotNull(status.label, shownSource?.takeIf { it.isNotBlank() }).joinToString(" · ")
             detail.setTextColor(color(status.color))
             duration.text = TelegramSongDisplayPolicy.formatDuration(model.durationSeconds).orEmpty()
         }

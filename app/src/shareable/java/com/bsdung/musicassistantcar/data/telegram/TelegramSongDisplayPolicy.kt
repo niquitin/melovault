@@ -8,8 +8,9 @@ import java.util.TimeZone
 /** Song-list display never duplicates Telegram's title and its filename, and formats metadata truthfully. */
 internal object TelegramSongDisplayPolicy {
     fun label(title: String, filename: String): String {
-        val t = title.trim()
-        val f = filename.trim()
+        // E96 P5B3: display text only (see DisplayTextPolicy); the stored title/filename and every key stay as they are.
+        val t = DisplayTextPolicy.clean(title.trim())
+        val f = DisplayTextPolicy.clean(filename.trim())
         if (t.isNotBlank() && t != "audio") return t
         return f.ifBlank { "Bài hát không tên" }
     }
@@ -49,7 +50,7 @@ internal object TelegramSongDisplayPolicy {
         playing: Boolean = false,
         zone: TimeZone = TimeZone.getDefault()
     ): String {
-        val parts = mutableListOf(source?.takeIf { it.isNotBlank() } ?: "Telegram", filename)
+        val parts = mutableListOf(DisplayTextPolicy.cleanOrNull(source)?.takeIf { it.isNotBlank() } ?: "Telegram", DisplayTextPolicy.clean(filename))
         formatMessageDate(dateSeconds, zone)?.let { parts.add(it) }
         formatFileSize(fileSizeBytes)?.let { parts.add(it) }
         return (if (playing) "▶ " else "") + parts.joinToString(" · ")
@@ -63,10 +64,8 @@ internal object TelegramSongDisplayPolicy {
         performer: String? = null
     ): String {
         val parts = mutableListOf<String>()
-        if (!performer.isNullOrBlank()) {
-            parts.add(performer.trim())
-        }
-        parts.add(source?.takeIf { it.isNotBlank() } ?: "Telegram")
+        DisplayTextPolicy.cleanOrNull(performer)?.takeIf { it.isNotBlank() }?.let { parts.add(it) }
+        parts.add(DisplayTextPolicy.cleanOrNull(source)?.takeIf { it.isNotBlank() } ?: "Telegram")
         val dur = formatDuration(durationSeconds)
         if (dur != null) {
             parts.add(dur)

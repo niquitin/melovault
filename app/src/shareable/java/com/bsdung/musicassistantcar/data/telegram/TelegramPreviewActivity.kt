@@ -2924,7 +2924,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
                 holder.subtitleView.text = if (song != null) {
                     if (isWide) {
-                        listOfNotNull(performer, sourceTitle).joinToString(" · ")
+                        listOfNotNull(DisplayTextPolicy.cleanOrNull(performer), DisplayTextPolicy.clean(sourceTitle)).joinToString(" · ")
                     } else {
                         TelegramSongDisplayPolicy.subtitle(
                             source = sourceTitle,
@@ -6449,9 +6449,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     }
                     refreshSongRows()
                     val statusText = if (syncState?.status == TelegramSyncState.STATUS_COMPLETE) {
-                        "Thư viện: $count bài từ ${sources.size} nguồn · Đã đồng bộ"
+                        "Thư viện: $count bài từ ${sources.size} nguồn · ${TelegramLibrarySyncDisplayPolicy.LIBRARY_UPDATED}"
                     } else if (syncState?.status == TelegramSyncState.STATUS_PAUSED) {
-                        "Thư viện: $count bài · Đồng bộ tạm dừng"
+                        "Thư viện: $count bài · ${TelegramLibrarySyncDisplayPolicy.LIBRARY_PAUSED}"
                     } else {
                         "Thư viện: $count bài từ ${sources.size} nguồn"
                     }

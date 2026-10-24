@@ -34,6 +34,19 @@ tasks.register('reportTelegramConfig') {
     doLast { println 'telegram.config.valid=' + valid }
 }
 
+// E96 P5B3: the ONLY way cloud Playlist sync is compiled in. Off unless this build is started with -PmeloSyncQa=true, and
+// then only for the DEBUG build type (its version name gets "-syncqa" so a QA candidate can never pass for a normal Beta).
+// Release always has it off: asking for both is an error, never a silent downgrade. It is not read from local.properties,
+// so a secret file can never switch it on, and it holds no key or id.
+def meloSyncQa = (project.findProperty('meloSyncQa') ?: 'false').toString().trim() == 'true'
+if (meloSyncQa && gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }) {
+    throw new GradleException('meloSyncQa=true is only allowed for Debug builds; Release always ships with cloud sync OFF.')
+}
+tasks.register('reportSyncQaFlag') {
+    description = 'Prints melo.sync.qa=true|false (the Debug build switch for cloud Playlist sync).'
+    doLast { println 'melo.sync.qa=' + meloSyncQa }
+}
+
 android {
     namespace 'com.bsdung.musicassistantcar'
     compileSdk 36
@@ -81,9 +94,12 @@ android {
         debug {
             // Never embed owner/admin credentials in any installable variant.
             buildConfigField 'String', 'CAR_API_TOKEN', '""'
+            buildConfigField 'boolean', 'MELO_SYNC_QA_BUILD', meloSyncQa ? 'true' : 'false'
+            if (meloSyncQa) versionNameSuffix '-syncqa'
         }
         release {
             buildConfigField 'String', 'CAR_API_TOKEN', '""'
+            buildConfigField 'boolean', 'MELO_SYNC_QA_BUILD', 'false'
             minifyEnabled false
             proguardFiles getDefaultProguardFile(
                 'proguard-android-optimize.txt'

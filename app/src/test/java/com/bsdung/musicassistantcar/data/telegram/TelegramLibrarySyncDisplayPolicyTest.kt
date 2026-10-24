@@ -24,7 +24,7 @@ class TelegramLibrarySyncDisplayPolicyTest {
             isSyncing = false,
             isAuthenticated = true
         )
-        assertEquals("Chưa có bài · Đã đồng bộ", label)
+        assertEquals("Chưa có bài · Đã cập nhật thư viện", label)
     }
 
     @Test
@@ -36,7 +36,7 @@ class TelegramLibrarySyncDisplayPolicyTest {
             isSyncing = false,
             isAuthenticated = true
         )
-        assertEquals("15 bài · Đã đồng bộ", label)
+        assertEquals("15 bài · Đã cập nhật thư viện", label)
     }
 
     @Test
@@ -48,7 +48,7 @@ class TelegramLibrarySyncDisplayPolicyTest {
             isSyncing = false,
             isAuthenticated = true
         )
-        assertEquals("Hiển thị 200 / 25.055 bài · Đã đồng bộ", label)
+        assertEquals("Hiển thị 200 / 25.055 bài · Đã cập nhật thư viện", label)
     }
 
     @Test
@@ -60,7 +60,7 @@ class TelegramLibrarySyncDisplayPolicyTest {
             isSyncing = false,
             isAuthenticated = true
         )
-        assertEquals("Hiển thị 400 / 25.055 bài · Đã đồng bộ", label)
+        assertEquals("Hiển thị 400 / 25.055 bài · Đã cập nhật thư viện", label)
     }
 
     @Test
@@ -71,7 +71,7 @@ class TelegramLibrarySyncDisplayPolicyTest {
             isSyncing = true,
             isAuthenticated = true
         )
-        assertEquals("Hiển thị 200 / 25.055 bài · Đang đồng bộ…", label)
+        assertEquals("Hiển thị 200 / 25.055 bài · Đang cập nhật thư viện…", label)
     }
 
     @Test
@@ -84,7 +84,7 @@ class TelegramLibrarySyncDisplayPolicyTest {
             isSourcesMode = true,
             sourceCount = 29
         )
-        assertEquals("29 nguồn · 25.055 bài · Đã đồng bộ", label)
+        assertEquals("29 nguồn · 25.055 bài · Đã cập nhật thư viện", label)
     }
 
     @Test
@@ -96,7 +96,7 @@ class TelegramLibrarySyncDisplayPolicyTest {
             isAuthenticated = true,
             selectedSourceTitle = "Nhạc Trẻ 2026"
         )
-        assertEquals("Nhạc Trẻ 2026 · Hiển thị 200 / 4.330 bài · Đã đồng bộ", label)
+        assertEquals("Nhạc Trẻ 2026 · Hiển thị 200 / 4.330 bài · Đã cập nhật thư viện", label)
     }
 
     // ── E9.3-03C Regression: Sources Overview Header Count After Channel Visit ─
@@ -115,7 +115,7 @@ class TelegramLibrarySyncDisplayPolicyTest {
             isSourcesMode = true,
             sourceCount = 29
         )
-        assertEquals("29 nguồn · 25.074 bài · Đã đồng bộ", labelWithCorrectTotal)
+        assertEquals("29 nguồn · 25.074 bài · Đã cập nhật thư viện", labelWithCorrectTotal)
 
         // The stale channel total MUST NOT produce a sources-overview label with 4.332
         val labelWithStaleChannelTotal = TelegramLibrarySyncDisplayPolicy.formatSyncSubtitle(
@@ -127,7 +127,7 @@ class TelegramLibrarySyncDisplayPolicyTest {
             sourceCount = 29
         )
         // Verify that the stale value would produce a WRONG label (so the fix is meaningful)
-        assertEquals("29 nguồn · 4.332 bài · Đã đồng bộ", labelWithStaleChannelTotal)
+        assertEquals("29 nguồn · 4.332 bài · Đã cập nhật thư viện", labelWithStaleChannelTotal)
     }
 
     @Test
@@ -141,7 +141,7 @@ class TelegramLibrarySyncDisplayPolicyTest {
             isSourcesMode = true,
             sourceCount = 29
         )
-        assertEquals("29 nguồn · 25.074 bài · Đã đồng bộ", label)
+        assertEquals("29 nguồn · 25.074 bài · Đã cập nhật thư viện", label)
     }
 
     @Test
@@ -156,7 +156,7 @@ class TelegramLibrarySyncDisplayPolicyTest {
             isSourcesMode = true,
             sourceCount = 29
         )
-        assertEquals("29 nguồn · 25.074 bài · Đã đồng bộ", label)
+        assertEquals("29 nguồn · 25.074 bài · Đã cập nhật thư viện", label)
     }
 
     @Test
@@ -171,7 +171,7 @@ class TelegramLibrarySyncDisplayPolicyTest {
             isSourcesMode = true,
             sourceCount = 0
         )
-        // Sources-mode branch returns "0 nguồn · 0 bài · Đã đồng bộ" (not "Chưa có bài")
-        assertEquals("0 nguồn · 0 bài · Đã đồng bộ", label)
+        // Sources-mode branch returns "0 nguồn · 0 bài · Đã cập nhật thư viện" (not "Chưa có bài")
+        assertEquals("0 nguồn · 0 bài · Đã cập nhật thư viện", label)
     }
 }

@@ -179,11 +179,11 @@ internal object MeloLibraryPolicy {
         else -> previouslyCollapsed
     }
 
-    /** "27.971 bài · Đã đồng bộ"; text from the existing sync display policy wins when present. */
+    /** "27.971 bài · Đã cập nhật thư viện" (catalog index, not the cloud Playlist); text from the existing display policy wins when present. */
     fun syncLine(existing: String?, total: Int?, syncing: Boolean): String = when {
         !existing.isNullOrBlank() -> existing
-        syncing -> "Đang đồng bộ…"
-        total != null && total > 0 -> "${MeloComponentPolicy.formatCount(total)} bài · Đã đồng bộ"
+        syncing -> TelegramLibrarySyncDisplayPolicy.LIBRARY_UPDATING
+        total != null && total > 0 -> "${MeloComponentPolicy.formatCount(total)} bài · ${TelegramLibrarySyncDisplayPolicy.LIBRARY_UPDATED}"
         else -> "Chưa có bài"
     }
 
