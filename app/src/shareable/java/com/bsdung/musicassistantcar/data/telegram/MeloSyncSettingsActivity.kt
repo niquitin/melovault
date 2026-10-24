@@ -54,6 +54,7 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
             facts = { lastFacts },
             runLog = SyncRuntime.runLog,
             channelCreationUnlocked = TelegramPlaylistFlags.SYNC_CREATE_ALLOWED,
+            epoch = { ShareableTdlibOwner.authEpoch() },
         )
         buildFrame()
         refresh()

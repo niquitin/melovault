@@ -154,8 +154,11 @@ internal class SyncSettingsController(
     private val runLog: SyncRunLog = SyncRunLog(),
     /** [TelegramPlaylistFlags.SYNC_CREATE_ALLOWED]: false = the screen can find and bind an existing channel, never create one. */
     private val channelCreationUnlocked: Boolean = false,
+    /** The live sign-in epoch of the TDLib owner: a new login (even of the same account) takes the send grant away. */
+    private val epoch: () -> Long = { 0L },
 ) {
     private var viewAccount: Long = 0L
+    private var viewEpoch: Long = epoch()
     private var channel: ChannelView = ChannelView.Unchecked
     private val lastRun: LastSyncRun? get() = runLog.last(viewAccount)
     private var running = false
@@ -173,6 +176,11 @@ internal class SyncSettingsController(
     @Synchronized
     private fun scope(current: TelegramUserId?) {
         val id = current?.value ?: 0L
+        val liveEpoch = epoch()
+        if (liveEpoch != viewEpoch) {
+            viewEpoch = liveEpoch
+            sendGrant = 0
+        }
         if (id != viewAccount) {
             viewAccount = id
             channel = ChannelView.Unchecked

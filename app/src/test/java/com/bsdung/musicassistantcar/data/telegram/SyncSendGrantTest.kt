@@ -181,6 +181,22 @@ class SyncSendGrantTest {
         assertEquals("a screen opened later starts from nothing", 0, controller().sendGrant())
     }
 
+    @Test fun t14_aNewSignInEpochOfTheSameAccountTakesTheGrantAway() {
+        var epoch = 7L
+        val c = SyncSettingsController(store, true, port, { current }, { facts }, epoch = { epoch })
+        c.optIn()
+        c.grantSend(3, true)
+        assertEquals(3, c.sendGrant())
+        epoch = 8L // A, then B, then A again: a fresh epoch
+        c.syncNow()
+        assertEquals("the run is given nothing", 0, port.budgets.last())
+        assertEquals(0, c.sendGrant())
+        c.grantSend(2, true)
+        assertEquals("a grant made in the new epoch is good", 2, c.sendGrant())
+        epoch = 9L
+        assertEquals(0, c.screen().sendGrant)
+    }
+
     @Test fun theScreenShowsAGrantOnlyWhileConsentToTransmitHolds() {
         val c = controller().also { it.optIn() }
         c.grantSend(2, true)
