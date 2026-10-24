@@ -308,6 +308,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
             currentAccount = { library.authorizedUser() },
             shown = { favoriteIds },
             apply = { ids -> applyRemoteSavedPlaylist(ids) },
+            // Counts only, never ids or titles (Sony hides Log.i, hence warn).
+            onResult = { count, changed -> android.util.Log.w("MeloPlaylist", "resume-refresh count=$count changed=$changed") },
         )
     }
     /** True while the saved playlist file exists but cannot be read; Save is then refused, nothing is overwritten. */

@@ -39,6 +39,7 @@ class PlaylistLiveRefreshTest {
     private fun FakeSyncDevice.song(n: Int) = toggle(account.value, saved(n))
 
     private class Screen(var shown: List<Long> = emptyList(), var account: TelegramUserId?, var alive: Boolean = true) {
+        val results = ArrayList<Pair<Int?, Boolean>>()
         val applied = ArrayList<List<Long>>()
         val queuedUi = ArrayList<() -> Unit>()
         var deferUi = false
@@ -52,6 +53,7 @@ class PlaylistLiveRefreshTest {
         currentAccount = { screen.account },
         shown = { screen.shown },
         apply = { ids -> screen.shown = ids; screen.applied.add(ids) },
+        onResult = { count, changed -> screen.results.add(count to changed) },
     )
 
     // ---- the defect: a remote change is committed to V2 but the list on screen is stale ---------------------------------
@@ -98,6 +100,16 @@ class PlaylistLiveRefreshTest {
         b.sync()
         refresh(b.session, screen).requestRefresh(acct)
         assertEquals(listOf(saved(2)), screen.shown)
+    }
+
+    @Test fun r3_theLogEvidenceCarriesOnlyACountAndAFlag() {
+        val a = device("dev-a"); val b = device("dev-b")
+        a.song(1); a.song(2); a.sync(); b.sync()
+        val screen = Screen(account = acct)
+        val r = refresh(b.session, screen)
+        r.requestRefresh(acct)
+        r.requestRefresh(acct)
+        assertEquals(listOf<Pair<Int?, Boolean>>(2 to true, 2 to false), screen.results)
     }
 
     // ---- guards -----------------------------------------------------------------------------------------------------------

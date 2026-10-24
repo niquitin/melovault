@@ -23,6 +23,8 @@ internal class PlaylistLiveRefresh(
     private val currentAccount: () -> TelegramUserId?,
     private val shown: () -> List<Long>,
     private val apply: (List<Long>) -> Unit,
+    /** Sanitised evidence for the log: how many songs the committed list has (null = no readable list) and whether the screen had to change. */
+    private val onResult: (count: Int?, changed: Boolean) -> Unit = { _, _ -> },
 ) {
     private val generation = AtomicLong()
 
@@ -38,8 +40,12 @@ internal class PlaylistLiveRefresh(
             val ids = session.snapshotFor(account)
             toUi {
                 if (!alive() || generation.get() != mine || currentAccount() != account) return@toUi
-                if (ids == null || ids == shown()) return@toUi
+                if (ids == null || ids == shown()) {
+                    onResult(ids?.size, false)
+                    return@toUi
+                }
                 apply(ids)
+                onResult(ids.size, true)
             }
         }
     }
