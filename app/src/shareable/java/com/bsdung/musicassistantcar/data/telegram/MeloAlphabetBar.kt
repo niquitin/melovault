@@ -17,7 +17,9 @@ internal class MeloAlphabetBar(
     private val textColor: Int,
     private val activeColor: Int,
     private val onTouching: (Char?) -> Unit,
-    private val onLetter: (Char, Boolean) -> Unit
+    private val onLetter: (Char, Boolean) -> Unit,
+    /** E98 teal theme: when set, the chosen letter sits in an accent circle with this text colour. */
+    private val onAccent: Int? = null
 ) : View(context) {
     private val density = context.resources.displayMetrics.density
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -50,7 +52,13 @@ internal class MeloAlphabetBar(
         val metrics = paint.fontMetrics
         list.forEachIndexed { i, ch ->
             val selected = ch == (touching ?: active)
-            paint.color = if (selected) activeColor else textColor
+            if (selected && onAccent != null) {
+                paint.color = activeColor
+                canvas.drawCircle(width / 2f, cell * i + cell / 2, minOf(cell / 2f, width / 2f - 1f), paint)
+                paint.color = onAccent
+            } else {
+                paint.color = if (selected) activeColor else textColor
+            }
             val y = cell * i + cell / 2 - (metrics.ascent + metrics.descent) / 2
             canvas.drawText(ch.toString(), width / 2f, y, paint)
         }

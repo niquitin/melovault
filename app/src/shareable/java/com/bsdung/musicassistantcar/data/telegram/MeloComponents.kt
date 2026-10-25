@@ -2,6 +2,7 @@ package com.bsdung.musicassistantcar.data.telegram
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -13,7 +14,10 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
 import android.text.Editable
 import android.text.InputType
+import android.text.SpannableString
+import android.text.Spanned
 import android.text.TextUtils
+import android.text.style.ForegroundColorSpan
 import android.text.TextWatcher
 import android.util.TypedValue
 import android.view.GestureDetector
@@ -29,6 +33,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import com.bsdung.musicassistantcar.R
 import com.bsdung.musicassistantcar.data.telegram.MeloComponentPolicy.ColorRole
 import com.bsdung.musicassistantcar.data.telegram.MeloComponentPolicy.Status
 import com.bsdung.musicassistantcar.data.telegram.MeloDesignTokens.Palette
@@ -218,6 +223,7 @@ internal class MeloComponents(
         onLongClick: (() -> Unit)? = null,
         onMore: (() -> Unit)? = null
     ): View {
+        if (teal && !isCompact && !isCar) return tealSongRow(model, onClick, onLongClick, onMore)
         val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local)
         // E96 P5B3: lookalike/combining characters in channel names are drawn by a fallback font; show their plain form.
         val shownTitle = DisplayTextPolicy.clean(model.title)
@@ -403,6 +409,206 @@ internal class MeloComponents(
 
     fun songRowHolder(): SongRowHolder = SongRowHolder()
 
+    // ---- E98 teal theme ----------------------------------------------------------------------------
+    // Everything below is used only when [teal] is true, so the current theme draws exactly as before.
+
+    fun gradient(
+        start: Int,
+        end: Int,
+        radius: Int = sizes.corner,
+        orientation: GradientDrawable.Orientation = GradientDrawable.Orientation.TOP_BOTTOM,
+        stroke: Int? = null
+    ): GradientDrawable = GradientDrawable(orientation, intArrayOf(start, end)).apply {
+        cornerRadius = radius.toFloat()
+        if (stroke != null) setStroke(maxOf(1, sizes.gap / 8), stroke)
+    }
+
+    /** A 24dp vector from res/drawable drawn in one colour at [sizePx]. */
+    fun vectorIcon(resId: Int, sizePx: Int, tint: Int): ImageView = ImageView(context).apply {
+        setImageResource(resId)
+        imageTintList = ColorStateList.valueOf(tint)
+        scaleType = ImageView.ScaleType.FIT_CENTER
+        layoutParams = LinearLayout.LayoutParams(sizePx, sizePx)
+        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+    }
+
+    /** A round touch target around a vector, e.g. ⚙ and the filter button. */
+    fun vectorButton(resId: Int, description: String, tint: Int, onClick: () -> Unit): FrameLayout {
+        val icon = (sizes.minTouch * 0.5f).toInt()
+        return FrameLayout(context).apply {
+            contentDescription = description
+            isClickable = true
+            isFocusable = true
+            layoutParams = LinearLayout.LayoutParams(sizes.minTouch, sizes.minTouch)
+            addView(vectorIcon(resId, icon, tint), FrameLayout.LayoutParams(icon, icon, Gravity.CENTER))
+            setOnClickListener { onClick() }
+        }
+    }
+
+    /** "Melo" in the text colour, "Vault" in the accent. */
+    fun logo(sizePx: Float): TextView = TextView(context).apply {
+        val full = SpannableString("MeloVault")
+        full.setSpan(ForegroundColorSpan(palette.text), 0, 4, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        full.setSpan(ForegroundColorSpan(palette.accent), 4, full.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        text = full
+        setTextSize(TypedValue.COMPLEX_UNIT_PX, sizePx)
+        typeface = Typeface.DEFAULT_BOLD
+        includeFontPadding = false
+        maxLines = 1
+    }
+
+    /** Outlined pill for the current track's quality, e.g. "MP3 · 44.1 kHz · 320 kbps". */
+    fun qualityPill(label: String): TextView = text(label, sizes.secondaryText, palette.accent, bold = true).apply {
+        gravity = Gravity.CENTER
+        background = pill(0x00000000, palette.accent)
+        setPadding(sizes.gap * 2, sizes.gap / 2, sizes.gap * 2, sizes.gap / 2)
+    }
+
+    /** One of the four menu tabs: icon + label; the selected one is the accent gradient. [stacked] puts the icon above a short label. */
+    fun tabCard(iconRes: Int, label: String, selected: Boolean, stacked: Boolean, onClick: () -> Unit): View {
+        val tint = if (selected) palette.onAccent else palette.text
+        val icon = (sizes.secondaryText * 1.5f).toInt()
+        return LinearLayout(context).apply {
+            orientation = if (stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            minimumHeight = sizes.minTouch
+            setPadding(sizes.gap, sizes.gap / 2, sizes.gap, sizes.gap / 2)
+            background = if (selected) {
+                gradient(palette.accent, palette.accentEnd, sizes.corner, GradientDrawable.Orientation.LEFT_RIGHT)
+            } else {
+                roundedBackground(palette.surfaceRaised, sizes.corner, stroke = palette.border)
+            }
+            isClickable = true
+            isFocusable = true
+            isSelected = selected
+            contentDescription = label + if (selected) ", đang chọn" else ""
+            addView(vectorIcon(iconRes, icon, tint))
+            addView(text(label, sizes.secondaryText, tint, bold = selected).apply {
+                gravity = Gravity.CENTER
+                if (stacked) setPadding(0, sizes.gap / 4, 0, 0) else setPadding(sizes.gap / 2, 0, 0, 0)
+            })
+            setOnClickListener { onClick() }
+        }
+    }
+
+    /** Row shell of the teal theme: a card, the playing song on an accent gradient. */
+    private fun tealSongRow(
+        model: SongRowModel,
+        onClick: (() -> Unit)?,
+        onLongClick: (() -> Unit)?,
+        onMore: (() -> Unit)?
+    ): View {
+        val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local)
+        val shownTitle = DisplayTextPolicy.clean(model.title)
+        val shownSource = DisplayTextPolicy.cleanOrNull(model.sourceTitle)
+        val playing = status.highlightRow
+        val radius = sizes.corner * 7 / 8
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = sizes.rowHeight
+            setPadding(sizes.gap, sizes.gap / 2, sizes.gap / 2, sizes.gap / 2)
+            background = if (playing) {
+                gradient(
+                    palette.accentSoft, MeloComponentPolicy.blend(palette.accentSoft, palette.accent, 0.35f), radius,
+                    GradientDrawable.Orientation.LEFT_RIGHT, stroke = palette.accent
+                )
+            } else {
+                roundedBackground(palette.surface, radius, stroke = palette.border)
+            }
+            isClickable = true
+            isFocusable = true
+            contentDescription = listOfNotNull(shownTitle, status.label, shownSource).joinToString(", ")
+            if (onClick != null) setOnClickListener { onClick() }
+            if (onLongClick != null) setOnLongClickListener { onLongClick(); true }
+        }
+        row.addView(
+            if (model.artKey != null) rowArtView(model.art, shownSource, shownTitle, sizes.rowArt, model.artKey)
+            else artView(model.art, shownSource, shownTitle, sizes.rowArt)
+        )
+        val body = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(sizes.gap * 3 / 2, 0, sizes.gap, 0)
+            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        body.addView(text(shownTitle, sizes.titleText, if (playing) palette.accent else palette.text, bold = true, maxLines = 2))
+        body.addView(text(MeloComponentPolicy.themedSecondLine(model.status, status.label, shownSource), sizes.secondaryText,
+            if (model.status == Status.ERROR) palette.warning else palette.textSecondary).apply {
+            setPadding(0, sizes.gap / 2, 0, 0)
+        })
+        row.addView(body)
+
+        val iconSize = (sizes.secondaryText * 1.5f).toInt()
+        val tint = when (model.status) {
+            Status.DOWNLOADED -> palette.statusOk
+            Status.ERROR -> palette.warning
+            Status.TELEGRAM -> palette.textSecondary
+            else -> palette.accent
+        }
+        row.addView(MeloStatusIconView(context, model.status, tint, model.progressPercent, palette.onAccent).apply {
+            layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply { marginEnd = sizes.gap }
+            contentDescription = status.label
+        })
+        TelegramSongDisplayPolicy.formatDuration(model.durationSeconds)?.let { duration ->
+            row.addView(text(duration, sizes.secondaryText, palette.textSecondary).apply {
+                setPadding(0, 0, sizes.gap / 2, 0)
+            })
+        }
+        row.addView(TextView(context).apply {
+            text = "⋮"
+            gravity = Gravity.CENTER
+            setTextSize(TypedValue.COMPLEX_UNIT_PX, sizes.titleText * 1.25f)
+            setTextColor(palette.textSecondary)
+            contentDescription = "Tùy chọn bài hát"
+            tag = MELO_SONG_ROW_MORE_TAG
+            isClickable = true
+            isFocusable = true
+            layoutParams = LinearLayout.LayoutParams(sizes.minTouch, sizes.minTouch)
+            setOnClickListener { (onMore ?: onLongClick)?.invoke() }
+        })
+        return row
+    }
+
+    /** The "☁ Đồng bộ: 27.971 bài ●" line with the ⚙ button at its end. */
+    inner class SyncRow internal constructor(onSettings: () -> Unit) {
+        private val label = text("", sizes.secondaryText, palette.textSecondary, maxLines = 2)
+        private val dot = View(context)
+        private var lastDot: MeloThemePolicy.SyncDot? = null
+        val view: LinearLayout = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            val cloud = (sizes.secondaryText * 1.4f).toInt()
+            addView(vectorIcon(R.drawable.ic_cloud, cloud, palette.textSecondary).apply {
+                (layoutParams as LinearLayout.LayoutParams).marginEnd = sizes.gap
+            })
+            addView(label, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            val d = sizes.gap
+            addView(dot, LinearLayout.LayoutParams(d, d).apply { marginStart = sizes.gap; marginEnd = sizes.gap / 2 })
+            addView(vectorButton(R.drawable.ic_settings, "Cài đặt giao diện", palette.text) { onSettings() })
+        }
+
+        fun update(headline: CharSequence, state: MeloThemePolicy.SyncDot) {
+            if (label.text.toString() != headline.toString()) label.text = headline
+            if (state == lastDot) return
+            lastDot = state
+            dot.background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(when (state) {
+                    MeloThemePolicy.SyncDot.OK -> palette.statusOk
+                    MeloThemePolicy.SyncDot.SYNCING -> 0xFFFFC857.toInt()
+                    MeloThemePolicy.SyncDot.OFFLINE -> palette.textSecondary
+                })
+            }
+            dot.contentDescription = when (state) {
+                MeloThemePolicy.SyncDot.OK -> "Đã đồng bộ"
+                MeloThemePolicy.SyncDot.SYNCING -> "Đang đồng bộ"
+                MeloThemePolicy.SyncDot.OFFLINE -> "Chưa kết nối"
+            }
+        }
+    }
+
+    fun syncRow(onSettings: () -> Unit): SyncRow = SyncRow(onSettings)
+
     fun chip(label: String, selected: Boolean, onClick: (() -> Unit)? = null): TextView =
         TextView(context).apply {
             text = label
@@ -485,21 +691,34 @@ internal class MeloComponents(
         return scroller
     }
 
+    /** The search bar and its text field, so a caller never has to dig the field out of the bar's children. */
+    class SearchBar(val view: LinearLayout, val field: EditText)
+
     /** Search field: hint with the real song count, instant results, filter button at the end. */
-    fun searchBar(totalSongs: Int?, onQuery: ((String) -> Unit)? = null, onFilter: (() -> Unit)? = null): LinearLayout {
+    fun searchBar(totalSongs: Int?, onQuery: ((String) -> Unit)? = null, onFilter: (() -> Unit)? = null): LinearLayout =
+        searchBarWithField(totalSongs, onQuery, onFilter).view
+
+    fun searchBarWithField(totalSongs: Int?, onQuery: ((String) -> Unit)? = null, onFilter: (() -> Unit)? = null): SearchBar {
         val bar = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = pill(palette.surface, palette.border)
+            background = if (teal) roundedBackground(palette.surface, sizes.corner, stroke = palette.border)
+            else pill(palette.surface, palette.border)
             setPadding(sizes.gap * 2, 0, sizes.gap / 2, 0)
             minimumHeight = sizes.minTouch
         }
-        bar.addView(text("⌕", sizes.titleText * 1.2f, palette.textSecondary).apply {
-            setPadding(0, 0, sizes.gap, 0)
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        })
-        bar.addView(EditText(context).apply {
-            hint = MeloComponentPolicy.searchHint(totalSongs)
+        if (teal) {
+            bar.addView(vectorIcon(R.drawable.ic_search, (sizes.titleText * 1.2f).toInt(), palette.textSecondary).apply {
+                (layoutParams as LinearLayout.LayoutParams).marginEnd = sizes.gap
+            })
+        } else {
+            bar.addView(text("⌕", sizes.titleText * 1.2f, palette.textSecondary).apply {
+                setPadding(0, 0, sizes.gap, 0)
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            })
+        }
+        val field = EditText(context).apply {
+            hint = if (teal) "Tìm bài hát theo tên..." else MeloComponentPolicy.searchHint(totalSongs)
             setHintTextColor(palette.textSecondary)
             setTextColor(palette.text)
             setTextSize(TypedValue.COMPLEX_UNIT_PX, sizes.titleText)
@@ -515,12 +734,17 @@ internal class MeloComponents(
                 override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) = Unit
                 override fun afterTextChanged(s: Editable?) { onQuery?.invoke(s?.toString().orEmpty()) }
             })
-        })
-        bar.addView(iconButton("☰", "Bộ lọc", width = sizes.minTouch, height = sizes.minTouch) { onFilter?.invoke() }.apply {
-            background = null
-            setTextColor(palette.textSecondary)
-        })
-        return bar
+        }
+        bar.addView(field)
+        if (teal) {
+            bar.addView(vectorButton(R.drawable.ic_tune, "Bộ lọc", palette.textSecondary) { onFilter?.invoke() })
+        } else {
+            bar.addView(iconButton("☰", "Bộ lọc", width = sizes.minTouch, height = sizes.minTouch) { onFilter?.invoke() }.apply {
+                background = null
+                setTextColor(palette.textSecondary)
+            })
+        }
+        return SearchBar(bar, field)
     }
 
     class MiniPlayerHandle(

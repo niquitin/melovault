@@ -159,6 +159,38 @@ internal object MeloLibraryPolicy {
         GenreChip.entries.forEach { add(Chip(it.label, null, it)) }
     }
 
+    // ---- E98 teal theme: the four menu tabs ----------------------------------------------------
+
+    enum class TabKind { ALL, DOWNLOADED, PLAYLIST, SOURCES }
+
+    data class ThemeTab(val kind: TabKind, val label: String, val selected: Boolean)
+
+    /** Below this pane width the tab labels shrink to one word. */
+    const val NARROW_TABS_DP = 520
+
+    /**
+     * "Tất cả (27K)", "Đã tải về máy", "Playlist", "Nguồn Telegram" - exactly four tabs. On a pane
+     * narrower than [NARROW_TABS_DP] the labels are "Tất cả", "Đã tải", "Playlist", "Nguồn".
+     * [totalSongs] is the whole library; an unknown count shows no brackets.
+     */
+    fun themeTabs(totalSongs: Int?, widthDp: Int, mode: Mode, showingSources: Boolean): List<ThemeTab> {
+        val narrow = widthDp in 1 until NARROW_TABS_DP
+        val short = MeloComponentPolicy.shortCount(totalSongs)
+        val all = if (short != null && !narrow) "Tất cả ($short)" else "Tất cả"
+        return listOf(
+            ThemeTab(TabKind.ALL, all, !showingSources && mode == Mode.ALL),
+            ThemeTab(TabKind.DOWNLOADED, if (narrow) "Đã tải" else "Đã tải về máy", !showingSources && mode == Mode.DOWNLOADED),
+            ThemeTab(TabKind.PLAYLIST, "Playlist", !showingSources && mode == Mode.PLAYLIST),
+            ThemeTab(TabKind.SOURCES, if (narrow) "Nguồn" else "Nguồn Telegram", showingSources)
+        )
+    }
+
+    /** The genre the search box currently filters by (its keyword), or null. */
+    fun activeGenre(query: String): GenreChip? {
+        val q = MeloComponentPolicy.searchKey(query)
+        return GenreChip.entries.firstOrNull { it.keyword == q }
+    }
+
     /** Index of the selected chip from the current state: a genre keyword wins, else the mode. */
     fun selectedChip(mode: Mode, query: String, downloadedCount: Int?): Int {
         val list = chips(downloadedCount)

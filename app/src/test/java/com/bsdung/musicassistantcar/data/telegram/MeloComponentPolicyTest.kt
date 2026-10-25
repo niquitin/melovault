@@ -112,4 +112,53 @@ class MeloComponentPolicyTest {
         assertEquals("48 kHz", MeloComponentPolicy.formatKhz(48_000))
         assertEquals("44.1 kHz", MeloComponentPolicy.formatKhz(44_100))
     }
+
+    @Test
+    fun shortCountForTabLabels() {
+        assertEquals("0", MeloComponentPolicy.shortCount(0))
+        assertEquals("999", MeloComponentPolicy.shortCount(999))
+        assertEquals("1K", MeloComponentPolicy.shortCount(1_000))
+        assertEquals("1,1K", MeloComponentPolicy.shortCount(1_199))
+        assertEquals("9,5K", MeloComponentPolicy.shortCount(9_540))
+        assertEquals("9,9K", MeloComponentPolicy.shortCount(9_999))
+        assertEquals("10K", MeloComponentPolicy.shortCount(10_000))
+        assertEquals("27K", MeloComponentPolicy.shortCount(27_971))
+        assertEquals("999K", MeloComponentPolicy.shortCount(999_999))
+        assertEquals("1M", MeloComponentPolicy.shortCount(1_000_000))
+        assertEquals("1,2M", MeloComponentPolicy.shortCount(1_250_000))
+        assertEquals("12M", MeloComponentPolicy.shortCount(12_900_000))
+    }
+
+    @Test
+    fun shortCountOfUnknownOrNegativeIsNull() {
+        assertNull(MeloComponentPolicy.shortCount(null))
+        assertNull(MeloComponentPolicy.shortCount(-1))
+        assertNull(MeloComponentPolicy.shortCount(Int.MIN_VALUE))
+    }
+
+    @Test
+    fun blendMixesEveryChannel() {
+        assertEquals(0xFF000000.toInt(), MeloComponentPolicy.blend(0xFF000000.toInt(), 0xFFFFFFFF.toInt(), 0f))
+        assertEquals(0xFFFFFFFF.toInt(), MeloComponentPolicy.blend(0xFF000000.toInt(), 0xFFFFFFFF.toInt(), 1f))
+        assertEquals(0xFF808080.toInt(), MeloComponentPolicy.blend(0xFF000000.toInt(), 0xFFFFFFFF.toInt(), 0.5f))
+        // Out-of-range factors are clamped.
+        assertEquals(0xFFFFFFFF.toInt(), MeloComponentPolicy.blend(0xFF000000.toInt(), 0xFFFFFFFF.toInt(), 3f))
+        assertEquals(0xFF000000.toInt(), MeloComponentPolicy.blend(0xFF000000.toInt(), 0xFFFFFFFF.toInt(), -1f))
+    }
+
+    @Test
+    fun themedSecondLineKeepsWordsOnlyWhereTheStateNeedsThem() {
+        assertEquals("Kênh A", MeloComponentPolicy.themedSecondLine(Status.TELEGRAM, "Telegram · Chưa tải", "Kênh A"))
+        assertEquals("Kênh A", MeloComponentPolicy.themedSecondLine(Status.DOWNLOADED, "Đã tải · MP3", "Kênh A"))
+        assertEquals("Đang phát · Kênh A", MeloComponentPolicy.themedSecondLine(Status.PLAYING, "Đang phát", "Kênh A"))
+        assertEquals("Đang tải 40% · Kênh A", MeloComponentPolicy.themedSecondLine(Status.DOWNLOADING, "Đang tải 40%", "Kênh A"))
+        assertEquals("Tải lỗi – bấm thử lại", MeloComponentPolicy.themedSecondLine(Status.ERROR, "Tải lỗi – bấm thử lại", null))
+        // A plain row with no channel name still says something rather than leaving the line empty.
+        assertEquals("Telegram · Chưa tải", MeloComponentPolicy.themedSecondLine(Status.TELEGRAM, "Telegram · Chưa tải", " "))
+    }
+
+    @Test
+    fun shortCountHandlesTheLargestInt() {
+        assertEquals("2147M", MeloComponentPolicy.shortCount(Int.MAX_VALUE))
+    }
 }

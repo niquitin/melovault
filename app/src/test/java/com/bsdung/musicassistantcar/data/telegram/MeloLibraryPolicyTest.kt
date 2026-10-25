@@ -273,4 +273,58 @@ class MeloLibraryPolicyTest {
         assertTrue(unknown.single().second.startsWith("chưa có số"))
         assertEquals(1, MeloLibraryPolicy.libraryDiagLines(MeloLibraryPolicy.LibraryDiag(-1, -1, -1, 0L)).size)
     }
+
+    // ---- E98 teal theme tabs ----------------------------------------------------------------
+
+    @Test
+    fun themeTabsAreExactlyFourWithFullLabelsOnAWidePane() {
+        val tabs = MeloLibraryPolicy.themeTabs(27_971, 700, Mode.ALL, showingSources = false)
+        assertEquals(
+            listOf("Tất cả (27K)", "Đã tải về máy", "Playlist", "Nguồn Telegram"),
+            tabs.map { it.label }
+        )
+        assertEquals(
+            listOf(MeloLibraryPolicy.TabKind.ALL, MeloLibraryPolicy.TabKind.DOWNLOADED, MeloLibraryPolicy.TabKind.PLAYLIST, MeloLibraryPolicy.TabKind.SOURCES),
+            tabs.map { it.kind }
+        )
+    }
+
+    @Test
+    fun themeTabsShortenOnANarrowPane() {
+        val tabs = MeloLibraryPolicy.themeTabs(27_971, 400, Mode.ALL, showingSources = false)
+        assertEquals(listOf("Tất cả", "Đã tải", "Playlist", "Nguồn"), tabs.map { it.label })
+        assertEquals(listOf("Tất cả", "Đã tải", "Playlist", "Nguồn"), MeloLibraryPolicy.themeTabs(null, 519, Mode.ALL, false).map { it.label })
+        assertEquals("Nguồn Telegram", MeloLibraryPolicy.themeTabs(null, 520, Mode.ALL, false).last().label)
+    }
+
+    @Test
+    fun themeTabsHideBracketsWhenTheCountIsUnknown() {
+        assertEquals("Tất cả", MeloLibraryPolicy.themeTabs(null, 700, Mode.ALL, false).first().label)
+        assertEquals("Tất cả (0)", MeloLibraryPolicy.themeTabs(0, 700, Mode.ALL, false).first().label)
+    }
+
+    @Test
+    fun themeTabsUnknownWidthCountsAsWide() {
+        assertEquals("Nguồn Telegram", MeloLibraryPolicy.themeTabs(5, 0, Mode.ALL, false).last().label)
+    }
+
+    @Test
+    fun themeTabsSelectOnlyOneByModeOrSources() {
+        fun selected(mode: Mode, sources: Boolean) =
+            MeloLibraryPolicy.themeTabs(10, 700, mode, sources).filter { it.selected }.map { it.kind }
+        assertEquals(listOf(MeloLibraryPolicy.TabKind.ALL), selected(Mode.ALL, false))
+        assertEquals(listOf(MeloLibraryPolicy.TabKind.DOWNLOADED), selected(Mode.DOWNLOADED, false))
+        assertEquals(listOf(MeloLibraryPolicy.TabKind.PLAYLIST), selected(Mode.PLAYLIST, false))
+        // The source grid wins over whatever mode is behind it.
+        assertEquals(listOf(MeloLibraryPolicy.TabKind.SOURCES), selected(Mode.ALL, true))
+        assertEquals(listOf(MeloLibraryPolicy.TabKind.SOURCES), selected(Mode.PLAYLIST, true))
+    }
+
+    @Test
+    fun activeGenreFollowsTheSearchKeyword() {
+        assertEquals(MeloLibraryPolicy.GenreChip.CHILLOUT, MeloLibraryPolicy.activeGenre("chillout"))
+        assertEquals(MeloLibraryPolicy.GenreChip.LAKHOUSE, MeloLibraryPolicy.activeGenre("  LakHouse "))
+        assertNull(MeloLibraryPolicy.activeGenre(""))
+        assertNull(MeloLibraryPolicy.activeGenre("chillout mix"))
+    }
 }

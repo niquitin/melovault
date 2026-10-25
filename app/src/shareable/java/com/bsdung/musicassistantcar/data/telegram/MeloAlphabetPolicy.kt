@@ -79,4 +79,11 @@ internal object MeloAlphabetPolicy {
 
     fun barVisible(sort: SongSort, showingSources: Boolean, rowCount: Int, hasLowerBound: Boolean = false): Boolean =
         sort == SongSort.NAME && !showingSources && (rowCount >= MIN_ROWS_FOR_BAR || hasLowerBound)
+
+    /** E98 teal theme: the bar shows for any sort once the list is long enough; a tap on a letter may switch the sort. */
+    fun barVisibleThemed(showingSources: Boolean, rowCount: Int, hasLowerBound: Boolean = false): Boolean =
+        !showingSources && (rowCount >= MIN_ROWS_FOR_BAR || hasLowerBound)
+
+    /** A letter jump only makes sense in name order: a tap while "Mới nhất" is on switches to Tên A–Z first. */
+    fun needsSortSwitch(sort: SongSort): Boolean = sort != SongSort.NAME
 }
