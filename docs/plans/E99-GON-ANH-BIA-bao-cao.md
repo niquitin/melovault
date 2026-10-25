@@ -141,3 +141,89 @@ Dòng 52 dp, ảnh 40 dp, thanh đáy 102 dp, cửa sổ 574 dp, 8 dòng: giữ 
 - Ảnh/log: `docs/plans/artifacts/E99-GON-ANH-BIA/` (`00_tong_hop.png`, `00…31_Shanling_*.png`, `32…34_Sony_*.png`, `logs/`).
 - Tiny: `C:\Bots\_qa_handoff\E99-GON-ANH-BIA\` (APK, `tiny_build.log`, `shots\`).
 - Bundle: `D:\Bots\_transfer\MeloVault_E99-GON-ANH-BIA_full_a606bd7_20261025.bundle` (+`.sha256`); log Gradle Ni: `D:\Bots\_e99logs\`.
+
+---
+
+# REWORK-01 — Gọn luôn có ảnh bìa với mọi Kiểu màu (vc115)
+
+**Phiên GỘP REWORK-01**, 25/10/2026 ~22:00–22:22. Chỉ thị: `E99-GON-ANH-BIA-nghiem-thu.md` mục 12. Nhánh `dot/E99-GON-ANH-BIA`, baseline `2687956` → code `6fb4e65`. Không `am force-stop`, không `pm clear`/uninstall/`-d`; chỉ `install -r`.
+
+## R.1 Tóm tắt
+
+| Mục | Kết quả |
+|---|---|
+| Code đúng 4 file chỉ thị | **PASS** — `git diff --stat 2687956 6fb4e65`: `MeloThemePolicy.kt`, `MeloUiLabActivity.kt`, `MeloThemePolicyTest.kt`, `app/build.gradle` (4 file, +15/−12) |
+| Test Debug / Release (Ni) | **PASS** — 2042 chạy, 21 bỏ qua, **0 lỗi** mỗi biến thể (XML `app/build/test-results`); số test không đổi so với nền 2042 (một test được viết lại, không thêm) |
+| Build Debug + Release (Ni) | **PASS** — `BUILD SUCCESSFUL in 3m 40s`; `git diff --check` sạch (chỉ cảnh báo LF→CRLF của `app/build.gradle`) |
+| APK có Telegram config (Tiny, Git bundle) | **PASS** — vc115 / `0.6.90.1-beta`, cert khớp, `telegram.config.valid=true` |
+| Shanling R1–R4 | **PASS** cả bốn (mục R.4) |
+| Sony Phone | **PASS** — Hiện tại: không ảnh; Teal: có ảnh; đã trả về Hiện tại (mục R.5) |
+| Màn hình cuối | `SHANLING_SCREEN_END=OFF` (22:17:06); `SONY_SCREEN_END=OFF` (22:21:58, `Display State=OFF`, `mWakefulness=Dozing`) |
+
+## R.2 Thay đổi mã
+
+- `MeloThemePolicy.rowArtLayer`: `appliesTo(...) || profile == Profile.COMPACT` — Gọn luôn `true` với mọi `ColorTheme`; Phone/Tablet vẫn `= appliesTo`; Car luôn `false`. KDoc hàm và KDoc đầu file đã sửa ("Gọn giữ màu, luôn có ảnh bìa dòng"). `rowArtActive` giữ nguyên.
+- `MeloUiLabActivity`: ghi chú Kiểu màu → "Bản Gọn giữ màu cũ và luôn có ảnh bìa nhỏ (tắt bằng công tắc bên dưới); Car Mode không đổi." (đã thấy trên máy, ảnh `R2_06`).
+- `MeloThemePolicyTest`: `rowArtLayerAddsOnlyTheCompactLayerWithTheTealTheme` → `rowArtLayerAlwaysCoversTheCompactScreenWhateverTheTheme` (mọi theme: COMPACT = true, CAR = false với layer null và mọi `NewLayer`; CURRENT/TEAL + COMPACT = true; TEAL + PHONE layer null = false). Test khóa Phone/Tablet = `appliesTo` giữ nguyên. `layerKey` không đổi.
+- `app/build.gradle`: vc114 → **vc115**, `0.6.90` → **`0.6.90.1`** (hậu tố `-beta`).
+- Công tắc "Tải ảnh bìa từ Telegram" không sửa (`rowArtOn()` = layer && công tắc).
+
+## R.3 Chuyển code, build Tiny, gói/chứng chỉ
+
+| Mục | Giá trị |
+|---|---|
+| Bundle | `D:\Bots\_transfer\MeloVault_E99-GON-ANH-BIA_full_6fb4e65_20261025.bundle`, 12.647.497 byte, `git bundle verify` OK, SHA-256 `F25514A07FB2F9CFF5E16ECC3EDB1DF8D782C5642101550519C0C21A71E896FE` — **khớp trên Tiny** (`Get-FileHash`). Chép file vào `C:\Bots\_MeloVault_Git_Transfer\` qua `T:` (chỉ file bundle mới) |
+| Clone cô lập | `C:\Bots\MeloVault-E99-IsolatedQA` (clone sạch của vòng 1 @ `a606bd7`) → `git fetch` bundle + `merge --ff-only` → HEAD `6fb4e65`, sạch. `local.properties` (git-ignored) vẫn nằm trong Tiny |
+| Build Tiny | `reportTelegramConfig assembleShareableDebug` BUILD SUCCESSFUL 1m 16s; `telegram.config.valid=true` |
+| Gói / phiên bản | `app.melovault.player`, versionCode **115**, versionName **0.6.90.1-beta** (`aapt2`) |
+| Chứng chỉ | SHA-256 `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8` — trùng `base.apk` vc114 kéo từ Shanling và từ Sony |
+| Gate cài Shanling | `adb devices -l` = device `30313860180939`; getprop `Shanling M3 Ultra` / `Shanling` / Android 10; vc115 > vc114; Telegram config true; Media3 `state=0` (không phát); màn Asleep → `adb -s 30313860180939 install -r` = `Success` (22:09) |
+| Gate cài Sony | Tiny `adb devices -l`: `QV725WEQ54` device, `XQ-AS52` / Sony; cert bản đang cài = cert APK; vc115 > vc114; Media3 `state=2` (tạm dừng, không PLAYING); `Display State=OFF`, không ai chạm → `install -r` = `Success` (22:17) |
+
+## R.4 Bảng QA Shanling (Agent tự làm qua ADB, 22:11–22:17; ảnh `docs/plans/artifacts/E99-GON-ANH-BIA/rework01/`)
+
+| # | Hành động | Kỳ vọng | Thực tế | KQ | Ảnh |
+|---|---|---|---|---|---|
+| R1 | Mở app (Kiểu màu đang Teal sáng, công tắc bật) | Như vc114: 8 dòng, có ảnh, màu Gọn cũ | 8/8 dòng có ảnh, dòng 52 dp, màu Gọn cũ, thanh đáy giữ nguyên | **PASS** | `R1_vc115_first_open_221120.png` |
+| R2 | ☰ → Cài đặt giao diện → Kiểu màu = **Hiện tại** → quay lại, chờ 5 s | Gọn vẫn có ảnh (≥ 80 % dòng), màu không đổi, vẫn 8 dòng | 8/8 dòng có ảnh sau 5 s; cuộn thêm: ảnh dòng mới tải về (log `compact visible=9 withArt=9 settled=9`, `sent=151 … decoded=165` — bộ nạp thực sự hoạt động ở Hiện tại, không chỉ ảnh cũ trong đệm); màu không đổi; ghi chú mới hiện đúng | **PASS** | `R2_02…R2_06`, `R2_07`, `R2_08`, `R2_10` |
+| R3 | Tắt công tắc → quay lại 5 s; rồi bật lại | Tắt: ô chữ cái, không `MeloRowArt` mới; bật: ảnh về | Tắt (22:14:49): toàn ô chữ cái "S"; `logcat_rowart_rework01.txt` **không có dòng nào** từ 22:14:49 đến lúc bật lại; bật lại: dòng đầu 22:15:47 (`sent=179`, `cache` đã reset về 240 KB), ảnh về đủ 8/8 | **PASS** | `R3_01…R3_05` |
+| R4 | Trả Kiểu màu = **Teal sáng**, công tắc bật | Như R1 | Radio Teal ◉, ☑ bật; 8/8 dòng có ảnh, cuộn tiếp vẫn tải được | **PASS** | `R4_01`, `R4_02`, `R4_03` |
+
+Điều kiện cuối Shanling: Kiểu màu **Teal sáng**, công tắc **bật** (đúng trạng thái trước QA). Media3 `state=0`; crash buffer 0 FATAL; không ANR. Inflight ≤ 1 trong log (13 dòng `sent=`), không vượt 3. Màn OFF (`mGlobalDisplayState=OFF`) lúc 22:17:06.
+
+Janky: không đo lại vòng này — số cộng dồn của `gfxinfo` (3169 khung, 12,37 %) gồm cả lần chạy đầu sau khi cài, vuốt nhanh liên tục và chuyển màn cài đặt, nên **không so được** với bảng vòng 1; chủ dự án đã chấp nhận độ mượt vc114 và REWORK-01 không đổi bộ nạp/kích thước.
+
+Ghi chú kỹ thuật: bộ đệm logcat của máy chỉ 256 KB và app ghi rất nhiều dòng, nên `logcat -d` sau vài giây không còn dòng `MeloRowArt`; tôi dùng luồng `logcat -s MeloRowArt:I` ghi ra tệp (`logs/logcat_rowart_rework01.txt`). Không đổi cấu hình `logcat -G`.
+
+## R.5 Sony Xperia 5 II (Tiny, `QV725WEQ54`, Android 12, XQ-AS52) — Điện thoại dọc, 22:17–22:22
+
+| # | Hành động | Kỳ vọng | Thực tế | KQ | Ảnh |
+|---|---|---|---|---|---|
+| S1 | Mở vc115 (Kiểu màu = Hiện tại, công tắc bật — trạng thái sẵn có) | Không ảnh (hợp đồng E98) | Toàn ô chữ cái S/K, không ảnh | **PASS** | `S1_vc115_open_221803.png` |
+| S2 | ⚙ → Kiểu màu = Teal sáng → quay lại, 7 s | Có ảnh bìa dòng | Dòng có ảnh, giao diện Teal | **PASS** | `S4_…`, `S5_phone_teal_7s_222037.png` |
+| S3 | Trả Kiểu màu = Hiện tại | Về như S1 | Ô chữ cái, giao diện cũ | **PASS** | `S6_…`, `S7_phone_current_restored_222139.png` |
+
+Sony cuối: Kiểu màu = Hiện tại (như trước QA), công tắc bật; hàng đợi Media3 cũ vẫn `state=2` (không đụng); `SONY_SCREEN_END=OFF`. Khác vòng 1: lần này không thấy chữ lạ trong ô tìm kiếm.
+
+## R.6 Ảnh tổng hợp và đường dẫn
+
+- `docs/plans/artifacts/E99-GON-ANH-BIA/rework01/00_tong_hop_rework01.png` (8 ô, 1536×1332): R1, R2 ghi chú, R2 ảnh dòng mới, R3 tắt, R3 bật, R4 Teal, Sony Hiện tại, Sony Teal. Ảnh vòng 1 giữ nguyên, không ghi đè. Ảnh gitignored (có tên bài/kênh).
+- Log: `…/rework01/logs/` (`logcat_rowart_rework01.txt`, `tiny_build_rework01.log`, `ni_gradle_rework01_utf16.log`).
+- Tiny: `C:\Bots\_qa_handoff\E99-GON-ANH-BIA\` (APK vc115, `shots_rework01\`, `tiny_build_rework01.log`). Ni: `D:\Bots\_e99apk\`.
+
+## R.7 APK QA cần Opus nghiệm thu bàn giao (REWORK-01)
+
+| Mục | Giá trị |
+|---|---|
+| Nhãn | **QA CANDIDATE — CHƯA NGHIỆM THU** (Sonnet không upload/công bố, không đổi quyền Drive) |
+| Loại build | Debug QA, ký bằng debug key (cùng cert bản đang cài), dựng trên Tiny |
+| Git | nguồn code `6fb4e65` trên `dot/E99-GON-ANH-BIA` (cha `2687956`); bundle SHA `F25514A0…896FE`. Báo cáo này nằm ở commit sau `6fb4e65` |
+| APK (đã kiểm tồn tại) | Tiny: `C:\Bots\_qa_handoff\E99-GON-ANH-BIA\MeloVault-E99-REWORK01-6fb4e65-vc115-TinySigned-debug.apk`; Ni: `D:\Bots\_e99apk\MeloVault-E99-REWORK01-6fb4e65-vc115-TinySigned-debug.apk` |
+| Gói / phiên bản | `app.melovault.player` / vc115 / `0.6.90.1-beta` |
+| SHA-256 / byte | `341200C7DC2D00B82FB780193997C5661B70164699D5144C7E80FAD995C636E6` / 33.413.060 — trùng ở Tiny, Ni |
+| Cert SHA-256 | `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8` |
+| Telegram config | **true** (chỉ true/false) |
+| Test | Debug/Release 2042, 21 bỏ qua, 0 lỗi; build Debug/Release Ni OK (3m 40s) |
+| Thiết bị | Shanling M3 Ultra (đã cài vc115, QA R1–R4); Sony XQ-AS52 (đã cài vc115, Phone Hiện tại/Teal) |
+| Chưa QA / hạn chế | Janky không đo lại; Tablet/Hai khung/Y700/S25/FYT/Car; âm thanh thật (**CHƯA XÁC NHẬN ÂM THANH THỰC**); Sony chỉ Phone dọc; đổi Teal → Hiện tại không gọi `reset()` loader (bộ đệm ~0,4 MB giữ tới lần reset kế — đã ghi ở nghiệm thu vòng 1) |
+| Rollback | Người dùng: tắt công tắc "Tải ảnh bìa từ Telegram" → Gọn ô chữ cái như vc113. Mã: revert `6fb4e65` (về điều kiện "chỉ khi Teal"); không hạ versionCode |
