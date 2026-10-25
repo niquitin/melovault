@@ -4,7 +4,9 @@
 
 | Vòng | Thời điểm | Trạng thái |
 |---|---|---|
-| **1 — hiện tại** | 25/10 ~16:30 | **BLOCKED — CHỜ CHỦ DỰ ÁN** (kỹ thuật đạt; Janky lạnh cần chủ dự án cảm nhận; chờ duyệt ảnh/cài vc114) |
+| 1 | 25/10 ~16:30 | BLOCKED — CHỜ CHỦ DỰ ÁN (kỹ thuật đạt; Janky lạnh cần chủ dự án cảm nhận; chờ duyệt ảnh/cài vc114) |
+| 1 — phản hồi chủ dự án | 25/10 | "ĐẠT" + "Gọn luôn hiện ảnh bìa, luôn có ảnh" (trả lời câu hỏi §3.2 kế hoạch) |
+| **REWORK-01 — hiện tại** | 25/10 | **REWORK** — chỉ đổi điều kiện bật ảnh ở Gọn (mục 12); phần còn lại chủ dự án đã chấp nhận |
 
 ## 1. Git
 
@@ -89,3 +91,28 @@ Shanling: `SHANLING_SCREEN_END` OFF 15:37:59 (Sonnet); Opus kiểm lại 16:13 `
 ## 11. Kết luận vòng 1
 
 **BLOCKED — CHỜ CHỦ DỰ ÁN.** Mã đúng phạm vi, test/build Opus tự chạy xanh, APK đạt gate và đã lên Drive owner-only, QA Shanling thật đạt các bước 1–6. Còn chờ chủ dự án: (1) xem ảnh / dùng vc114 trên Shanling — đặc biệt vuốt nhanh có giật không (mục 5); (2) giữ điều kiện "chỉ khi Teal sáng" hay không; rồi nói **ĐẠT** hoặc báo lỗi. Khi ĐẠT: đổi thành PASS, xin xác nhận rồi `git merge --no-ff` vào `feature/e93-03d-y700-offline-cockpit`.
+
+## 12. REWORK-01 — Gọn luôn có ảnh bìa, không phụ thuộc Kiểu màu
+
+**Phản hồi chủ dự án (25/10):** "ĐẠT" cho vc114 (độ mượt khi vuốt chấp nhận) và chốt §3.2 kế hoạch: **"Gọn luôn hiện ảnh bìa, luôn có ảnh"** — chọn phương án thay thế, bỏ điều kiện Kiểu màu = Teal sáng cho Gọn. vc114 đang làm theo đề xuất mặc định (chỉ khi Teal) nên kết luận vòng này là **REWORK-01** (nhỏ, không mở kế hoạch mới). Merge chỉ sau khi REWORK-01 đạt.
+
+**Chỉ thị (đúng phạm vi, không thêm việc):**
+1. `MeloThemePolicy.rowArtLayer`: Gọn (`Profile.COMPACT`) trả `true` với **mọi** `ColorTheme`; Phone/Tablet giữ `appliesTo` như E98; Car luôn `false`. Sửa KDoc hàm và KDoc đầu file ("Gọn giữ màu, luôn có ảnh bìa dòng").
+2. Công tắc **"Tải ảnh bìa từ Telegram"** (mặc định bật) **giữ nguyên** là cách tắt ảnh ở Gọn (`rowArtOn()` = layer && công tắc, không sửa).
+3. `MeloUiLabActivity`: chữ ghi chú Kiểu màu → "… Bản Gọn giữ màu cũ và luôn có ảnh bìa nhỏ (tắt bằng công tắc bên dưới); Car Mode không đổi." Không thêm lựa chọn mới.
+4. `MeloThemePolicyTest`: đổi `rowArtLayerAddsOnlyTheCompactLayerWithTheTealTheme` thành: CURRENT + COMPACT = true, TEAL + COMPACT = true, CAR = false với mọi theme/layer, PHONE layer null = false; giữ nguyên test khóa Phone/Tablet = `appliesTo`. `layerKey` không đổi.
+5. `app/build.gradle`: vc114 → **vc115**, `0.6.90` → **`0.6.90.1`**.
+6. Chỉ 4 file trên + báo cáo. Không sửa loader/DB/TDLib/Media3/palette/kích thước.
+
+**QA bắt buộc — Shanling `30313860180939`** (vc115 build Tiny qua Git bundle, đủ gate §3, chỉ `install -r`):
+
+| # | Hành động | Kỳ vọng |
+|---|---|---|
+| R1 | Mở app (Kiểu màu đang Teal) | Như vc114: 8 dòng, có ảnh, màu Gọn cũ |
+| R2 | ☰ → Cài đặt giao diện → Kiểu màu = **Hiện tại** → quay lại, chờ 5 s | Gọn **vẫn có ảnh** (≥ 80 % dòng), màu không đổi, vẫn 8 dòng |
+| R3 | Tắt công tắc "Tải ảnh bìa từ Telegram" → quay lại; rồi bật lại | Tắt: ô chữ cái, không dòng `MeloRowArt` mới; bật: ảnh về |
+| R4 | **Trả Kiểu màu = Teal sáng, công tắc bật** (như trước QA) | Như R1 |
+
+Sony (nếu Tiny ADB sẵn sàng và không ai đang dùng): Điện thoại dọc, Kiểu màu Hiện tại → **không** có ảnh (hợp đồng E98); Teal → có ảnh; trả cài đặt như cũ. Màn hình OFF trong `finally` (§7). Ghép `00_tong_hop_rework01.png`, không ghi đè ảnh vòng 1. Thêm mục "REWORK-01" vào `E99-GON-ANH-BIA-bao-cao.md` kèm "APK QA cần Opus nghiệm thu bàn giao". **Không** dùng `am force-stop` trên Shanling (giữ hàng đợi của chủ dự án).
+
+**PASS REWORK-01:** test 0 lỗi, ≥ 2042 mỗi biến thể; build OK; đúng 4 file; R1–R4 đạt; Phone Hiện tại không có ảnh (mã + test, Sony nếu có); chủ dự án duyệt.
