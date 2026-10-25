@@ -4,6 +4,7 @@
 - **E98-THEME-ANH-BIA: PASS** (chủ dự án "ĐẠT" 25/10; nghiệm thu Opus `3092e9e`, `docs/plans/E98-THEME-ANH-BIA-nghiem-thu.md`). Theme Teal sáng + ảnh bìa dòng, REWORK-01 thẻ "Đang phát" lớn ở Thanh đáy gộp (Gọn giữ 8 dòng trên Shanling). APK đã duyệt vc113 / `0.6.89.1-beta` @ `48449ab`, SHA-256 `200E6EBC…0210F6`, link Drive owner-only ở `docs/plans/E98-THEME-ANH-BIA-apk-test.md`.
 - Merge `--no-ff` vào `feature/e93-03d-y700-offline-cockpit`: **merge commit `98662c7`** (parent `0b4aa49` + `3092e9e`). Kéo theo luôn E95, E96 (P0–P5B3) và E97A nằm dưới E98 (57 commit, 155 file) — chủ dự án chọn như vậy. Cây sau merge giống hệt `dot/E98-THEME-ANH-BIA`; test trên cây đó: 2038 test mỗi biến thể, 21 bỏ qua, 0 lỗi, build Debug/Release OK. Chưa push.
 - Giới hạn còn mở: Y700/S25/FYT/Car Mode trên máy, cỡ chữ lớn, Gọn lúc đang quét offline (có thể 7 dòng), âm thanh thật chưa xác nhận. Shanling đang cài vc113; Sony vc113.
+- **Việc kế tiếp chủ dự án CHỐT 25/10: E99-GON-ANH-BIA** — hiện ảnh bìa dòng (thumbnail Telegram / ảnh nhạc trên máy) cả trong giao diện **Gọn** (Shanling). E98 cố ý chỉ bật ảnh bìa cho Teal sáng ở Điện thoại/Tablet dọc + Hai khung (`MeloThemePolicy.appliesTo` / `rowArtActive`); Gọn đang vẽ ô chữ cái. Bước tiếp: phiên Opus lập kế hoạch mới, nhánh `dot/E99-GON-ANH-BIA` cắt từ `feature/e93-03d-y700-offline-cockpit`.
 - Mục bên dưới là lịch sử trước 25/10.
 
 ## Cập nhật tích hợp 19/10/2026 — E94 MERGED
