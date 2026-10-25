@@ -119,6 +119,22 @@ class TelegramPreviewActivity : AppCompatActivity() {
     )
 
     private val thumbnailCache = android.util.LruCache<Long, Bitmap>(60)
+
+    // E98: row covers of the teal theme. The loader exists only after a teal screen asked for it.
+    private var rowArtThemeActive = false
+    private var rowArtLoaderLazy: MeloRowArtLoader? = null
+    private var rowArtOffReset = false
+
+    private fun rowArtOn(): Boolean = rowArtThemeActive &&
+        MeloThemePolicy.rowArtSwitch(getSharedPreferences(MeloScreenPolicy.PREFS_NAME, Context.MODE_PRIVATE))
+
+    private fun rowArtLoader(): MeloRowArtLoader = rowArtLoaderLazy ?: MeloRowArtLoader(
+        context = this,
+        send = { type, tag, configure -> send(type, tag, configure) },
+        account = { library.authorizedUser()?.value ?: 0L },
+        isOwnedFile = { TelegramAccountStoragePolicy.isOwnedFile(filesRoot, it) },
+        alive = { !isDestroyed && !isFinishing }
+    ).also { rowArtLoaderLazy = it }
     private val thumbnailExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
         Thread(r, "MeloVault-ThumbLoader").apply { priority = Thread.MIN_PRIORITY }
     }
@@ -575,7 +591,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val sort = activeSort()
         if (library.sort != sort) library.setSort(sort) { scheduleMeloLibraryRefresh() }
         // snapshot() runs twice per redraw: build the rows only when the list or the sort changed.
-        val key = library.version.toLong() * 2L + if (sort == SongSort.NAME) 1L else 0L
+        val key = library.version.toLong() * 4L + (if (sort == SongSort.NAME) 1L else 0L) + (if (rowArtOn()) 2L else 0L)
         if (key != localRowsKey) {
             localRowsKey = key
             localRows = library.visible().map { song ->
@@ -590,7 +606,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     art = null,
                     sortKey = if (sort == SongSort.NAME) song.alphaKey else "",
                     mimeType = song.mimeType,
-                    local = true
+                    local = true,
+                    artKey = if (rowArtOn()) MeloRowArtPolicy.localKey(song.mediaStoreId) else null,
+                    mediaStoreId = song.mediaStoreId
                 )
             }
         }
@@ -4812,6 +4830,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             return
         }
         detachMeloLayer()
+        rowArtThemeActive = theme == MeloThemePolicy.ColorTheme.TEAL_BRIGHT
         val sizes = MeloDesignTokens.sizes(profile, display.density, display.fontScale, display.physicalPpi)
         val view: View
         if (layer == MeloLibraryPolicy.NewLayer.TWO_PANE) {
@@ -4897,6 +4916,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         tabletScreen = null
         meloLayer = null
         meloLayerKey = null
+        rowArtThemeActive = false
         if (wasCar) setCarFullscreen(false)
         if (::mainRoot.isInitialized) mainRoot.visibility = View.VISIBLE
     }
@@ -5059,8 +5079,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val playingKey = currentSongKey()
             val downloadingPercent = currentTelegramMessageId()?.let { currentDownloadPercent() }
             val sort = activeSort()
+            val rowArt = rowArtOn()
+            val rowArtAccount = if (rowArt) library.authorizedUser()?.value ?: 0L else 0L
             val rows = if (showingSources) emptyList() else shownSongs.map { song ->
                 MeloScreenHost.Row(
+                    artKey = if (rowArtAccount > 0L && song.chatId != 0L) {
+                        MeloRowArtPolicy.telegramKey(rowArtAccount, song.chatId, song.genuineMessageId)
+                    } else null,
+                    chatId = song.chatId,
+                    rawMessageId = song.genuineMessageId,
+                    localFile = if (rowArt) cachedSongPaths[song.messageId] else null,
                     title = TelegramSongDisplayPolicy.label(song.title, song.filename),
                     sourceTitle = song.sourceTitle ?: sourceNames[song.chatId],
                     filename = song.filename,
@@ -5150,6 +5178,32 @@ class TelegramPreviewActivity : AppCompatActivity() {
             return MeloAlphabetPolicy.firstIndexAtOrAfter(
                 shownSongs.map { MeloAlphabetPolicy.keyOf(it.title, it.performer, it.filename) }, lowerBound
             ).coerceAtMost((shownSongs.size - 1).coerceAtLeast(0))
+        }
+
+        override fun rowArtEnabled(): Boolean = rowArtOn()
+
+        override fun requestRowArt(rows: List<MeloScreenHost.Row>, rowArtPx: Int) {
+            if (!rowArtOn()) {
+                // Switched off (or another theme): stop asking and let go of what was loaded.
+                if (!rowArtOffReset) {
+                    rowArtOffReset = true
+                    rowArtLoaderLazy?.reset()
+                }
+                return
+            }
+            rowArtOffReset = false
+            val items = rows.mapNotNull { row ->
+                row.artKey?.let { MeloRowArtLoader.Item(it, row.chatId, row.rawMessageId, row.localFile, row.mediaStoreId) }
+            }
+            rowArtLoader().request(items, rowArtPx)
+        }
+
+        override fun peekRowArt(key: String?): Bitmap? = if (rowArtOn()) rowArtLoaderLazy?.peek(key) else null
+
+        override fun rowArtSettled(key: String?): Boolean = rowArtLoaderLazy?.settled(key) ?: false
+
+        override fun setRowArtListener(listener: (() -> Unit)?) {
+            if (listener != null) rowArtLoader().setListener(listener) else rowArtLoaderLazy?.setListener(null)
         }
 
         override fun openLocal() = openLocalMusic()
@@ -5881,6 +5935,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun onNativeEvent(result: JSONObject, sessionDb: File, secret: String) {
         val kind = result.optString("@type")
         val tag = result.optString("@extra")
+        if (tag.startsWith("rowArt")) {
+            // E98 row covers: handled first and alone, so they never reach the message / chat / file handlers below.
+            rowArtLoaderLazy?.onTdlibEvent(result)
+            return
+        }
         if (tag.startsWith("offlineLocal:")) {
             pendingOffline.remove(tag)?.complete(result)
             return
@@ -6115,6 +6174,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             observePrefetch(result)
         }
         if (kind == "updateFile") {
+            rowArtLoaderLazy?.onUpdateFile(result)
             result.optJSONObject("file")?.let {
                 TelegramProgressiveCache.observe(it)
                 playIfDownloaded(it)
@@ -6213,6 +6273,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 globalScanLoading = false
                 ShareableTdlibOwner.revokeAuthorization()
                 TelegramProgressiveCache.clear()
+                runOnUiThread { rowArtLoaderLazy?.reset() } // loader state lives on the main thread
                 auth.logout()
                 clearPendingQrLink()
                 runOnUiThread {
@@ -7126,6 +7187,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         globalScanLoading = false
         ShareableTdlibOwner.revokeAuthorization()
         TelegramProgressiveCache.clear()
+        rowArtLoaderLazy?.reset()
         clearPlaybackSession()
         songs.clear()
         adapter.clear()
@@ -7185,6 +7247,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         pendingOffline.clear()
         thumbnailExecutor.shutdownNow()
         thumbnailCache.evictAll()
+        rowArtLoaderLazy?.shutdown()
+        rowArtLoaderLazy = null
         if (libraryDb is AndroidTelegramLibraryDatabase) {
             runCatching { (libraryDb as AndroidTelegramLibraryDatabase).close() }
         }

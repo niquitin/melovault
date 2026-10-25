@@ -40,6 +40,9 @@ import kotlin.math.sin
 /** Tag on the ⋮ button of a song row, so a ListView host can keep just that button clickable. */
 internal const val MELO_SONG_ROW_MORE_TAG = "melo.songrow.more"
 
+/** Tag on the cover frame of a teal-theme song row: which cover ([MeloRowArtPolicy] key) belongs there. */
+internal class MeloArtTag(val key: String)
+
 /**
  * Shared MeloVault building blocks (docs/ui-spec.md "Thành phần dùng chung").
  * Every size comes from [Sizes] in device pixels, so the same code renders the
@@ -65,7 +68,9 @@ internal class MeloComponents(
         val art: Bitmap? = null,
         val index: Int? = null,
         /** A "Nhạc trên máy" song: the status line says "Trên máy" instead of "Đã tải". */
-        val local: Boolean = false
+        val local: Boolean = false,
+        /** E98 teal theme: identity of the row's cover, so a cover that arrives later finds its row. */
+        val artKey: String? = null
     )
 
     data class MiniPlayerModel(
@@ -157,6 +162,52 @@ internal class MeloComponents(
     }
 
     /**
+     * E98 teal theme: a cover tile whose picture can arrive after the row was built. A frame tagged
+     * with [MeloArtTag] holds the picture (hidden until there is one) over the letter tile.
+     */
+    fun rowArtView(art: Bitmap?, sourceTitle: String?, title: String, sizePx: Int, key: String): FrameLayout {
+        val radius = minOf(sizes.corner * 3 / 4, sizePx / 4)
+        val frame = FrameLayout(context).apply {
+            tag = MeloArtTag(key)
+            layoutParams = LinearLayout.LayoutParams(sizePx, sizePx)
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        frame.addView(ImageView(context).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = roundedBackground(palette.surfaceRaised, radius)
+            clipToOutline = true
+            visibility = View.GONE
+        }, FrameLayout.LayoutParams(sizePx, sizePx))
+        frame.addView(TextView(context).apply {
+            text = MeloComponentPolicy.initialOf(sourceTitle, title)
+            gravity = Gravity.CENTER
+            setTextSize(TypedValue.COMPLEX_UNIT_PX, sizePx * 0.42f)
+            setTextColor(palette.text)
+            typeface = Typeface.DEFAULT_BOLD
+            background = roundedBackground(MeloComponentPolicy.placeholderColor(sourceTitle ?: title, palette), radius)
+        }, FrameLayout.LayoutParams(sizePx, sizePx))
+        applyRowArt(frame, art)
+        return frame
+    }
+
+    /**
+     * Puts [bmp] into a [rowArtView] frame in place (no relayout, same bitmap not set twice).
+     * Returns whether the frame now shows a picture. A null [bmp] never takes a picture away.
+     */
+    fun applyRowArt(frame: FrameLayout, bmp: Bitmap?): Boolean {
+        val image = frame.getChildAt(0) as? ImageView ?: return false
+        val tile = frame.getChildAt(1)
+        if (bmp == null) return image.visibility == View.VISIBLE
+        if (image.tag !== bmp) {
+            image.setImageBitmap(bmp)
+            image.tag = bmp
+        }
+        image.visibility = View.VISIBLE
+        tile.visibility = View.GONE
+        return true
+    }
+
+    /**
      * Song row: cover, title (2 lines, or 1 on Gọn), status icon + words, total
      * duration, ⋮ (not in Car Mode). Tap = play, long press = menu.
      */
@@ -192,7 +243,11 @@ internal class MeloComponents(
                 layoutParams = LinearLayout.LayoutParams(sizes.minTouch * 6 / 10, ViewGroup.LayoutParams.WRAP_CONTENT)
             })
         }
-        row.addView(artView(model.art, shownSource, shownTitle, sizes.rowArt))
+        if (teal && model.artKey != null) {
+            row.addView(rowArtView(model.art, shownSource, shownTitle, sizes.rowArt, model.artKey))
+        } else {
+            row.addView(artView(model.art, shownSource, shownTitle, sizes.rowArt))
+        }
 
         val body = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL

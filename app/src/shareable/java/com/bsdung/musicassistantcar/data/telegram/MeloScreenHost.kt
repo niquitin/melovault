@@ -90,6 +90,19 @@ internal interface MeloScreenHost {
      */
     fun jumpToLetter(lowerBound: String?): Int?
 
+    // ---- E98 row covers (teal theme only; the defaults keep every other screen as it was) -----
+
+    /** The "Tải ảnh bìa từ Telegram" switch of Cài đặt giao diện (default on). */
+    fun rowArtEnabled(): Boolean = false
+    /** Visible rows plus the few below them; the host fetches their covers in the background. */
+    fun requestRowArt(rows: List<Row>, rowArtPx: Int) = Unit
+    /** The cover to show now for [key] (a blur counts), or null. */
+    fun peekRowArt(key: String?): Bitmap? = null
+    /** True when [key] has its final cover or is known to have none. */
+    fun rowArtSettled(key: String?): Boolean = false
+    /** Called on the main thread, coalesced, when new covers are ready. */
+    fun setRowArtListener(listener: (() -> Unit)?) = Unit
+
     // ---- Studio Deck (Now Playing) --------------------------------------------------------
 
     /** Current playback queue in play order (the service's authoritative order). */
@@ -137,7 +150,15 @@ internal interface MeloScreenHost {
         val sortKey: String = "",
         /** MediaStore MIME type of a local song (format text); null for Telegram rows. */
         val mimeType: String? = null,
-        val local: Boolean = false
+        val local: Boolean = false,
+        /** E98 teal theme: identity of the cover ([MeloRowArtPolicy] keys); null for the current theme. */
+        val artKey: String? = null,
+        val chatId: Long = 0L,
+        /** The genuine Telegram message id (not the song key). */
+        val rawMessageId: Long = 0L,
+        /** Path of the downloaded file, when the song is on the device; the loader checks it is the account's own. */
+        val localFile: String? = null,
+        val mediaStoreId: Long = 0L
     )
 
     data class SourceRow(val chatId: Long, val title: String, val count: Int)

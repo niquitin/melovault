@@ -95,8 +95,12 @@ internal class MeloLibraryPane(
     /** Scroll position handed over by the screen this one replaced; used once, for the same group only. */
     private var inheritedAnchor: MeloScreenHost.ListAnchor? = host.listAnchor()
     private var restoringAnchor: MeloScreenHost.ListAnchor? = null
+    /** E98 row covers: the list's scroll state (nothing is requested while it is flung) and the first row asked for. */
+    private var scrollState = AbsListView.OnScrollListener.SCROLL_STATE_IDLE
+    private var lastArtFirst = -1
 
     init {
+        if (c.teal) host.setRowArtListener(::refreshVisibleArt)
         searchHolder.addView(searchBar)
         view.addView(searchHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         view.addView(chipHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -137,10 +141,15 @@ internal class MeloLibraryPane(
                 true
             }
             setOnScrollListener(object : AbsListView.OnScrollListener {
-                override fun onScrollStateChanged(v: AbsListView?, state: Int) = Unit
+                override fun onScrollStateChanged(v: AbsListView?, state: Int) {
+                    scrollState = state
+                    // The covers of a fast scroll are fetched once the list slows down.
+                    if (c.teal && state != AbsListView.OnScrollListener.SCROLL_STATE_FLING) requestVisibleArt()
+                }
                 override fun onScroll(v: AbsListView?, first: Int, visible: Int, total: Int) {
                     val snap = snapshot ?: return
                     if (snap.showingSources) return
+                    if (c.teal && first != lastArtFirst) requestVisibleArt()
                     if (MeloCompactPolicy.shouldLoadMore(first, visible, total)) host.loadMore()
                     if (bar.visibility == View.VISIBLE) {
                         snap.rows.getOrNull(first)?.sortKey?.let { bar.setActive(MeloAlphabetPolicy.letterOf(it)) }
@@ -166,6 +175,7 @@ internal class MeloLibraryPane(
     }
 
     fun detach() {
+        if (c.teal) host.setRowArtListener(null)
         saveScrollAnchor()
         pendingJump?.let(handler::removeCallbacks)
         pendingQuery?.let(handler::removeCallbacks)
@@ -245,6 +255,10 @@ internal class MeloLibraryPane(
             list.setPadding(0, 0, if (showBar) bar.barWidthPx else 0, 0)
             if (!showBar) bar.setActive(null)
             adapter.notifyDataSetChanged()
+            if (c.teal) {
+                lastArtFirst = -1
+                list.post { requestVisibleArt() }
+            }
             val restore = restoringAnchor
             if (restore != null && snap.rows.isNotEmpty()) {
                 restoringAnchor = null
@@ -417,11 +431,51 @@ internal class MeloLibraryPane(
             val quality = MeloComponentPolicy.qualityLabel(MeloComponentPolicy.formatOf(row.mimeType, row.filename), null, null, null)
             return c.songRow(
                 SongRowModel(
-                    row.title, row.sourceTitle, row.durationSeconds, status, quality, row.downloadingPercent, row.art,
-                    local = snap.local || row.local
+                    row.title, row.sourceTitle, row.durationSeconds, status, quality, row.downloadingPercent,
+                    row.art ?: if (c.teal) host.peekRowArt(row.artKey) else null,
+                    local = snap.local || row.local,
+                    artKey = if (c.teal) row.artKey else null
                 )
             ).also { unclickable(it, position) }
         }
+    }
+
+    // ---- E98 row covers (teal theme) ------------------------------------------------------------------
+
+    /** Asks the host for the covers of the rows on screen and the few below (never while the list is flung). */
+    private fun requestVisibleArt() {
+        val snap = snapshot ?: return
+        if (snap.showingSources || !MeloRowArtPolicy.shouldLoad(scrollState)) return
+        val first = list.firstVisiblePosition
+        lastArtFirst = first
+        val range = MeloRowArtPolicy.rowsToLoad(first, list.childCount, snap.rows.size)
+        if (range.isEmpty()) return
+        host.requestRowArt(snap.rows.slice(range), s.rowArt)
+    }
+
+    /** New covers arrived: put them into the rows on screen in place; the list is not rebuilt. Logs counts only. */
+    private fun refreshVisibleArt() {
+        val snap = snapshot ?: return
+        if (snap.showingSources) return
+        var shown = 0
+        var withArt = 0
+        var settled = 0
+        for (i in 0 until list.childCount) {
+            val artHost = findArtHost(list.getChildAt(i), 0) ?: continue
+            val key = (artHost.tag as MeloArtTag).key
+            shown++
+            val bmp = host.peekRowArt(key)
+            if (c.applyRowArt(artHost, bmp)) withArt++
+            if (host.rowArtSettled(key)) settled++
+        }
+        android.util.Log.i("MeloRowArt", "visible=$shown withArt=$withArt settled=$settled")
+    }
+
+    private fun findArtHost(v: View?, depth: Int): FrameLayout? {
+        if (v == null || depth > 4) return null
+        if (v is FrameLayout && v.tag is MeloArtTag) return v
+        if (v is ViewGroup) for (i in 0 until v.childCount) findArtHost(v.getChildAt(i), depth + 1)?.let { return it }
+        return null
     }
 
     /**
