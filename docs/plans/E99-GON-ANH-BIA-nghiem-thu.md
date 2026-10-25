@@ -6,7 +6,8 @@
 |---|---|---|
 | 1 | 25/10 ~16:30 | BLOCKED — CHỜ CHỦ DỰ ÁN (kỹ thuật đạt; Janky lạnh cần chủ dự án cảm nhận; chờ duyệt ảnh/cài vc114) |
 | 1 — phản hồi chủ dự án | 25/10 | "ĐẠT" + "Gọn luôn hiện ảnh bìa, luôn có ảnh" (trả lời câu hỏi §3.2 kế hoạch) |
-| **REWORK-01 — hiện tại** | 25/10 | **REWORK** — chỉ đổi điều kiện bật ảnh ở Gọn (mục 12); phần còn lại chủ dự án đã chấp nhận |
+| REWORK-01 — chỉ thị | 25/10 ~21:56 | **REWORK** — chỉ đổi điều kiện bật ảnh ở Gọn (mục 12); phần còn lại chủ dự án đã chấp nhận |
+| **REWORK-01 — nghiệm thu (hiện tại)** | 25/10 ~22:30–22:45 | **BLOCKED — CHỜ CHỦ DỰ ÁN** (kỹ thuật đạt hết, mục 13; chờ chủ dự án duyệt ảnh/vc115) |
 
 ## 1. Git
 
@@ -116,3 +117,30 @@ Shanling: `SHANLING_SCREEN_END` OFF 15:37:59 (Sonnet); Opus kiểm lại 16:13 `
 Sony (nếu Tiny ADB sẵn sàng và không ai đang dùng): Điện thoại dọc, Kiểu màu Hiện tại → **không** có ảnh (hợp đồng E98); Teal → có ảnh; trả cài đặt như cũ. Màn hình OFF trong `finally` (§7). Ghép `00_tong_hop_rework01.png`, không ghi đè ảnh vòng 1. Thêm mục "REWORK-01" vào `E99-GON-ANH-BIA-bao-cao.md` kèm "APK QA cần Opus nghiệm thu bàn giao". **Không** dùng `am force-stop` trên Shanling (giữ hàng đợi của chủ dự án).
 
 **PASS REWORK-01:** test 0 lỗi, ≥ 2042 mỗi biến thể; build OK; đúng 4 file; R1–R4 đạt; Phone Hiện tại không có ảnh (mã + test, Sony nếu có); chủ dự án duyệt.
+
+## 13. Nghiệm thu REWORK-01 (vc115) — Opus, 25/10 ~22:30–22:45
+
+**Git:** HEAD `d14d991` (báo cáo), code `6fb4e65`, cha `2687956`; cây sạch, không Gradle/adb nào khác đang chạy (commit cuối 22:23, Sonnet đã báo dừng). `git diff --stat 2687956..HEAD`: đúng 4 file chỉ thị (+15/−12) + báo cáo; `git diff --check` sạch. Không đụng loader/DB/TDLib/Media3/palette/kích thước.
+
+**Mã (đọc toàn bộ diff):** `rowArtLayer = appliesTo(...) || profile == COMPACT` — Gọn luôn bật lớp ảnh, Phone/Tablet vẫn `= appliesTo` (Hiện tại → không ảnh), Car `false`. Công tắc vẫn chặn qua `rowArtOn()` (`TelegramPreviewActivity.kt:128`). Vì `rowArt` của Gọn nay luôn `true`, khóa `layerKey` không đổi khi đổi Kiểu màu → không dựng lại lớp Gọn thừa. Test viết lại phủ mọi `ColorTheme` × COMPACT/CAR. Ghi chú nhỏ (không chặn): `MeloThemePolicy.rowArtActive` (dòng 41–42, KDoc "chỉ khi Teal") không còn dùng ở mã sản phẩm, chỉ còn trong test — có thể dọn ở nhiệm vụ sau.
+
+| Tiêu chí PASS REWORK-01 | Kết quả | Bằng chứng |
+|---|---|---|
+| Test 0 lỗi, ≥ 2042 mỗi biến thể | **ĐẠT** | Opus tự chạy `--rerun` 22:30–22:32: `BUILD SUCCESSFUL in 1m 40s`; XML mới (166 file/biến thể): Debug 2042/21 bỏ qua/0 lỗi, Release 2042/21/0. Số test giữ nguyên (1 test viết lại) |
+| Build Debug + Release OK | **ĐẠT** | cùng lần chạy trên |
+| Đúng 4 file | **ĐẠT** | diff --stat ở trên |
+| R1 Teal: 8 dòng có ảnh | **ĐẠT** | ô 1 ảnh tổng hợp, `R1_…221120` |
+| R2 Hiện tại: Gọn vẫn có ảnh ≥ 80 %, màu không đổi | **ĐẠT** | ô 2–3, `R2_07`, `R2_08`; log 22:14:11–16 (lúc đang Hiện tại) `sent` 123→161, `decoded` 115→175, `compact visible=9 withArt=9` — bộ nạp thật sự tải ở Hiện tại |
+| R3 tắt → ô chữ cái; bật → ảnh về | **ĐẠT** | ô 4–5; log không dòng nào 22:14:16 → 22:15:47 (bật lại, `cache` reset 240 KB). Log có điều tiết nên "không request khi tắt" dựa trên mã (`artKey = null`) + ảnh, như vòng 1 |
+| R4 trả Teal + công tắc bật | **ĐẠT** | ô 6, `R4_02`; trạng thái cuối Shanling = trước QA |
+| Phone Hiện tại không ảnh (mã + test; Sony) | **ĐẠT** | test `rowArtLayerKeepsTheE98BehaviourForPhoneAndTablet`; Sony ô 7 (Hiện tại: chữ cái), ô 8 (Teal: có ảnh); Sony trả về Hiện tại |
+| inflight ≤ 3, không crash/ANR | **ĐẠT** | log inflight 0/1 (10/3 lần); báo cáo: crash buffer 0 FATAL |
+| Không `force-stop`/uninstall/`pm clear`/`-d` | **ĐẠT** | báo cáo R.1, R.3; Media3 Shanling `state=0`, Sony `state=2` không đụng |
+| Màn hình OFF cuối (§7) | **ĐẠT** | Sonnet: Shanling 22:17:06, Sony 22:21:58; Opus kiểm lại Shanling `mScreenState=OFF`, không đánh thức máy nào |
+| Chủ dự án duyệt | **CHỜ** | — |
+
+**APK (§9) — đạt gate:** `MeloVault-E99-REWORK01-6fb4e65-vc115-TinySigned-debug.apk`, SHA-256 `341200C7…C636E6`, 33.413.060 byte — trùng ở Tiny, Ni, Drive và `base.apk` đang cài trên Shanling. `aapt2`: `app.melovault.player` vc115 / `0.6.90.1-beta`; `apksigner`: cert `eecd3df7…c3fce8`; clone Tiny @ `6fb4e65` sạch, log build `telegram.config.valid=true`. Drive owner-only, thư mục mới `E99-GON-ANH-BIA-20261025-vc115-6fb4e65`: `E99-GON-ANH-BIA-apk-test.md`, ảnh: `E99-GON-ANH-BIA-hinh-nghiem-thu.md`. Nhãn **QA CANDIDATE — CHƯA NGHIỆM THU**.
+
+**Giới hạn:** Janky không đo lại (REWORK-01 không đổi bộ nạp/kích thước; cùng điều kiện ở Kiểu màu Hiện tại nay Gọn cũng tải ảnh như Teal — chủ dự án đã chấp nhận độ mượt vc114). Tablet/Hai khung, Y700/S25/FYT/Car Mode chưa kiểm; Gọn lúc đang quét offline chưa kiểm. **CHƯA XÁC NHẬN ÂM THANH THỰC.**
+
+**Kết luận REWORK-01: BLOCKED — CHỜ CHỦ DỰ ÁN.** Kỹ thuật đạt toàn bộ tiêu chí mục 12. Chủ dự án xem ảnh / dùng vc115 (Kiểu màu Hiện tại → Gọn vẫn có ảnh bìa) rồi nói **ĐẠT** hoặc báo lỗi. Khi ĐẠT: đổi thành PASS, xin xác nhận rồi `git merge --no-ff dot/E99-GON-ANH-BIA` vào `feature/e93-03d-y700-offline-cockpit`, cập nhật đầu HANDOFF.md.
