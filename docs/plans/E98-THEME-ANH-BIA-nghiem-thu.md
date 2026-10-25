@@ -9,7 +9,8 @@
 | REWORK-01 bản đầu | 25/10 13:46 (`0bab5cc`) | chỉ cho Teal sáng — **đã thay** |
 | Chủ dự án chốt thêm | 25/10 | "Tôi muốn thẻ lớn cho tất cả các giao diện"; Shanling: **giữ đủ 8 bài** |
 | REWORK-01 | 25/10 13:56 (`2f00755`) | sửa đúng mục 10; Sonnet làm `48449ab` (vc113) + báo cáo `4446410` |
-| **2 — hiện tại** | 25/10 ~14:50 | **BLOCKED — CHỜ CHỦ DỰ ÁN** (REWORK-01 đạt kỹ thuật, Sony + Shanling thật; chờ chủ dự án nói ĐẠT) — mục 11 |
+| 2 | 25/10 ~14:50 | BLOCKED — CHỜ CHỦ DỰ ÁN (REWORK-01 đạt kỹ thuật, Sony + Shanling thật) — mục 11 |
+| **Chủ dự án duyệt — hiện tại** | 25/10 | **PASS** — chủ dự án trả lời "ĐẠT" trong chat sau khi xem ảnh Sony + Shanling vc113; chưa merge — mục 12 |
 
 ## 1. Git
 
@@ -121,3 +122,9 @@ Trước khi chạm, logcat cho thấy có người tự cài vc112 từ Tải x
 **Chưa kiểm chứng:** Y700 (Tablet dọc), S25, FYT/Car Mode trên máy; cỡ chữ lớn trên máy thật; Gọn lúc đang quét offline; **CHƯA XÁC NHẬN ÂM THANH THỰC** (Media3 PLAYING chỉ chứng minh luồng phát).
 
 **Kết luận vòng 2: BLOCKED — CHỜ CHỦ DỰ ÁN.** REWORK-01 đạt toàn bộ tiêu chí kỹ thuật có thể kiểm (Sony + Shanling thật); chờ chủ dự án xem ảnh/cài vc113 và nói **ĐẠT** hoặc báo lỗi. Ảnh: `docs/plans/E98-THEME-ANH-BIA-hinh-nghiem-thu.md`. Khi ĐẠT: đổi thành PASS, xin xác nhận nhánh tích hợp (repo không có `main`) rồi mới `git merge --no-ff`.
+
+## 12. Kết luận cuối: PASS (25/10/2026)
+
+Chủ dự án trả lời **"ĐẠT"** trong chat sau khi xem ảnh tổng hợp Sony và ảnh Shanling thật của vc113. **E98-THEME-ANH-BIA: PASS** cho phạm vi đã kiểm: theme Teal sáng + ảnh bìa dòng (vòng 1) và thẻ "Đang phát" lớn ở Thanh đáy gộp (REWORK-01). APK được nghiệm thu: vc113 / `0.6.89.1-beta` @ `48449ab`, SHA-256 `200E6EBC…0210F6`; bỏ nhãn QA CANDIDATE cho bản này (không phải Stable, không phát hành công khai).
+
+Giới hạn vẫn giữ (không nằm trong PASS): Y700 / Tablet dọc, S25, FYT/Car Mode trên máy, cỡ chữ lớn trên máy, Gọn lúc đang quét offline (có thể còn 7 dòng), **âm thanh thật chưa xác nhận**. Merge: chờ chủ dự án chọn nhánh tích hợp (repo không có `main`), sau đó mới `git merge --no-ff`.

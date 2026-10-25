@@ -2,7 +2,7 @@
 
 ## Bản mới nhất: REWORK-01, vc113 (25/10/2026)
 
-**Trạng thái:** QA CANDIDATE — CHƯA NGHIỆM THU. Bản test, không phải Beta phát hành hay Stable.
+**Trạng thái:** ĐÃ NGHIỆM THU — PASS (chủ dự án "ĐẠT" 25/10/2026, xem `E98-THEME-ANH-BIA-nghiem-thu.md` mục 12). Bản test nội bộ, không phải Stable, không phát hành công khai; giới hạn: Y700/S25/FYT, âm thanh thật chưa xác nhận.
 
 - [MỞ APK TEST E98 REWORK-01 (vc113) TRÊN GOOGLE DRIVE](https://drive.google.com/file/d/1PMwmQfhKnampHqOUnROc6c_SW8PAwMZe/view)
 - [THƯ MỤC APK + ẢNH QA vc113](https://drive.google.com/drive/folders/1Seuc8lMGKj47Kv3-CNAhvWJVV8ELY0KS)
