@@ -1,6 +1,16 @@
 # MELOVAULT — Quy trình 3 vai trò, hội thoại độc lập
 
-Chủ sở hữu phê duyệt quy trình ngày 18/10/2026. **ChatGPT duy nhất biên tập SOP, prompt mẫu và tài liệu nghiệm thu.** Claude không tự chỉnh tài liệu quy trình, không lập prompt công việc tiếp theo. Mỗi vòng: ChatGPT đề xuất → chủ dự án CHỐT → Opus lập kế hoạch → Sonnet thi hành → ChatGPT QA độc lập → chủ dự án thử thao tác → ChatGPT PASS và merge → đề xuất vòng sau. Nếu REWORK mở Sonnet hội thoại MỚI trên chính nhánh; nếu BLOCKED xác định nút thắt trước khi thực thi tiếp.
+## CẬP NHẬT 25/10/2026 — Opus nghiệm thu thay ChatGPT (ưu tiên hơn mọi mục bên dưới)
+
+Chủ dự án quyết định ngày 25/10/2026: **Claude Opus trong một hội thoại MỚI (không Resume phiên lập kế hoạch) làm vai NGHIỆM THU thay ChatGPT.** Ở mọi mục bên dưới, chữ "ChatGPT" ở vai đề xuất/kiểm toán/nghiệm thu/merge/chuẩn hóa ảnh/bàn giao link APK đọc là **"Opus nghiệm thu"**. Chỉ Opus (khi chủ dự án yêu cầu) biên tập SOP, prompt mẫu và tài liệu nghiệm thu; Sonnet không.
+
+Mỗi vòng: Opus nghiệm thu đề xuất (hoặc chủ dự án tự nêu) → chủ dự án CHỐT → **Opus lập kế hoạch** (phiên mới, cuối phiên đưa prompt Sonnet điền từ mẫu) → **Sonnet phiên 1** code + test Ni → **Sonnet phiên 2** build Tiny + QA + báo cáo (nhiệm vụ nhỏ gộp 1 phiên) → **Opus nghiệm thu** (phiên mới, prompt `PROMPT_OPUS_NGHIEM_THU.md`) gửi ảnh + link APK → chủ dự án nói ĐẠT/báo lỗi → Opus nghiệm thu ghi PASS và merge sau khi chủ dự án xác nhận thao tác merge. REWORK: Opus nghiệm thu ghi lỗi và đưa prompt Sonnet REWORK; Sonnet MỚI sửa trên chính nhánh. BLOCKED: xác định nút thắt trước khi làm tiếp.
+
+Tính độc lập: phiên nghiệm thu chấm theo tiêu chí PASS/FAIL đã ghi trong kế hoạch, tự chạy lại test/build và xem ảnh thật; không dựa vào lời tóm tắt của Sonnet, không nới tiêu chí để đạt. Tiết kiệm token theo CLAUDE.md mục 10.
+
+---
+
+*Bản gốc 18/10/2026 (đọc với ánh xạ ở trên):* Chủ sở hữu phê duyệt quy trình ngày 18/10/2026. ChatGPT duy nhất biên tập SOP, prompt mẫu và tài liệu nghiệm thu. Claude không tự chỉnh tài liệu quy trình, không lập prompt công việc tiếp theo. Mỗi vòng: ChatGPT đề xuất → chủ dự án CHỐT → Opus lập kế hoạch → Sonnet thi hành → ChatGPT QA độc lập → chủ dự án thử thao tác → ChatGPT PASS và merge → đề xuất vòng sau. Nếu REWORK mở Sonnet hội thoại MỚI trên chính nhánh; nếu BLOCKED xác định nút thắt trước khi thực thi tiếp.
 
 ## A. Bắt đầu nhiệm vụ
 - Mỗi nhiệm vụ được chủ dự án duyệt có TASK_ID duy nhất: chữ thường, dấu gạch nối, ví dụ downloaded-count-startup. Mở nhánh **dot/<TASK_ID>** từ HEAD nhánh tích hợp đã được xác minh; không sửa mã trực tiếp trên nhánh tích hợp.

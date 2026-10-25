@@ -18,13 +18,16 @@ Nhánh dự kiến: dot/<TASK_ID>
 5. Plan ghi rõ những trường hợp Sonnet phải STOP và xin kiểm toán thay vì đoán, kể cả signature mismatch, ADB không nhận, missing Telegram API config hoặc layout không tái hiện.
 6. Không sửa .kt, .gradle, manifest, data, CLAUDE.md hay docs/workflow; không chạy build, cài APK, xóa dữ liệu, không tự chuyển sang task khác. Chỉ commit file kế hoạch trên dot/<TASK_ID> khi Git sạch, báo đường dẫn file, commit và điểm chặn.
 
-Kết thúc bằng ba đoạn dễ hiểu: Đã làm / Chưa kiểm chứng / Rủi ro, và đúng câu:
+7. Nhiệm vụ lớn: chia rõ **Sonnet phiên 1** (code + test Ni, các bước nào) và **Sonnet phiên 2** (build Tiny + QA + báo cáo); nhiệm vụ nhỏ ghi GỘP. Tiêu chí PASS/FAIL phải đo được để phiên Opus nghiệm thu chấm thẳng.
+
+Kết thúc bằng ba đoạn dễ hiểu: Đã làm / Chưa kiểm chứng / Rủi ro, rồi **prompt Sonnet phiên 1** (hoặc GỘP) điền từ docs/workflow/PROMPT_SONNET.md (chỉ thay TASK_ID, baseline, PHIÊN và ≤ 8 dòng lưu ý riêng), và đúng câu:
 "Giờ mở phiên mới, chọn Sonnet."
 
-DỪNG. Không viết prompt Sonnet, ChatGPT sẽ cung cấp sau khi chủ dự án chốt.
+DỪNG. Không tự triển khai code.
 
 ---
-Khi phải sửa chính kế hoạch theo kết quả ChatGPT REWORK, mở phiên Opus MỚI trên cùng nhánh, không tạo nhánh/plan trùng.
+Khi phải sửa chính kế hoạch theo kết quả Opus nghiệm thu REWORK, mở phiên Opus MỚI trên cùng nhánh, không tạo nhánh/plan trùng.
+(Cập nhật 25/10/2026: "ChatGPT" ở các mục dưới đọc là "Opus nghiệm thu".)
 
 ### QUY ĐỊNH MÀN HÌNH KHI LẬP KẾ HOẠCH (19/10/2026)
 
