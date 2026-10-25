@@ -203,9 +203,13 @@ class BulkDownloadTest {
 
     /**
      * 3. Retry eligibility for FAILED and CANCELLED tracks.
+     * The cancel is synchronized with the worker: the stream of track 202 is held open until the
+     * test has cancelled, so the transfer can never finish before the cancel (no timing race).
      */
     @Test
     fun testRetryEligibilityForFailedAndCancelled() {
+        val opened202 = CountDownLatch(1)
+        val release202 = CountDownLatch(1)
         val manager = PinnedDownloadManager(
             store = store,
             executor = Executors.newSingleThreadExecutor(),
@@ -213,14 +217,23 @@ class BulkDownloadTest {
                 if (track.id == 201) {
                     throw IOException("Network error")
                 }
+                if (track.id == 202) {
+                    opened202.countDown()
+                    assertTrue("test must release track 202", release202.await(5, TimeUnit.SECONDS))
+                }
                 Pair(ByteArrayInputStream(ByteArray(1000)), 1000L)
             }
         )
 
         val completedLatch = CountDownLatch(1)
+        val cancelled202Latch = CountDownLatch(1)
         manager.addListener(object : PinnedDownloadManager.DownloadListener {
             override fun onDownloadFailed(trackId: Long, error: String) {
                 if (trackId == 201L) completedLatch.countDown()
+            }
+
+            override fun onDownloadCancelled(trackId: Long) {
+                if (trackId == 202L) cancelled202Latch.countDown()
             }
         })
 
@@ -229,10 +242,15 @@ class BulkDownloadTest {
         assertTrue(completedLatch.await(5, TimeUnit.SECONDS))
         assertEquals(DownloadState.FAILED, manager.getDownloadStatus(201L).state)
 
-        // Track 202 is cancelled
+        // Track 202 is cancelled while its transfer is provably still in flight
         manager.startDownload(sampleTrack(202))
-        manager.cancelDownload(202L)
+        assertTrue("worker must reach track 202 stream", opened202.await(5, TimeUnit.SECONDS))
+        assertTrue("cancel before completion must take effect", manager.cancelDownload(202L))
         assertEquals(DownloadState.CANCELLED, manager.getDownloadStatus(202L).state)
+        release202.countDown()
+        assertTrue(cancelled202Latch.await(5, TimeUnit.SECONDS))
+        assertEquals(DownloadState.CANCELLED, manager.getDownloadStatus(202L).state)
+        assertFalse(manager.isOfflineReady(202L))
 
         // Classify tracks 201, 202, and 203
         val tracks = listOf(sampleTrack(201), sampleTrack(202), sampleTrack(203))
@@ -246,6 +264,164 @@ class BulkDownloadTest {
         assertTrue(classification.eligibleNewTracks.any { it.id == 201 })
         assertTrue(classification.eligibleNewTracks.any { it.id == 202 })
         assertTrue(classification.eligibleNewTracks.any { it.id == 203 })
+    }
+
+    /**
+     * 3b. Cancel mid-transfer (stream already open and registered): the committed file/record must
+     * never appear even though the stream later reaches EOF.
+     */
+    @Test
+    fun testCancelMidTransferNeverCommits() {
+        val firstChunkRead = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val cancelled = CountDownLatch(1)
+        val stream = object : InputStream() {
+            private var served = false
+            override fun read(): Int = throw UnsupportedOperationException()
+            override fun read(b: ByteArray, off: Int, len: Int): Int {
+                if (!served) {
+                    served = true
+                    java.util.Arrays.fill(b, off, off + 512, 9.toByte())
+                    firstChunkRead.countDown()
+                    return 512
+                }
+                assertTrue("test must release the stream", release.await(5, TimeUnit.SECONDS))
+                return -1
+            }
+        }
+        val executor = Executors.newSingleThreadExecutor()
+        val manager = PinnedDownloadManager(
+            store = store,
+            executor = executor,
+            streamOpener = { _, _ -> Pair(stream, 512L) },
+        )
+        manager.addListener(object : PinnedDownloadManager.DownloadListener {
+            override fun onDownloadCancelled(trackId: Long) {
+                if (trackId == 211L) cancelled.countDown()
+            }
+        })
+
+        manager.startDownload(sampleTrack(211))
+        assertTrue(firstChunkRead.await(5, TimeUnit.SECONDS))
+        assertTrue(manager.cancelDownload(211L))
+        release.countDown()
+        assertTrue(cancelled.await(5, TimeUnit.SECONDS))
+        executor.shutdown()
+        assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS))
+
+        assertEquals(DownloadState.CANCELLED, manager.getDownloadStatus(211L).state)
+        assertFalse(manager.isOfflineReady(211L))
+        assertNull(store.getRecord(211L))
+    }
+
+    /**
+     * 3c. Cancel after the download has already committed is a no-op: the track stays OFFLINE_READY
+     * (product contract: a committed offline file is never un-committed by a late cancel).
+     */
+    @Test
+    fun testCancelAfterCompletionKeepsOfflineReady() {
+        val completed = CountDownLatch(1)
+        val manager = PinnedDownloadManager(
+            store = store,
+            executor = Executors.newSingleThreadExecutor(),
+            streamOpener = { _, _ -> Pair(ByteArrayInputStream(ByteArray(1000)), 1000L) },
+        )
+        manager.addListener(object : PinnedDownloadManager.DownloadListener {
+            override fun onDownloadCompleted(trackId: Long, record: OfflineTrackRecord) {
+                if (trackId == 221L) completed.countDown()
+            }
+        })
+
+        manager.startDownload(sampleTrack(221))
+        assertTrue(completed.await(5, TimeUnit.SECONDS))
+        assertFalse("late cancel must report nothing to cancel", manager.cancelDownload(221L))
+        assertEquals(DownloadState.OFFLINE_READY, manager.getDownloadStatus(221L).state)
+        assertTrue(manager.isOfflineReady(221L))
+    }
+
+    /**
+     * 3d. A QUEUED job behind an active download cancels immediately and is never run.
+     */
+    @Test
+    fun testCancelQueuedJobBehindActiveDownload() {
+        val activeOpened = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val activeDone = CountDownLatch(1)
+        val opened = Collections.synchronizedList(mutableListOf<Int>())
+        val executor = Executors.newSingleThreadExecutor()
+        val manager = PinnedDownloadManager(
+            store = store,
+            executor = executor,
+            streamOpener = { track, _ ->
+                opened.add(track.id)
+                if (track.id == 231) {
+                    activeOpened.countDown()
+                    assertTrue(release.await(5, TimeUnit.SECONDS))
+                }
+                Pair(ByteArrayInputStream(ByteArray(1000)), 1000L)
+            },
+        )
+        manager.addListener(object : PinnedDownloadManager.DownloadListener {
+            override fun onDownloadCompleted(trackId: Long, record: OfflineTrackRecord) {
+                if (trackId == 231L) activeDone.countDown()
+            }
+        })
+
+        manager.startDownload(sampleTrack(231))
+        assertTrue(activeOpened.await(5, TimeUnit.SECONDS))
+        manager.startDownload(sampleTrack(232))
+        assertTrue(manager.cancelDownload(232L))
+        assertEquals(DownloadState.CANCELLED, manager.getDownloadStatus(232L).state)
+
+        release.countDown()
+        assertTrue(activeDone.await(5, TimeUnit.SECONDS))
+        executor.shutdown()
+        assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS))
+
+        assertEquals(DownloadState.CANCELLED, manager.getDownloadStatus(232L).state)
+        assertFalse(manager.isOfflineReady(232L))
+        assertFalse("cancelled queued job must never open a stream", opened.contains(232))
+        assertTrue(manager.isOfflineReady(231L))
+    }
+
+    /**
+     * 3e. Repeat stress of the cancel-vs-completion race with a fast stream and NO synchronization
+     * between start and cancel. Whatever the interleaving, the outcome must be consistent:
+     * cancel returned true  -> CANCELLED, nothing committed;
+     * cancel returned false -> OFFLINE_READY (the download had already committed).
+     */
+    @Test
+    fun testCancelVersusCompletionRaceIsAlwaysConsistent() {
+        var cancelWins = 0
+        var completionWins = 0
+        repeat(150) { iteration ->
+            val trackId = 3000 + iteration
+            val dir = tempFolder.newFolder("race_$iteration")
+            val raceStore = OfflineMetadataStore(dir)
+            val executor = Executors.newSingleThreadExecutor()
+            val manager = PinnedDownloadManager(
+                store = raceStore,
+                executor = executor,
+                streamOpener = { _, _ -> Pair(ByteArrayInputStream(ByteArray(1000)), 1000L) },
+            )
+            manager.startDownload(sampleTrack(trackId))
+            val cancelReturned = manager.cancelDownload(trackId.toLong())
+            executor.shutdown()
+            assertTrue("worker must settle (iteration $iteration)", executor.awaitTermination(10, TimeUnit.SECONDS))
+
+            val state = manager.getDownloadStatus(trackId.toLong()).state
+            if (cancelReturned) {
+                cancelWins++
+                assertEquals("iteration $iteration", DownloadState.CANCELLED, state)
+                assertFalse("iteration $iteration", manager.isOfflineReady(trackId.toLong()))
+                assertNull("iteration $iteration", raceStore.getRecord(trackId.toLong()))
+            } else {
+                completionWins++
+                assertEquals("iteration $iteration", DownloadState.OFFLINE_READY, state)
+                assertTrue("iteration $iteration", manager.isOfflineReady(trackId.toLong()))
+            }
+        }
+        assertEquals(150, cancelWins + completionWins)
     }
 
     /**

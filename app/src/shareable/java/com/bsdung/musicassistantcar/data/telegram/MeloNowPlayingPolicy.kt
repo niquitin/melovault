@@ -2,7 +2,6 @@ package com.bsdung.musicassistantcar.data.telegram
 
 import android.content.SharedPreferences
 import com.bsdung.musicassistantcar.data.telegram.MeloComponentPolicy.Status
-import kotlin.math.abs
 
 /**
  * Rules for the Studio Deck Now Playing screen, docs/ui-spec.md step 6.
@@ -14,7 +13,6 @@ internal object MeloNowPlayingPolicy {
     /** Lives with the playback preferences so ShareablePlaybackService can read it too. */
     const val PLAYBACK_PREFS = UiThemePolicy.PREFS_NAME
     const val KEY_PREFETCH_NEXT = "prefetch_next"
-    const val WAVEFORM_BUCKETS = 120
     const val SEEK_BACK_MS = -30_000L
     const val SEEK_FORWARD_MS = 60_000L
 
@@ -30,11 +28,15 @@ internal object MeloNowPlayingPolicy {
 
     enum class DeckLayout { PORTRAIT, LANDSCAPE }
 
-    /** Two panes (player left, queue right) wherever the library would use two panes. */
+    /**
+     * Player on the left and queue on the right in every window that is wider than tall and at
+     * least 600dp wide (E95: the head unit's 782 × 642 stays two columns); narrower or taller
+     * windows get one column. It no longer follows the library's layout, which switches to the
+     * list with a bottom bar at those sizes.
+     */
     fun deckLayout(widthDp: Int, heightDp: Int): DeckLayout =
-        if (MeloScreenPolicy.chooseLayout(widthDp, heightDp, carMode = false) == MeloScreenPolicy.Layout.TWO_PANE) {
-            DeckLayout.LANDSCAPE
-        } else DeckLayout.PORTRAIT
+        if (widthDp > heightDp && widthDp >= MeloScreenPolicy.TABLET_MIN_WIDTH_DP) DeckLayout.LANDSCAPE
+        else DeckLayout.PORTRAIT
 
     enum class SleepOption(val minutes: Int, val label: String) {
         OFF(0, "Tắt hẹn giờ"),
@@ -65,25 +67,43 @@ internal object MeloNowPlayingPolicy {
         MeloCarPolicy.seekTarget(positionMs, durationMs, deltaMs)
 
     /**
-     * Normalises real sample peaks to [buckets] bars in 0..1. Fewer samples than bars
-     * keeps the samples' count (bars are never invented); an all-silent file stays flat.
+     * The line under the song title on the Now Playing screens (E95 F08). A Telegram song says
+     * "Kênh: …" - the channel is a source, never passed off as an artist; a local song says
+     * "Nghệ sĩ: …" when it has a real artist and "Thư mục: …" when only its folder is known.
+     * Null when there is no name at all. UI text only: the MediaSession metadata is unchanged (D2).
      */
-    fun bucketPeaks(samples: FloatArray, buckets: Int): FloatArray {
-        if (samples.isEmpty() || buckets <= 0) return FloatArray(0)
-        val count = minOf(buckets, samples.size)
-        val out = FloatArray(count)
-        for (i in 0 until count) {
-            val from = (i.toLong() * samples.size / count).toInt()
-            val to = maxOf(from + 1, ((i + 1).toLong() * samples.size / count).toInt())
-            var peak = 0f
-            for (j in from until to) peak = maxOf(peak, abs(samples[j]))
-            out[i] = peak
+    fun sourceLine(sourceTitle: String?, local: Boolean, sourceIsFolder: Boolean): String? {
+        val name = sourceTitle?.trim().orEmpty()
+        if (name.isEmpty()) return null
+        return when {
+            !local -> "Kênh: $name"
+            sourceIsFolder -> "Thư mục: $name"
+            else -> "Nghệ sĩ: $name"
         }
-        val max = out.maxOrNull() ?: 0f
-        if (max <= 0f) return out
-        for (i in out.indices) out[i] = out[i] / max
-        return out
     }
+
+    /**
+     * A local song's display artist is its real artist, else its folder name (see
+     * MeloLocalSourcePolicy.displayArtist). When the shown name is the folder's name the line
+     * says "Thư mục"; the name is true for either label if an artist happens to share it.
+     */
+    fun localSourceIsFolder(displayArtist: String?, folder: String?): Boolean {
+        val artist = displayArtist?.trim().orEmpty()
+        val dir = folder?.trim().orEmpty()
+        return artist.isNotEmpty() && dir.isNotEmpty() && artist.equals(dir, ignoreCase = true)
+    }
+
+    /** Transport buttons (−30s / Lùi / Tiến / +60s) are 56dp in a window tall enough for it, else 48dp (touch minimum). */
+    fun transportHeightDp(windowHeightDp: Int): Int = if (windowHeightDp >= TALL_WINDOW_DP) 56 else 48
+
+    private const val TALL_WINDOW_DP = 600
+
+    /**
+     * The bit depth sits in the header of a downloaded lossless file only; lossy files never get
+     * a Hi-Res claim, so they are not probed at all.
+     */
+    fun shouldProbeBitDepth(filename: String?): Boolean =
+        MeloComponentPolicy.isLossless(MeloComponentPolicy.formatOf(null, filename))
 
     /**
      * Side of the square cover: what is left of the column height after everything else
@@ -99,6 +119,25 @@ internal object MeloNowPlayingPolicy {
     fun playerTight(availableHeightPx: Int, restHeightPx: Int, minSidePx: Int): Boolean =
         availableHeightPx > 0 && availableHeightPx - restHeightPx.coerceAtLeast(0) < minSidePx
 
+    // ---- E98 teal theme: labels of the 2x2 grid and the quality pill --------------------------------
+
+    const val THEMED_QUEUE_LABEL = "Hàng đợi"
+
+    fun themedShuffleLabel(on: Boolean): String = if (on) "Đảo: Bật" else "Đảo: Tắt"
+
+    /** [repeatLabel] is the host's word: "tắt", "tất cả" or "một bài". */
+    fun themedRepeatLabel(repeatLabel: String): String = when (repeatLabel) {
+        "tất cả" -> "Lặp tất cả"
+        "một bài" -> "Lặp 1 bài"
+        else -> "Không lặp"
+    }
+
+    fun themedFavoriteLabel(saved: Boolean): String = if (saved) "Đã lưu" else "Lưu bài"
+
+    /** "MP3 · 44.1 kHz · 320 kbps" is shown as "MP3 • 44.1 kHz • 320 kbps" in the pill; blank when nothing is known. */
+    fun qualityPillText(parts: List<String?>): String =
+        parts.mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }.joinToString(" • ") { it.replace(" · ", " • ") }
+
     /** Short label so four chips fit one row: the repeat state shows by colour, only "một bài" adds a digit. */
     fun repeatChipLabel(repeatLabel: String): String = if (repeatLabel == "một bài") "↻ Lặp 1" else "↻ Lặp"
 
@@ -111,24 +150,6 @@ internal object MeloNowPlayingPolicy {
         val cell = (availableWidthPx - gapPx * (chipWidthsPx.size - 1)) / chipWidthsPx.size
         return chipWidthsPx.max() > cell
     }
-
-    /** Touch position to 0..1 over the bar, which starts and ends [inset] px inside the view. */
-    fun seekFraction(x: Float, width: Float, inset: Float = 0f): Float {
-        val span = width - 2f * inset.coerceAtLeast(0f)
-        if (span <= 0f) return 0f
-        return ((x - inset.coerceAtLeast(0f)) / span).coerceIn(0f, 1f)
-    }
-
-    /** Knob centre for [fraction]: [inset] at 0, width - [inset] at 1, so the knob is never clipped. */
-    fun knobCenter(fraction: Float, width: Float, inset: Float): Float {
-        val i = inset.coerceAtLeast(0f)
-        val span = (width - 2f * i).coerceAtLeast(0f)
-        return i + span * fraction.coerceIn(0f, 1f)
-    }
-
-    /** Derived data only; scoped by account so a different login never reuses another's file. */
-    fun waveformCacheName(accountId: Long, songKey: Long, sizeBytes: Long): String =
-        "wf_${accountId}_${songKey}_${sizeBytes}.bin"
 
     /**
      * Quality label from the real decoder format. ExoPlayer may report "audio/raw" after

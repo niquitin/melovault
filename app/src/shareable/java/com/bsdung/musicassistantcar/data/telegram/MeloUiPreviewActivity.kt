@@ -31,7 +31,7 @@ class MeloUiPreviewActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setTheme(R.style.Theme_MusicAssistantCar)
+        setTheme(R.style.Theme_MeloVault_Shareable)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.systemBars())
@@ -41,11 +41,16 @@ class MeloUiPreviewActivity : AppCompatActivity() {
         val prefs = getSharedPreferences(MeloScreenPolicy.PREFS_NAME, Context.MODE_PRIVATE)
         val emulation = MeloScreenPolicy.loadEmulation(prefs)
         val carPreview = MeloScreenPolicy.loadPreviewCarMode(prefs)
-        val real = MeloUiLabActivity.realMeasurements(this).display
+        val measured = MeloUiLabActivity.realMeasurements(this)
+        val real = measured.display
         val spec = emulation.spec() ?: real
         val frameContext = if (emulation.isActive) MeloEmulation.emulatedContext(this, spec) else this
 
-        val layout = MeloScreenPolicy.chooseLayout(spec.widthDp, spec.heightDp, carPreview)
+        // The frame is the whole (emulated) panel: Shanling's frame is Gọn, the head unit's is not.
+        val panelCompact = if (emulation.isActive) {
+            MeloScreenPolicy.panelCompact(spec.smallestWidthDp, maxOf(spec.widthDp, spec.heightDp), inMultiWindow = false)
+        } else measured.panelCompact
+        val layout = MeloScreenPolicy.chooseLayout(spec.widthDp, spec.heightDp, carPreview, panelCompact)
         val profile = MeloScreenPolicy.profileFor(layout, spec.smallestWidthDp)
         val sizes = MeloDesignTokens.sizes(profile, spec.density, spec.fontScale, spec.physicalPpi)
         val components = MeloComponents(frameContext, sizes)

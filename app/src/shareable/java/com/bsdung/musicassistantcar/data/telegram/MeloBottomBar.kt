@@ -2,6 +2,7 @@ package com.bsdung.musicassistantcar.data.telegram
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Typeface
 import android.util.TypedValue
 import android.view.GestureDetector
@@ -9,6 +10,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -19,8 +21,9 @@ import kotlin.math.abs
 
 /**
  * "Thanh đáy gộp": the only playback control on the portrait layouts. Top to bottom: a 2dp
- * progress line, one "tên bài · tên kênh" line, then tab · Lùi · Phát/Dừng · Tiến · tab.
- * Tapping the bar (or swiping up on it) opens Now Playing. Pure view: every action goes to [host].
+ * progress line, the "Đang phát" card (cover · song title · channel · ⌃), then
+ * tab · Lùi · Phát/Dừng · Tiến · tab. Tapping the card (or swiping up on it) opens Now Playing;
+ * the tabs and the transport buttons keep their own actions. Pure view: every action goes to [host].
  */
 internal class MeloBottomBar(
     private val context: Context,
@@ -39,14 +42,17 @@ internal class MeloBottomBar(
 
     val view: LinearLayout = LinearLayout(context)
     private val progress = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal)
-    private val titleLine: TextView = c.text("", spec.titleSp * density * fontScale, p.text, bold = true).apply {
-        gravity = Gravity.CENTER
-        setPadding(s.gap, 0, s.gap, 0)
-    }
+    private val card = LinearLayout(context)
+    private val artSlot = FrameLayout(context)
+    private val titleText: TextView = c.text("", spec.titleSp * density * fontScale, p.text, bold = true)
+    private val channelText: TextView = c.text("", spec.channelSp * density * fontScale, p.textSecondary)
     private val play: TextView
     private val tabViews = LinkedHashMap<Tab, TextView>()
     private var hasSong = false
     private var shownTitle: String? = null
+    private var shownArt: Bitmap? = null
+    private var shownArtKey: String? = null
+    private var iconOnly = false
 
     init {
         view.apply {
@@ -63,10 +69,13 @@ internal class MeloBottomBar(
             visibility = View.INVISIBLE
         }
         view.addView(progress, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(MeloBottomBarPolicy.PROGRESS_DP)))
-        titleLine.apply { minHeight = dp(spec.titleLineDp); visibility = View.INVISIBLE }
-        view.addView(titleLine, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        buildCard()
+        view.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            marginStart = dp(MeloBottomBarPolicy.CARD_MARGIN_DP)
+            marginEnd = dp(MeloBottomBarPolicy.CARD_MARGIN_DP)
+        })
 
-        val rowHeight = dp(spec.heightDp - MeloBottomBarPolicy.PROGRESS_DP - spec.titleLineDp)
+        val rowHeight = dp(MeloBottomBarPolicy.rowDp(spec))
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -81,12 +90,51 @@ internal class MeloBottomBar(
         row.addView(transportButton("⏭", "Bài kế") { host.next() })
         MeloBottomBarPolicy.rightTabs(spec.tabs).forEach { row.addView(tabView(it), tabParams()) }
         view.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, rowHeight))
+        // The window can be resized without rebuilding this bar: re-check the label fit each time.
+        row.addOnLayoutChangeListener { _, l, _, r, _, ol, _, or_, _ -> if (r - l != or_ - ol) row.post { updateTabLabels() } }
         installOpenGestures()
-        // No song yet: setOnClickListener made the bar clickable, so switch it and Play off again.
+        // No song yet: setOnClickListener made the bar and the card clickable, so switch them and Play off again.
         view.isClickable = false
+        card.isClickable = false
         play.alpha = MeloBottomBarPolicy.playAlpha(false)
         play.isEnabled = MeloBottomBarPolicy.playEnabled(false)
         update(null)
+    }
+
+    /** Cover on the left, song title (bold, one line, "…" at the end) over the channel, "⌃" on the right. */
+    private fun buildCard() {
+        card.apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = c.roundedBackground(p.surface, stroke = p.border)
+            minimumHeight = dp(MeloBottomBarPolicy.cardHeightDp(spec, fontScale))
+            setPadding(dp(MeloBottomBarPolicy.CARD_PAD_DP), dp(MeloBottomBarPolicy.CARD_PAD_DP), 0, dp(MeloBottomBarPolicy.CARD_PAD_DP))
+            visibility = View.INVISIBLE
+            isClickable = false
+        }
+        card.addView(artSlot, LinearLayout.LayoutParams(dp(spec.artDp), dp(spec.artDp)).apply { marginEnd = s.gap })
+        val texts = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        texts.addView(titleText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        texts.addView(channelText, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        card.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val chevron = c.text("⌃", spec.titleSp * density * fontScale, p.textSecondary).apply {
+            gravity = Gravity.CENTER
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        card.addView(chevron, LinearLayout.LayoutParams(dp(MeloBottomBarPolicy.CARD_CHEVRON_DP), ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
+
+    /** The cover goes through [MeloComponents.artView]: no picture means the letter tile that is already there. */
+    private fun showArt(now: NowPlaying) {
+        val key = now.sourceTitle ?: now.title
+        if (shownArt === now.art && shownArtKey == key && artSlot.childCount > 0) return
+        shownArt = now.art
+        shownArtKey = key
+        artSlot.removeAllViews()
+        artSlot.addView(
+            c.artView(now.art, now.sourceTitle, now.title, dp(spec.artDp)),
+            FrameLayout.LayoutParams(dp(spec.artDp), dp(spec.artDp))
+        )
     }
 
     private fun tabParams() = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f).apply {
@@ -104,9 +152,24 @@ internal class MeloBottomBar(
         }
     }
 
+    /** A tab cell too narrow for its label (head unit's 1/3 window, font ×1.25) shows only the icon, larger. */
+    private fun updateTabLabels() {
+        val cell = tabViews.values.firstOrNull()?.width ?: return
+        if (cell <= 0) return
+        val only = MeloBottomBarPolicy.tabIconOnly((cell / density).toInt(), fontScale)
+        if (only == iconOnly) return
+        iconOnly = only
+        tabViews.forEach { (tab, v) ->
+            v.text = tabText(tab)
+            v.setTextSize(TypedValue.COMPLEX_UNIT_PX, if (only) s.titleText else s.secondaryText * 0.85f)
+        }
+    }
+
+    private fun tabText(tab: Tab): String = if (iconOnly) tab.icon else "${tab.icon}\n${tab.label}"
+
     private fun tabView(tab: Tab): TextView {
         val label = TextView(context).apply {
-            text = "${tab.icon}\n${tab.label}"
+            text = tabText(tab)
             gravity = Gravity.CENTER
             setTextSize(TypedValue.COMPLEX_UNIT_PX, s.secondaryText * 0.85f)
             setTextColor(p.textSecondary)
@@ -140,7 +203,8 @@ internal class MeloBottomBar(
             hasSong = has
             val showInfo = MeloBottomBarPolicy.showsSongInfo(has)
             progress.visibility = if (showInfo) View.VISIBLE else View.INVISIBLE
-            titleLine.visibility = if (showInfo) View.VISIBLE else View.INVISIBLE
+            card.visibility = if (showInfo) View.VISIBLE else View.INVISIBLE
+            card.isClickable = showInfo
             view.isClickable = showInfo
             val alpha = MeloBottomBarPolicy.playAlpha(has)
             play.alpha = alpha
@@ -150,15 +214,19 @@ internal class MeloBottomBar(
             shownTitle = null
             play.text = "▶"
             play.contentDescription = MeloBottomBarPolicy.playDescription(false, false)
-            view.contentDescription = null
+            card.contentDescription = null
             return
         }
         val line = MeloBottomBarPolicy.titleLine(now.title, now.sourceTitle)
         if (line != shownTitle) {
             shownTitle = line
-            titleLine.text = line
-            view.contentDescription = MeloBottomBarPolicy.contentDescription(now.title, now.sourceTitle)
+            val channel = MeloBottomBarPolicy.channelLine(now.sourceTitle)
+            titleText.text = now.title.trim()
+            channelText.text = channel.orEmpty()
+            channelText.visibility = if (channel == null) View.GONE else View.VISIBLE
+            card.contentDescription = MeloBottomBarPolicy.contentDescription(now.title, now.sourceTitle)
         }
+        showArt(now)
         val durationSeconds = (now.durationMs / 1000).toInt()
         progress.max = maxOf(durationSeconds, 1)
         progress.progress = (now.positionMs / 1000).toInt().coerceIn(0, progress.max)
@@ -174,14 +242,17 @@ internal class MeloBottomBar(
 
     @SuppressLint("ClickableViewAccessibility")
     private fun installOpenGestures() {
-        view.setOnClickListener { if (hasSong) onOpenNowPlaying() }
         val detector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
             override fun onFling(e1: MotionEvent?, e2: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
                 if (hasSong && velocityY < 0 && abs(velocityY) > abs(velocityX)) { onOpenNowPlaying(); return true }
                 return false
             }
         })
-        // A swipe up consumes its ACTION_UP so the tap listener does not open a second time.
-        view.setOnTouchListener { _, event -> detector.onTouchEvent(event) && event.action == MotionEvent.ACTION_UP }
+        // The card is clickable itself (a tap anywhere on it opens once), so a swipe up must be read on it as well.
+        listOf(view, card).forEach { target ->
+            target.setOnClickListener { if (hasSong) onOpenNowPlaying() }
+            // A swipe up consumes its ACTION_UP so the tap listener does not open a second time.
+            target.setOnTouchListener { _, event -> detector.onTouchEvent(event) && event.action == MotionEvent.ACTION_UP }
+        }
     }
 }

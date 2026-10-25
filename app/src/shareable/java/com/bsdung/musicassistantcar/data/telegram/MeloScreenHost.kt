@@ -32,6 +32,16 @@ internal interface MeloScreenHost {
     fun previous()
     fun seekTo(positionMs: Long)
     fun toggleFavorite()
+
+    /**
+     * E96 P4: the honest one-line state of the saved Playlist (saved on this device / waiting / synced / why not),
+     * computed off the UI thread and cached; null until the first read. Never a guess, never another account's.
+     */
+    fun playlistStatus(): PlaylistSyncStatusPolicy.Line? = null
+
+    /** Opens Settings > Đồng bộ Playlist. */
+    fun openSyncSettings() = Unit
+
     fun toggleShuffle()
     fun cycleRepeat()
     fun openQueue()
@@ -40,6 +50,14 @@ internal interface MeloScreenHost {
 
     /** Starts speech input; false when this device has no speech recognizer. */
     fun startVoiceSearch(onText: (String) -> Unit): Boolean
+
+    /**
+     * Where the song list was scrolled to when its screen was torn down by a window-size change
+     * that needs another screen type (E95). Kept in memory only; the next screen restores it
+     * when it shows the same group ([groupKey]) and the song is loaded.
+     */
+    fun saveListAnchor(groupKey: String, songKey: Long?, offsetPx: Int)
+    fun listAnchor(): ListAnchor?
 
     // ---- Library screens (Điện thoại / Tablet / Hai khung) ---------------------------------
 
@@ -71,6 +89,19 @@ internal interface MeloScreenHost {
      * from the database starting at that letter.
      */
     fun jumpToLetter(lowerBound: String?): Int?
+
+    // ---- E98 row covers (teal theme only; the defaults keep every other screen as it was) -----
+
+    /** The "Tải ảnh bìa từ Telegram" switch of Cài đặt giao diện (default on). */
+    fun rowArtEnabled(): Boolean = false
+    /** Visible rows plus the few below them; the host fetches their covers in the background. */
+    fun requestRowArt(rows: List<Row>, rowArtPx: Int) = Unit
+    /** The cover to show now for [key] (a blur counts), or null. */
+    fun peekRowArt(key: String?): Bitmap? = null
+    /** True when [key] has its final cover or is known to have none. */
+    fun rowArtSettled(key: String?): Boolean = false
+    /** Called on the main thread, coalesced, when new covers are ready. */
+    fun setRowArtListener(listener: (() -> Unit)?) = Unit
 
     // ---- Studio Deck (Now Playing) --------------------------------------------------------
 
@@ -119,10 +150,21 @@ internal interface MeloScreenHost {
         val sortKey: String = "",
         /** MediaStore MIME type of a local song (format text); null for Telegram rows. */
         val mimeType: String? = null,
-        val local: Boolean = false
+        val local: Boolean = false,
+        /** E98 teal theme: identity of the cover ([MeloRowArtPolicy] keys); null for the current theme. */
+        val artKey: String? = null,
+        val chatId: Long = 0L,
+        /** The genuine Telegram message id (not the song key). */
+        val rawMessageId: Long = 0L,
+        /** Path of the downloaded file, when the song is on the device; the loader checks it is the account's own. */
+        val localFile: String? = null,
+        val mediaStoreId: Long = 0L
     )
 
     data class SourceRow(val chatId: Long, val title: String, val count: Int)
+
+    /** The first visible song of a group and how far its top edge sits from the list's top. */
+    data class ListAnchor(val groupKey: String, val songKey: Long?, val offsetPx: Int)
 
     data class Snapshot(
         val showingSources: Boolean,
@@ -160,6 +202,12 @@ internal interface MeloScreenHost {
         /** Paused by the user (play-when-ready off); false while merely buffering. */
         val paused: Boolean = false,
         /** The playing song comes from "Nhạc trên máy"; [sourceTitle] is then its artist or folder. */
-        val local: Boolean = false
+        val local: Boolean = false,
+        /** Local song with no artist tag: [sourceTitle] is its folder name, so the line says "Thư mục:" (E95 F08). */
+        val sourceIsFolder: Boolean = false,
+        /** E96 P4: whether and how the Save button may act on this song (see [MeloSavePolicy]). */
+        val saveAvailability: MeloSavePolicy.Availability = MeloSavePolicy.Availability.READY,
+        /** A Save write for this song is running; [favorite] still shows what is committed. */
+        val saveBusy: Boolean = false
     )
 }

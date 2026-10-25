@@ -33,14 +33,35 @@ class MeloLibraryPolicyTest {
 
     @Test
     fun deviceNumbersPickTheRightLayer() {
-        fun layer(w: Int, h: Int) = MeloLibraryPolicy.newLayer(LibraryStyle.NEW, MeloScreenPolicy.chooseLayout(w, h, false), true)
+        fun layer(w: Int, h: Int, panelCompact: Boolean = false) =
+            MeloLibraryPolicy.newLayer(LibraryStyle.NEW, MeloScreenPolicy.chooseLayout(w, h, false, panelCompact), true)
         assertEquals(NewLayer.PHONE_PORTRAIT, layer(384, 832))   // S25 Ultra portrait (measured)
         assertEquals(NewLayer.TWO_PANE, layer(832, 384))         // S25 Ultra landscape (measured)
         assertEquals(NewLayer.PHONE_PORTRAIT, layer(360, 840))   // Sony XQ-AS52 portrait
         assertEquals(NewLayer.TWO_PANE, layer(840, 360))         // Sony landscape
         assertEquals(NewLayer.TWO_PANE, layer(1024, 640))        // Y700-like landscape
         assertEquals(NewLayer.TABLET_PORTRAIT, layer(640, 1024)) // Y700-like portrait
-        assertNull(layer(384, 640))                              // Shanling stays on Gọn
+        assertNull(layer(384, 640, panelCompact = true))         // Shanling stays on Gọn
+    }
+
+    @Test
+    fun fytWindowsPickTheNewLayerNeverTheOldOne() {
+        // FYT 7870 (panel 1209 × 756dp, so panelCompact is false) at full, 2/3, 1/2 and 1/3.
+        assertEquals(NewLayer.TWO_PANE, MeloLibraryPolicy.newLayer(LibraryStyle.NEW, MeloScreenPolicy.chooseLayout(1179, 642, false, false), true))
+        assertEquals(NewLayer.TABLET_PORTRAIT, MeloLibraryPolicy.newLayer(LibraryStyle.NEW, MeloScreenPolicy.chooseLayout(782, 642, false, false), true))
+        assertEquals(NewLayer.PHONE_PORTRAIT, MeloLibraryPolicy.newLayer(LibraryStyle.NEW, MeloScreenPolicy.chooseLayout(592, 642, false, false), true))
+        assertEquals(NewLayer.PHONE_PORTRAIT, MeloLibraryPolicy.newLayer(LibraryStyle.NEW, MeloScreenPolicy.chooseLayout(388, 642, false, false), true))
+    }
+
+    @Test
+    fun anchorIndexFindsTheRowOrStartsAtTheTop() {
+        fun row(key: Long) = MeloScreenHost.Row("t$key", null, "f$key.mp3", 60, key, false, null, null)
+        val rows = listOf(row(10), row(20), row(30))
+        assertEquals(0, MeloLibraryPolicy.anchorIndex(rows, 10))
+        assertEquals(2, MeloLibraryPolicy.anchorIndex(rows, 30))
+        assertEquals(0, MeloLibraryPolicy.anchorIndex(rows, 99)) // not loaded (yet): top
+        assertEquals(0, MeloLibraryPolicy.anchorIndex(rows, null))
+        assertEquals(0, MeloLibraryPolicy.anchorIndex(emptyList(), 10))
     }
 
     @Test
@@ -101,8 +122,8 @@ class MeloLibraryPolicyTest {
     @Test
     fun syncLineUsesRealCounts() {
         assertEquals("50 nhóm / 76 bản offline", MeloLibraryPolicy.syncLine("50 nhóm / 76 bản offline", 10, false))
-        assertEquals("27.971 bài · Đã đồng bộ", MeloLibraryPolicy.syncLine(null, 27_971, false))
-        assertEquals("Đang đồng bộ…", MeloLibraryPolicy.syncLine("", 27_971, true))
+        assertEquals("27.971 bài · Đã cập nhật thư viện", MeloLibraryPolicy.syncLine(null, 27_971, false))
+        assertEquals("Đang cập nhật thư viện…", MeloLibraryPolicy.syncLine("", 27_971, true))
         assertEquals("Chưa có bài", MeloLibraryPolicy.syncLine(null, 0, false))
     }
 
@@ -140,13 +161,22 @@ class MeloLibraryPolicyTest {
 
     @Test
     fun quickSwitchOnlyOnTwoPaneWithOneChannelOpen() {
-        assertTrue(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.ALL, 7L))
-        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, true, Mode.ALL, 7L))
-        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.ALL, null))
-        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.PLAYLIST, 7L))
-        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.DOWNLOADED, 7L))
-        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.PHONE_PORTRAIT, false, Mode.ALL, 7L))
-        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TABLET_PORTRAIT, false, Mode.ALL, 7L))
+        assertTrue(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.ALL, 7L, 5))
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, true, Mode.ALL, 7L, 5))
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.ALL, null, 5))
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.PLAYLIST, 7L, 5))
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.DOWNLOADED, 7L, 5))
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.PHONE_PORTRAIT, false, Mode.ALL, 7L, 5))
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TABLET_PORTRAIT, false, Mode.ALL, 7L, 5))
+    }
+
+    @Test
+    fun quickSwitchStaysHiddenWhileThereIsNoChannelToSwitchTo() {
+        // F02: no channel with songs (list loading, or every count still 0) keeps the big player.
+        assertFalse(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.ALL, 7L, 0))
+        assertTrue(MeloLibraryPolicy.quickSwitchVisible(NewLayer.TWO_PANE, false, Mode.ALL, 7L, 1))
+        val none = listOf(MeloScreenHost.SourceRow(7L, "Kênh", 0), MeloScreenHost.SourceRow(0L, "Kho", 10))
+        assertEquals(0, MeloLibraryPolicy.quickSwitchRows(none).size)
     }
 
     @Test
@@ -218,5 +248,83 @@ class MeloLibraryPolicyTest {
         assertEquals(-1, MeloLibraryPolicy.quickSwitchIndex(rows, 6L))
         assertEquals(-1, MeloLibraryPolicy.quickSwitchIndex(rows, null))
         assertEquals(-1, MeloLibraryPolicy.quickSwitchIndex(emptyList(), 5L))
+    }
+
+    @Test
+    fun channelListRefreshesAtMostEveryTenSecondsWhileSyncing() {
+        assertTrue(MeloLibraryPolicy.channelRefreshDue(5_000, 0))              // never refreshed yet
+        assertFalse(MeloLibraryPolicy.channelRefreshDue(14_999, 5_000))
+        assertTrue(MeloLibraryPolicy.channelRefreshDue(15_000, 5_000))
+        assertTrue(MeloLibraryPolicy.channelRefreshDue(1_000, 5_000))          // the clock went back: do not stall forever
+        assertTrue(MeloLibraryPolicy.channelRefreshDue(7_000, 5_000, minIntervalMs = 2_000))
+    }
+
+    @Test
+    fun libraryDiagShowsCountsOnlyAndAdmitsWhenUnknown() {
+        val utc = java.util.TimeZone.getTimeZone("UTC")
+        val lines = MeloLibraryPolicy.libraryDiagLines(MeloLibraryPolicy.LibraryDiag(42_734, 0, 27, 1_700_000_000_000L), utc)
+        assertEquals("42.734 bài", lines.first { it.first == "Tổng bài trong thư viện" }.second)
+        assertEquals("0", lines.first { it.first == "Kênh có bài (số đã lưu)" }.second)
+        assertEquals("27", lines.first { it.first == "Kênh có bài (đếm thật)" }.second)
+        assertEquals("14/11/2023 22:13", lines.first { it.first == "Đồng bộ hoàn tất lần cuối" }.second)
+        assertEquals("chưa từng hoàn tất", MeloLibraryPolicy.lastSyncText(0L, utc))
+        val unknown = MeloLibraryPolicy.libraryDiagLines(null)
+        assertEquals(1, unknown.size)
+        assertTrue(unknown.single().second.startsWith("chưa có số"))
+        assertEquals(1, MeloLibraryPolicy.libraryDiagLines(MeloLibraryPolicy.LibraryDiag(-1, -1, -1, 0L)).size)
+    }
+
+    // ---- E98 teal theme tabs ----------------------------------------------------------------
+
+    @Test
+    fun themeTabsAreExactlyFourWithFullLabelsOnAWidePane() {
+        val tabs = MeloLibraryPolicy.themeTabs(27_971, 700, Mode.ALL, showingSources = false)
+        assertEquals(
+            listOf("Tất cả (27K)", "Đã tải về máy", "Playlist", "Nguồn Telegram"),
+            tabs.map { it.label }
+        )
+        assertEquals(
+            listOf(MeloLibraryPolicy.TabKind.ALL, MeloLibraryPolicy.TabKind.DOWNLOADED, MeloLibraryPolicy.TabKind.PLAYLIST, MeloLibraryPolicy.TabKind.SOURCES),
+            tabs.map { it.kind }
+        )
+    }
+
+    @Test
+    fun themeTabsShortenOnANarrowPane() {
+        val tabs = MeloLibraryPolicy.themeTabs(27_971, 400, Mode.ALL, showingSources = false)
+        assertEquals(listOf("Tất cả", "Đã tải", "Playlist", "Nguồn"), tabs.map { it.label })
+        assertEquals(listOf("Tất cả", "Đã tải", "Playlist", "Nguồn"), MeloLibraryPolicy.themeTabs(null, 519, Mode.ALL, false).map { it.label })
+        assertEquals("Nguồn Telegram", MeloLibraryPolicy.themeTabs(null, 520, Mode.ALL, false).last().label)
+    }
+
+    @Test
+    fun themeTabsHideBracketsWhenTheCountIsUnknown() {
+        assertEquals("Tất cả", MeloLibraryPolicy.themeTabs(null, 700, Mode.ALL, false).first().label)
+        assertEquals("Tất cả (0)", MeloLibraryPolicy.themeTabs(0, 700, Mode.ALL, false).first().label)
+    }
+
+    @Test
+    fun themeTabsUnknownWidthCountsAsWide() {
+        assertEquals("Nguồn Telegram", MeloLibraryPolicy.themeTabs(5, 0, Mode.ALL, false).last().label)
+    }
+
+    @Test
+    fun themeTabsSelectOnlyOneByModeOrSources() {
+        fun selected(mode: Mode, sources: Boolean) =
+            MeloLibraryPolicy.themeTabs(10, 700, mode, sources).filter { it.selected }.map { it.kind }
+        assertEquals(listOf(MeloLibraryPolicy.TabKind.ALL), selected(Mode.ALL, false))
+        assertEquals(listOf(MeloLibraryPolicy.TabKind.DOWNLOADED), selected(Mode.DOWNLOADED, false))
+        assertEquals(listOf(MeloLibraryPolicy.TabKind.PLAYLIST), selected(Mode.PLAYLIST, false))
+        // The source grid wins over whatever mode is behind it.
+        assertEquals(listOf(MeloLibraryPolicy.TabKind.SOURCES), selected(Mode.ALL, true))
+        assertEquals(listOf(MeloLibraryPolicy.TabKind.SOURCES), selected(Mode.PLAYLIST, true))
+    }
+
+    @Test
+    fun activeGenreFollowsTheSearchKeyword() {
+        assertEquals(MeloLibraryPolicy.GenreChip.CHILLOUT, MeloLibraryPolicy.activeGenre("chillout"))
+        assertEquals(MeloLibraryPolicy.GenreChip.LAKHOUSE, MeloLibraryPolicy.activeGenre("  LakHouse "))
+        assertNull(MeloLibraryPolicy.activeGenre(""))
+        assertNull(MeloLibraryPolicy.activeGenre("chillout mix"))
     }
 }

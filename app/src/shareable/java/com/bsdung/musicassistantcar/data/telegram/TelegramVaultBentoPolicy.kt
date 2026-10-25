@@ -76,10 +76,31 @@ object TelegramVaultBentoPolicy {
     }
 
     /**
+     * E95 F05: the stored `track_count` of a source only changes when a full sync completes, so a
+     * channel the app already holds songs of can still read 0. [live] is the real number of live
+     * songs per chat (read-only query): every listed source takes it (0 when the chat has none),
+     * and a chat that has songs but no source row yet is added under [titleOf]. Order is left to
+     * [distinctSourcesByChatId] / [sortSources]. Pure; writes nothing.
+     */
+    fun withLiveCounts(
+        accountId: Long,
+        sources: List<IndexedTelegramSource>,
+        live: Map<Long, Int>,
+        titleOf: (Long) -> String
+    ): List<IndexedTelegramSource> {
+        val known = sources.map { it.copy(trackCount = live[it.chatId] ?: 0) }
+        val knownIds = sources.mapTo(HashSet()) { it.chatId }
+        val extra = live.entries
+            .filter { (chatId, count) -> chatId != 0L && count > 0 && chatId !in knownIds }
+            .map { (chatId, count) -> IndexedTelegramSource(accountId = accountId, chatId = chatId, title = titleOf(chatId), trackCount = count) }
+        return known + extra
+    }
+
+    /**
      * Formats track count label truthfully.
      */
     fun formatTrackCount(count: Int): String {
-        return if (count <= 0) "0 bài" else String.format(Locale.US, "%,d bài", count)
+        return if (count <= 0) "0 bài" else "${MeloComponentPolicy.formatCount(count)} bài"
     }
 
     /**
@@ -93,8 +114,8 @@ object TelegramVaultBentoPolicy {
      * Formats header subtitle with source count, total indexed track count, and optional sync status.
      */
     fun formatHeaderSubtitle(sourceCount: Int, totalIndexedTracks: Int, isSyncing: Boolean = false): String {
-        val formattedTracks = String.format(Locale.US, "%,d", totalIndexedTracks)
-        val syncLabel = if (isSyncing) "Đang đồng bộ…" else "Đã đồng bộ"
+        val formattedTracks = MeloComponentPolicy.formatCount(totalIndexedTracks)
+        val syncLabel = if (isSyncing) TelegramLibrarySyncDisplayPolicy.LIBRARY_UPDATING else TelegramLibrarySyncDisplayPolicy.LIBRARY_UPDATED
         return "$sourceCount nguồn  ·  $formattedTracks bài  ·  $syncLabel"
     }
 

@@ -26,6 +26,37 @@ if (!(telegramApiId ==~ /[0-9]{1,10}/) || !(telegramApiHash ==~ /[a-fA-F0-9]{32}
     telegramApiId = '0'
     telegramApiHash = ''
 }
+// E96 P5-A: lets a build machine answer "is the Telegram developer config usable?" without ever showing it.
+// Prints only true/false; the ID and hash are never written to the console, a log or an artifact.
+tasks.register('reportTelegramConfig') {
+    description = 'Prints telegram.config.valid=true|false (never the values).'
+    def valid = (telegramApiId != '0' && telegramApiHash != '')
+    doLast { println 'telegram.config.valid=' + valid }
+}
+
+// E96 P5B3: the ONLY way cloud Playlist sync is compiled in. Off unless this build is started with -PmeloSyncQa=true, and
+// then only for the DEBUG build type (its version name gets "-syncqa" so a QA candidate can never pass for a normal Beta).
+// Release always has it off: asking for both is an error, never a silent downgrade. It is not read from local.properties,
+// so a secret file can never switch it on, and it holds no key or id.
+def meloSyncQa = (project.findProperty('meloSyncQa') ?: 'false').toString().trim() == 'true'
+if (meloSyncQa && gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }) {
+    throw new GradleException('meloSyncQa=true is only allowed for Debug builds; Release always ships with cloud sync OFF.')
+}
+// E96 P5B3 REWORK-01: creating a Telegram channel is LOCKED in every build. Only a Debug build started with BOTH
+// -PmeloSyncQa=true and -PmeloSyncQaAllowCreate=true can unlock it, and Release never can (asking is an error).
+// A QA build without it can find and bind an EXISTING channel, never create one.
+def meloSyncQaAllowCreate = meloSyncQa && (project.findProperty('meloSyncQaAllowCreate') ?: 'false').toString().trim() == 'true'
+if (((project.findProperty('meloSyncQaAllowCreate') ?: 'false').toString().trim() == 'true') &&
+        gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }) {
+    throw new GradleException('meloSyncQaAllowCreate=true is only allowed for Debug builds; Release never creates channels.')
+}
+tasks.register('reportSyncQaFlag') {
+    description = 'Prints melo.sync.qa=true|false (the Debug build switch for cloud Playlist sync).'
+    doLast {
+        println 'melo.sync.qa=' + meloSyncQa
+        println 'melo.sync.qa.allowcreate=' + meloSyncQaAllowCreate
+    }
+}
 
 android {
     namespace 'com.bsdung.musicassistantcar'
@@ -59,8 +90,8 @@ android {
             // Replace with a managed release key before any public distribution.
             signingConfig signingConfigs.debug
             // Beta-only bump; never alter the existing Personal Stable artifact.
-            versionCode 109
-            versionName '0.6.88'
+            versionCode 113
+            versionName '0.6.89.1'
             versionNameSuffix '-beta'
             buildConfigField 'boolean', 'PERSONAL_BACKEND_ENABLED', 'false'
             buildConfigField 'String', 'CAR_API_PRIMARY', '""'
@@ -74,9 +105,14 @@ android {
         debug {
             // Never embed owner/admin credentials in any installable variant.
             buildConfigField 'String', 'CAR_API_TOKEN', '""'
+            buildConfigField 'boolean', 'MELO_SYNC_QA_BUILD', meloSyncQa ? 'true' : 'false'
+            buildConfigField 'boolean', 'MELO_SYNC_QA_ALLOW_CREATE', meloSyncQaAllowCreate ? 'true' : 'false'
+            if (meloSyncQa) versionNameSuffix '-syncqa'
         }
         release {
             buildConfigField 'String', 'CAR_API_TOKEN', '""'
+            buildConfigField 'boolean', 'MELO_SYNC_QA_BUILD', 'false'
+            buildConfigField 'boolean', 'MELO_SYNC_QA_ALLOW_CREATE', 'false'
             minifyEnabled false
             proguardFiles getDefaultProguardFile(
                 'proguard-android-optimize.txt'

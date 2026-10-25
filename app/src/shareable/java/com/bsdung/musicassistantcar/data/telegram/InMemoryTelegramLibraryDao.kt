@@ -90,6 +90,14 @@ class InMemoryTelegramLibraryDao : TelegramLibraryDao {
         return songs.values.firstOrNull { it.accountId == accountId && it.songKey == songKey && !it.isDeleted }
     }
 
+    override fun getSongsByKeys(accountId: Long, songKeys: Collection<Long>): List<IndexedTelegramSong> {
+        if (songKeys.isEmpty()) return emptyList()
+        val wanted = songKeys.toHashSet()
+        return songs.values
+            .filter { it.accountId == accountId && !it.isDeleted && it.songKey in wanted }
+            .distinctBy { it.songKey }
+    }
+
     override fun updateSongFileId(accountId: Long, chatId: Long, messageId: Long, fileId: Int) {
         val key = Triple(accountId, chatId, messageId)
         val existing = songs[key]
@@ -105,6 +113,13 @@ class InMemoryTelegramLibraryDao : TelegramLibraryDao {
             .sortedByDescending { it.trackCount }
             .toList()
     }
+
+    override fun getLiveSourceCounts(accountId: Long): Map<Long, Int> =
+        songs.values
+            .asSequence()
+            .filter { it.accountId == accountId && !it.isDeleted }
+            .groupingBy { it.chatId }
+            .eachCount()
 
     override fun upsertSources(sources: Collection<IndexedTelegramSource>): Int {
         var count = 0

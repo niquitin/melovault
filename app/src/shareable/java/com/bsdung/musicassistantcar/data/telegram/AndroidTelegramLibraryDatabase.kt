@@ -288,6 +288,22 @@ class AndroidTelegramLibraryDatabase(
         }
     }
 
+    override fun getSongsByKeys(accountId: Long, songKeys: Collection<Long>): List<IndexedTelegramSong> {
+        if (songKeys.isEmpty()) return emptyList()
+        val found = LinkedHashMap<Long, IndexedTelegramSong>()
+        val db = readableDatabase
+        for (chunk in songKeys.distinct().chunked(TelegramLibraryDao.SONGS_BY_KEYS_CHUNK)) {
+            val args = arrayOf(accountId.toString()) + chunk.map { it.toString() }
+            db.rawQuery(TelegramLibraryDao.songsByKeysSql(chunk.size), args).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val song = mapCursorToSong(cursor)
+                    found.putIfAbsent(song.songKey, song)
+                }
+            }
+        }
+        return found.values.toList()
+    }
+
     override fun updateSongFileId(accountId: Long, chatId: Long, messageId: Long, fileId: Int) {
         if (accountId <= 0L || chatId == 0L || messageId <= 0L || fileId <= 0) return
         val db = writableDatabase
@@ -329,6 +345,17 @@ class AndroidTelegramLibraryDatabase(
             }
         }
         return results
+    }
+
+    override fun getLiveSourceCounts(accountId: Long): Map<Long, Int> {
+        val counts = LinkedHashMap<Long, Int>()
+        readableDatabase.rawQuery(TelegramLibraryDao.LIVE_SOURCE_COUNTS_SQL, arrayOf(accountId.toString())).use { cursor ->
+            while (cursor.moveToNext()) {
+                val count = cursor.getInt(1)
+                if (count > 0) counts[cursor.getLong(0)] = count
+            }
+        }
+        return counts
     }
 
     override fun upsertSources(sources: Collection<IndexedTelegramSource>): Int {

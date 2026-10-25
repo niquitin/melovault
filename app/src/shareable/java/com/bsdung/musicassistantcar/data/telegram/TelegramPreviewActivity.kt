@@ -100,6 +100,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val performer: String? = null,
         val durationSeconds: Int = 0,
         val sourceTitle: String? = null,
+        /** A saved Playlist entry the library does not know yet (E96 P0). Shown, removable, never played or queued. */
+        val placeholder: Boolean = false,
     ) {
         val genuineMessageId: Long get() = if (rawMessageId > 0L) rawMessageId else messageId
     }
@@ -117,6 +119,22 @@ class TelegramPreviewActivity : AppCompatActivity() {
     )
 
     private val thumbnailCache = android.util.LruCache<Long, Bitmap>(60)
+
+    // E98: row covers of the teal theme. The loader exists only after a teal screen asked for it.
+    private var rowArtThemeActive = false
+    private var rowArtLoaderLazy: MeloRowArtLoader? = null
+    private var rowArtOffReset = false
+
+    private fun rowArtOn(): Boolean = rowArtThemeActive &&
+        MeloThemePolicy.rowArtSwitch(getSharedPreferences(MeloScreenPolicy.PREFS_NAME, Context.MODE_PRIVATE))
+
+    private fun rowArtLoader(): MeloRowArtLoader = rowArtLoaderLazy ?: MeloRowArtLoader(
+        context = this,
+        send = { type, tag, configure -> send(type, tag, configure) },
+        account = { library.authorizedUser()?.value ?: 0L },
+        isOwnedFile = { TelegramAccountStoragePolicy.isOwnedFile(filesRoot, it) },
+        alive = { !isDestroyed && !isFinishing }
+    ).also { rowArtLoaderLazy = it }
     private val thumbnailExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
         Thread(r, "MeloVault-ThumbLoader").apply { priority = Thread.MIN_PRIORITY }
     }
@@ -185,6 +203,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var filterOnlyDownloaded = false
     private var lastSystemBarsInsets = WindowInsetsPolicy.Insets.ZERO
     private var lastImeInsets = WindowInsetsPolicy.Insets.ZERO
+    /** Top strip kept free for the head unit's card handle, measured with the last insets (E95 F04). */
+    private var lastHandleBand = 0
     private lateinit var syncSubtitle: TextView
     private lateinit var bottomNavBar: LinearLayout
     private val bottomNavButtons = mutableListOf<Button>()
@@ -217,6 +237,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
     /** All channels (unfiltered by search / hide-zero) for the two-pane quick switch; main thread only. */
     private var meloChannelRows: List<MeloScreenHost.SourceRow> = emptyList()
     private var meloChannelsRequested = false
+    /** Library numbers (counts only) handed to "Thông tin màn hình"; written on the database thread (E95 F05). */
+    @Volatile private var meloLibraryDiag: MeloLibraryPolicy.LibraryDiag? = null
+    private var lastMeloChannelRefreshMs = 0L
     /** Whole-library song count (unfiltered `getSongCount`); null until the DB answered. Main thread. */
     @Volatile private var telegramLibraryTotal: Int? = null
     /** Offline groups of the last finished whole-library scan (no channel, search or playlist); memory only. */
@@ -285,8 +308,34 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private val songs = mutableListOf<Song>()
     private var shownSongs: List<Song> = emptyList()
     private var queueSongOrder: List<Song> = emptyList()
-    private val playlistStore by lazy { TelegramSavedPlaylistStore(noBackupFilesDir) }
-    private var favoriteIds: List<Long> = emptyList()
+    // E96 P0: the single writer of the saved playlist is process-wide (see TelegramPlaylistRuntime).
+    private val playlistSession by lazy { TelegramPlaylistRuntime.session(noBackupFilesDir) }
+    @Volatile private var favoriteIds: List<Long> = emptyList()
+    /**
+     * REWORK-03: re-reads the committed saved list when the screen returns (e.g. from Settings > Đồng bộ Playlist), so a sync
+     * that ran there shows without restarting the app. Local, in memory, never starts a sync.
+     */
+    private val liveRefresh by lazy {
+        PlaylistLiveRefresh(
+            session = playlistSession,
+            submit = { task -> TelegramPlaylistRuntime.submit(task) },
+            toUi = { block -> runOnUiThread { block() } },
+            alive = { !isDestroyed },
+            currentAccount = { library.authorizedUser() },
+            shown = { favoriteIds },
+            apply = { ids -> applyRemoteSavedPlaylist(ids) },
+            // Counts only, never ids or titles (Sony hides Log.i, hence warn).
+            onResult = { count, changed -> android.util.Log.w("MeloPlaylist", "resume-refresh count=$count changed=$changed") },
+            // Sync-QA debug builds only: an optional marker file in the cache dir adds one unknown song to what is READ (never written).
+            transform = { ids ->
+                PlaylistQaSimulation.apply(
+                    ids, TelegramPlaylistFlags.SYNC_ENABLED, java.io.File(cacheDir, PlaylistQaSimulation.MARKER_FILE).exists(),
+                )
+            },
+        )
+    }
+    /** True while the saved playlist file exists but cannot be read; Save is then refused, nothing is overwritten. */
+    private var playlistUnreadable = false
     private var playlistMode = false
     // Gọn layout (docs/ui-spec.md step 4): a view layer over the unchanged legacy tree.
     private lateinit var outerRoot: FrameLayout
@@ -296,6 +345,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var tabletScreen: MeloTabletScreen? = null
     private var meloLayer: View? = null
     private var meloLayerKey: String? = null
+    /** List place handed from a torn-down library screen to the next one (memory only, E95 F03d). */
+    private var meloListAnchor: MeloScreenHost.ListAnchor? = null
     private var carPromptShown = false
     private var compactRefreshPosted = false
     private var authEpoch: Long = 0L
@@ -337,7 +388,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         if (!MeloMediaControlPolicy.shouldAskNotificationPermission(
                 Build.VERSION.SDK_INT, granted, MeloMediaControlPolicy.notificationAsked(prefs), auth.isReady())) return
         MeloMediaControlPolicy.markNotificationAsked(prefs)
-        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+        AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
             .setTitle("Cho phép thông báo phát nhạc?")
             .setMessage("Thông báo giúp điều khiển nhạc từ màn hình khoá, đồng hồ và tai nghe Bluetooth. " +
                 "Bạn có thể đổi lại trong Cài đặt Android.")
@@ -417,7 +468,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             showRationale = shouldShowRequestPermissionRationale(permission)
         )) {
             MeloLocalSourcePolicy.PermissionStep.OPEN -> enterLocal()
-            MeloLocalSourcePolicy.PermissionStep.EXPLAIN_THEN_ASK -> AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            MeloLocalSourcePolicy.PermissionStep.EXPLAIN_THEN_ASK -> AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
                 .setTitle("Cho phép đọc nhạc trên máy?")
                 .setMessage("MeloVault cần quyền đọc tệp âm thanh trên máy để liệt kê và phát nhạc của bạn. " +
                     "Ứng dụng chỉ đọc, không sửa, xóa hay gửi tệp đi đâu.")
@@ -427,7 +478,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     localPermissionResult.launch(permission)
                 }
                 .show()
-            MeloLocalSourcePolicy.PermissionStep.OPEN_SETTINGS -> AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+            MeloLocalSourcePolicy.PermissionStep.OPEN_SETTINGS -> AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
                 .setTitle("Quyền đọc nhạc đang tắt")
                 .setMessage("Bật quyền đọc nhạc/âm thanh cho MeloVault trong Cài đặt Android để xem nhạc trên máy.")
                 .setNegativeButton("Để sau", null)
@@ -540,7 +591,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val sort = activeSort()
         if (library.sort != sort) library.setSort(sort) { scheduleMeloLibraryRefresh() }
         // snapshot() runs twice per redraw: build the rows only when the list or the sort changed.
-        val key = library.version.toLong() * 2L + if (sort == SongSort.NAME) 1L else 0L
+        val key = library.version.toLong() * 4L + (if (sort == SongSort.NAME) 1L else 0L) + (if (rowArtOn()) 2L else 0L)
         if (key != localRowsKey) {
             localRowsKey = key
             localRows = library.visible().map { song ->
@@ -555,7 +606,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     art = null,
                     sortKey = if (sort == SongSort.NAME) song.alphaKey else "",
                     mimeType = song.mimeType,
-                    local = true
+                    local = true,
+                    artKey = if (rowArtOn()) MeloRowArtPolicy.localKey(song.mediaStoreId) else null,
+                    mediaStoreId = song.mediaStoreId
                 )
             }
         }
@@ -580,10 +633,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun localNowPlaying(controller: MediaController, item: MediaItem): MeloScreenHost.NowPlaying {
         val duration = controller.duration.takeIf { it != C.TIME_UNSET && it > 0L } ?: localDurationOf(item)
+        val shownName = item.mediaMetadata.artist?.toString()?.takeIf { it.isNotBlank() }
+        // The player's artist is the real artist or, without one, the folder: tell the screens which (E95 F08, label only).
+        val folder = MeloLocalSourcePolicy.idOfMediaId(item.mediaId)
+            ?.let { id -> if (localMusicLazy.isInitialized()) localMusic.byId(id)?.folder else null }
         return MeloScreenHost.NowPlaying(
             songKey = currentSongKey(),
             title = item.mediaMetadata.title?.toString()?.takeIf { it.isNotBlank() } ?: "Đang phát",
-            sourceTitle = item.mediaMetadata.artist?.toString()?.takeIf { it.isNotBlank() },
+            sourceTitle = shownName,
+            sourceIsFolder = MeloNowPlayingPolicy.localSourceIsFolder(shownName, folder),
             filename = null,
             positionMs = controller.currentPosition.coerceAtLeast(0L),
             durationMs = duration,
@@ -598,7 +656,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
             },
             downloadNote = null,
             paused = !controller.playWhenReady,
-            local = true
+            local = true,
+            saveAvailability = MeloSavePolicy.Availability.LOCAL_ONLY
         )
     }
 
@@ -627,7 +686,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun showLocalSongMenu(anchor: View, onPlay: () -> Unit, onInfo: () -> Unit) {
-        val popup = PopupMenu(ContextThemeWrapper(this, R.style.Theme_MusicAssistantCar_Dialog), anchor)
+        val popup = PopupMenu(ContextThemeWrapper(this, R.style.Theme_MeloVault_Dialog), anchor)
         popup.menu.add(0, 1, 1, "▶ Phát bài này")
         popup.menu.add(0, 2, 2, "ℹ Thông tin")
         popup.setOnMenuItemClickListener { item ->
@@ -653,7 +712,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             append("• Thời lượng: ${TelegramSongDisplayPolicy.formatDuration((durationMs / 1000L).toInt()) ?: "Không xác định"}")
             folder?.takeIf { it.isNotBlank() }?.let { append("\n• Thư mục: $it") }
         }
-        AlertDialog.Builder(ContextThemeWrapper(this, R.style.Theme_MusicAssistantCar_Dialog))
+        AlertDialog.Builder(ContextThemeWrapper(this, R.style.Theme_MeloVault_Dialog))
             .setTitle("Thông tin chi tiết")
             .setMessage(info)
             .setPositiveButton("Đóng", null)
@@ -692,7 +751,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val title = controller.getMediaItemAt(i).mediaMetadata.title?.toString().orEmpty().ifBlank { "Nhạc trên máy" }
             (if (i == at) "▶ " else "") + title
         }
-        val dialog = AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+        val dialog = AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
             .setTitle("Danh sách phát · $count bài")
             .setItems(names) { _, which -> playLocalQueueAt(which) }
             .setPositiveButton("Xong", null)
@@ -799,7 +858,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setTheme(R.style.Theme_MusicAssistantCar)
+        setTheme(R.style.Theme_MeloVault_Shareable)
         val prefs = getSharedPreferences(UiThemePolicy.PREFS_NAME, Context.MODE_PRIVATE)
         currentThemePreset = UiThemePolicy.getSavedPreset(prefs)
         currentSourceDisplayMode = TelegramVaultBentoPolicy.getSavedSourceDisplayMode(prefs)
@@ -869,6 +928,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
         uiForeground = true
         // Picks up a changed "Bố cục Gọn" setting when returning from Cài đặt giao diện.
         applyMeloLayer()
+        // E96 P5-A: coming back from Settings re-reads the Playlist status line (a local file read, no network).
+        library.authorizedUser()?.let {
+            if (playlistLoaded) {
+                reloadSavedPlaylistLive(it)
+                refreshPlaylistStatus(it)
+                runQaFixtureIfRequested(it)
+            }
+        }
         if (auth.isReady()) {
             refreshLocalCount()
             val user = library.authorizedUser()?.value ?: 0L
@@ -980,7 +1047,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // Playback queue follows only the selected source (and visible title
         // filter), never silently jumps into a different Telegram channel.
         queueSongOrder = TelegramQueueRetentionPolicy.forSelected(
-            if (filterOnlyDownloaded) offlineQueueSongs(song.messageId) else shownSongs,
+            if (filterOnlyDownloaded) offlineQueueSongs(song.messageId) else shownSongs.filterNot { it.placeholder },
             queueSongOrder, song.messageId
         ) { it.messageId }.ifEmpty { listOf(song) }
         library.authorizedUser()?.let { owner ->
@@ -1034,7 +1101,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // The Media3 source waits only for missing bytes; do not wait for the
         // full mix or silently pretend the file is fully cached.
         queueSongOrder = TelegramQueueRetentionPolicy.forSelected(
-            if (filterOnlyDownloaded) offlineQueueSongs(song.messageId) else shownSongs,
+            if (filterOnlyDownloaded) offlineQueueSongs(song.messageId) else shownSongs.filterNot { it.placeholder },
             queueSongOrder, song.messageId
         ) { it.messageId }.ifEmpty { listOf(song) }
         library.authorizedUser()?.let { owner ->
@@ -1185,7 +1252,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
             displayCutout = WindowInsetsPolicy.Insets.ZERO,
             baseHorizontal = dp(if (isNarrowLayout) 6 else 12),
             baseTop = dp(if (isShortLayout) 2 else 6),
-            baseBottom = dp(3)
+            baseBottom = dp(3),
+            handleBand = lastHandleBand
         )
         mainRoot.setPadding(computed.left, computed.top, computed.right, computed.bottom)
     }
@@ -1336,7 +1404,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }.toTypedArray()
         val currentIndex = presets.indexOf(currentThemePreset).coerceAtLeast(0)
 
-        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+        AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
             .setTitle("Chọn giao diện MeloVault")
             .setSingleChoiceItems(names, currentIndex) { dialog, which ->
                 val chosen = presets[which]
@@ -1399,7 +1467,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }.toTypedArray()
         val currentIndex = modes.indexOf(currentSourceDisplayMode).coerceAtLeast(0)
 
-        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+        AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
             .setTitle("Chế độ hiển thị nguồn Telegram")
             .setSingleChoiceItems(names, currentIndex) { dialog, which ->
                 val chosen = modes[which]
@@ -2369,7 +2437,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             setBackgroundColor(midnight)
         }
         mainRoot = root
-        ViewCompat.setOnApplyWindowInsetsListener(root) { _, insets ->
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
             val systemBars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
@@ -2378,6 +2446,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             lastSystemBarsInsets = WindowInsetsPolicy.Insets(
                 systemBars.left, systemBars.top, systemBars.right, systemBars.bottom
             )
+            lastHandleBand = MeloUiLabActivity.handleBandPx(v, insets)
             lastImeInsets = WindowInsetsPolicy.Insets(
                 ime.left, ime.top, ime.right, ime.bottom
             )
@@ -2902,7 +2971,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
                 holder.subtitleView.text = if (song != null) {
                     if (isWide) {
-                        listOfNotNull(performer, sourceTitle).joinToString(" · ")
+                        listOfNotNull(DisplayTextPolicy.cleanOrNull(performer), DisplayTextPolicy.clean(sourceTitle)).joinToString(" · ")
                     } else {
                         TelegramSongDisplayPolicy.subtitle(
                             source = sourceTitle,
@@ -3288,7 +3357,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun showLibraryOverflow(anchor: View) {
-        val themed = ContextThemeWrapper(this, R.style.Theme_MusicAssistantCar_Dialog)
+        val themed = ContextThemeWrapper(this, R.style.Theme_MeloVault_Dialog)
         val menu = PopupMenu(themed, anchor)
         menu.menu.add(0, 1, 1, "☆ Tin đã lưu")
         menu.menu.add(0, 2, 2, "Đồng bộ nhanh (Cập nhật bài mới)")
@@ -3343,7 +3412,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
                 6 -> if (auth.isReady()) openAudioDocument()
                 7 -> if (auth.isReady()) {
-                    AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+                    AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
                         .setTitle("Đăng xuất tài khoản Telegram?")
                         .setMessage("Bài đã tải và phiên đăng nhập trên thiết bị sẽ thay đổi.")
                         .setNegativeButton("Hủy", null)
@@ -3352,8 +3421,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
                 8 -> toggleThemePreset()
                 9 -> showSourceDisplayModeDialog()
-                10 -> startActivity(Intent(this, MeloUiLabActivity::class.java)
-                    .putExtra(MeloUiLabActivity.EXTRA_SONG_COUNT, totalCountForCurrentView))
+                10 -> startActivity(uiLabIntent())
                 11 -> openLocalMusic()
             }
             true
@@ -3701,7 +3769,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     displayCutout = WindowInsetsPolicy.Insets.ZERO,
                     baseHorizontal = dp(18),
                     baseTop = dp(18),
-                    baseBottom = dp(18)
+                    baseBottom = dp(18),
+                    handleBand = MeloUiLabActivity.handleBandPx(wrapper, insets)
                 )
                 wrapper.setPadding(computed.left, computed.top, computed.right, computed.bottom)
                 insets
@@ -3744,7 +3813,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 displayCutout = WindowInsetsPolicy.Insets.ZERO,
                 baseHorizontal = dp(16),
                 baseTop = dp(14),
-                baseBottom = dp(16)
+                baseBottom = dp(16),
+                handleBand = MeloUiLabActivity.handleBandPx(container, insets)
             )
             container.setPadding(computed.left, computed.top, computed.right, computed.bottom)
             insets
@@ -3758,16 +3828,19 @@ class TelegramPreviewActivity : AppCompatActivity() {
             textSize = 16f
             setTypeface(null, android.graphics.Typeface.BOLD)
             setTextColor(ink)
-        }, LinearLayout.LayoutParams(0, dp(56), 1f))
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         header.addView(uiButton("Xong").apply {
             setOnClickListener { popup.dismiss() }
         }, LinearLayout.LayoutParams(dp(82), dp(48)))
-        container.addView(header, LinearLayout.LayoutParams(-1, dp(60)))
+        // Wrap + minimum height instead of fixed rows: at font ×1.25 a second line is not clipped.
+        header.minimumHeight = dp(60)
+        container.addView(header, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))
         container.addView(TextView(this).apply {
             text = "Danh sách của nguồn · Bài chưa tải sẽ cần tải qua Telegram"
             textSize = 12f
             setTextColor(subtle)
-        }, LinearLayout.LayoutParams(-1, dp(47)))
+            minHeight = dp(47)
+        }, LinearLayout.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))
         val rows = ListView(this).apply {
             divider = null
             dividerHeight = dp(8)
@@ -3904,7 +3977,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 playing = s.songKey == currentTelegramMessageId()
             )
         }.toTypedArray()
-        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog).setTitle(group.label).setItems(labels) { _, index ->
+        AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog).setTitle(group.label).setItems(labels) { _, index ->
             val selected = group.entries[index].song
             val entry = group.selected(account, selected.chatId, selected.messageId) ?: return@setItems
             if (library.authorizedUser()?.value != account || !auth.isReady()) return@setItems
@@ -4179,6 +4252,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val currentChatId = selectedChatId
         val isAllChats = allChatsMode
         val currentFavIds = favoriteIds.toSet()
+        // Playlist order is the saved order. The copies are taken here, on the calling thread, so the
+        // database thread never reads the live `songs` list while the main thread changes it.
+        val currentFavList = if (isPlaylist) favoriteIds else emptyList()
+        val loadedSongsSnapshot = if (isPlaylist) songs.toList() else emptyList()
         val currentSort = activeSort()
         val currentFloor = letterFloor.takeIf { currentSort == SongSort.NAME }
 
@@ -4194,7 +4271,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             if (uiQueryGeneration.get() != generation) return@executeOnDb
 
             if (isBrowseSources) {
-                val sources = if (db != null && userId > 0L) db.getSources(userId) else emptyList()
+                val sources = if (db != null && userId > 0L) withLiveCounts(db, userId, db.getSources(userId)) else emptyList()
                 val totalCount = if (db != null && userId > 0L) db.getSongCount(userId) else songs.size
                 val rawSources: List<IndexedTelegramSource> = if (sources.isNotEmpty()) {
                     sources
@@ -4274,11 +4351,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
             } else {
                 val (loadedSongs, totalDisplayCount) = if (isPlaylist) {
-                    val favSongs = currentFavIds.mapNotNull { id -> songs.firstOrNull { it.messageId == id } }
-                    val filtered = if (q.isBlank()) favSongs else favSongs.filter {
+                    val entries = resolvePlaylistEntries(userId, db, currentFavList, loadedSongsSnapshot)
+                    val known = entries.mapNotNull { it.item }
+                    val filtered = if (q.isBlank()) known else known.filter {
                         MeloComponentPolicy.matchesSearch(q, it.title, it.performer, it.filename)
                     }
-                    Pair(sortSongs(filtered, currentSort), filtered.size)
+                    // Saved songs the library does not know yet stay in the list (last), never dropped.
+                    val unknown = if (q.isBlank()) entries.filter { it.isPlaceholder }.map { placeholderSong(it.key) } else emptyList()
+                    val shown = sortSongs(filtered, currentSort) + unknown
+                    Pair(shown, shown.size)
                 } else if (isAllChats && db != null && userId > 0L) {
                     val filterQuery = q.takeIf { it.isNotBlank() }
                     val count = db.getSongCount(userId, chatId = currentChatId, searchQuery = filterQuery)
@@ -4346,6 +4427,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     })
                     val chatId = currentChatId
                     libraryTitle.text = when {
+                        isPlaylist && playlistUnreadable -> "PLAYLIST  ·  KHÔNG ĐỌC ĐƯỢC DỮ LIỆU ĐÃ LƯU"
                         isPlaylist -> "PLAYLIST  ·  BÀI ĐÃ LƯU (${shownSongs.size})"
                         !isAllChats -> "THƯ VIỆN NHẠC  ·  SAVED MESSAGES (${shownSongs.size})"
                         chatId != null -> "‹ " + (sourceNames[chatId] ?: "Nguồn Telegram $chatId") + " ($totalDisplayCount bài)"
@@ -4365,26 +4447,295 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
     }
 
+    /** The song a Save would name: any list this screen holds, so the target never depends on which list is open. */
+    private fun songForSave(key: Long): Song? =
+        songs.firstOrNull { it.messageId == key } ?: queueSongOrder.firstOrNull { it.messageId == key }
+            ?: shownSongs.firstOrNull { it.messageId == key }
+
     private fun toggleCurrentFavorite() {
         if (currentLocalId() != null) {
-            toast("Nhạc trên máy chưa hỗ trợ Lưu.")
+            toast(MeloSavePolicy.HINT_LOCAL_ONLY)
             return
         }
         val account = library.authorizedUser() ?: return
         if (!auth.isReady()) return
         val target = currentTelegramMessageId() ?: return
-        if (songs.none { it.messageId == target } &&
-            queueSongOrder.none { it.messageId == target }) return
-        val next = TelegramPlaylistPolicy.toggle(favoriteIds, target)
-        val result = runCatching { playlistStore.save(account, next) }
-        if (result.isFailure) {
-            showMessage("Không lưu được playlist an toàn trên thiết bị.")
+        // Carry the real (chat, message) of the song, not only the UI key, so V2 can name it on any device.
+        val song = songForSave(target)
+        if (song == null) {
+            showMessage("Chưa xác định được bài đang phát để lưu. Hãy mở bài từ danh sách rồi thử lại.")
             return
         }
-        favoriteIds = next
+        requestPlaylistToggle(account, PlaylistTarget(target, song.chatId, song.rawMessageId), null)
+    }
+
+    /** E96 P4: quick taps fold into one write at a time (see [SaveToggleGuard]); UI thread only. One guard per account. */
+    private var saveGuard = SaveToggleGuard<PlaylistTarget>()
+    private var saveGuardAccount = 0L
+    @Volatile private var playlistLoaded = false
+    @Volatile private var playlistStatusLine: PlaylistSyncStatusPolicy.Line? = null
+    private val syncConsentStore by lazy { FileSyncConsentStore(noBackupFilesDir) }
+
+    /**
+     * The one Save/Unsave path (now-playing button and song menu). The write runs on the playlist
+     * thread, never on the UI thread; the screen changes and a success message appears only after
+     * the file was really written (local save: nothing is claimed about other devices).
+     * [title] null = short "N bài đã lưu" wording.
+     */
+    private fun requestPlaylistToggle(account: TelegramUserId, target: PlaylistTarget, title: String?) {
+        if (saveGuardAccount != account.value) {
+            saveGuard = SaveToggleGuard()
+            saveGuardAccount = account.value
+        }
+        val guard = saveGuard
+        // A write is already running: this tap is counted and the running write's end will pick it up.
+        if (guard.tap(target)) startPlaylistWrite(guard, account, target, title)
+        notifyMeloPlayback()
+    }
+
+    private fun startPlaylistWrite(
+        guard: SaveToggleGuard<PlaylistTarget>, account: TelegramUserId, target: PlaylistTarget, title: String?
+    ) {
+        TelegramPlaylistRuntime.submit {
+            val outcome = playlistSession.toggle(account, target)
+            runOnUiThread { onPlaylistWriteDone(guard, account, outcome, title) }
+        }
+    }
+
+    private fun onPlaylistWriteDone(
+        guard: SaveToggleGuard<PlaylistTarget>, account: TelegramUserId,
+        outcome: TelegramPlaylistSession.ToggleOutcome, title: String?
+    ) {
+        val written = outcome is TelegramPlaylistSession.ToggleOutcome.Added || outcome is TelegramPlaylistSession.ToggleOutcome.Removed
+        val next = guard.finish(written)
+        onPlaylistToggled(account, outcome, title)
+        refreshPlaylistStatus(account)
+        // A guard replaced by an account change belongs to the previous account: its leftovers are not re-run.
+        if (guard === saveGuard && next != null) startPlaylistWrite(guard, account, next, null)
+        notifyMeloPlayback()
+    }
+
+    private fun onPlaylistToggled(
+        account: TelegramUserId, outcome: TelegramPlaylistSession.ToggleOutcome, title: String?
+    ) {
+        if (isDestroyed || library.authorizedUser() != account) return
+        when (outcome) {
+            is TelegramPlaylistSession.ToggleOutcome.Added -> {
+                applySavedPlaylist(outcome.ids)
+                showMessage(if (title != null) "Đã lưu '$title' trên máy." else "Đã lưu trên máy · ${outcome.ids.size} bài trong Playlist.")
+            }
+            is TelegramPlaylistSession.ToggleOutcome.Removed -> {
+                applySavedPlaylist(outcome.ids)
+                showMessage(if (title != null) "Đã bỏ lưu '$title'." else "Đã bỏ lưu · ${outcome.ids.size} bài trong Playlist.")
+            }
+            is TelegramPlaylistSession.ToggleOutcome.Full -> {
+                val message = "Playlist đã đủ ${TelegramPlaylistPolicy.MAX_IDS} bài. Hãy xóa bớt một bài trước khi thêm bài mới."
+                showMessage(message)
+                toast(message)
+            }
+            is TelegramPlaylistSession.ToggleOutcome.Blocked -> {
+                playlistUnreadable = true
+                showPlaylistUnreadable()
+            }
+            is TelegramPlaylistSession.ToggleOutcome.NotOpen ->
+                showMessage("Playlist chưa sẵn sàng. Hãy thử lại sau giây lát.")
+            is TelegramPlaylistSession.ToggleOutcome.Failed ->
+                showMessage("Không lưu được playlist an toàn trên thiết bị.")
+            is TelegramPlaylistSession.ToggleOutcome.OutboxFull -> {
+                val message = "Có quá nhiều thay đổi Playlist đang chờ đồng bộ nên chưa thể lưu thêm. Dữ liệu cũ vẫn được giữ nguyên."
+                showMessage(message)
+                toast(message)
+            }
+        }
+    }
+
+    /** Lets Playlist V2 map a saved key back to its real (chat, message) through this account's library index. */
+    private val playlistIndex = object : PlaylistIndex {
+        override fun resolveAll(account: TelegramUserId, keys: Collection<Long>): Map<Long, PlaylistItemId.Telegram> {
+            val db = libraryDb ?: return emptyMap()
+            return db.getSongsByKeys(account.value, keys).associate { it.songKey to PlaylistItemId.Telegram(it.chatId, it.messageId) }
+        }
+    }
+
+    /** After the library index is loaded: saved keys that could not be named before get their real source. */
+    private fun upgradeLegacyPlaylistKeys(user: TelegramUserId) {
+        TelegramPlaylistRuntime.submit { playlistSession.resolveLegacyKeys(user) }
+    }
+
+    private fun applySavedPlaylist(ids: List<Long>) {
+        favoriteIds = ids
+        playlistUnreadable = false
         updatePlaylistButtons()
         refreshSongRows()
-        showMessage("Playlist cá nhân: ${favoriteIds.size} bài đã lưu.")
+    }
+
+    /**
+     * E96 P5B3 FINAL LIVE QA, Sync-QA debug builds only ([PlaylistQaFixture]): a marker file in the cache dir asks for ONE change of
+     * the synthetic QA item in the Playlist (add or remove). It only queues one outbox operation through the normal Save path;
+     * nothing is sent here (consent (c) and a send grant in Settings decide that). The marker is always consumed.
+     */
+    private fun runQaFixtureIfRequested(account: TelegramUserId) {
+        if (!TelegramPlaylistFlags.SYNC_ENABLED) return
+        val addMarker = java.io.File(cacheDir, PlaylistQaFixture.ADD_MARKER)
+        val removeMarker = java.io.File(cacheDir, PlaylistQaFixture.REMOVE_MARKER)
+        if (!addMarker.exists() && !removeMarker.exists()) return
+        val usedFile = java.io.File(cacheDir, PlaylistQaFixture.USED_FILE)
+        TelegramPlaylistRuntime.submit {
+            // No readable list yet: the marker stays for the next resume (nothing is written blindly).
+            val saved = playlistSession.snapshotFor(account) ?: return@submit
+            val target = PlaylistQaFixture.target(account)
+            val used = runCatching {
+                usedFile.readText().split(',').mapNotNull { runCatching { PlaylistQaFixture.Step.valueOf(it.trim()) }.getOrNull() }.toSet()
+            }.getOrDefault(emptySet())
+            val step = PlaylistQaFixture.decide(true, addMarker.exists(), removeMarker.exists(), saved, target.songKey, used)
+            addMarker.delete()
+            removeMarker.delete()
+            if (step == null) {
+                android.util.Log.w("MeloPlaylist", "qa-fixture step=none")
+                return@submit
+            }
+            // Recorded BEFORE the change: a crash in between can never allow a second operation of the same kind.
+            runCatching { usedFile.writeText((used + step).joinToString(",") { it.name }) }
+            val outcome = playlistSession.toggle(account, target)
+            android.util.Log.w("MeloPlaylist", "qa-fixture step=${step.name} outcome=${outcome::class.simpleName}")
+            val ids = when (outcome) {
+                is TelegramPlaylistSession.ToggleOutcome.Added -> outcome.ids
+                is TelegramPlaylistSession.ToggleOutcome.Removed -> outcome.ids
+                else -> null
+            }
+            if (ids != null) runOnUiThread {
+                if (isDestroyed || library.authorizedUser() != account) return@runOnUiThread
+                applyRemoteSavedPlaylist(ids)
+                refreshPlaylistStatus(account)
+            }
+        }
+    }
+
+    /** Local only: asks the playlist thread for the committed list of this account and redraws if it differs from what is shown. */
+    private fun reloadSavedPlaylistLive(account: TelegramUserId) {
+        liveRefresh.requestRefresh(account)
+    }
+
+    /**
+     * The committed list changed behind the screen (another device's songs were applied by a sync). A saved song that this
+     * device's library index does not know yet stays in the list as a placeholder row (see [placeholderSong]), it is not dropped.
+     */
+    private fun applyRemoteSavedPlaylist(ids: List<Long>) {
+        applySavedPlaylist(ids)
+        carScreen?.onPlaylistStatusChanged()
+        scheduleMeloLibraryRefresh()
+        notifyMeloPlayback()
+    }
+
+    /**
+     * E96 P4: recomputes the Playlist status line from the committed V2 state. The read runs on the playlist thread (it
+     * waits behind a Save in progress), never on the UI thread. Nothing here starts a sync: with the build switch off
+     * the consent file is not even read.
+     */
+    private fun refreshPlaylistStatus(account: TelegramUserId) {
+        TelegramPlaylistRuntime.submit {
+            val facts = playlistSession.statusFacts(account)
+            val consent = if (TelegramPlaylistFlags.SYNC_ENABLED) syncConsentStore.load(account) else SyncConsent()
+            val line = PlaylistSyncStatusPolicy.evaluate(
+                account.value, facts,
+                SyncContext(TelegramPlaylistFlags.SYNC_ENABLED, consent, lastRun = SyncRuntime.runLog.last(account.value))
+            )
+            runOnUiThread {
+                if (isDestroyed || library.authorizedUser() != account) return@runOnUiThread
+                playlistStatusLine = line
+                carScreen?.onPlaylistStatusChanged()
+                scheduleMeloLibraryRefresh()
+            }
+        }
+    }
+
+    private fun showPlaylistUnreadable() {
+        val message = "Không đọc được Playlist đã lưu trên máy này. Để không mất dữ liệu, ứng dụng sẽ không ghi đè lên nó. " +
+            "Hãy giữ nguyên ứng dụng và báo cho người hỗ trợ."
+        showMessage(message)
+        toast(message)
+    }
+
+    /** The stored playlist is shown as it is; changes made by an older app version are kept and imported at a later start. */
+    private fun showPlaylistImportDeferred(warning: PlaylistWarning) {
+        val message = when (warning) {
+            PlaylistWarning.IMPORT_DEFERRED_OUTBOX_FULL ->
+                "Playlist có bài do bản ứng dụng cũ thêm nhưng chưa nhập được vì hàng đợi thay đổi đang đầy. Không bài nào bị mất; ứng dụng sẽ thử lại ở lần mở sau."
+            PlaylistWarning.IMPORT_NOT_SAVED ->
+                "Chưa lưu được các thay đổi Playlist từ bản ứng dụng cũ. Không bài nào bị mất; hãy mở lại ứng dụng để thử lại."
+        }
+        showMessage(message)
+        toast(message)
+    }
+
+    /** Opens the signed-in account's saved playlist off the UI thread; queued behind any pending Save. */
+    private fun loadSavedPlaylist(user: TelegramUserId) {
+        TelegramPlaylistRuntime.submit {
+            playlistSession.attachIndex(playlistIndex)
+            val opened = playlistSession.open(user)
+            runOnUiThread {
+                if (isDestroyed || library.authorizedUser() != user) return@runOnUiThread
+                when (opened) {
+                    is TelegramPlaylistSession.OpenResult.Ready -> {
+                        favoriteIds = opened.ids
+                        playlistUnreadable = false
+                        playlistLoaded = true
+                        updatePlaylistButtons()
+                        if (playlistMode) refreshSongRows()
+                        opened.warning?.let { showPlaylistImportDeferred(it) }
+                    }
+                    is TelegramPlaylistSession.OpenResult.Blocked -> {
+                        favoriteIds = emptyList()
+                        playlistUnreadable = true
+                        playlistLoaded = false
+                        updatePlaylistButtons()
+                        if (playlistMode) refreshSongRows()
+                        showPlaylistUnreadable()
+                    }
+                }
+                refreshPlaylistStatus(user)
+                notifyMeloPlayback()
+            }
+        }
+    }
+
+    private fun closeSavedPlaylist() {
+        liveRefresh.invalidate()
+        playlistUnreadable = false
+        playlistLoaded = false
+        playlistStatusLine = null
+        // A different account must never inherit the previous one's queued taps.
+        saveGuard = SaveToggleGuard()
+        saveGuardAccount = 0L
+        // E96 P5-A: no sync report outlives its session, and an unfinished sync is stopped (inert while the build switch is off).
+        SyncRuntime.runLog.clear()
+        SyncRuntime.provider(noBackupFilesDir).actions().close()
+        TelegramPlaylistRuntime.submit { playlistSession.close() }
+    }
+
+    private fun placeholderSong(songKey: Long) = Song(
+        fileId = 0, title = "Bài đã lưu · chưa có trong thư viện máy này", filename = "",
+        messageId = songKey, chatId = 0L, placeholder = true
+    )
+
+    private fun indexedToSong(row: IndexedTelegramSong) = Song(
+        row.fileId, row.title, row.filename, row.songKey, row.chatId, row.fileSize,
+        rawMessageId = row.messageId, performer = row.performer,
+        durationSeconds = row.durationSeconds, sourceTitle = row.sourceTitle
+    )
+
+    /** Database thread. Saved order; memory first, then one batched database lookup for the rest. */
+    private fun resolvePlaylistEntries(
+        userId: Long, db: TelegramLibraryDao?, keys: List<Long>, loaded: List<Song>
+    ): List<TelegramPlaylistViewPolicy.Entry<Song>> {
+        val byKey = HashMap<Long, Song>(loaded.size * 2)
+        for (song in loaded) byKey.putIfAbsent(song.messageId, song)
+        val missing = TelegramPlaylistViewPolicy.missingFromMemory(keys) { byKey[it] }
+        val indexed = if (db != null && userId > 0L && missing.isNotEmpty()) {
+            runCatching { db.getSongsByKeys(userId, missing) }.getOrDefault(emptyList())
+                .associate { it.songKey to indexedToSong(it) }
+        } else emptyMap()
+        return TelegramPlaylistViewPolicy.resolve(keys, { byKey[it] }, indexed)
     }
 
     // ---- New-screen layers (Gọn, Car Mode) ---------------------------------------------------
@@ -4405,7 +4756,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         maybeAskCarMode(prefs, carSetting, display)
         val setting = MeloCompactPolicy.loadSetting(prefs)
-        val wanted = MeloCompactPolicy.shouldUseCompact(setting, display.widthDp, display.heightDp, auth.isReady())
+        val wanted = MeloCompactPolicy.shouldUseCompact(setting, measured.panelCompact, auth.isReady())
         if (!wanted) {
             showNewLayer(prefs, measured)
             return
@@ -4439,7 +4790,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 ViewCompat.setOnApplyWindowInsetsListener(v) { view, insets ->
                     val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
                     val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-                    view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+                    // This listener replaces the padding, so the handle band is added to the top here.
+                    view.setPadding(bars.left, bars.top + MeloUiLabActivity.handleBandPx(view, insets), bars.right, maxOf(bars.bottom, ime.bottom))
                     insets
                 }
             }
@@ -4456,31 +4808,40 @@ class TelegramPreviewActivity : AppCompatActivity() {
      */
     private fun showNewLayer(prefs: android.content.SharedPreferences, measured: MeloUiLabActivity.Measurements) {
         val display = measured.display
-        val layout = MeloScreenPolicy.chooseLayout(measured.windowWidthDp, measured.windowHeightDp, carMode = false)
+        val layout = MeloScreenPolicy.chooseLayout(
+            measured.windowWidthDp, measured.windowHeightDp, carMode = false, panelCompact = measured.panelCompact)
         val layer = MeloLibraryPolicy.newLayer(MeloLibraryPolicy.loadStyle(prefs), layout, auth.isReady())
         if (layer == null) {
             closeLocalMusic()
             detachMeloLayer()
             return
         }
-        val key = "new:$layer:${measured.windowWidthPx}x${measured.windowHeightPx}:${display.densityDpi}:${display.fontScale}"
+        val profile = MeloLibraryPolicy.profileFor(measured.smallestWidthDp)
+        // No window size in the key: resizing inside one screen type keeps the screen (list position,
+        // search box, open groups) and the views stretch by themselves. Only the type, profile,
+        // density and font scale rebuild it (E95 F03d).
+        // E98: the colour theme is part of the key, so choosing it in Cài đặt giao diện rebuilds the screen.
+        val theme = MeloThemePolicy.effective(MeloThemePolicy.load(prefs), layer, profile)
+        val key = "new:$layer:$profile:${theme.key}:${display.densityDpi}:${display.fontScale}"
         if ((phoneScreen != null || tabletScreen != null) && meloLayerKey == key) {
+            // The window moved or resized: the handle band and the bars are measured again.
+            meloLayer?.let { ViewCompat.requestApplyInsets(it) }
             scheduleMeloLibraryRefresh()
             return
         }
         detachMeloLayer()
-        val sizes = MeloDesignTokens.sizes(
-            MeloLibraryPolicy.profileFor(measured.smallestWidthDp), display.density, display.fontScale, display.physicalPpi)
+        rowArtThemeActive = theme == MeloThemePolicy.ColorTheme.TEAL_BRIGHT
+        val sizes = MeloDesignTokens.sizes(profile, display.density, display.fontScale, display.physicalPpi)
         val view: View
         if (layer == MeloLibraryPolicy.NewLayer.TWO_PANE) {
-            val screen = MeloTabletScreen(this, sizes, meloHost, onBackPressedDispatcher)
+            val screen = MeloTabletScreen(this, sizes, meloHost, onBackPressedDispatcher, theme)
             tabletScreen = screen
             view = screen.view
             installLayerInsets(view)
             addMeloLayer(view, key)
             screen.attach()
         } else {
-            val screen = MeloPhoneScreen(this, sizes, layer, meloHost, onBackPressedDispatcher)
+            val screen = MeloPhoneScreen(this, sizes, layer, meloHost, onBackPressedDispatcher, theme)
             phoneScreen = screen
             view = screen.view
             installLayerInsets(view)
@@ -4496,9 +4857,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
         ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
-            v.setPadding(base[0] + bars.left, base[1] + bars.top, base[2] + bars.right, base[3] + maxOf(bars.bottom, ime.bottom))
+            val band = MeloUiLabActivity.handleBandPx(v, insets)
+            v.setPadding(base[0] + bars.left, base[1] + bars.top + band, base[2] + bars.right, base[3] + maxOf(bars.bottom, ime.bottom))
             insets
         }
+        // The window's place on the screen is only known after the first layout: measure the band again then.
+        view.post { ViewCompat.requestApplyInsets(view) }
     }
 
     /** Car Mode at the panel's real pixels, full screen; emulated FYT frames for testing on a tablet. */
@@ -4552,6 +4916,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         tabletScreen = null
         meloLayer = null
         meloLayerKey = null
+        rowArtThemeActive = false
         if (wasCar) setCarFullscreen(false)
         if (::mainRoot.isInitialized) mainRoot.visibility = View.VISIBLE
     }
@@ -4578,7 +4943,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 setting, MeloCarPolicy.asked(prefs), display.widthDp, display.heightDp, auth.isReady())) return
         carPromptShown = true
         MeloCarPolicy.markAsked(prefs)
-        AlertDialog.Builder(this, R.style.Theme_MusicAssistantCar_Dialog)
+        AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
             .setTitle("Bật Car Mode?")
             .setMessage("Màn hình này rộng như màn hình ô tô. Car Mode dùng nút to, chữ lớn, 5 bài mỗi trang và ẩn thanh hệ thống. " +
                 "Có thể đổi lại trong ⋮ → Cài đặt giao diện.")
@@ -4635,13 +5000,62 @@ class TelegramPreviewActivity : AppCompatActivity() {
         if (userId <= 0L) return
         meloChannelsRequested = true
         executeOnDb {
-            val sources = db.getSources(userId)
+            val sources = withLiveCounts(db, userId, db.getSources(userId))
             for (src in sources) sourceNames[src.chatId] = src.title
             runOnUiThread {
                 if (isDestroyed || library.authorizedUser()?.value != userId) return@runOnUiThread
                 meloChannelRows = meloChannelRowsOf(sources)
                 scheduleMeloLibraryRefresh()
             }
+        }
+    }
+
+    /**
+     * E95 F05: [sources] with the real number of songs per channel (read-only query, see
+     * [TelegramLibraryDao.getLiveSourceCounts]); the stored counts only change when a full sync
+     * completes, so a channel with songs could read "0 bài". Also remembers the library numbers
+     * for the settings screen. Background (database) thread only.
+     */
+    private fun withLiveCounts(db: TelegramLibraryDao, userId: Long, sources: List<IndexedTelegramSource>): List<IndexedTelegramSource> {
+        val live = runCatching { db.getLiveSourceCounts(userId) }.getOrNull() ?: return sources
+        meloLibraryDiag = MeloLibraryPolicy.LibraryDiag(
+            liveSongs = live.values.sum(),
+            storedChannels = sources.count { it.chatId != 0L && it.trackCount > 0 },
+            liveChannels = live.size,
+            lastSyncCompletedMs = runCatching { db.getSyncState(userId)?.lastSyncCompletedAtMs }.getOrNull() ?: 0L
+        )
+        return TelegramVaultBentoPolicy.withLiveCounts(userId, sources, live) { chatId -> sourceNames[chatId] ?: "Nguồn Telegram $chatId" }
+    }
+
+    /** "Cài đặt giao diện" with the song count and, once a list was built, the library numbers (counts only). */
+    private fun uiLabIntent(): Intent {
+        val lab = Intent(this, MeloUiLabActivity::class.java)
+            .putExtra(MeloUiLabActivity.EXTRA_SONG_COUNT, totalCountForCurrentView)
+        meloLibraryDiag?.let { diag ->
+            lab.putExtra(MeloUiLabActivity.EXTRA_LIB_LIVE_SONGS, diag.liveSongs)
+                .putExtra(MeloUiLabActivity.EXTRA_LIB_STORED_CHANNELS, diag.storedChannels)
+                .putExtra(MeloUiLabActivity.EXTRA_LIB_LIVE_CHANNELS, diag.liveChannels)
+                .putExtra(MeloUiLabActivity.EXTRA_LIB_LAST_SYNC_MS, diag.lastSyncCompletedMs)
+        }
+        return lab
+    }
+
+    /**
+     * While a sync writes pages nothing else refreshes the channel list: rebuild it with the
+     * live counts at most every [MeloLibraryPolicy.CHANNEL_REFRESH_MIN_MS]. Database thread.
+     */
+    private fun refreshMeloChannelsWhileSyncing(userId: Long) {
+        val db = libraryDb ?: return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (!MeloLibraryPolicy.channelRefreshDue(now, lastMeloChannelRefreshMs)) return
+        lastMeloChannelRefreshMs = now
+        val sources = withLiveCounts(db, userId, db.getSources(userId))
+        for (src in sources) sourceNames[src.chatId] = src.title
+        runOnUiThread {
+            if (isDestroyed || library.authorizedUser()?.value != userId) return@runOnUiThread
+            meloChannelRows = meloChannelRowsOf(sources)
+            meloChannelsRequested = true
+            scheduleMeloLibraryRefresh()
         }
     }
 
@@ -4665,8 +5079,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val playingKey = currentSongKey()
             val downloadingPercent = currentTelegramMessageId()?.let { currentDownloadPercent() }
             val sort = activeSort()
+            val rowArt = rowArtOn()
+            val rowArtAccount = if (rowArt) library.authorizedUser()?.value ?: 0L else 0L
             val rows = if (showingSources) emptyList() else shownSongs.map { song ->
                 MeloScreenHost.Row(
+                    artKey = if (rowArtAccount > 0L && song.chatId != 0L) {
+                        MeloRowArtPolicy.telegramKey(rowArtAccount, song.chatId, song.genuineMessageId)
+                    } else null,
+                    chatId = song.chatId,
+                    rawMessageId = song.genuineMessageId,
+                    localFile = if (rowArt) cachedSongPaths[song.messageId] else null,
                     title = TelegramSongDisplayPolicy.label(song.title, song.filename),
                     sourceTitle = song.sourceTitle ?: sourceNames[song.chatId],
                     filename = song.filename,
@@ -4756,6 +5178,32 @@ class TelegramPreviewActivity : AppCompatActivity() {
             return MeloAlphabetPolicy.firstIndexAtOrAfter(
                 shownSongs.map { MeloAlphabetPolicy.keyOf(it.title, it.performer, it.filename) }, lowerBound
             ).coerceAtMost((shownSongs.size - 1).coerceAtLeast(0))
+        }
+
+        override fun rowArtEnabled(): Boolean = rowArtOn()
+
+        override fun requestRowArt(rows: List<MeloScreenHost.Row>, rowArtPx: Int) {
+            if (!rowArtOn()) {
+                // Switched off (or another theme): stop asking and let go of what was loaded.
+                if (!rowArtOffReset) {
+                    rowArtOffReset = true
+                    rowArtLoaderLazy?.reset()
+                }
+                return
+            }
+            rowArtOffReset = false
+            val items = rows.mapNotNull { row ->
+                row.artKey?.let { MeloRowArtLoader.Item(it, row.chatId, row.rawMessageId, row.localFile, row.mediaStoreId) }
+            }
+            rowArtLoader().request(items, rowArtPx)
+        }
+
+        override fun peekRowArt(key: String?): Bitmap? = if (rowArtOn()) rowArtLoaderLazy?.peek(key) else null
+
+        override fun rowArtSettled(key: String?): Boolean = rowArtLoaderLazy?.settled(key) ?: false
+
+        override fun setRowArtListener(listener: (() -> Unit)?) {
+            if (listener != null) rowArtLoader().setListener(listener) else rowArtLoaderLazy?.setListener(null)
         }
 
         override fun openLocal() = openLocalMusic()
@@ -4862,8 +5310,21 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     else -> "tắt"
                 },
                 downloadNote = currentDownloadNote(),
-                paused = !controller.playWhenReady
+                paused = !controller.playWhenReady,
+                saveAvailability = MeloSavePolicy.availability(
+                    playing = true, local = false, songKey = key, songKnown = song != null,
+                    chatId = song?.chatId ?: 0L, rawMessageId = song?.rawMessageId ?: 0L,
+                    accountId = library.authorizedUser()?.value ?: 0L,
+                    playlistUnreadable = playlistUnreadable, playlistLoaded = playlistLoaded
+                ),
+                saveBusy = saveGuard.busy
             )
+        }
+
+        override fun playlistStatus(): PlaylistSyncStatusPolicy.Line? = playlistStatusLine
+
+        override fun openSyncSettings() {
+            startActivity(Intent(this@TelegramPreviewActivity, MeloSyncSettingsActivity::class.java))
         }
 
         override fun playPause() {
@@ -4908,9 +5369,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
         override fun openLegacyOverflow(anchor: View) = showLibraryOverflow(anchor)
 
         override fun openUiLab() {
-            startActivity(Intent(this@TelegramPreviewActivity, MeloUiLabActivity::class.java)
-                .putExtra(MeloUiLabActivity.EXTRA_SONG_COUNT, totalCountForCurrentView))
+            startActivity(uiLabIntent())
         }
+
+        override fun saveListAnchor(groupKey: String, songKey: Long?, offsetPx: Int) {
+            meloListAnchor = MeloScreenHost.ListAnchor(groupKey, songKey, offsetPx)
+        }
+
+        override fun listAnchor(): MeloScreenHost.ListAnchor? = meloListAnchor
 
         override fun startVoiceSearch(onText: (String) -> Unit): Boolean {
             if (!voiceSearchAvailable()) return false
@@ -5195,9 +5661,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
         song: Song, isDownloaded: Boolean, anchor: View,
         versions: TelegramOfflineLibrary.Group? = null
     ) {
-        val themed = ContextThemeWrapper(this, R.style.Theme_MusicAssistantCar_Dialog)
+        val themed = ContextThemeWrapper(this, R.style.Theme_MeloVault_Dialog)
         val popup = PopupMenu(themed, anchor)
         val isFav = song.messageId in favoriteIds
+        if (song.placeholder) {
+            // Not in this device's library yet: all that can be done is take it off the Playlist.
+            popup.menu.add(0, 3, 1, "★ Xóa khỏi Playlist")
+            popup.setOnMenuItemClickListener { toggleFavoriteSong(song); true }
+            popup.show()
+            return
+        }
         val manyVersions = versions?.takeIf { it.entries.size > 1 }
         popup.menu.add(0, 1, 1, "▶ Phát bài này")
         if (manyVersions != null) popup.menu.add(0, 6, 1, "☰ Chọn bản khác (${manyVersions.entries.size} bản)")
@@ -5261,22 +5734,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun toggleFavoriteSong(song: Song) {
         val account = library.authorizedUser() ?: return
         if (!auth.isReady()) return
-        val target = song.messageId
-        val next = TelegramPlaylistPolicy.toggle(favoriteIds, target)
-        val result = runCatching { playlistStore.save(account, next) }
-        if (result.isFailure) {
-            showMessage("Không lưu được playlist an toàn trên thiết bị.")
-            return
-        }
-        favoriteIds = next
-        updatePlaylistButtons()
-        refreshSongRows()
-        val isAdded = target in next
-        showMessage(if (isAdded) "Đã thêm '${song.title}' vào Playlist." else "Đã xóa '${song.title}' khỏi Playlist.")
+        requestPlaylistToggle(account, PlaylistTarget(song.messageId, song.chatId, song.rawMessageId), song.title)
     }
 
     private fun showSongDetailsDialog(song: Song, isDownloaded: Boolean) {
-        val themed = ContextThemeWrapper(this, R.style.Theme_MusicAssistantCar_Dialog)
+        val themed = ContextThemeWrapper(this, R.style.Theme_MeloVault_Dialog)
         val source = song.sourceTitle ?: (sourceNames[song.chatId] ?: "Telegram")
         val performer = song.performer?.takeIf { it.isNotBlank() } ?: "Không xác định"
         val dur = TelegramSongDisplayPolicy.formatDuration(song.durationSeconds) ?: "Không xác định"
@@ -5473,6 +5935,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun onNativeEvent(result: JSONObject, sessionDb: File, secret: String) {
         val kind = result.optString("@type")
         val tag = result.optString("@extra")
+        if (tag.startsWith("rowArt")) {
+            // E98 row covers: handled first and alone, so they never reach the message / chat / file handlers below.
+            rowArtLoaderLazy?.onTdlibEvent(result)
+            return
+        }
         if (tag.startsWith("offlineLocal:")) {
             pendingOffline.remove(tag)?.complete(result)
             return
@@ -5585,8 +6052,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 if (auth.onGetMe(authEpoch, verified)) {
                     ShareableTdlibOwner.markGetMeVerified(verified.value)
                     showMessage("Đã đăng nhập Telegram. Tải nhạc trong Saved Messages.")
-                    favoriteIds = runCatching { playlistStore.load(verified) }
-                        .getOrDefault(emptyList())
+                    // Never fall back to an empty list on a read error: the file is read (and, if it
+                    // cannot be, protected) by the playlist session, off this receiver thread.
+                    favoriteIds = emptyList()
+                    loadSavedPlaylist(verified)
                     playlistMode = false
                     runOnUiThread {
                         updatePlaylistButtons()
@@ -5705,6 +6174,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             observePrefetch(result)
         }
         if (kind == "updateFile") {
+            rowArtLoaderLazy?.onUpdateFile(result)
             result.optJSONObject("file")?.let {
                 TelegramProgressiveCache.observe(it)
                 playIfDownloaded(it)
@@ -5803,6 +6273,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 globalScanLoading = false
                 ShareableTdlibOwner.revokeAuthorization()
                 TelegramProgressiveCache.clear()
+                runOnUiThread { rowArtLoaderLazy?.reset() } // loader state lives on the main thread
                 auth.logout()
                 clearPendingQrLink()
                 runOnUiThread {
@@ -5815,6 +6286,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     songs.clear()
                     adapter.clear()
                     favoriteIds = emptyList()
+                    closeSavedPlaylist()
                     playlistMode = false
                     shownSongs = emptyList()
                     updatePlaylistButtons()
@@ -6096,7 +6568,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val db = getOrInitDatabase(userId)
         executeOnDb {
             val count = db.getSongCount(userId)
-            val sources = db.getSources(userId)
+            val sources = withLiveCounts(db, userId, db.getSources(userId))
             for (src in sources) {
                 sourceNames[src.chatId] = src.title
             }
@@ -6109,6 +6581,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 telegramLibraryTotal = count
                 scheduleMeloLibraryRefresh()
                 startDownloadedCountFlow(userId)
+                upgradeLegacyPlaylistKeys(TelegramUserId(userId))
                 refreshLocalCount()
                 if (count > 0) {
                     totalCountForCurrentView = count
@@ -6127,9 +6600,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     }
                     refreshSongRows()
                     val statusText = if (syncState?.status == TelegramSyncState.STATUS_COMPLETE) {
-                        "Thư viện: $count bài từ ${sources.size} nguồn · Đã đồng bộ"
+                        "Thư viện: $count bài từ ${sources.size} nguồn · ${TelegramLibrarySyncDisplayPolicy.LIBRARY_UPDATED}"
                     } else if (syncState?.status == TelegramSyncState.STATUS_PAUSED) {
-                        "Thư viện: $count bài · Đồng bộ tạm dừng"
+                        "Thư viện: $count bài · ${TelegramLibrarySyncDisplayPolicy.LIBRARY_PAUSED}"
                     } else {
                         "Thư viện: $count bài từ ${sources.size} nguồn"
                     }
@@ -6143,7 +6616,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun reloadIndexedSourcesFromDb(userId: Long) {
         val db = libraryDb ?: return
         executeOnDb {
-            val sources = db.getSources(userId)
+            val sources = withLiveCounts(db, userId, db.getSources(userId))
             currentAuthoritativeSourceCount = sources.size
             for (src in sources) {
                 sourceNames[src.chatId] = src.title
@@ -6353,6 +6826,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
             val syncState = libraryDb?.getSyncState(currentUser)
             val totalSynced = syncState?.totalItemsSynced ?: indexedSongs.size
+            refreshMeloChannelsWhileSyncing(currentUser)
 
             runOnUiThread {
                 if (!allChatsMode || !auth.isReady() || library.authorizedUser()?.value != currentUser || isDestroyed) return@runOnUiThread
@@ -6544,6 +7018,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun downloadAndPlay(song: Song) {
+        if (song.placeholder) {
+            // A saved song this device's library does not list (yet) has no message to open.
+            toast("Bài này chưa có trong thư viện máy. Hãy chờ đồng bộ thư viện xong rồi thử lại.")
+            return
+        }
         if (!auth.isReady()) return
         val effectiveChatId = if (song.chatId != 0L) song.chatId else (savedChatId.takeIf { it != 0L } ?: (library.authorizedUser()?.value ?: 0L))
         val rawMsgId = song.genuineMessageId
@@ -6708,11 +7187,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
         globalScanLoading = false
         ShareableTdlibOwner.revokeAuthorization()
         TelegramProgressiveCache.clear()
+        rowArtLoaderLazy?.reset()
         clearPlaybackSession()
         songs.clear()
         adapter.clear()
         queueSongOrder = emptyList()
         favoriteIds = emptyList()
+        closeSavedPlaylist()
         playlistMode = false
         shownSongs = emptyList()
         updatePlaylistButtons()
@@ -6758,12 +7239,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
         syncCoordinator?.cancelSync()
         localMode = false
         if (localMusicLazy.isInitialized()) localMusic.shutdown()
+        // The playlist session outlives this screen: let go of this screen's library index.
+        TelegramPlaylistRuntime.submit { playlistSession.detachIndex(playlistIndex) }
         dbExecutor.shutdownNow()
         offlineExecutor.shutdownNow()
         pendingOffline.values.forEach { it.cancel(false) }
         pendingOffline.clear()
         thumbnailExecutor.shutdownNow()
         thumbnailCache.evictAll()
+        rowArtLoaderLazy?.shutdown()
+        rowArtLoaderLazy = null
         if (libraryDb is AndroidTelegramLibraryDatabase) {
             runCatching { (libraryDb as AndroidTelegramLibraryDatabase).close() }
         }

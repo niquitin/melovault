@@ -1,6 +1,5 @@
 package com.bsdung.musicassistantcar.data.telegram
 
-import java.util.Locale
 
 /**
  * Pure policy for formatting library sync and pagination status labels truthfully.
@@ -8,6 +7,15 @@ import java.util.Locale
  * and background synchronization state without confusing partial pages with sync completion.
  */
 object TelegramLibrarySyncDisplayPolicy {
+
+    /**
+     * E96 P5B3: what the library header says about the Telegram CATALOG INDEX (which songs the app has listed). It is never
+     * about the cloud copy of the saved Playlist, which has its own line ([PlaylistSyncStatusPolicy]); the word
+     * "đồng bộ" is therefore kept out of these two.
+     */
+    const val LIBRARY_UPDATED = "Đã cập nhật thư viện"
+    const val LIBRARY_UPDATING = "Đang cập nhật thư viện…"
+    const val LIBRARY_PAUSED = "Cập nhật thư viện tạm dừng"
 
     /**
      * Formats the header sync subtitle.
@@ -30,15 +38,15 @@ object TelegramLibrarySyncDisplayPolicy {
         selectedSourceTitle: String? = null
     ): String {
         val stateLabel = when {
-            isSyncing -> "Đang đồng bộ…"
-            isAuthenticated -> "Đã đồng bộ"
+            isSyncing -> LIBRARY_UPDATING
+            isAuthenticated -> LIBRARY_UPDATED
             else -> "Chờ kết nối"
         }
         if (!isAuthenticated) return "Telegram · $stateLabel"
 
         if (isSourcesMode) {
-            val srcStr = String.format(Locale.US, "%,d nguồn", sourceCount)
-            val totalStr = String.format(Locale.US, "%,d bài", totalIndexedCount)
+            val srcStr = "${MeloComponentPolicy.formatCount(sourceCount)} nguồn"
+            val totalStr = "${MeloComponentPolicy.formatCount(totalIndexedCount)} bài"
             return "$srcStr · $totalStr · $stateLabel"
         }
 
@@ -46,9 +54,9 @@ object TelegramLibrarySyncDisplayPolicy {
             return "Chưa có bài · $stateLabel"
         }
 
-        val totalStr = String.format(Locale.US, "%,d", totalIndexedCount)
+        val totalStr = MeloComponentPolicy.formatCount(totalIndexedCount)
         val countLabel = if (displayedCount in 1 until totalIndexedCount) {
-            val dispStr = String.format(Locale.US, "%,d", displayedCount)
+            val dispStr = MeloComponentPolicy.formatCount(displayedCount)
             "Hiển thị $dispStr / $totalStr bài"
         } else {
             "$totalStr bài"

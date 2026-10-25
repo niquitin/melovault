@@ -49,7 +49,8 @@ internal class MeloCompactScreen(
     private val libraryPage = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     private val title = c.text("", s.titleText, p.text, bold = true)
     private val note = c.text("", s.secondaryText, p.textSecondary, maxLines = 2)
-    private val downloadedLine = c.text("", s.secondaryText, MeloCompactPolicy.DOWNLOADED_LINE_COLOR)
+    // Two lines: the Playlist status sentence is longer than one line on a narrow screen (REWORK-04, M3 showed "Chưa kiểm tra đồng ...").
+    private val downloadedLine = c.text("", s.secondaryText, MeloCompactPolicy.DOWNLOADED_LINE_COLOR, maxLines = 2)
     private val list = ListView(context)
     private val adapter = RowsAdapter()
     private val bar = MeloBottomBar(context, c, host, onTab = ::onBarTab, onOpenNowPlaying = ::openNowPlaying)
@@ -162,8 +163,21 @@ internal class MeloCompactScreen(
             snap.mode, snap.sourceTitle, snap.showingSources,
             host.sourceSummaries().firstOrNull { it.kind == MeloSourceCardPolicy.Kind.TELEGRAM }?.downloaded
         )
-        downloadedLine.text = downloaded.orEmpty()
-        downloadedLine.visibility = if (downloaded == null) View.GONE else View.VISIBLE
+        // E96 P4: on the Playlist tab the same hint line carries the honest Playlist state; tap = detail.
+        val playlistState = if (snap.mode == Mode.PLAYLIST && !snap.showingSources) host.playlistStatus() else null
+        val hint = playlistState?.text ?: downloaded
+        downloadedLine.text = hint.orEmpty()
+        downloadedLine.visibility = if (hint == null) View.GONE else View.VISIBLE
+        if (playlistState != null) {
+            downloadedLine.contentDescription = "Trạng thái Playlist: ${playlistState.text}. Chạm để xem chi tiết."
+            downloadedLine.setOnClickListener {
+                android.widget.Toast.makeText(context, playlistState.text + "\n" + playlistState.fullDetail(), android.widget.Toast.LENGTH_LONG).show()
+            }
+        } else {
+            downloadedLine.contentDescription = null
+            downloadedLine.setOnClickListener(null)
+            downloadedLine.isClickable = false
+        }
         note.text = snap.note.orEmpty()
         note.visibility = if (snap.note.isNullOrBlank()) View.GONE else View.VISIBLE
         backCallback.isEnabled = nowPage != null || searchBar.visibility == View.VISIBLE ||
@@ -236,7 +250,7 @@ internal class MeloCompactScreen(
     private fun dp(v: Int) = (v * context.resources.displayMetrics.density).toInt()
 
     /**
-     * Rows are 56dp edge to edge so 8 fit above the 72dp bar on the 574dp Shanling window;
+     * Rows are 52dp edge to edge so 8 fit above the 102dp bar on the 574dp Shanling window;
      * insetting the drawn background by 1dp on top and bottom leaves the 2dp visual gap.
      */
     private fun rowGap(row: View) {
@@ -528,7 +542,9 @@ internal class MeloCompactScreen(
             download.text = now.downloadNote.orEmpty()
             shuffle.text = if (now.shuffle) "⇄ Đảo: bật" else "⇄ Đảo: tắt"
             repeat.text = "↻ Lặp: ${now.repeatLabel}"
-            favorite.text = if (now.favorite) "★ Đã lưu vào Playlist" else "☆ Lưu vào Playlist"
+            val save = MeloSavePolicy.buttonState(now.saveAvailability, now.favorite, now.saveBusy)
+            favorite.text = if (save.saved) "★ Bỏ lưu khỏi Playlist" else "☆ Lưu vào Playlist"
+            favorite.contentDescription = save.contentDescription
             setTextPx(shuffle); setTextPx(repeat); setTextPx(favorite); setTextPx(queue)
         }
 

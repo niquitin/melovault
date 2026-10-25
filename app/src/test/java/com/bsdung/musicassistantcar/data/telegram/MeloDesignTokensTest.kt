@@ -37,7 +37,8 @@ class MeloDesignTokensTest {
         assertEquals(16f, compact.titleText, 0.01f)
         assertEquals(13f, compact.secondaryText, 0.01f)
         assertEquals(40, compact.rowArt)
-        assertEquals(56, compact.rowHeight)
+        // REWORK-01: 52dp so that 8 rows still fit above the taller bottom bar on the Shanling.
+        assertEquals(52, compact.rowHeight)
         assertEquals(56, compact.playButtonWidth)
         assertEquals(56, compact.miniPlayerHeight)
         assertEquals(16, compact.screenMargin)
@@ -61,7 +62,7 @@ class MeloDesignTokensTest {
     fun dpProfilesScaleWithDensityAndTextWithFontScale() {
         val s = MeloDesignTokens.sizes(Profile.COMPACT, 2f, 1.3f, 355f)
         assertEquals(80, s.rowArt)
-        assertEquals(112, s.rowHeight)
+        assertEquals(104, s.rowHeight)
         assertEquals(96, s.minTouch)
         assertEquals(16f * 2f * 1.3f, s.titleText, 0.01f)
     }
@@ -131,5 +132,57 @@ class MeloDesignTokensTest {
     fun carPanesFitFytWidth() {
         val r = MeloDesignTokens.CarReferencePx
         assertTrue(r.NAV_COLUMN + r.PLAYER_PANE + r.LIST_PANE <= 1920)
+    }
+
+    // ---- E98 teal theme ---------------------------------------------------------------------
+
+    @Test
+    fun currentThemeKeepsEveryExistingPalette() {
+        val current = MeloThemePolicy.ColorTheme.CURRENT
+        Profile.entries.forEach { profile ->
+            assertEquals(MeloDesignTokens.palette(profile), MeloDesignTokens.palette(profile, current))
+        }
+        assertEquals(MeloDesignTokens.PALETTE, MeloDesignTokens.palette(Profile.PHONE, current))
+        assertEquals(MeloDesignTokens.CAR_PALETTE, MeloDesignTokens.palette(Profile.CAR, current))
+    }
+
+    @Test
+    fun tealThemeNeverReachesCarOrCompact() {
+        val teal = MeloThemePolicy.ColorTheme.TEAL_BRIGHT
+        assertEquals(MeloDesignTokens.CAR_PALETTE, MeloDesignTokens.palette(Profile.CAR, teal))
+        assertEquals(MeloDesignTokens.PALETTE, MeloDesignTokens.palette(Profile.COMPACT, teal))
+        assertEquals(MeloDesignTokens.TEAL_PALETTE, MeloDesignTokens.palette(Profile.PHONE, teal))
+        assertEquals(MeloDesignTokens.TEAL_PALETTE, MeloDesignTokens.palette(Profile.TABLET, teal))
+    }
+
+    @Test
+    fun tealPaletteIsBrighterThanTheCurrentOne() {
+        val cur = MeloDesignTokens.PALETTE
+        val teal = MeloDesignTokens.TEAL_PALETTE
+        assertTrue(MeloDesignTokens.luminance(teal.background) > MeloDesignTokens.luminance(cur.background))
+        assertTrue(MeloDesignTokens.luminance(teal.surface) > MeloDesignTokens.luminance(cur.surface))
+        assertTrue(MeloDesignTokens.luminance(teal.surfaceRaised) > MeloDesignTokens.luminance(cur.surfaceRaised))
+        assertEquals(0xFF10263A.toInt(), teal.background)
+        assertEquals(0xFF0C1C2B.toInt(), teal.backgroundEnd)
+        assertEquals(0xFF36E2C2.toInt(), teal.accent)
+        assertEquals(0xFF22B8A6.toInt(), teal.accentEnd)
+    }
+
+    @Test
+    fun tealTextMeetsWcagContrast() {
+        val p = MeloDesignTokens.TEAL_PALETTE
+        listOf(p.surface, p.surfaceRaised, p.background).forEach { bg ->
+            assertTrue("text on ${bg.toString(16)}", MeloDesignTokens.contrast(p.text, bg) >= 4.5)
+            assertTrue("secondary on ${bg.toString(16)}", MeloDesignTokens.contrast(p.textSecondary, bg) >= 4.5)
+        }
+        assertTrue(MeloDesignTokens.contrast(p.onAccent, p.accent) >= 3.0)
+        assertTrue(MeloDesignTokens.contrast(p.onAccent, p.accentEnd) >= 3.0)
+        assertTrue(MeloDesignTokens.contrast(p.accent, p.accentSoft) >= 3.0)
+    }
+
+    @Test
+    fun contrastMathMatchesKnownValues() {
+        assertEquals(21.0, MeloDesignTokens.contrast(0xFF000000.toInt(), 0xFFFFFFFF.toInt()), 0.01)
+        assertEquals(1.0, MeloDesignTokens.contrast(0xFF123456.toInt(), 0xFF123456.toInt()), 0.0001)
     }
 }

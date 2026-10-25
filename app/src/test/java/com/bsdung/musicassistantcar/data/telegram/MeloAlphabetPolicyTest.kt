@@ -11,6 +11,28 @@ class MeloAlphabetPolicyTest {
     private fun key(t: String) = TelegramSearchPolicy.songSearchKey(t, null, null)
 
     @Test
+    fun themedBarShowsForAnySortOnceTheListIsLong() {
+        assertTrue(MeloAlphabetPolicy.barVisibleThemed(false, 50))
+        assertTrue(MeloAlphabetPolicy.barVisibleThemed(false, 27_000))
+        assertFalse(MeloAlphabetPolicy.barVisibleThemed(false, 49))
+        assertFalse(MeloAlphabetPolicy.barVisibleThemed(true, 27_000))
+        // A list reloaded from a letter stays navigable even when it is short.
+        assertTrue(MeloAlphabetPolicy.barVisibleThemed(false, 3, hasLowerBound = true))
+    }
+
+    @Test
+    fun theCurrentThemeBarStillNeedsNameOrder() {
+        assertFalse(MeloAlphabetPolicy.barVisible(SongSort.NEWEST, false, 27_000))
+        assertTrue(MeloAlphabetPolicy.barVisible(SongSort.NAME, false, 27_000))
+    }
+
+    @Test
+    fun aLetterTapSwitchesToNameOrderOnlyFromNewest() {
+        assertTrue(MeloAlphabetPolicy.needsSortSwitch(SongSort.NEWEST))
+        assertFalse(MeloAlphabetPolicy.needsSortSwitch(SongSort.NAME))
+    }
+
+    @Test
     fun lettersFollowAccentInsensitiveKey() {
         assertEquals('A', MeloAlphabetPolicy.letterOf(key("Ánh trăng")))
         assertEquals('D', MeloAlphabetPolicy.letterOf(key("Đường xa")))

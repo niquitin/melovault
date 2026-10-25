@@ -61,9 +61,13 @@ internal object MeloLibraryPolicy {
         if (count <= 0) null
         else (if (expanded) "▾ " else "▸ ") + "Các kênh chưa có nhạc (${MeloComponentPolicy.formatCount(count)})"
 
-    /** Two-pane left pane turns into the channel list only while one specific channel is open. */
-    fun quickSwitchVisible(layer: NewLayer, showingSources: Boolean, mode: Mode, selectedChatId: Long?): Boolean =
-        layer == NewLayer.TWO_PANE && !showingSources && mode == Mode.ALL && selectedChatId != null
+    /**
+     * Two-pane left pane turns into the channel list only while one specific channel is open AND
+     * there is at least one channel to switch to ([rowCount] of [quickSwitchRows]); with none (the
+     * list not loaded yet, or every count still 0) the big player stays instead of an empty column.
+     */
+    fun quickSwitchVisible(layer: NewLayer, showingSources: Boolean, mode: Mode, selectedChatId: Long?, rowCount: Int): Boolean =
+        layer == NewLayer.TWO_PANE && !showingSources && mode == Mode.ALL && selectedChatId != null && rowCount > 0
 
     /** Channels offered for the quick switch: only those with songs, original (grid) order. */
     fun quickSwitchRows(channels: List<MeloScreenHost.SourceRow>): List<MeloScreenHost.SourceRow> =
@@ -92,11 +96,48 @@ internal object MeloLibraryPolicy {
     }
 
     /**
+     * Index of the row with [songKey] in [rows] (where the list was scrolled to before the layout
+     * changed), 0 when there is no key or the row is not loaded: the list then starts at its top.
+     */
+    fun anchorIndex(rows: List<MeloScreenHost.Row>, songKey: Long?): Int =
+        if (songKey == null) 0 else rows.indexOfFirst { it.songKey == songKey }.coerceAtLeast(0)
+
+    /**
      * A freshly opened group starts at its first row. The jump waits for rows to arrive (they
      * load asynchronously) and never happens on the channel grid.
      */
     fun shouldResetTop(pending: Boolean, showingSources: Boolean, rowCount: Int): Boolean =
         pending && !showingSources && rowCount > 0
+
+    /** While a sync writes pages, the channel list is rebuilt at most this often (E95 F05). */
+    const val CHANNEL_REFRESH_MIN_MS = 10_000L
+
+    /** True when the channel list may be rebuilt now ([lastMs] <= 0: never yet; a clock that went back counts as due). */
+    fun channelRefreshDue(nowMs: Long, lastMs: Long, minIntervalMs: Long = CHANNEL_REFRESH_MIN_MS): Boolean =
+        lastMs <= 0L || nowMs < lastMs || nowMs - lastMs >= minIntervalMs
+
+    /**
+     * Library numbers for "Thông tin màn hình": what the database really holds ([liveSongs],
+     * [liveChannels]) against what the stored counts claim ([storedChannels] with track_count > 0)
+     * and when a full sync last completed. Counts only, never a channel name. -1 = not known.
+     */
+    data class LibraryDiag(val liveSongs: Int, val storedChannels: Int, val liveChannels: Int, val lastSyncCompletedMs: Long)
+
+    fun libraryDiagLines(diag: LibraryDiag?, zone: java.util.TimeZone = java.util.TimeZone.getDefault()): List<Pair<String, String>> {
+        if (diag == null || diag.liveSongs < 0) return listOf("Thư viện (dữ liệu thật)" to "chưa có số (mở lại màn này sau khi thư viện tải xong)")
+        return listOf(
+            "Tổng bài trong thư viện" to "${MeloComponentPolicy.formatCount(diag.liveSongs)} bài",
+            "Kênh có bài (số đã lưu)" to MeloComponentPolicy.formatCount(diag.storedChannels),
+            "Kênh có bài (đếm thật)" to MeloComponentPolicy.formatCount(diag.liveChannels),
+            "Đồng bộ hoàn tất lần cuối" to lastSyncText(diag.lastSyncCompletedMs, zone)
+        )
+    }
+
+    fun lastSyncText(completedAtMs: Long, zone: java.util.TimeZone = java.util.TimeZone.getDefault()): String {
+        if (completedAtMs <= 0L) return "chưa từng hoàn tất"
+        val format = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.US).apply { timeZone = zone }
+        return format.format(java.util.Date(completedAtMs))
+    }
 
     /** Tablet portrait gets Previous on the mini player; phones keep Play and Next only (spec). */
     fun miniPlayerShowsPrevious(layer: NewLayer): Boolean = layer == NewLayer.TABLET_PORTRAIT
@@ -116,6 +157,38 @@ internal object MeloLibraryPolicy {
         add(Chip(MeloComponentPolicy.chipLabel("Đã tải", downloadedCount), Mode.DOWNLOADED, null))
         add(Chip("Playlist", Mode.PLAYLIST, null))
         GenreChip.entries.forEach { add(Chip(it.label, null, it)) }
+    }
+
+    // ---- E98 teal theme: the four menu tabs ----------------------------------------------------
+
+    enum class TabKind { ALL, DOWNLOADED, PLAYLIST, SOURCES }
+
+    data class ThemeTab(val kind: TabKind, val label: String, val selected: Boolean)
+
+    /** Below this pane width the tab labels shrink to one word. */
+    const val NARROW_TABS_DP = 520
+
+    /**
+     * "Tất cả (27K)", "Đã tải về máy", "Playlist", "Nguồn Telegram" - exactly four tabs. On a pane
+     * narrower than [NARROW_TABS_DP] the labels are "Tất cả", "Đã tải", "Playlist", "Nguồn".
+     * [totalSongs] is the whole library; an unknown count shows no brackets.
+     */
+    fun themeTabs(totalSongs: Int?, widthDp: Int, mode: Mode, showingSources: Boolean): List<ThemeTab> {
+        val narrow = widthDp in 1 until NARROW_TABS_DP
+        val short = MeloComponentPolicy.shortCount(totalSongs)
+        val all = if (short != null && !narrow) "Tất cả ($short)" else "Tất cả"
+        return listOf(
+            ThemeTab(TabKind.ALL, all, !showingSources && mode == Mode.ALL),
+            ThemeTab(TabKind.DOWNLOADED, if (narrow) "Đã tải" else "Đã tải về máy", !showingSources && mode == Mode.DOWNLOADED),
+            ThemeTab(TabKind.PLAYLIST, "Playlist", !showingSources && mode == Mode.PLAYLIST),
+            ThemeTab(TabKind.SOURCES, if (narrow) "Nguồn" else "Nguồn Telegram", showingSources)
+        )
+    }
+
+    /** The genre the search box currently filters by (its keyword), or null. */
+    fun activeGenre(query: String): GenreChip? {
+        val q = MeloComponentPolicy.searchKey(query)
+        return GenreChip.entries.firstOrNull { it.keyword == q }
     }
 
     /** Index of the selected chip from the current state: a genre keyword wins, else the mode. */
@@ -138,11 +211,11 @@ internal object MeloLibraryPolicy {
         else -> previouslyCollapsed
     }
 
-    /** "27.971 bài · Đã đồng bộ"; text from the existing sync display policy wins when present. */
+    /** "27.971 bài · Đã cập nhật thư viện" (catalog index, not the cloud Playlist); text from the existing display policy wins when present. */
     fun syncLine(existing: String?, total: Int?, syncing: Boolean): String = when {
         !existing.isNullOrBlank() -> existing
-        syncing -> "Đang đồng bộ…"
-        total != null && total > 0 -> "${MeloComponentPolicy.formatCount(total)} bài · Đã đồng bộ"
+        syncing -> TelegramLibrarySyncDisplayPolicy.LIBRARY_UPDATING
+        total != null && total > 0 -> "${MeloComponentPolicy.formatCount(total)} bài · ${TelegramLibrarySyncDisplayPolicy.LIBRARY_UPDATED}"
         else -> "Chưa có bài"
     }
 

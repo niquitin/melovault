@@ -116,6 +116,19 @@ class MeloSourceCardPolicyTest {
     }
 
     @Test
+    fun phoneRowHidesInLowWindowsButTabletRowStays() {
+        // FYT 1/3 and 1/2 are 642dp tall: no 88dp row there, the list gets the room.
+        assertFalse(MeloSourceCardPolicy.rowVisible(NewLayer.PHONE_PORTRAIT, false, Mode.ALL, 642, 1))
+        assertFalse(MeloSourceCardPolicy.rowVisible(NewLayer.PHONE_PORTRAIT, false, Mode.ALL, 699, 1))
+        assertTrue(MeloSourceCardPolicy.rowVisible(NewLayer.PHONE_PORTRAIT, false, Mode.ALL, 700, 1))
+        // Sony portrait (~840dp) and S25 (832dp) keep the cards.
+        assertTrue(MeloSourceCardPolicy.rowVisible(NewLayer.PHONE_PORTRAIT, false, Mode.ALL, 840, 1))
+        assertTrue(MeloSourceCardPolicy.rowVisible(NewLayer.PHONE_PORTRAIT, false, Mode.ALL, 832, 1))
+        // FYT 2/3 (782 × 642dp, list + bottom bar) keeps the Telegram card for "Về tất cả".
+        assertTrue(MeloSourceCardPolicy.rowVisible(NewLayer.TABLET_PORTRAIT, false, Mode.ALL, 642, 1))
+    }
+
+    @Test
     fun twoPaneNeedsTallWindow() {
         assertFalse(MeloSourceCardPolicy.rowVisible(NewLayer.TWO_PANE, false, Mode.ALL, 360, 1))
         assertFalse(MeloSourceCardPolicy.rowVisible(NewLayer.TWO_PANE, false, Mode.ALL, 384, 1))
@@ -133,5 +146,29 @@ class MeloSourceCardPolicyTest {
         val peek = 1080 - three - 30
         assertTrue("peek=$peek width=$three", kotlin.math.abs(peek - three / 2) <= 2)
         assertEquals(0, MeloSourceCardPolicy.cardWidthPx(1080, 0, 600, 30))
+    }
+
+    @Test
+    fun telegramCardSaysBackToAllWhileAChannelIsOpen() {
+        val sources = listOf(Source(Kind.TELEGRAM, 42_734, 120))
+        val open = MeloSourceCardPolicy.cards(sources, selected = null, channelOpen = true).single()
+        assertEquals("Về tất cả · 42.734 bài · đã tải 120", open.detail)
+        assertEquals("Telegram", open.title)
+        assertFalse(open.selected)
+        assertEquals("Về toàn bộ Telegram, 42.734 bài, đã tải 120", open.contentDescription)
+        // Closed state is exactly as before.
+        val closed = MeloSourceCardPolicy.cards(sources, selected = Kind.TELEGRAM).single()
+        assertEquals("42.734 bài · đã tải 120", closed.detail)
+        assertEquals("Nguồn Telegram, 42.734 bài, đã tải 120, đang chọn", closed.contentDescription)
+        // Default parameter keeps old callers unchanged.
+        assertEquals(closed.detail, MeloSourceCardPolicy.cards(sources, Kind.TELEGRAM, channelOpen = false).single().detail)
+    }
+
+    @Test
+    fun backToAllWithoutDownloadedCountAndOnlyOnTelegram() {
+        val sources = listOf(Source(Kind.TELEGRAM, 25_104, null), Source(Kind.LOCAL, 432, null))
+        val cards = MeloSourceCardPolicy.cards(sources, selected = null, channelOpen = true)
+        assertEquals("Về tất cả · 25.104 bài", cards.first { it.kind == Kind.TELEGRAM }.detail)
+        assertEquals("432 bài", cards.first { it.kind == Kind.LOCAL }.detail)
     }
 }

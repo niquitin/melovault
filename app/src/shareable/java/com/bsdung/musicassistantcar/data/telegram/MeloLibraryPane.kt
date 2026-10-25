@@ -17,6 +17,8 @@ import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
+import com.bsdung.musicassistantcar.R
 import com.bsdung.musicassistantcar.data.telegram.MeloCompactPolicy.Mode
 import com.bsdung.musicassistantcar.data.telegram.MeloComponents.SongRowModel
 import com.bsdung.musicassistantcar.data.telegram.MeloLibraryPolicy.NewLayer
@@ -71,14 +73,19 @@ internal class MeloLibraryPane(
     private val bar = MeloAlphabetBar(
         context, p.textSecondary, p.accent,
         onTouching = { ch -> bubble.visibility = if (ch == null) View.GONE else View.VISIBLE; if (ch != null) bubble.text = ch.toString() },
-        onLetter = ::onBarLetter
+        onLetter = ::onBarLetter,
+        onAccent = if (c.teal) p.onAccent else null
     ).apply { visibility = View.GONE }
     private var pendingJump: Runnable? = null
     private val adapter = RowsAdapter()
     private val sourcesScroll = ScrollView(context)
     private val sourcesBox = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-    private val searchBar = c.searchBar(null, onQuery = ::queueQuery)
-    private val searchField: EditText get() = searchBar.getChildAt(1) as EditText
+    // E98: the filter button does something only on the teal theme; the current theme keeps its inert button.
+    private val searchHandle = c.searchBarWithField(null, onQuery = ::queueQuery, onFilter = if (c.teal) ::openFilterDialog else null)
+    private val searchBar = searchHandle.view
+    private val searchField: EditText get() = searchHandle.field
+    /** Teal theme: "Chillout ✕" under the search box while a genre filter is on. */
+    private val genreHolder = FrameLayout(context)
 
     private var snapshot: Snapshot? = null
     private var chipKey: String? = null
@@ -90,11 +97,29 @@ internal class MeloLibraryPane(
     private var groupKey: String? = null
     private var emptyExpanded = false
     private var pendingTopReset = false
-    private var lastLocal = false
+    /** Null until the first snapshot: the search box then starts from the host's query, not empty. */
+    private var lastLocal: Boolean? = null
+    /** Scroll position handed over by the screen this one replaced; used once, for the same group only. */
+    private var inheritedAnchor: MeloScreenHost.ListAnchor? = host.listAnchor()
+    private var restoringAnchor: MeloScreenHost.ListAnchor? = null
+    /** E98 row covers: the list's scroll state (nothing is requested while it is flung) and the first row asked for. */
+    private var scrollState = AbsListView.OnScrollListener.SCROLL_STATE_IDLE
+    private var lastArtFirst = -1
 
     init {
+        if (c.teal) {
+            host.setRowArtListener(::refreshVisibleArt)
+            // The tab labels shorten on a narrow pane: render them again once the width is known or changes.
+            view.addOnLayoutChangeListener { _, l, _, r, _, ol, _, or_, _ ->
+                if (r - l != or_ - ol) view.post { snapshot?.let(::renderThemeTabs) }
+            }
+        }
         searchHolder.addView(searchBar)
         view.addView(searchHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        genreHolder.visibility = View.GONE
+        view.addView(genreHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = s.gap / 2
+        })
         view.addView(chipHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = s.gap
         })
@@ -125,7 +150,7 @@ internal class MeloLibraryPane(
         list.apply {
             adapter = this@MeloLibraryPane.adapter
             divider = null
-            dividerHeight = s.gap / 2
+            dividerHeight = if (c.teal) s.gap else s.gap / 2
             setSelector(android.R.color.transparent)
             setOnItemClickListener { _, _, position, _ -> snapshot?.takeIf { !it.showingSources && position in it.rows.indices }?.let { host.playAt(position) } }
             setOnItemLongClickListener { _, v, position, _ ->
@@ -133,10 +158,15 @@ internal class MeloLibraryPane(
                 true
             }
             setOnScrollListener(object : AbsListView.OnScrollListener {
-                override fun onScrollStateChanged(v: AbsListView?, state: Int) = Unit
+                override fun onScrollStateChanged(v: AbsListView?, state: Int) {
+                    scrollState = state
+                    // The covers of a fast scroll are fetched once the list slows down.
+                    if (c.teal && state != AbsListView.OnScrollListener.SCROLL_STATE_FLING) requestVisibleArt()
+                }
                 override fun onScroll(v: AbsListView?, first: Int, visible: Int, total: Int) {
                     val snap = snapshot ?: return
                     if (snap.showingSources) return
+                    if (c.teal && first != lastArtFirst) requestVisibleArt()
                     if (MeloCompactPolicy.shouldLoadMore(first, visible, total)) host.loadMore()
                     if (bar.visibility == View.VISIBLE) {
                         snap.rows.getOrNull(first)?.sortKey?.let { bar.setActive(MeloAlphabetPolicy.letterOf(it)) }
@@ -162,9 +192,24 @@ internal class MeloLibraryPane(
     }
 
     fun detach() {
-    pendingJump?.let(handler::removeCallbacks)
+        if (c.teal) host.setRowArtListener(null)
+        saveScrollAnchor()
+        pendingJump?.let(handler::removeCallbacks)
         pendingQuery?.let(handler::removeCallbacks)
         handler.removeCallbacksAndMessages(null)
+    }
+
+    /**
+     * A window-size change that needs another screen type tears this pane down; hand the first
+     * visible song to the host so the next pane scrolls back to it (E95 F03d).
+     */
+    private fun saveScrollAnchor() {
+        val snap = snapshot ?: return
+        val key = groupKey ?: return
+        if (snap.showingSources || snap.rows.isEmpty() || listFrame.visibility != View.VISIBLE) return
+        val first = list.firstVisiblePosition
+        val row = snap.rows.getOrNull(first) ?: return
+        host.saveListAnchor(key, row.songKey, list.getChildAt(0)?.top ?: 0)
     }
 
     /** Back at the top with the owner's title row visible, e.g. after switching group or page. */
@@ -185,8 +230,12 @@ internal class MeloLibraryPane(
         snapshot = snap
         val key = "${snap.showingSources}|${snap.mode}|${snap.sourceTitle}|${snap.query}|${snap.sort}|${snap.letterFloor}|${snap.local}"
         if (key != groupKey) {
+            val inherited = inheritedAnchor?.takeIf { groupKey == null && it.groupKey == key }
+            inheritedAnchor = null
             groupKey = key
-            resetScroll()
+            restoringAnchor = inherited
+            // The same group as the screen this one replaced: keep the owner's place in the list.
+            if (inherited == null) resetScroll()
         }
         if (snap.local != lastLocal) {
             // The search box belongs to one source: show that source's own query when switching.
@@ -195,7 +244,11 @@ internal class MeloLibraryPane(
             lastQuery = snap.query
             if (searchField.text.toString() != snap.query) searchField.setText(snap.query)
         }
-        searchField.hint = if (snap.showingSources) "Tìm nhóm, kênh hoặc bot…" else MeloComponentPolicy.searchHint(snap.total)
+        searchField.hint = when {
+            snap.showingSources -> "Tìm nhóm, kênh hoặc bot…"
+            c.teal -> "Tìm bài hát theo tên..."
+            else -> MeloComponentPolicy.searchHint(snap.total)
+        }
         renderChips(snap)
         renderSourceCards(snap)
         header.post { fitHeader() }
@@ -216,13 +269,26 @@ internal class MeloLibraryPane(
             note.visibility = if (snap.note.isNullOrBlank()) View.GONE else View.VISIBLE
             sourcesScroll.visibility = View.GONE
             listFrame.visibility = View.VISIBLE
-            sortChip.visibility = View.VISIBLE
+            // E98: on the teal theme the sort lives in the filter panel, so the chip goes.
+            sortChip.visibility = if (c.teal) View.GONE else View.VISIBLE
             sortChip.text = if (snap.sort == SongSort.NAME) "↕ Tên A–Z" else "↕ Mới nhất"
-            val showBar = MeloAlphabetPolicy.barVisible(snap.sort, false, snap.total ?: snap.rows.size, snap.letterFloor != null)
+            val rowCount = snap.total ?: snap.rows.size
+            val showBar = if (c.teal) MeloAlphabetPolicy.barVisibleThemed(false, rowCount, snap.letterFloor != null)
+            else MeloAlphabetPolicy.barVisible(snap.sort, false, rowCount, snap.letterFloor != null)
             bar.visibility = if (showBar) View.VISIBLE else View.GONE
             list.setPadding(0, 0, if (showBar) bar.barWidthPx else 0, 0)
             if (!showBar) bar.setActive(null)
             adapter.notifyDataSetChanged()
+            if (c.teal) {
+                lastArtFirst = -1
+                list.post { requestVisibleArt() }
+            }
+            val restore = restoringAnchor
+            if (restore != null && snap.rows.isNotEmpty()) {
+                restoringAnchor = null
+                val index = MeloLibraryPolicy.anchorIndex(snap.rows, restore.songKey)
+                list.post { list.setSelectionFromTop(index, restore.offsetPx) }
+            }
             if (MeloLibraryPolicy.shouldResetTop(pendingTopReset, snap.showingSources, snap.rows.size)) {
                 // The rows of the new group just arrived; the list still remembers the old group's offset.
                 pendingTopReset = false
@@ -268,6 +334,11 @@ internal class MeloLibraryPane(
     private fun onBarLetter(letter: Char, final: Boolean) {
         pendingJump?.let(handler::removeCallbacks)
         val task = Runnable {
+            // E98: a letter only means something in name order, so "Mới nhất" is switched first, once, with a notice.
+            if (c.teal && MeloAlphabetPolicy.needsSortSwitch(host.sort())) {
+                host.setSort(SongSort.NAME)
+                android.widget.Toast.makeText(context, "Đã sắp xếp theo tên A–Z", android.widget.Toast.LENGTH_SHORT).show()
+            }
             val index = host.jumpToLetter(MeloAlphabetPolicy.lowerBound(letter))
             bar.setActive(letter)
             if (index != null) {
@@ -294,7 +365,114 @@ internal class MeloLibraryPane(
         handler.postDelayed(task, 250L)
     }
 
+    // ---- E98 teal theme: four menu tabs, genre chip, filter panel -------------------------------------
+
+    private fun renderThemeTabs(snap: Snapshot) {
+        renderGenreChip(snap)
+        if (snap.local) {
+            chipHolder.visibility = View.GONE
+            return
+        }
+        chipHolder.visibility = View.VISIBLE
+        val density = context.resources.displayMetrics.density
+        val widthDp = (view.width / density).toInt()
+        val total = host.sourceSummaries().firstOrNull { it.kind == MeloSourceCardPolicy.Kind.TELEGRAM }?.total
+        val tabs = MeloLibraryPolicy.themeTabs(total, widthDp, snap.mode, snap.showingSources)
+        val narrow = widthDp in 1 until MeloLibraryPolicy.NARROW_TABS_DP
+        val key = tabs.joinToString("|") { "${it.label}:${it.selected}" } + "#$narrow"
+        if (key == chipKey) return
+        chipKey = key
+        chipHolder.removeAllViews()
+        val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        tabs.forEachIndexed { i, tab ->
+            val icon = when (tab.kind) {
+                MeloLibraryPolicy.TabKind.ALL -> R.drawable.ic_library_music
+                MeloLibraryPolicy.TabKind.DOWNLOADED -> R.drawable.ic_download
+                MeloLibraryPolicy.TabKind.PLAYLIST -> R.drawable.ic_playlist
+                MeloLibraryPolicy.TabKind.SOURCES -> R.drawable.ic_send
+            }
+            row.addView(c.tabCard(icon, tab.label, tab.selected, narrow) { onThemeTab(tab.kind) },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    if (i < tabs.lastIndex) marginEnd = s.gap
+                })
+        }
+        chipHolder.addView(row)
+    }
+
+    private fun onThemeTab(kind: MeloLibraryPolicy.TabKind) {
+        when (kind) {
+            MeloLibraryPolicy.TabKind.ALL -> { host.openSource(null); host.setMode(Mode.ALL); clearSearch() }
+            MeloLibraryPolicy.TabKind.DOWNLOADED -> { host.setMode(Mode.DOWNLOADED); clearSearch() }
+            MeloLibraryPolicy.TabKind.PLAYLIST -> { host.setMode(Mode.PLAYLIST); clearSearch() }
+            MeloLibraryPolicy.TabKind.SOURCES -> host.showSources()
+        }
+    }
+
+    private fun clearSearch() = applyGenre(null)
+
+    /** "Chillout ✕" under the search box while a genre filter is on; tapping it removes the filter. */
+    private fun renderGenreChip(snap: Snapshot) {
+        val genre = if (snap.showingSources || snap.local) null else MeloLibraryPolicy.activeGenre(snap.query)
+        genreHolder.removeAllViews()
+        if (genre == null) {
+            genreHolder.visibility = View.GONE
+            return
+        }
+        genreHolder.visibility = View.VISIBLE
+        genreHolder.addView(c.chip("${genre.label} ✕", true) { applyGenre(null) }.apply {
+            contentDescription = "Bỏ lọc ${genre.label}"
+        })
+    }
+
+    /** Sets (or clears, when null) the genre keyword exactly like tapping a genre chip did. */
+    private fun applyGenre(genre: MeloLibraryPolicy.GenreChip?) {
+        val query = genre?.keyword.orEmpty()
+        lastQuery = query
+        if (searchField.text.toString() != query) searchField.setText(query)
+        host.setQuery(query)
+    }
+
+    /** The ⚙-like button of the search box: sort order and genre, applied at once. */
+    private fun openFilterDialog() {
+        val snap = snapshot ?: return
+        lateinit var dialog: AlertDialog
+        val box = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(s.gap * 2, s.gap * 2, s.gap * 2, s.gap)
+        }
+        fun chips(build: LinearLayout.() -> Unit): View = HorizontalScrollView(context).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; build() })
+        }
+        box.addView(c.text("Sắp xếp", s.titleText, p.text, bold = true).apply { setPadding(0, 0, 0, s.gap) })
+        box.addView(chips {
+            listOf(SongSort.NEWEST to "Mới nhất", SongSort.NAME to "Tên A–Z").forEach { (sort, label) ->
+                addView(c.chip(label, host.sort() == sort) { host.setSort(sort); dialog.dismiss() })
+            }
+        })
+        if (!snap.local) {
+            val active = MeloLibraryPolicy.activeGenre(snap.query)
+            box.addView(c.text("Thể loại", s.titleText, p.text, bold = true).apply { setPadding(0, s.gap * 2, 0, s.gap) })
+            box.addView(chips {
+                addView(c.chip("Tất cả", active == null) { applyGenre(null); dialog.dismiss() })
+                MeloLibraryPolicy.GenreChip.entries.forEach { genre ->
+                    addView(c.chip(genre.label, active == genre) { applyGenre(genre); dialog.dismiss() })
+                }
+            })
+        }
+        dialog = AlertDialog.Builder(context, R.style.Theme_MeloVault_Dialog)
+            .setTitle("Bộ lọc")
+            .setView(box)
+            .setNegativeButton("Đóng", null)
+            .create()
+        dialog.show()
+    }
+
     private fun renderChips(snap: Snapshot) {
+        if (c.teal) {
+            renderThemeTabs(snap)
+            return
+        }
         // Telegram's Tất cả / Đã tải / Playlist chips (and its counts) mean nothing on the device list.
         if (snap.showingSources || snap.local) {
             chipHolder.visibility = View.GONE
@@ -322,7 +500,8 @@ internal class MeloLibraryPane(
 
     private fun renderSourceCards(snap: Snapshot) {
         val selected = MeloSourceCardPolicy.selectedKind(snap.selectedChatId, snap.showingSources, snap.local)
-        val cards = MeloSourceCardPolicy.cards(host.sourceSummaries(), selected)
+        val channelOpen = snap.selectedChatId != null && !snap.showingSources && !snap.local
+        val cards = MeloSourceCardPolicy.cards(host.sourceSummaries(), selected, channelOpen)
         sourceRowVisible = MeloSourceCardPolicy.rowVisible(
             layer, snap.showingSources, snap.mode, context.resources.configuration.screenHeightDp, cards.size
         )
@@ -388,11 +567,51 @@ internal class MeloLibraryPane(
             val quality = MeloComponentPolicy.qualityLabel(MeloComponentPolicy.formatOf(row.mimeType, row.filename), null, null, null)
             return c.songRow(
                 SongRowModel(
-                    row.title, row.sourceTitle, row.durationSeconds, status, quality, row.downloadingPercent, row.art,
-                    local = snap.local || row.local
+                    row.title, row.sourceTitle, row.durationSeconds, status, quality, row.downloadingPercent,
+                    row.art ?: if (c.teal) host.peekRowArt(row.artKey) else null,
+                    local = snap.local || row.local,
+                    artKey = if (c.teal) row.artKey else null
                 )
             ).also { unclickable(it, position) }
         }
+    }
+
+    // ---- E98 row covers (teal theme) ------------------------------------------------------------------
+
+    /** Asks the host for the covers of the rows on screen and the few below (never while the list is flung). */
+    private fun requestVisibleArt() {
+        val snap = snapshot ?: return
+        if (snap.showingSources || !MeloRowArtPolicy.shouldLoad(scrollState)) return
+        val first = list.firstVisiblePosition
+        lastArtFirst = first
+        val range = MeloRowArtPolicy.rowsToLoad(first, list.childCount, snap.rows.size)
+        if (range.isEmpty()) return
+        host.requestRowArt(snap.rows.slice(range), s.rowArt)
+    }
+
+    /** New covers arrived: put them into the rows on screen in place; the list is not rebuilt. Logs counts only. */
+    private fun refreshVisibleArt() {
+        val snap = snapshot ?: return
+        if (snap.showingSources) return
+        var shown = 0
+        var withArt = 0
+        var settled = 0
+        for (i in 0 until list.childCount) {
+            val artHost = findArtHost(list.getChildAt(i), 0) ?: continue
+            val key = (artHost.tag as MeloArtTag).key
+            shown++
+            val bmp = host.peekRowArt(key)
+            if (c.applyRowArt(artHost, bmp)) withArt++
+            if (host.rowArtSettled(key)) settled++
+        }
+        android.util.Log.i("MeloRowArt", "visible=$shown withArt=$withArt settled=$settled")
+    }
+
+    private fun findArtHost(v: View?, depth: Int): FrameLayout? {
+        if (v == null || depth > 4) return null
+        if (v is FrameLayout && v.tag is MeloArtTag) return v
+        if (v is ViewGroup) for (i in 0 until v.childCount) findArtHost(v.getChildAt(i), depth + 1)?.let { return it }
+        return null
     }
 
     /**

@@ -211,8 +211,8 @@ class TelegramVaultBentoPolicyTest {
         assertEquals("0 bài", TelegramVaultBentoPolicy.formatTrackCount(-5))
         assertEquals("1 bài", TelegramVaultBentoPolicy.formatTrackCount(1))
         assertEquals("200 bài", TelegramVaultBentoPolicy.formatTrackCount(200))
-        assertEquals("1,245 bài", TelegramVaultBentoPolicy.formatTrackCount(1245))
-        assertEquals("25,067 bài", TelegramVaultBentoPolicy.formatTrackCount(25067))
+        assertEquals("1.245 bài", TelegramVaultBentoPolicy.formatTrackCount(1245))
+        assertEquals("25.067 bài", TelegramVaultBentoPolicy.formatTrackCount(25067))
     }
 
     @Test
@@ -224,10 +224,10 @@ class TelegramVaultBentoPolicyTest {
     @Test
     fun formatHeaderSubtitle_combinesSourceCountAndTotalTracksTruthfully() {
         val subtitleSynced = TelegramVaultBentoPolicy.formatHeaderSubtitle(sourceCount = 29, totalIndexedTracks = 25067, isSyncing = false)
-        assertEquals("29 nguồn  ·  25,067 bài  ·  Đã đồng bộ", subtitleSynced)
+        assertEquals("29 nguồn  ·  25.067 bài  ·  Đã cập nhật thư viện", subtitleSynced)
 
         val subtitleSyncing = TelegramVaultBentoPolicy.formatHeaderSubtitle(sourceCount = 29, totalIndexedTracks = 25067, isSyncing = true)
-        assertEquals("29 nguồn  ·  25,067 bài  ·  Đang đồng bộ…", subtitleSyncing)
+        assertEquals("29 nguồn  ·  25.067 bài  ·  Đang cập nhật thư viện…", subtitleSyncing)
     }
 
     @Test
@@ -310,5 +310,54 @@ class TelegramVaultBentoPolicyTest {
         TelegramVaultBentoPolicy.saveHideZeroSources(prefs, false)
         val unhide = TelegramVaultBentoPolicy.getSavedHideZeroSources(prefs)
         assertFalse(unhide)
+    }
+
+    // ── Live counts (E95 F05) ────────────────────────────────────────────────
+
+    private fun source(chatId: Long, title: String, stored: Int) =
+        IndexedTelegramSource(accountId = 100L, chatId = chatId, title = title, trackCount = stored)
+
+    @Test
+    fun withLiveCounts_replacesStoredZeroWithRealCount() {
+        // Owner photo: channel "EMI" sat under "chưa có nhạc" (stored 0) while it holds 77 songs.
+        val stored = listOf(source(1L, "Nhạc Lạnh - Chillout (EMI)", 0), source(2L, "LakHouse", 10))
+        val result = TelegramVaultBentoPolicy.withLiveCounts(100L, stored, mapOf(1L to 77, 2L to 10)) { "x" }
+        assertEquals(77, result.first { it.chatId == 1L }.trackCount)
+        assertEquals(10, result.first { it.chatId == 2L }.trackCount)
+        assertEquals("Nhạc Lạnh - Chillout (EMI)", result.first { it.chatId == 1L }.title)
+    }
+
+    @Test
+    fun withLiveCounts_channelWithoutSongsReadsZeroEvenIfStoredHigher() {
+        val stored = listOf(source(1L, "Cũ", 50))
+        val result = TelegramVaultBentoPolicy.withLiveCounts(100L, stored, emptyMap()) { "x" }
+        assertEquals(0, result.single().trackCount)
+    }
+
+    @Test
+    fun withLiveCounts_addsChatsThatHaveSongsButNoSourceRow() {
+        val stored = listOf(source(1L, "A", 3))
+        val result = TelegramVaultBentoPolicy.withLiveCounts(100L, stored, mapOf(1L to 3, 9L to 12, 0L to 5, 8L to 0)) { id -> "Nguồn Telegram $id" }
+        assertEquals(listOf(1L, 9L), result.map { it.chatId })
+        val added = result.first { it.chatId == 9L }
+        assertEquals(12, added.trackCount)
+        assertEquals("Nguồn Telegram 9", added.title)
+        assertEquals(100L, added.accountId)
+    }
+
+    @Test
+    fun withLiveCounts_feedsTheExistingSortAndPartition() {
+        val stored = listOf(source(1L, "A", 0), source(2L, "B", 0), source(3L, "C", 0))
+        val live = TelegramVaultBentoPolicy.withLiveCounts(100L, stored, mapOf(2L to 40, 3L to 5)) { "x" }
+        val (active, empty) = TelegramVaultBentoPolicy.partitionSources(live)
+        assertEquals(listOf(2L, 3L), TelegramVaultBentoPolicy.sortSources(active).map { it.chatId })
+        assertEquals(listOf(1L), empty.map { it.chatId })
+    }
+
+    @Test
+    fun countsUseTheVietnameseThousandsDot() {
+        assertEquals("1.245 bài", TelegramVaultBentoPolicy.formatTrackCount(1245))
+        assertEquals("0 bài", TelegramVaultBentoPolicy.formatTrackCount(0))
+        assertEquals("29 nguồn  ·  29.551 bài  ·  Đã cập nhật thư viện", TelegramVaultBentoPolicy.formatHeaderSubtitle(29, 29551))
     }
 }

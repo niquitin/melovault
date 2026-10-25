@@ -365,4 +365,36 @@ class TelegramLibraryDaoTest {
         assertEquals(listOf("Sử Thanh Hóa 3", "Sử Thanh Hóa 2"), page.map { it.title })
         assertEquals(1, dao.getSongCount(accountId = 100L, searchQuery = "artist khac"))
     }
+
+    // ---- getLiveSourceCounts (E95 F05): read-only truth about songs per chat ------------------
+
+    @Test
+    fun liveSourceCountsCountOnlyLiveSongsPerChatAndAccount() {
+        dao.upsertSongs(
+            listOf(
+                sampleSong(chatId = 10L, messageId = 1L),
+                sampleSong(chatId = 10L, messageId = 2L),
+                sampleSong(chatId = 10L, messageId = 3L).copy(isDeleted = true),
+                sampleSong(chatId = 20L, messageId = 4L),
+                sampleSong(chatId = 30L, messageId = 5L).copy(isDeleted = true),
+                sampleSong(accountId = 999L, chatId = 10L, messageId = 6L)
+            )
+        )
+        val live = dao.getLiveSourceCounts(accountId = 100L)
+        assertEquals(mapOf(10L to 2, 20L to 1), live)
+        assertEquals(mapOf(10L to 1), dao.getLiveSourceCounts(accountId = 999L))
+        assertTrue(dao.getLiveSourceCounts(accountId = 12345L).isEmpty())
+    }
+
+    @Test
+    fun liveSourceCountsDoNotNeedASourceRowAndNeverWrite() {
+        // Songs exist but no telegram_sources row and stored count 0: the live map still knows them.
+        dao.upsertSources(listOf(IndexedTelegramSource(accountId = 100L, chatId = 10L, title = "Kênh A", trackCount = 0)))
+        dao.upsertSongs(listOf(sampleSong(chatId = 10L, messageId = 1L), sampleSong(chatId = 77L, messageId = 2L)))
+        val before = dao.getSources(100L)
+        assertEquals(mapOf(10L to 1, 77L to 1), dao.getLiveSourceCounts(100L))
+        // Read-only: the stored counts and the source rows are exactly as they were.
+        assertEquals(before, dao.getSources(100L))
+        assertEquals(0, dao.getSources(100L).single().trackCount)
+    }
 }

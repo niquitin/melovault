@@ -30,7 +30,7 @@ internal object MeloEmulation {
             fontScale = spec.fontScale
             orientation = if (spec.isLandscape) Configuration.ORIENTATION_LANDSCAPE else Configuration.ORIENTATION_PORTRAIT
         }
-        return ContextThemeWrapper(base.createConfigurationContext(config), R.style.Theme_MusicAssistantCar)
+        return ContextThemeWrapper(base.createConfigurationContext(config), R.style.Theme_MeloVault_Shareable)
     }
 
     /**
