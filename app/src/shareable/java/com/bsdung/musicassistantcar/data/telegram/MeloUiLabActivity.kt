@@ -249,7 +249,7 @@ class MeloUiLabActivity : AppCompatActivity() {
         content.addView(components.sectionTitle("Kiểu màu"))
         content.addView(note(
             "Hiện tại: giao diện như trước. Teal sáng · ảnh bìa: màu sáng hơn, mỗi bài có ảnh bìa nhỏ, hàng menu có biểu tượng. " +
-                "Chỉ áp dụng cho Điện thoại dọc, Tablet dọc và Hai khung ngang. Bản Gọn giữ màu cũ, chỉ thêm ảnh bìa nhỏ; Car Mode không đổi."
+                "Chỉ áp dụng cho Điện thoại dọc, Tablet dọc và Hai khung ngang. Bản Gọn giữ màu cũ và luôn có ảnh bìa nhỏ (tắt bằng công tắc bên dưới); Car Mode không đổi."
         ))
         val colorTheme = MeloThemePolicy.load(prefs)
         MeloThemePolicy.ColorTheme.entries.forEach { theme ->

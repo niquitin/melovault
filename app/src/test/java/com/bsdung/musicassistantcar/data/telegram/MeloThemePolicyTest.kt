@@ -36,12 +36,15 @@ class MeloThemePolicyTest {
     }
 
     @Test
-    fun rowArtLayerAddsOnlyTheCompactLayerWithTheTealTheme() {
-        // Gọn has no new layer (null) yet shows covers with teal; the current theme never does.
+    fun rowArtLayerAlwaysCoversTheCompactScreenWhateverTheTheme() {
+        // Gọn has no new layer (null) and shows covers with every colour theme; Car Mode never does.
+        for (theme in ColorTheme.entries) {
+            assertTrue(MeloThemePolicy.rowArtLayer(theme, null, Profile.COMPACT))
+            assertFalse(MeloThemePolicy.rowArtLayer(theme, null, Profile.CAR))
+            NewLayer.entries.forEach { assertFalse(MeloThemePolicy.rowArtLayer(theme, it, Profile.CAR)) }
+        }
+        assertTrue(MeloThemePolicy.rowArtLayer(ColorTheme.CURRENT, null, Profile.COMPACT))
         assertTrue(MeloThemePolicy.rowArtLayer(ColorTheme.TEAL_BRIGHT, null, Profile.COMPACT))
-        assertFalse(MeloThemePolicy.rowArtLayer(ColorTheme.CURRENT, null, Profile.COMPACT))
-        assertFalse(MeloThemePolicy.rowArtLayer(ColorTheme.TEAL_BRIGHT, null, Profile.CAR))
-        NewLayer.entries.forEach { assertFalse(MeloThemePolicy.rowArtLayer(ColorTheme.TEAL_BRIGHT, it, Profile.CAR)) }
         assertFalse(MeloThemePolicy.rowArtLayer(ColorTheme.TEAL_BRIGHT, null, Profile.PHONE))
     }
 
