@@ -119,6 +119,25 @@ internal object MeloNowPlayingPolicy {
     fun playerTight(availableHeightPx: Int, restHeightPx: Int, minSidePx: Int): Boolean =
         availableHeightPx > 0 && availableHeightPx - restHeightPx.coerceAtLeast(0) < minSidePx
 
+    // ---- E98 teal theme: labels of the 2x2 grid and the quality pill --------------------------------
+
+    const val THEMED_QUEUE_LABEL = "Hàng đợi"
+
+    fun themedShuffleLabel(on: Boolean): String = if (on) "Đảo: Bật" else "Đảo: Tắt"
+
+    /** [repeatLabel] is the host's word: "tắt", "tất cả" or "một bài". */
+    fun themedRepeatLabel(repeatLabel: String): String = when (repeatLabel) {
+        "tất cả" -> "Lặp tất cả"
+        "một bài" -> "Lặp 1 bài"
+        else -> "Không lặp"
+    }
+
+    fun themedFavoriteLabel(saved: Boolean): String = if (saved) "Đã lưu" else "Lưu bài"
+
+    /** "MP3 · 44.1 kHz · 320 kbps" is shown as "MP3 • 44.1 kHz • 320 kbps" in the pill; blank when nothing is known. */
+    fun qualityPillText(parts: List<String?>): String =
+        parts.mapNotNull { it?.trim()?.takeIf(String::isNotEmpty) }.joinToString(" • ") { it.replace(" · ", " • ") }
+
     /** Short label so four chips fit one row: the repeat state shows by colour, only "một bài" adds a digit. */
     fun repeatChipLabel(repeatLabel: String): String = if (repeatLabel == "một bài") "↻ Lặp 1" else "↻ Lặp"
 

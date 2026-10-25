@@ -190,4 +190,37 @@ class MeloNowPlayingPolicyTest {
         assertFalse(MeloNowPlayingPolicy.localSourceIsFolder("Hà Anh Tuấn", null))
         assertFalse(MeloNowPlayingPolicy.localSourceIsFolder("", ""))
     }
+
+    // ---- E98 teal theme labels --------------------------------------------------------------
+
+    @Test
+    fun themedShuffleLabelNamesTheState() {
+        assertEquals("Đảo: Tắt", MeloNowPlayingPolicy.themedShuffleLabel(false))
+        assertEquals("Đảo: Bật", MeloNowPlayingPolicy.themedShuffleLabel(true))
+    }
+
+    @Test
+    fun themedRepeatLabelCoversEveryHostWord() {
+        assertEquals("Không lặp", MeloNowPlayingPolicy.themedRepeatLabel("tắt"))
+        assertEquals("Lặp tất cả", MeloNowPlayingPolicy.themedRepeatLabel("tất cả"))
+        assertEquals("Lặp 1 bài", MeloNowPlayingPolicy.themedRepeatLabel("một bài"))
+        // An unexpected word never shows as if repeat were on.
+        assertEquals("Không lặp", MeloNowPlayingPolicy.themedRepeatLabel(""))
+        assertEquals("Không lặp", MeloNowPlayingPolicy.themedRepeatLabel("lạ"))
+    }
+
+    @Test
+    fun themedFavoriteAndQueueLabels() {
+        assertEquals("Lưu bài", MeloNowPlayingPolicy.themedFavoriteLabel(false))
+        assertEquals("Đã lưu", MeloNowPlayingPolicy.themedFavoriteLabel(true))
+        assertEquals("Hàng đợi", MeloNowPlayingPolicy.THEMED_QUEUE_LABEL)
+    }
+
+    @Test
+    fun qualityPillTextUsesBulletsAndSkipsBlanks() {
+        assertEquals("MP3 • 44.1 kHz • 320 kbps", MeloNowPlayingPolicy.qualityPillText(listOf("MP3 · 44.1 kHz · 320 kbps")))
+        assertEquals("MP3 • 320 kbps", MeloNowPlayingPolicy.qualityPillText(listOf("MP3", null, " ", "320 kbps")))
+        assertEquals("", MeloNowPlayingPolicy.qualityPillText(listOf(null, "")))
+        assertEquals("", MeloNowPlayingPolicy.qualityPillText(emptyList()))
+    }
 }

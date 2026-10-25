@@ -140,12 +140,12 @@ internal class MeloComponents(
     }
 
     /** Square rounded cover; without art, a tinted tile with the channel's first letter. */
-    fun artView(art: Bitmap?, sourceTitle: String?, title: String, sizePx: Int): View {
+    fun artView(art: Bitmap?, sourceTitle: String?, title: String, sizePx: Int, radius: Int = sizes.corner): View {
         if (art != null) {
             return ImageView(context).apply {
                 setImageBitmap(art)
                 scaleType = ImageView.ScaleType.CENTER_CROP
-                background = roundedBackground(palette.surfaceRaised)
+                background = roundedBackground(palette.surfaceRaised, radius)
                 clipToOutline = true
                 layoutParams = LinearLayout.LayoutParams(sizePx, sizePx)
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -159,7 +159,7 @@ internal class MeloComponents(
             typeface = Typeface.DEFAULT_BOLD
             background = roundedBackground(
                 MeloComponentPolicy.placeholderColor(sourceTitle ?: title, palette),
-                radius = minOf(sizes.corner, sizePx / 4)
+                radius = minOf(radius, sizePx / 4)
             )
             layoutParams = LinearLayout.LayoutParams(sizePx, sizePx)
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -431,6 +431,13 @@ internal class MeloComponents(
         layoutParams = LinearLayout.LayoutParams(sizePx, sizePx)
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }
+
+    /** A vector as a start drawable of a TextView: sized to [sizePx] and tinted. Null when the resource is missing. */
+    fun iconDrawable(resId: Int, sizePx: Int, tint: Int): android.graphics.drawable.Drawable? =
+        androidx.core.content.ContextCompat.getDrawable(context, resId)?.mutate()?.apply {
+            setBounds(0, 0, sizePx, sizePx)
+            setTint(tint)
+        }
 
     /** A round touch target around a vector, e.g. ⚙ and the filter button. */
     fun vectorButton(resId: Int, description: String, tint: Int, onClick: () -> Unit): FrameLayout {
@@ -853,6 +860,60 @@ internal class MeloComponents(
     }
 
     fun frame(): FrameLayout = FrameLayout(context)
+}
+
+/**
+ * E98 teal theme: a thin progress line with a round dot at its head. Display only - it takes no
+ * touch, so it can not be mistaken for a seek bar (E95 F09 / E97A keep seeking off this screen).
+ */
+internal class MeloThumbProgress(
+    context: Context,
+    private val trackColor: Int,
+    private val fillColor: Int,
+    private val thumbColor: Int,
+    private val trackPx: Int,
+    private val thumbPx: Int
+) : View(context) {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val rect = RectF()
+    private var fraction = 0f
+
+    init {
+        isClickable = false
+        isFocusable = false
+        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+    }
+
+    /** [positionMs] over [durationMs]; unknown or zero duration draws an empty line. */
+    fun set(positionMs: Long, durationMs: Long) {
+        val next = if (durationMs > 0L) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+        if (next == fraction) return
+        fraction = next
+        invalidate()
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        setMeasuredDimension(getDefaultSize(suggestedMinimumWidth, widthMeasureSpec), thumbPx)
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        val w = width.toFloat()
+        val cy = height / 2f
+        val half = thumbPx / 2f
+        val left = half
+        val right = w - half
+        val r = trackPx / 2f
+        paint.style = Paint.Style.FILL
+        paint.color = trackColor
+        rect.set(left, cy - r, right, cy + r)
+        canvas.drawRoundRect(rect, r, r, paint)
+        val x = left + (right - left) * fraction
+        paint.color = fillColor
+        rect.set(left, cy - r, x, cy + r)
+        canvas.drawRoundRect(rect, r, r, paint)
+        paint.color = thumbColor
+        canvas.drawCircle(x, cy, half * 0.8f, paint)
+    }
 }
 
 /** Status glyph drawn on canvas so it never depends on emoji fonts: bars, check, ring, cloud, triangle. */

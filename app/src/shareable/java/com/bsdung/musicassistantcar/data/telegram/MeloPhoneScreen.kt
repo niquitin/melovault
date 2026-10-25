@@ -30,10 +30,13 @@ internal class MeloPhoneScreen(
     private val c = MeloComponents(context, sizes, theme)
     private val s = c.sizes
     private val p = c.palette
+    /** E98 teal theme: two-colour logo, "Đồng bộ: N bài ●" row with ⚙, gradient background. */
+    private val teal = c.teal
+    private val syncRow by lazy { c.syncRow { host.openUiLab() } }
 
     val view: LinearLayout = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        setBackgroundColor(p.background)
+        if (teal) background = c.gradient(p.background, p.backgroundEnd, 0) else setBackgroundColor(p.background)
         setPadding(s.screenMargin, 0, s.screenMargin, s.gap)
     }
 
@@ -74,13 +77,18 @@ internal class MeloPhoneScreen(
     }
 
     private fun buildHeader() {
-        titleRow.addView(c.text("MeloVault", s.playerTitleText, p.text, bold = true), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        titleRow.addView(c.iconButton("⚙", "Cài đặt giao diện") { host.openUiLab() }.apply { background = null; setTextColor(p.text) })
+        if (teal) {
+            // The ⚙ moves to the sync row; the logo takes the title's place.
+            titleRow.addView(c.logo(s.playerTitleText), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        } else {
+            titleRow.addView(c.text("MeloVault", s.playerTitleText, p.text, bold = true), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            titleRow.addView(c.iconButton("⚙", "Cài đặt giao diện") { host.openUiLab() }.apply { background = null; setTextColor(p.text) })
+        }
         lateinit var more: View
         more = c.iconButton("⋮", "Tuỳ chọn thư viện") { host.openLegacyOverflow(more) }.apply { background = null; setTextColor(p.text) }
         titleRow.addView(more)
         headerBox.addView(titleRow, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        headerBox.addView(syncLine, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+        headerBox.addView(if (teal) syncRow.view else syncLine, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = s.gap
         })
     }
@@ -103,17 +111,33 @@ internal class MeloPhoneScreen(
         val snap = host.snapshot()
         snapshot = snap
         val playlistState = if (snap.mode == Mode.PLAYLIST && !snap.showingSources) host.playlistStatus() else null
-        syncLine.text = PlaylistSyncStatusPolicy.libraryLine(
-            playlistState, "☁ " + MeloLibraryPolicy.syncLine(host.syncSubtitle(), snap.total, false)
-        )
-        // E96 P4: on the Playlist tab the line is the honest Playlist state; tap = detail.
-        if (playlistState != null) {
-            syncLine.setOnClickListener {
-                android.widget.Toast.makeText(syncLine.context, playlistState.text + "\n" + playlistState.fullDetail(), android.widget.Toast.LENGTH_LONG).show()
+        val syncText = host.syncSubtitle()
+        if (teal) {
+            // Playlist tab: the honest Playlist state replaces the headline; tapping the row shows its detail.
+            val headline = if (playlistState != null) PlaylistSyncStatusPolicy.libraryLine(playlistState, "")
+            else MeloThemePolicy.syncHeadline(host.sourceSummaries().firstOrNull { it.kind == MeloSourceCardPolicy.Kind.TELEGRAM }?.total ?: snap.total)
+            syncRow.update(headline, MeloThemePolicy.syncDot(true, syncText))
+            if (playlistState != null) {
+                syncRow.view.setOnClickListener {
+                    android.widget.Toast.makeText(context, playlistState.text + "\n" + playlistState.fullDetail(), android.widget.Toast.LENGTH_LONG).show()
+                }
+            } else {
+                syncRow.view.setOnClickListener(null)
+                syncRow.view.isClickable = false
             }
         } else {
-            syncLine.setOnClickListener(null)
-            syncLine.isClickable = false
+            syncLine.text = PlaylistSyncStatusPolicy.libraryLine(
+                playlistState, "☁ " + MeloLibraryPolicy.syncLine(syncText, snap.total, false)
+            )
+            // E96 P4: on the Playlist tab the line is the honest Playlist state; tap = detail.
+            if (playlistState != null) {
+                syncLine.setOnClickListener {
+                    android.widget.Toast.makeText(syncLine.context, playlistState.text + "\n" + playlistState.fullDetail(), android.widget.Toast.LENGTH_LONG).show()
+                }
+            } else {
+                syncLine.setOnClickListener(null)
+                syncLine.isClickable = false
+            }
         }
         backCallback.isEnabled = !snap.showingSources && snap.sourceTitle != null
         bar.renderTabs(snap.showingSources, snap.mode)

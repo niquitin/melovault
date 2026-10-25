@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Typeface
 import android.util.TypedValue
+import android.widget.ImageView
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -15,6 +16,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.OnBackPressedDispatcher
+import com.bsdung.musicassistantcar.R
 import com.bsdung.musicassistantcar.data.telegram.MeloCompactPolicy.Mode
 import com.bsdung.musicassistantcar.data.telegram.MeloDesignTokens.Sizes
 import com.bsdung.musicassistantcar.data.telegram.MeloLibraryPolicy.NewLayer
@@ -35,6 +37,9 @@ internal class MeloTabletScreen(
     private val c = MeloComponents(context, sizes, theme)
     private val s = c.sizes
     private val p = c.palette
+    /** E98 teal theme: no navigation column (the four tabs and ⚙ replace it), a new player pane, the sync row. */
+    private val teal = c.teal
+    private val syncRow by lazy { c.syncRow { host.openUiLab() } }
 
     val view: LinearLayout = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
@@ -54,6 +59,13 @@ internal class MeloTabletScreen(
     private val quality = c.text("", s.secondaryText, p.accent, maxLines = 1)
     private val time = c.text("", s.secondaryText, p.textSecondary)
     private lateinit var play: TextView
+    // Teal theme only: the display-only progress line, its two times and the vector play button.
+    private lateinit var timeBlock: View
+    private lateinit var thumbProgress: MeloThumbProgress
+    private val timeLeft = c.text("", s.secondaryText, p.textSecondary)
+    private val timeRight = c.text("", s.secondaryText, p.textSecondary).apply { gravity = Gravity.END }
+    private var playIcon: ImageView? = null
+    private var playButton: View? = null
     private lateinit var shuffle: TextView
     private lateinit var repeat: TextView
     private lateinit var favorite: TextView
@@ -102,14 +114,19 @@ internal class MeloTabletScreen(
     }
 
     init {
-        buildNav()
-        view.addView(navColumn, LinearLayout.LayoutParams(s.minTouch * 80 / 48, ViewGroup.LayoutParams.MATCH_PARENT))
-        playerPane = buildPlayerPane()
+        if (teal) {
+            view.background = c.gradient(p.background, p.backgroundEnd, 0)
+            view.setPadding(s.screenMargin, s.gap, s.screenMargin, s.gap)
+        } else {
+            buildNav()
+            view.addView(navColumn, LinearLayout.LayoutParams(s.minTouch * 80 / 48, ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+        playerPane = if (teal) buildThemedPlayerPane() else buildPlayerPane()
         leftSlot.addView(playerPane, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         leftSlot.addView(buildQuickPane(), FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         view.addView(leftSlot, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 40f).apply { marginEnd = s.screenMargin })
         val right = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        right.addView(syncLine, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+        right.addView(if (teal) syncRow.view else syncLine, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = s.gap
         })
         right.addView(pane.view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -216,6 +233,110 @@ internal class MeloTabletScreen(
         return scroll
     }
 
+    /**
+     * E98 teal theme: logo, big cover (tap = Đang phát), centred title and source, quality pill, a
+     * display-only progress line with the two times, three large transport buttons and a 2x2 grid
+     * of Đảo / Lặp / Lưu / Hàng đợi with icons. Same fields as [buildPlayerPane], so the cover fit
+     * and the low-window rules below keep working.
+     */
+    private fun buildThemedPlayerPane(): View {
+        val scroll = ScrollView(context).apply { isFillViewport = true; isVerticalScrollBarEnabled = false }
+        val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        column.addView(c.logo(s.playerTitleText), LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = s.gap })
+        column.addView(artHost, LinearLayout.LayoutParams(0, 0).apply { gravity = Gravity.CENTER_HORIZONTAL })
+        artHost.apply {
+            isClickable = true
+            isFocusable = true
+            contentDescription = "Mở màn hình đang phát"
+            setOnClickListener { host.openNowPlaying() }
+        }
+        title.gravity = Gravity.CENTER_HORIZONTAL
+        source.gravity = Gravity.CENTER_HORIZONTAL
+        column.addView(title, matchWrap().apply { topMargin = s.gap * 2 })
+        column.addView(source, matchWrap().apply { topMargin = s.gap / 2 })
+        quality.apply {
+            gravity = Gravity.CENTER
+            typeface = Typeface.DEFAULT_BOLD
+            background = c.pill(0x00000000, p.accent)
+            setPadding(s.gap * 2, s.gap / 2, s.gap * 2, s.gap / 2)
+            visibility = View.GONE
+        }
+        column.addView(quality, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = s.gap })
+
+        thumbProgress = MeloThumbProgress(context, p.border, p.accent, p.text, s.progressHeight, s.progressThumb)
+        val progressBlock = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        progressBlock.addView(thumbProgress, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, s.progressThumb))
+        progressBlock.addView(LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(timeLeft, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(timeRight, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }, matchWrap().apply { topMargin = s.gap / 2 })
+        timeBlock = progressBlock
+        column.addView(progressBlock, matchWrap().apply { topMargin = s.gap * 2 })
+
+        val transport = transportRow.apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        transport.addView(themedTransportButton(R.drawable.ic_skip_previous, "Bài trước", false) { host.previous() },
+            LinearLayout.LayoutParams(0, s.playButtonHeight, 1f).apply { marginEnd = s.gap })
+        val playBtn = themedTransportButton(R.drawable.ic_play_arrow, "Phát", true) { host.playPause() }
+        playButton = playBtn
+        playIcon = playBtn.getChildAt(0) as ImageView
+        transport.addView(playBtn, LinearLayout.LayoutParams(0, s.playButtonHeight, 1.5f).apply { marginEnd = s.gap })
+        transport.addView(themedTransportButton(R.drawable.ic_skip_next, "Bài kế", false) { host.next() },
+            LinearLayout.LayoutParams(0, s.playButtonHeight, 1f))
+        column.addView(transport, matchWrap().apply { topMargin = s.gap * 2 })
+
+        shuffle = c.chip(MeloNowPlayingPolicy.themedShuffleLabel(false), false) { host.toggleShuffle(); onPlaybackChanged() }
+        repeat = c.chip(MeloNowPlayingPolicy.themedRepeatLabel("tắt"), false) { host.cycleRepeat(); onPlaybackChanged() }
+        favorite = c.chip(MeloNowPlayingPolicy.themedFavoriteLabel(false), false) { host.toggleFavorite(); onPlaybackChanged() }
+        queueChip = c.chip(MeloNowPlayingPolicy.THEMED_QUEUE_LABEL, false) { host.openQueue() }
+        toggleStyle(shuffle, false, MeloNowPlayingPolicy.themedShuffleLabel(false), R.drawable.ic_shuffle)
+        toggleStyle(repeat, false, MeloNowPlayingPolicy.themedRepeatLabel("tắt"), R.drawable.ic_repeat)
+        toggleStyle(favorite, false, MeloNowPlayingPolicy.themedFavoriteLabel(false), R.drawable.ic_heart_outline)
+        toggleStyle(queueChip, false, MeloNowPlayingPolicy.THEMED_QUEUE_LABEL, R.drawable.ic_queue_music)
+        listOf(shuffle, repeat, favorite, queueChip).forEach { it.setPadding(s.gap, 0, s.gap, 0) }
+        column.addView(extrasBox.apply {
+            orientation = LinearLayout.VERTICAL
+            addView(extrasRow1, matchWrap())
+            addView(extrasRow2, matchWrap().apply { topMargin = s.gap })
+        }, matchWrap().apply { topMargin = s.gap * 2 })
+        arrangeExtras(true)
+        scroll.addView(column)
+        playerScroll = scroll
+        playerColumn = column
+        scroll.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or_, ob ->
+            if (r - l != or_ - ol || b - t != ob - ot) requestArtFit()
+        }
+        return scroll
+    }
+
+    /** Large rounded transport button: a vector on a card, the primary one on the accent gradient. */
+    private fun themedTransportButton(iconRes: Int, description: String, primary: Boolean, onClick: () -> Unit): FrameLayout {
+        val radius = s.corner * 9 / 8
+        val icon = (s.playButtonHeight * 0.5f).toInt()
+        return FrameLayout(context).apply {
+            background = if (primary) {
+                c.gradient(p.accent, p.accentEnd, radius, android.graphics.drawable.GradientDrawable.Orientation.LEFT_RIGHT)
+            } else {
+                c.roundedBackground(p.surfaceRaised, radius, stroke = p.border)
+            }
+            contentDescription = description
+            isClickable = true
+            isFocusable = true
+            addView(c.vectorIcon(iconRes, icon, if (primary) p.onAccent else p.text), FrameLayout.LayoutParams(icon, icon, Gravity.CENTER))
+            setOnClickListener { onClick() }
+        }
+    }
+
+    private fun renderPlay(playing: Boolean) {
+        if (!teal) return
+        playIcon?.setImageResource(if (playing) R.drawable.ic_pause else R.drawable.ic_play_arrow)
+        playButton?.contentDescription = if (playing) "Dừng" else "Phát"
+    }
+
     // ---- Cover size and chip rows follow the height the other rows leave ---------------------
 
     /** One row of chips, or two when the column is too narrow for all four. */
@@ -253,7 +374,8 @@ internal class MeloTabletScreen(
             chip.measure(unspecified, unspecified)
             chip.measuredWidth
         }
-        arrangeExtras(MeloNowPlayingPolicy.extrasStacked(w - playerColumn.paddingLeft - playerColumn.paddingRight, widths, s.gap))
+        // Teal theme: always the 2x2 grid of the reference design.
+        arrangeExtras(teal || MeloNowPlayingPolicy.extrasStacked(w - playerColumn.paddingLeft - playerColumn.paddingRight, widths, s.gap))
         applyTight(false)
         var rest = MeloArtFit.restHeight(playerColumn, artHost, w)
         if (MeloNowPlayingPolicy.playerTight(h, rest, s.rowArt)) {
@@ -263,14 +385,26 @@ internal class MeloTabletScreen(
         sizeArt(MeloNowPlayingPolicy.artSide(w, h, rest, s.rowArt))
     }
 
+    /** Teal pill: shown only with something to say. True when its visibility changed (the column then needs a new fit). */
+    private fun syncQualityVisibility(): Boolean {
+        val next = qualityVisibility(playerTight)
+        if (quality.visibility == next) return false
+        quality.visibility = next
+        return true
+    }
+
+    /** The quality line goes in a low window; the teal pill also goes while it has nothing to say. */
+    private fun qualityVisibility(tight: Boolean): Int =
+        if (tight || (teal && quality.text.isNullOrEmpty())) View.GONE else View.VISIBLE
+
     /** Low window (a phone on its side): one-line title, no quality line, half the gaps, so the buttons stay on screen. */
     private fun applyTight(tight: Boolean) {
         if (tight == playerTight) return
         playerTight = tight
         title.maxLines = if (tight) 1 else 2
-        quality.visibility = if (tight) View.GONE else View.VISIBLE
+        quality.visibility = qualityVisibility(tight)
         val top = if (tight) s.gap else s.gap * 2
-        listOf<View>(title, time, transportRow, extrasBox).forEach { v ->
+        listOf<View>(title, if (teal) timeBlock else time, transportRow, extrasBox).forEach { v ->
             (v.layoutParams as LinearLayout.LayoutParams).topMargin = top
             v.requestLayout()
         }
@@ -420,7 +554,12 @@ internal class MeloTabletScreen(
         if (key == artKey) return
         artKey = key
         artHost.removeAllViews()
-        artHost.addView(c.artView(art, sourceTitle, songTitle, artSide).apply { layoutParams = FrameLayout.LayoutParams(artSide, artSide) })
+        // Teal theme: a rounder cover (20dp) with a soft shadow.
+        val radius = if (teal) s.corner * 5 / 4 else s.corner
+        artHost.addView(c.artView(art, sourceTitle, songTitle, artSide, radius).apply {
+            layoutParams = FrameLayout.LayoutParams(artSide, artSide)
+            if (teal) elevation = s.gap.toFloat()
+        })
     }
 
     private fun TextView.show(value: CharSequence): Boolean {
@@ -429,13 +568,19 @@ internal class MeloTabletScreen(
         return true
     }
 
-    private fun toggleStyle(chip: TextView, on: Boolean, label: String): Boolean {
-        val state = "$on|$label"
+    private fun toggleStyle(chip: TextView, on: Boolean, label: String, iconRes: Int? = null): Boolean {
+        val state = "$on|$label|$iconRes"
         if (chip.tag == state) return false
         chip.tag = state
         chip.text = label
         chip.setTextColor(if (on) p.onAccent else p.text)
         chip.background = if (on) c.pill(p.accent) else c.pill(p.surfaceRaised, p.border)
+        if (teal && iconRes != null) {
+            // Teal grid cells carry an icon in front of the label, in the text colour of the state.
+            val size = (s.secondaryText * 1.4f).toInt()
+            chip.setCompoundDrawablesRelative(c.iconDrawable(iconRes, size, if (on) p.onAccent else p.text), null, null, null)
+            chip.compoundDrawablePadding = s.gap
+        }
         return true
     }
 
@@ -443,20 +588,36 @@ internal class MeloTabletScreen(
         val snap = host.snapshot()
         snapshot = snap
         val playlistState = if (snap.mode == Mode.PLAYLIST && !snap.showingSources) host.playlistStatus() else null
-        syncLine.show(PlaylistSyncStatusPolicy.libraryLine(
-            playlistState, "☁ " + MeloLibraryPolicy.syncLine(host.syncSubtitle(), snap.total, false)
-        ))
-        // E96 P4: on the Playlist tab the line is the honest Playlist state; tap = detail.
-        if (playlistState != null) {
-            syncLine.setOnClickListener {
-                android.widget.Toast.makeText(syncLine.context, playlistState.text + "\n" + playlistState.fullDetail(), android.widget.Toast.LENGTH_LONG).show()
+        val syncText = host.syncSubtitle()
+        if (teal) {
+            // Playlist tab: the honest Playlist state replaces the headline; tapping the row shows its detail.
+            val headline = if (playlistState != null) PlaylistSyncStatusPolicy.libraryLine(playlistState, "")
+            else MeloThemePolicy.syncHeadline(host.sourceSummaries().firstOrNull { it.kind == MeloSourceCardPolicy.Kind.TELEGRAM }?.total ?: snap.total)
+            syncRow.update(headline, MeloThemePolicy.syncDot(true, syncText))
+            if (playlistState != null) {
+                syncRow.view.setOnClickListener {
+                    android.widget.Toast.makeText(context, playlistState.text + "\n" + playlistState.fullDetail(), android.widget.Toast.LENGTH_LONG).show()
+                }
+            } else {
+                syncRow.view.setOnClickListener(null)
+                syncRow.view.isClickable = false
             }
         } else {
-            syncLine.setOnClickListener(null)
-            syncLine.isClickable = false
+            syncLine.show(PlaylistSyncStatusPolicy.libraryLine(
+                playlistState, "☁ " + MeloLibraryPolicy.syncLine(syncText, snap.total, false)
+            ))
+            // E96 P4: on the Playlist tab the line is the honest Playlist state; tap = detail.
+            if (playlistState != null) {
+                syncLine.setOnClickListener {
+                    android.widget.Toast.makeText(syncLine.context, playlistState.text + "\n" + playlistState.fullDetail(), android.widget.Toast.LENGTH_LONG).show()
+                }
+            } else {
+                syncLine.setOnClickListener(null)
+                syncLine.isClickable = false
+            }
         }
         backCallback.isEnabled = !snap.showingSources && snap.sourceTitle != null
-        renderNav(snap)
+        if (!teal) renderNav(snap)
         renderQuickSwitch(snap)
         pane.onLibraryChanged()
     }
@@ -468,20 +629,43 @@ internal class MeloTabletScreen(
             relayout = title.show("Chọn một bài để phát")
             relayout = source.show("") or relayout
             quality.show("")
-            time.show("")
-            play.show("▶")
+            if (teal) {
+                timeLeft.show("")
+                timeRight.show("")
+                thumbProgress.set(0L, 0L)
+                renderPlay(false)
+                relayout = syncQualityVisibility() or relayout
+            } else {
+                time.show("")
+                play.show("▶")
+            }
             showArt(null, null, "♪")
         } else {
             relayout = title.show(now.title)
             relayout = source.show(MeloNowPlayingPolicy.sourceLine(now.sourceTitle, now.local, now.sourceIsFolder).orEmpty()) or relayout
-            quality.show(listOfNotNull(host.qualityLabel(null), now.downloadNote?.takeUnless { it.startsWith("Đã tải") }).joinToString(" · "))
-            time.show(MeloComponentPolicy.progressText((now.positionMs / 1000).toInt(), (now.durationMs / 1000).toInt()))
-            play.show(if (now.playing) "❚❚" else "▶")
-            play.contentDescription = if (now.playing) "Dừng" else "Phát"
-            relayout = toggleStyle(shuffle, now.shuffle, "⇄ Đảo") or relayout
-            relayout = toggleStyle(repeat, now.repeatLabel != "tắt", MeloNowPlayingPolicy.repeatChipLabel(now.repeatLabel)) or relayout
+            val qualityParts = listOfNotNull(host.qualityLabel(null), now.downloadNote?.takeUnless { it.startsWith("Đã tải") })
             val save = MeloSavePolicy.buttonState(now.saveAvailability, now.favorite, now.saveBusy)
-            relayout = toggleStyle(favorite, save.saved, MeloSavePolicy.chipLabel(save.saved)) or relayout
+            if (teal) {
+                quality.show(MeloNowPlayingPolicy.qualityPillText(qualityParts))
+                timeLeft.show(TelegramSongDisplayPolicy.formatDuration((now.positionMs / 1000).toInt().coerceAtLeast(0)) ?: "00:00")
+                timeRight.show(TelegramSongDisplayPolicy.formatDuration((now.durationMs / 1000).toInt()).orEmpty())
+                thumbProgress.set(now.positionMs, now.durationMs)
+                renderPlay(now.playing)
+                relayout = syncQualityVisibility() or relayout
+                relayout = toggleStyle(shuffle, now.shuffle, MeloNowPlayingPolicy.themedShuffleLabel(now.shuffle), R.drawable.ic_shuffle) or relayout
+                relayout = toggleStyle(repeat, now.repeatLabel != "tắt", MeloNowPlayingPolicy.themedRepeatLabel(now.repeatLabel),
+                    if (now.repeatLabel == "một bài") R.drawable.ic_repeat_one else R.drawable.ic_repeat) or relayout
+                relayout = toggleStyle(favorite, save.saved, MeloNowPlayingPolicy.themedFavoriteLabel(save.saved),
+                    if (save.saved) R.drawable.ic_heart_filled else R.drawable.ic_heart_outline) or relayout
+            } else {
+                quality.show(qualityParts.joinToString(" · "))
+                time.show(MeloComponentPolicy.progressText((now.positionMs / 1000).toInt(), (now.durationMs / 1000).toInt()))
+                play.show(if (now.playing) "❚❚" else "▶")
+                play.contentDescription = if (now.playing) "Dừng" else "Phát"
+                relayout = toggleStyle(shuffle, now.shuffle, "⇄ Đảo") or relayout
+                relayout = toggleStyle(repeat, now.repeatLabel != "tắt", MeloNowPlayingPolicy.repeatChipLabel(now.repeatLabel)) or relayout
+                relayout = toggleStyle(favorite, save.saved, MeloSavePolicy.chipLabel(save.saved)) or relayout
+            }
             shuffle.contentDescription = if (now.shuffle) "Đảo bài: bật" else "Đảo bài: tắt"
             repeat.contentDescription = "Lặp: ${now.repeatLabel}"
             favorite.contentDescription = save.contentDescription
