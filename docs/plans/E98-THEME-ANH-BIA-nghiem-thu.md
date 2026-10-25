@@ -8,7 +8,8 @@
 | 1 — phản hồi chủ dự án | 25/10 13:39 | "Về đa phần đã đạt" + báo lỗi: bài đang phát ở thanh dưới nhỏ quá, rất khó nhấn |
 | REWORK-01 bản đầu | 25/10 13:46 (`0bab5cc`) | chỉ cho Teal sáng — **đã thay** |
 | Chủ dự án chốt thêm | 25/10 | "Tôi muốn thẻ lớn cho tất cả các giao diện"; Shanling: **giữ đủ 8 bài** |
-| **Hiện tại** | 25/10 | **REWORK-01** — sửa đúng mục 10, phiên Sonnet MỚI trên `dot/E98-THEME-ANH-BIA` |
+| REWORK-01 | 25/10 13:56 (`2f00755`) | sửa đúng mục 10; Sonnet làm `48449ab` (vc113) + báo cáo `4446410` |
+| **2 — hiện tại** | 25/10 ~14:50 | **BLOCKED — CHỜ CHỦ DỰ ÁN** (REWORK-01 đạt kỹ thuật, Sony + Shanling thật; chờ chủ dự án nói ĐẠT) — mục 11 |
 
 ## 1. Git
 
@@ -73,40 +74,50 @@ Opus ghép `00_tong_hop.png` (8 ô) từ ảnh gốc Sony; bản sao ở `docs/p
 
 **REWORK-01.** Các phần khác chủ dự án chấp nhận ("đa phần đã đạt"); chỉ sửa mục 10, không mở rộng phạm vi.
 
-## 10. REWORK-01 — Thẻ "Đang phát" lớn ở Thanh đáy gộp, MỌI giao diện
+## 10. REWORK-01 (tóm tắt chỉ thị, bản đầy đủ ở commit `2f00755`)
 
-**Lỗi (chủ dự án, ảnh 13:39, điện thoại dọc):** dòng "tên bài · kênh" phía trên ⏮▶⏭ quá nhỏ, rất khó nhấn để mở màn Đang phát. Chủ dự án chốt: **thẻ lớn cho tất cả các giao diện**; Shanling **giữ đủ 8 bài**.
-**Nguyên nhân (Opus đọc mã):** `MeloBottomBar` (Thanh đáy gộp, có từ trước E98) chỉ dành dải `titleLineDp` 18/22/24 dp (Gọn/Điện thoại/Tablet dọc), chữ 13–15 sp; hàng dưới là tab + ⏮▶⏭ giữ hết cú chạm ⇒ vùng mở Đang phát ~20–26 dp, dưới mức chạm tối thiểu 48 dp (`MeloBottomBarPolicy.MIN_TOUCH_DP`; `docs/ui-spec.md`: "Không làm nút nhỏ hơn 48dp").
-**Phạm vi:** cả theme Hiện tại và Teal sáng; hồ sơ Gọn (Shanling), Điện thoại dọc, Tablet dọc. Car Mode (`spec(CAR) = null`) và Hai khung ngang không có thanh này ⇒ không đổi.
+Lỗi chủ dự án báo 13:39: dòng "tên bài · kênh" ở Thanh đáy gộp chỉ cao ~20–26 dp, khó bấm để mở Đang phát. Chỉ thị: thẻ "Đang phát" lớn cho **mọi** giao diện (Gọn 48 dp / Điện thoại 56 / Tablet dọc 60; thanh đáy 102 / 122 / 132 dp; ảnh 36/40/44 dp; tên đậm 14/15/16 sp; kênh 12/12/13 sp), bấm bất kỳ chỗ nào trên thẻ → Đang phát, tab và ⏮⏯⏭ giữ hành động cũ; Gọn hạ dòng 56 → 52 dp để giữ 8 bài trên cửa sổ 574 dp; vc113 / `0.6.89.1-beta`. Danh sách 8 file được sửa, unit test và QA Sony như bản đầy đủ.
 
-**Phải làm:**
-1. Thay dải tên bằng **thẻ Đang phát** theo bảng; thanh đáy mới = 2 dp tiến trình + thẻ + hàng nút cũ (hàng nút giữ nguyên chiều cao, `playDp`, `skipDp`, tab):
+## 11. Vòng 2 — Nghiệm thu REWORK-01 (25/10 14:37–14:50)
 
-| Hồ sơ | Thẻ (tối thiểu) | Ảnh bìa | Tên bài (đậm) | Dòng kênh | Thanh đáy |
+**Git:** `dot/E98-THEME-ANH-BIA` @ `4446410`, cây sạch, không Gradle/agent nào đang sửa. `git diff --stat 2f00755..48449ab`: đúng **8 file** của mục 10 (+193/−52; production ~123 dòng so với ước ≤ 120 — chênh nhỏ, chấp nhận). `git diff --check` sạch. Không file ngoài phạm vi.
+
+**Đọc mã** (`MeloBottomBar.kt`, `MeloBottomBarPolicy.kt`): thẻ là `LinearLayout` riêng (ảnh `c.artView` · tên `maxLines=1` + `…` · kênh `textSecondary` · "⌃" 24 dp), nền `c.roundedBackground(p.surface, p.border)` theo palette đang dùng; `minimumHeight = cardHeightDp(spec, fontScale)` ≥ 48 dp và tăng theo cỡ chữ; thanh đáy dùng `WRAP_CONTENT` ở cả `MeloCompactScreen:118` và `MeloPhoneScreen:63` nên thẻ cao thêm không bị cắt. Bấm/vuốt gắn cho cả thanh và thẻ, vuốt lên ăn `ACTION_UP` nên không mở 2 lần; chưa có bài → thẻ `INVISIBLE`, `isClickable=false`. Hàng nút = `heightDp − 2 − cardDp` = 52/64/70 (không đổi). `rowDp` Gọn 52 ở `MeloDesignTokens.kt:128`; ảnh dòng 40 dp giữ nguyên. Không đụng TDLib/DB/schema/Media3/queue/sync.
+
+**Test/build Opus tự chạy (Ni 14:38–14:40):** `:app:testShareableDebugUnitTest --rerun :app:testShareableReleaseUnitTest --rerun :app:assembleShareableDebug :app:assembleShareableRelease` → `BUILD SUCCESSFUL in 1m 55s`. XML: Debug **2038 / 21 bỏ qua / 0 lỗi**, Release giống hệt (166 file). Vòng 1 là 2033 → +5, không giảm. Khớp báo cáo Sonnet R3.
+
+**Nguồn APK:** Tiny dựng từ clone cô lập `MeloVault-E93D-IsolatedQA` @ `8654323` + patch chưa commit; Opus tự `git hash-object` 7 file mã/test trên Tiny — **khớp từng blob** với `48449ab`; phần còn lại của `8654323..48449ab` chỉ là tài liệu. Chuyển bằng patch văn bản có SHA-256 thay cho Git bundle (lệch quy trình, Sonnet đã nêu ở R4; chấp nhận vì blob khớp, không lặp lại khi có đường bundle).
+
+**APK candidate vc113 (CLAUDE.md §9) — đạt gate:** `MeloVault-E98-REWORK01-48449ab-vc113-TinySigned-debug.apk`, SHA-256 `200E6EBC501FED01954B78E8BAEA575D24811E3A8B7AD813B9C3905A450210F6`, 33.413.064 byte, `app.melovault.player` vc113 / `0.6.89.1-beta` (aapt2), cert `eecd3df7…c3fce8` (apksigner, trên Tiny và Ni), Telegram config = true (Tiny, chỉ boolean). Drive owner-only: `docs/plans/E98-THEME-ANH-BIA-apk-test.md`.
+
+**Ảnh Sony (Sonnet, 00_tong_hop.png 8 ô):** đối chiếu từng ô với R5 — thẻ có ảnh + tên đậm "…" + kênh + "⌃" ở Hiện tại (ô 1) và Teal (ô 6); bấm giữa/vuốt lên mở Đang phát (ô 2, 5); ⏸ chỉ tạm dừng (ô 3); tab Playlist chỉ đổi tab (ô 4); khung Shanling giả lập: 8 dòng đủ + thẻ 48 dp (ô 7, 8). Bounds Sony: thẻ 147 px = 56,0 dp.
+
+**Hồi quy Gọn trên Shanling THẬT 30313860180939 (Opus, chủ dự án cho phép trong chat 14:42):**
+Trước khi chạm, logcat cho thấy có người tự cài vc112 từ Tải xuống lúc 14:39 → Opus hỏi, chủ dự án chọn "Cài vc113, tự QA". `adb devices -l` = device; getprop Shanling M3 Ultra / Shanling / Android 10. Đang cài vc112 = đúng SHA `B2280859…` (pull `base.apk`), cert khớp `eecd3df7…`; Media3 state=2 (tạm dừng) → `adb install -r` → `Success`, vc113 / `0.6.89.1-beta`. UiLab không đổi (`color_theme=teal_bright`, Gọn tự động → giao diện Hiện tại theo `MeloThemePolicy`).
+
+| # | Hành động (Shanling, dọc 768×1280, density 2,0) | Kỳ vọng | Thực tế | KQ | Ảnh |
 |---|---|---|---|---|---|
-| Gọn (Shanling) | 48 dp | 36 dp | 14 sp | 12 sp | 2 + 48 + 52 = **102 dp** (cũ 72) |
-| Điện thoại dọc | 56 dp | 40 dp | 15 sp | 12 sp | 2 + 56 + 64 = **122 dp** (cũ 88) |
-| Tablet dọc | 60 dp | 44 dp | 16 sp | 13 sp | 2 + 60 + 70 = **132 dp** (cũ 96) |
+| 1 | Mở app sau cài | Gọn, ≥ 8 dòng trên thanh 102 dp | **8 dòng đầy đủ** + mép dòng 9; thanh mới, thẻ ẩn giữ chỗ (chưa có bài) | PASS | 01 |
+| 2 | Bấm bài đã tải "LOW 2026" (✓) | Thẻ: ô chữ cái (không ảnh) + tên đậm + kênh + ⌃; vẫn 8 dòng | Đúng; Media3 state=3 | PASS | 02 |
+| 3 | Bấm tâm thẻ (400,1050) | Mở Đang phát | Mở Đang phát của Gọn; Back về danh sách | PASS | 03 |
+| 4 | Bấm ⏯ hàng dưới; `uiautomator` | Chỉ tạm dừng; thẻ ≥ 48 dp | Media3 3→2, vẫn ở danh sách; thẻ `[24,1004][744,1100]` = 96 px = **48 dp**; cửa sổ app 60→1208 = **574 dp** | PASS | 04 |
 
-2. Trong thẻ: trái là ảnh bìa `now.art` qua `MeloComponents.artView(...)` (không có ảnh → ô chữ cái sẵn có); giữa là tên bài 1 dòng, `…` cuối, dưới là kênh/nghệ sĩ màu `textSecondary`; phải là "⌃" ~24 dp. Nền `c.roundedBackground(...)` theo **palette của theme đang dùng** (Hiện tại dùng palette Hiện tại; Teal dùng palette teal).
-3. **Bấm bất kỳ chỗ nào trên thẻ** → `onOpenNowPlaying()` (một lần); vuốt lên vẫn mở như cũ. Tab và ⏮▶⏭ giữ nguyên vị trí và hành động; bấm chúng **không** mở Đang phát.
-4. Thanh tiến trình 2 dp ở mép trên. Chưa có bài: thẻ `INVISIBLE` giữ chỗ (như hiện nay). Thẻ cao tối thiểu theo bảng, tăng theo cỡ chữ hệ thống, không bao giờ < 48 dp. `contentDescription` = `MeloBottomBarPolicy.contentDescription(...)` hiện có.
-5. **Gọn giữ 8 bài:** hạ chiều cao dòng hồ sơ COMPACT 56 → **52 dp** (`MeloDesignTokens.kt`, `rowDp` của bảng COMPACT; dùng qua `sizes.rowHeight`). Ảnh dòng Gọn giữ 40 dp. Các hồ sơ khác không đổi chiều cao dòng. Ngân sách: 574 − 48 − 102 − 2 = 422 ≥ 8 × 52 = 416.
-6. Phiên bản: `app/build.gradle` vc113 / `0.6.89.1` + `-beta`.
+`SHANLING_SCREEN_BEGIN 14:42:39` (bật bằng keyevent 224 lúc cần chụp) → `SHANLING_SCREEN_END 14:44:39`: keyevent 223, `Display Power: state=OFF`, `mWakefulness=Asleep`. Crash buffer MeloVault: 0. Bài "LOW 2026" để ở trạng thái tạm dừng (hàng đợi cũ được thay). Không uninstall/pm clear/xóa dữ liệu/`-d`.
 
-**File được sửa (không file nào khác):** `MeloBottomBar.kt`, `MeloBottomBarPolicy.kt` (bảng `SPEC_*` + cỡ ảnh/chữ thẻ), `MeloDesignTokens.kt` (chỉ `rowDp` COMPACT), `MeloCompactScreen.kt` (chỉ chú thích "56dp … 72dp bar" ~dòng 253), `MeloBottomBarPolicyTest.kt`, `MeloDesignTokensTest.kt`, `app/build.gradle`, `docs/ui-spec.md` (bảng Thanh đáy gộp ~dòng 168–170, 198, 218, 248; ngân sách Shanling ~dòng 109–118). Ước lượng ≤ 120 dòng production.
+**Bảng kiểm REWORK-01**
 
-**Unit test:** bảng spec mới (thanh đáy 102/122/132, thẻ 48/56/60; `playDp`/`skipDp`/hàng nút không đổi); thẻ ≥ 48 dp ở fontScale 1,0 và 1,3; ngân sách Shanling `visibleRows(574, 48, 102, 52, 0, pad) >= 8` và `(604, …) >= 8` (thay các assert 72/56 cũ); `compact.rowHeight == 52`, `compact.rowArt == 40`; `spec(CAR) == null`; `tabWidthDp` không đổi. Chỉ sửa đúng các assert của bảng cũ (liệt kê trong báo cáo); toàn bộ test xanh, số test không giảm.
+| Tiêu chí mục 10 | Kết quả |
+|---|---|
+| Thẻ lớn ở Hiện tại + Teal, Điện thoại dọc | **ĐẠT** (Sony 56,0 dp) |
+| Thẻ ở Gọn ≥ 48 dp, giữ 8 bài | **ĐẠT trên Shanling thật** (48 dp, 8 dòng, cửa sổ 574 dp) |
+| Bấm bất kỳ chỗ nào trên thẻ → Đang phát; vuốt lên vẫn mở | **ĐẠT** (Sony: giữa/trái/phải/vuốt; Shanling: giữa) |
+| Tab và ⏮⏯⏭ giữ hành động, không mở Đang phát | **ĐẠT** (Sony + Shanling ⏸; Sony tab Playlist) |
+| Tablet dọc 60 dp / 132 dp | **CHỈ unit test** — chưa có Y700 |
+| Thẻ tăng theo cỡ chữ ×1,3 | **CHỈ unit test** |
+| Test không giảm, build OK, đúng 8 file | **ĐẠT** |
 
-**QA Sony QV725WEQ54 (Tiny, dọc), theo CLAUDE.md §3, §6, §7:**
-1. Build ở Tiny (bundle SHA256), kiểm package/vc113/cert/config, `install -r` đè vc112.
-2. Kiểu màu **Hiện tại**: phát **một bài trong "Đã tải"** (không làm tải bài mới) → ảnh thẻ; `uiautomator dump` bounds thẻ (content-desc "Đang phát: …") ≥ 56 dp × density, ghi số px.
-3. Bấm tâm thẻ, gần mép trái (ảnh) và gần mép phải (⌃): mỗi lần mở Đang phát → ảnh → Back. Bấm ⏸ ở hàng dưới: chỉ tạm dừng; bấm tab Playlist: chỉ đổi tab; vuốt lên trên thẻ → mở Đang phát.
-4. Kiểu màu **Teal sáng**: ảnh thẻ + 1 lần bấm thẻ.
-5. **Gọn trên Sony:** Cài đặt giao diện → "Thử trong khung Shanling (768 × 1280)" → ảnh danh sách Gọn + thẻ, ghi số dòng thấy được (khung 640 dp phải ≥ 8); bấm thẻ mở Đang phát.
-6. Trả cài đặt UiLab về đúng giá trị lúc bắt đầu; màn OFF trong `finally`.
-Ghép `00_tong_hop.png`. Báo cáo: thêm mục **"REWORK-01"** vào `docs/plans/E98-THEME-ANH-BIA-bao-cao.md`, giữ nội dung vòng 1. Sonnet **không** cài Shanling, **không** upload APK.
+**Quan sát (không chặn):** (a) Sonnet R7 nêu: nếu dòng ghi chú quét offline (~34 dp) hiện trên Gọn thì 574 dp chỉ còn 7 dòng. Trên Shanling thật lần này dòng đó không hiện (đầu trang 2 dòng "Tất cả · 29.827 bài / Đã tải: 5 nhóm…" nằm gọn trong 48 dp) → 8 dòng. Lúc đang quét offline **chưa kiểm**. (b) Trong Teal, nền thẻ `surface` hơi chìm so với thanh (Sonnet ghi) — thẩm mỹ, để chủ dự án xem ảnh 11. (c) Ô 4 Sony (tab Playlist) danh sách trống trong ảnh — chỉ là chuyển tab, ngoài phạm vi REWORK-01.
 
-**Opus nghiệm thu vòng sau sẽ:** chạy lại test/build, kiểm APK vc113, upload Drive owner-only, rồi tự làm hồi quy Gọn trên **Shanling thật** 30313860180939: chuyển APK qua Drive owner-only sang Ni, kiểm SHA/package/cert, chỉ `install -r` (vc113 thay vc109 syncqa, không hạ phiên bản), chụp thẻ + đủ 8 dòng + bấm thẻ, tắt màn.
+**Chưa kiểm chứng:** Y700 (Tablet dọc), S25, FYT/Car Mode trên máy; cỡ chữ lớn trên máy thật; Gọn lúc đang quét offline; **CHƯA XÁC NHẬN ÂM THANH THỰC** (Media3 PLAYING chỉ chứng minh luồng phát).
 
-**Bác sĩ tự kiểm tra (sau khi cài vc113):** (1) Điện thoại, cả Hiện tại và Teal: phát một bài → thẻ ở đáy có ảnh nhỏ + tên bài chữ to. (2) Bấm bất kỳ chỗ nào trên thẻ → mở màn Đang phát. (3) Bấm ⏸ ở hàng dưới → chỉ dừng nhạc. (4) Shanling: vẫn thấy đủ 8 bài trong danh sách và thẻ dễ bấm.
+**Kết luận vòng 2: BLOCKED — CHỜ CHỦ DỰ ÁN.** REWORK-01 đạt toàn bộ tiêu chí kỹ thuật có thể kiểm (Sony + Shanling thật); chờ chủ dự án xem ảnh/cài vc113 và nói **ĐẠT** hoặc báo lỗi. Ảnh: `docs/plans/E98-THEME-ANH-BIA-hinh-nghiem-thu.md`. Khi ĐẠT: đổi thành PASS, xin xác nhận nhánh tích hợp (repo không có `main`) rồi mới `git merge --no-ff`.
