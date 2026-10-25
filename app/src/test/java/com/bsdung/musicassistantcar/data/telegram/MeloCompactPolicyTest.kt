@@ -16,6 +16,20 @@ class MeloCompactPolicyTest {
         MeloScreenPolicy.panelCompact(shortDp, longDp, inMultiWindow)
 
     @Test
+    fun layerKeyWithoutCoversIsTheOldKey() {
+        assertEquals("compact:auto:768x1280:320:1.0", MeloCompactPolicy.layerKey("auto", 768, 1280, 320, 1.0f, false))
+    }
+
+    @Test
+    fun layerKeyChangesWithCoversAndFontScale() {
+        val plain = MeloCompactPolicy.layerKey("auto", 768, 1280, 320, 1.0f, false)
+        val art = MeloCompactPolicy.layerKey("auto", 768, 1280, 320, 1.0f, true)
+        assertEquals("$plain:art", art)
+        assertTrue(plain != art)
+        assertTrue(art != MeloCompactPolicy.layerKey("auto", 768, 1280, 320, 1.3f, true))
+    }
+
+    @Test
     fun autoTurnsOnForShanlingPanel() {
         // Shanling M3 Ultra: 768 × 1280 px at 320 dpi = 384 × 640dp, either orientation.
         assertTrue(MeloCompactPolicy.shouldUseCompact(CompactSetting.AUTO, panelCompact(384, 640), authorized = true))

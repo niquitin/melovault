@@ -40,6 +40,10 @@ internal object MeloCompactPolicy {
         }
     }
 
+    /** Key of a built Gọn layer; a change rebuilds it. The row-cover flag only adds ":art", so without covers it is the old key. */
+    fun layerKey(settingKey: String, widthPx: Int, heightPx: Int, densityDpi: Int, fontScale: Float, rowArt: Boolean): String =
+        "compact:$settingKey:${widthPx}x$heightPx:$densityDpi:$fontScale" + if (rowArt) ":art" else ""
+
     /** Spec: the Gọn player opens on "Đã tải" — applied once, then the owner's choice is kept. */
     fun needsDefaultDownloadedFilter(alreadyApplied: Boolean): Boolean = !alreadyApplied
 

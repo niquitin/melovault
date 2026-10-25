@@ -7,8 +7,8 @@ import com.bsdung.musicassistantcar.data.telegram.MeloLibraryPolicy.NewLayer
 /**
  * E98: the optional "Kiểu màu" of the library screens. [ColorTheme.CURRENT] is the look MeloVault
  * always had and stays the default; [ColorTheme.TEAL_BRIGHT] is the brighter teal look with a cover
- * on every row. The theme only reaches Điện thoại dọc, Tablet dọc and Hai khung; Gọn and Car Mode
- * never change. Pure JVM except the preference helpers.
+ * on every row. The theme only reaches Điện thoại dọc, Tablet dọc and Hai khung; Gọn keeps its colours (E99: it gets the row
+ * covers with the teal theme chosen) and Car Mode never changes. Pure JVM except the preference helpers.
  */
 internal object MeloThemePolicy {
 
@@ -33,6 +33,10 @@ internal object MeloThemePolicy {
     /** The theme a screen really draws with: the chosen one where it applies, otherwise [ColorTheme.CURRENT]. */
     fun effective(theme: ColorTheme, layer: NewLayer?, profile: Profile): ColorTheme =
         if (appliesTo(theme, layer, profile)) ColorTheme.TEAL_BRIGHT else ColorTheme.CURRENT
+
+    /** E99: whether a screen shows row covers. The teal layers do; Gọn does too with the teal theme chosen, but keeps its own colours. Car Mode never. */
+    fun rowArtLayer(theme: ColorTheme, layer: NewLayer?, profile: Profile): Boolean =
+        appliesTo(theme, layer, profile) || (theme == ColorTheme.TEAL_BRIGHT && profile == Profile.COMPACT)
 
     /** Row covers are fetched from Telegram only with the teal theme on and the switch (default on) not turned off. */
     fun rowArtActive(theme: ColorTheme, switchOn: Boolean): Boolean = theme == ColorTheme.TEAL_BRIGHT && switchOn

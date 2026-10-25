@@ -36,6 +36,33 @@ class MeloThemePolicyTest {
     }
 
     @Test
+    fun rowArtLayerAddsOnlyTheCompactLayerWithTheTealTheme() {
+        // Gọn has no new layer (null) yet shows covers with teal; the current theme never does.
+        assertTrue(MeloThemePolicy.rowArtLayer(ColorTheme.TEAL_BRIGHT, null, Profile.COMPACT))
+        assertFalse(MeloThemePolicy.rowArtLayer(ColorTheme.CURRENT, null, Profile.COMPACT))
+        assertFalse(MeloThemePolicy.rowArtLayer(ColorTheme.TEAL_BRIGHT, null, Profile.CAR))
+        NewLayer.entries.forEach { assertFalse(MeloThemePolicy.rowArtLayer(ColorTheme.TEAL_BRIGHT, it, Profile.CAR)) }
+        assertFalse(MeloThemePolicy.rowArtLayer(ColorTheme.TEAL_BRIGHT, null, Profile.PHONE))
+    }
+
+    @Test
+    fun rowArtLayerKeepsTheE98BehaviourForPhoneAndTablet() {
+        for (theme in ColorTheme.entries) for (layer in NewLayer.entries) {
+            for (profile in listOf(Profile.PHONE, Profile.TABLET)) {
+                assertEquals(
+                    MeloThemePolicy.appliesTo(theme, layer, profile),
+                    MeloThemePolicy.rowArtLayer(theme, layer, profile),
+                )
+            }
+        }
+        NewLayer.entries.forEach {
+            assertTrue(MeloThemePolicy.rowArtLayer(ColorTheme.TEAL_BRIGHT, it, Profile.PHONE))
+            assertTrue(MeloThemePolicy.rowArtLayer(ColorTheme.TEAL_BRIGHT, it, Profile.TABLET))
+            assertFalse(MeloThemePolicy.rowArtLayer(ColorTheme.CURRENT, it, Profile.PHONE))
+        }
+    }
+
+    @Test
     fun noLayerMeansNoTheme() {
         // Gọn, Car Mode, the legacy library and a signed-out app have no new layer.
         assertFalse(MeloThemePolicy.appliesTo(ColorTheme.TEAL_BRIGHT, null, Profile.PHONE))
