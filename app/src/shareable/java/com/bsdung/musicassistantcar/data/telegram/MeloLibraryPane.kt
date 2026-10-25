@@ -597,7 +597,7 @@ internal class MeloLibraryPane(
         var withArt = 0
         var settled = 0
         for (i in 0 until list.childCount) {
-            val artHost = findArtHost(list.getChildAt(i), 0) ?: continue
+            val artHost = findRowArtFrame(list.getChildAt(i)) ?: continue
             val key = (artHost.tag as MeloArtTag).key
             shown++
             val bmp = host.peekRowArt(key)
@@ -605,13 +605,6 @@ internal class MeloLibraryPane(
             if (host.rowArtSettled(key)) settled++
         }
         android.util.Log.i("MeloRowArt", "visible=$shown withArt=$withArt settled=$settled")
-    }
-
-    private fun findArtHost(v: View?, depth: Int): FrameLayout? {
-        if (v == null || depth > 4) return null
-        if (v is FrameLayout && v.tag is MeloArtTag) return v
-        if (v is ViewGroup) for (i in 0 until v.childCount) findArtHost(v.getChildAt(i), depth + 1)?.let { return it }
-        return null
     }
 
     /**

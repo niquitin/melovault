@@ -37,7 +37,9 @@ internal class MeloCompactScreen(
     private val context: Context,
     sizes: Sizes,
     private val host: MeloScreenHost,
-    private val backDispatcher: OnBackPressedDispatcher
+    private val backDispatcher: OnBackPressedDispatcher,
+    /** E99: the song rows carry their cover (teal theme chosen); colours and sizes stay Gọn's own. */
+    private val rowArt: Boolean = false
 ) {
 
     private val c = MeloComponents(context, sizes)
@@ -60,6 +62,9 @@ internal class MeloCompactScreen(
     private var pendingQuery: Runnable? = null
     private var lastQuery = ""
     private var lastLocal = false
+    /** E99 row covers: the list's scroll state (nothing is requested while it is flung) and the first row asked for. */
+    private var scrollState = AbsListView.OnScrollListener.SCROLL_STATE_IDLE
+    private var lastArtFirst = -1
 
     private val backCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
@@ -80,12 +85,14 @@ internal class MeloCompactScreen(
 
     fun attach() {
         backDispatcher.addCallback(backCallback)
+        if (rowArt) host.setRowArtListener(::refreshVisibleArt)
         onLibraryChanged()
         onPlaybackChanged()
     }
 
     fun detach() {
         backCallback.remove()
+        if (rowArt) host.setRowArtListener(null)
         pendingQuery?.let(handler::removeCallbacks)
         handler.removeCallbacksAndMessages(null)
     }
@@ -107,9 +114,14 @@ internal class MeloCompactScreen(
             setOnItemClickListener { _, _, position, _ -> onRowClick(position) }
             setOnItemLongClickListener { _, v, position, _ -> onRowLongClick(position, v); true }
             setOnScrollListener(object : AbsListView.OnScrollListener {
-                override fun onScrollStateChanged(view: AbsListView?, scrollState: Int) = Unit
+                override fun onScrollStateChanged(view: AbsListView?, state: Int) {
+                    scrollState = state
+                    // The covers of a fast scroll are fetched once the list slows down.
+                    if (rowArt && state != AbsListView.OnScrollListener.SCROLL_STATE_FLING) requestVisibleArt()
+                }
                 override fun onScroll(view: AbsListView?, first: Int, visible: Int, total: Int) {
                     val snap = snapshot ?: return
+                    if (rowArt && first != lastArtFirst) requestVisibleArt()
                     if (!snap.showingSources && MeloCompactPolicy.shouldLoadMore(first, visible, total)) host.loadMore()
                 }
             })
@@ -184,6 +196,40 @@ internal class MeloCompactScreen(
             (!snap.showingSources && snap.sourceTitle != null)
         bar.renderTabs(snap.showingSources, snap.mode)
         adapter.notifyDataSetChanged()
+        if (rowArt) {
+            lastArtFirst = -1
+            list.post { requestVisibleArt() }
+        }
+    }
+
+    // ---- E99 row covers (teal theme chosen) -----------------------------------------------------------
+
+    /** Asks the host for the covers of the rows on screen and the few below (never while the list is flung). */
+    private fun requestVisibleArt() {
+        val snap = snapshot ?: return
+        if (snap.showingSources || !MeloRowArtPolicy.shouldLoad(scrollState)) return
+        val first = list.firstVisiblePosition
+        lastArtFirst = first
+        val range = MeloRowArtPolicy.rowsToLoad(first, list.childCount, snap.rows.size)
+        if (range.isEmpty()) return
+        host.requestRowArt(snap.rows.slice(range), s.rowArt)
+    }
+
+    /** New covers arrived: put them into the rows on screen in place; the list is not rebuilt. Logs counts only. */
+    private fun refreshVisibleArt() {
+        val snap = snapshot ?: return
+        if (snap.showingSources) return
+        var shown = 0
+        var withArt = 0
+        var settled = 0
+        for (i in 0 until list.childCount) {
+            val frame = findRowArtFrame(list.getChildAt(i)) ?: continue
+            val key = (frame.tag as MeloArtTag).key
+            shown++
+            if (c.applyRowArt(frame, host.peekRowArt(key))) withArt++
+            if (host.rowArtSettled(key)) settled++
+        }
+        android.util.Log.i("MeloRowArt", "compact visible=$shown withArt=$withArt settled=$settled")
     }
 
     private fun onRowClick(position: Int) {
@@ -225,8 +271,9 @@ internal class MeloCompactScreen(
             status = status,
             qualityLabel = quality,
             progressPercent = row.downloadingPercent,
-            art = row.art,
-            local = snap.local || row.local
+            art = row.art ?: if (rowArt) host.peekRowArt(row.artKey) else null,
+            local = snap.local || row.local,
+            artKey = if (rowArt) row.artKey else null
         )).also { rowGap(it); unclickable(it, position) }
     }
 
