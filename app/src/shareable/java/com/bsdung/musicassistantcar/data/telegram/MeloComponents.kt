@@ -48,8 +48,12 @@ internal const val MELO_SONG_ROW_MORE_TAG = "melo.songrow.more"
 internal class MeloComponents(
     private val context: Context,
     val sizes: Sizes,
-    val palette: Palette = MeloDesignTokens.palette(sizes.profile)
+    /** E98: the teal look only where [MeloThemePolicy.appliesTo]; every other caller keeps the default and draws as before. */
+    val theme: MeloThemePolicy.ColorTheme = MeloThemePolicy.ColorTheme.CURRENT,
+    val palette: Palette = MeloDesignTokens.palette(sizes.profile, theme)
 ) {
+    val teal: Boolean get() = theme == MeloThemePolicy.ColorTheme.TEAL_BRIGHT
+
 
     data class SongRowModel(
         val title: String,

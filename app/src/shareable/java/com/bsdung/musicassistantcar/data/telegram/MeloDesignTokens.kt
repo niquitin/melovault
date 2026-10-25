@@ -22,7 +22,12 @@ internal object MeloDesignTokens {
         val text: Int,
         val textSecondary: Int,
         val onAccent: Int,
-        val warning: Int
+        val warning: Int,
+        /** E98 teal theme only: lower end of the background / accent gradients; equal to the flat colour elsewhere. */
+        val backgroundEnd: Int = background,
+        val accentEnd: Int = accent,
+        /** E98 teal theme only: the "synced" dot and the downloaded tick. */
+        val statusOk: Int = accent
     )
 
     val PALETTE = Palette(
@@ -42,6 +47,44 @@ internal object MeloDesignTokens {
     val CAR_PALETTE = PALETTE.copy(textSecondary = 0xFFC4D3DB.toInt())
 
     fun palette(profile: Profile): Palette = if (profile == Profile.CAR) CAR_PALETTE else PALETTE
+
+    /** E98 "Teal sáng": about one step brighter than [PALETTE], with gradient ends for the background and accent. */
+    val TEAL_PALETTE = Palette(
+        background = 0xFF10263A.toInt(),
+        surface = 0xFF16334A.toInt(),
+        surfaceRaised = 0xFF1D4058.toInt(),
+        border = 0xFF2C5670.toInt(),
+        accent = 0xFF36E2C2.toInt(),
+        accentSoft = 0xFF1A5552.toInt(),
+        text = 0xFFF3FAFC.toInt(),
+        textSecondary = 0xFFB8CCD6.toInt(),
+        onAccent = 0xFF05231D.toInt(),
+        warning = 0xFFFF8B7B.toInt(),
+        backgroundEnd = 0xFF0C1C2B.toInt(),
+        accentEnd = 0xFF22B8A6.toInt(),
+        statusOk = 0xFF3DDC97.toInt()
+    )
+
+    /** Car Mode and Gọn never take the teal theme; every other profile gets it only when asked. */
+    fun palette(profile: Profile, theme: MeloThemePolicy.ColorTheme): Palette =
+        if (theme == MeloThemePolicy.ColorTheme.TEAL_BRIGHT && (profile == Profile.PHONE || profile == Profile.TABLET)) TEAL_PALETTE
+        else palette(profile)
+
+    /** WCAG relative luminance of an ARGB colour (alpha ignored). */
+    fun luminance(argb: Int): Double {
+        fun channel(shift: Int): Double {
+            val v = ((argb shr shift) and 0xFF) / 255.0
+            return if (v <= 0.03928) v / 12.92 else Math.pow((v + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * channel(16) + 0.7152 * channel(8) + 0.0722 * channel(0)
+    }
+
+    /** WCAG contrast ratio between two colours, 1.0 .. 21.0. */
+    fun contrast(a: Int, b: Int): Double {
+        val la = luminance(a)
+        val lb = luminance(b)
+        return (maxOf(la, lb) + 0.05) / (minOf(la, lb) + 0.05)
+    }
 
     enum class Profile(val key: String, val displayName: String) {
         COMPACT("compact", "Gọn"),

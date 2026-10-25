@@ -246,6 +246,27 @@ class MeloUiLabActivity : AppCompatActivity() {
             })
         }
 
+        content.addView(components.sectionTitle("Kiểu màu"))
+        content.addView(note(
+            "Hiện tại: giao diện như trước. Teal sáng · ảnh bìa: màu sáng hơn, mỗi bài có ảnh bìa nhỏ, hàng menu có biểu tượng. " +
+                "Chỉ áp dụng cho Điện thoại dọc, Tablet dọc và Hai khung ngang; bản Gọn và Car Mode không đổi."
+        ))
+        val colorTheme = MeloThemePolicy.load(prefs)
+        MeloThemePolicy.ColorTheme.entries.forEach { theme ->
+            content.addView(choiceRow(theme.displayName, theme == colorTheme) {
+                MeloThemePolicy.save(prefs, theme)
+                render()
+            })
+        }
+        val rowArtOn = MeloThemePolicy.rowArtSwitch(prefs)
+        content.addView(choiceRow("Tải ảnh bìa từ Telegram", rowArtOn, checkbox = true) {
+            MeloThemePolicy.setRowArtSwitch(prefs, !rowArtOn)
+            render()
+        })
+        content.addView(note(
+            "Tắt công tắc này nếu muốn dừng tải ảnh bìa; các dòng sẽ hiện ô chữ cái như cũ."
+        ))
+
         content.addView(components.sectionTitle("Màn Đang phát"))
         content.addView(note(
             "Studio Deck: ảnh bìa lớn, −30s / +60s, hàng nút điều khiển luôn nằm cuối màn, hẹn giờ tắt, " +

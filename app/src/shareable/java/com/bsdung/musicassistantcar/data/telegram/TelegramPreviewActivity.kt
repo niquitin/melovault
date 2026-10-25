@@ -4802,7 +4802,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // No window size in the key: resizing inside one screen type keeps the screen (list position,
         // search box, open groups) and the views stretch by themselves. Only the type, profile,
         // density and font scale rebuild it (E95 F03d).
-        val key = "new:$layer:$profile:${display.densityDpi}:${display.fontScale}"
+        // E98: the colour theme is part of the key, so choosing it in Cài đặt giao diện rebuilds the screen.
+        val theme = MeloThemePolicy.effective(MeloThemePolicy.load(prefs), layer, profile)
+        val key = "new:$layer:$profile:${theme.key}:${display.densityDpi}:${display.fontScale}"
         if ((phoneScreen != null || tabletScreen != null) && meloLayerKey == key) {
             // The window moved or resized: the handle band and the bars are measured again.
             meloLayer?.let { ViewCompat.requestApplyInsets(it) }
@@ -4813,14 +4815,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val sizes = MeloDesignTokens.sizes(profile, display.density, display.fontScale, display.physicalPpi)
         val view: View
         if (layer == MeloLibraryPolicy.NewLayer.TWO_PANE) {
-            val screen = MeloTabletScreen(this, sizes, meloHost, onBackPressedDispatcher)
+            val screen = MeloTabletScreen(this, sizes, meloHost, onBackPressedDispatcher, theme)
             tabletScreen = screen
             view = screen.view
             installLayerInsets(view)
             addMeloLayer(view, key)
             screen.attach()
         } else {
-            val screen = MeloPhoneScreen(this, sizes, layer, meloHost, onBackPressedDispatcher)
+            val screen = MeloPhoneScreen(this, sizes, layer, meloHost, onBackPressedDispatcher, theme)
             phoneScreen = screen
             view = screen.view
             installLayerInsets(view)

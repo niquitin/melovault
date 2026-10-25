@@ -29,9 +29,10 @@ internal class MeloTabletScreen(
     private val context: Context,
     sizes: Sizes,
     private val host: MeloScreenHost,
-    private val backDispatcher: OnBackPressedDispatcher
+    private val backDispatcher: OnBackPressedDispatcher,
+    theme: MeloThemePolicy.ColorTheme = MeloThemePolicy.ColorTheme.CURRENT
 ) {
-    private val c = MeloComponents(context, sizes)
+    private val c = MeloComponents(context, sizes, theme)
     private val s = c.sizes
     private val p = c.palette
 
