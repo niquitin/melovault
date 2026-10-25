@@ -1,5 +1,12 @@
 # HANDOFF — MeloVault (Shareable Preview)
-## Cập nhật tích hợp 19/10/2026 — E94 MERGED (ƯU TIÊN CAO NHẤT)
+## Cập nhật tích hợp 25/10/2026 — E98 MERGED (ƯU TIÊN CAO NHẤT)
+
+- **E98-THEME-ANH-BIA: PASS** (chủ dự án "ĐẠT" 25/10; nghiệm thu Opus `3092e9e`, `docs/plans/E98-THEME-ANH-BIA-nghiem-thu.md`). Theme Teal sáng + ảnh bìa dòng, REWORK-01 thẻ "Đang phát" lớn ở Thanh đáy gộp (Gọn giữ 8 dòng trên Shanling). APK đã duyệt vc113 / `0.6.89.1-beta` @ `48449ab`, SHA-256 `200E6EBC…0210F6`, link Drive owner-only ở `docs/plans/E98-THEME-ANH-BIA-apk-test.md`.
+- Merge `--no-ff` vào `feature/e93-03d-y700-offline-cockpit`: **merge commit `98662c7`** (parent `0b4aa49` + `3092e9e`). Kéo theo luôn E95, E96 (P0–P5B3) và E97A nằm dưới E98 (57 commit, 155 file) — chủ dự án chọn như vậy. Cây sau merge giống hệt `dot/E98-THEME-ANH-BIA`; test trên cây đó: 2038 test mỗi biến thể, 21 bỏ qua, 0 lỗi, build Debug/Release OK. Chưa push.
+- Giới hạn còn mở: Y700/S25/FYT/Car Mode trên máy, cỡ chữ lớn, Gọn lúc đang quét offline (có thể 7 dòng), âm thanh thật chưa xác nhận. Shanling đang cài vc113; Sony vc113.
+- Mục bên dưới là lịch sử trước 25/10.
+
+## Cập nhật tích hợp 19/10/2026 — E94 MERGED
 
 - **E94-LOCAL-MUSIC:** chủ dự án đã duyệt PASS (commit nghiệm thu c2fa595) với các giới hạn nêu trong biên bản. Đã merge bằng --no-ff vào feature/e93-03d-y700-offline-cockpit; **merge commit 0b984f79beb9413c3d6e871835b1eaa4f40e0cd9**, hai parent: 0cc29e3 và 1a91ab3. Nhánh dot/E94-LOCAL-MUSIC vẫn lưu, chưa xóa; không phát hành APK mới khi merge.
 - ChatGPT độc lập chạy lại trên integration: testShareableDebugUnitTest, testShareableReleaseUnitTest, assembleShareableDebug và assembleShareableRelease (offline): **BUILD SUCCESSFUL**; mỗi biến thể 1.302 tests, 21 skipped, 0 failures/errors; working tree sau merge sạch; git diff HEAD^ HEAD --check sạch.
