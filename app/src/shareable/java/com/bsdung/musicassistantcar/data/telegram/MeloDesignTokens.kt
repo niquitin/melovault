@@ -125,7 +125,7 @@ internal object MeloDesignTokens {
     )
 
     private val DP_PROFILES = mapOf(
-        Profile.COMPACT to DpProfile(16f, 13f, 40, 56, 56, 16, 0),
+        Profile.COMPACT to DpProfile(16f, 13f, 40, 52, 56, 16, 0),
         Profile.PHONE to DpProfile(16f, 13f, 56, 72, 64, 16, 0),
         Profile.TABLET to DpProfile(17f, 14f, 64, 80, 72, 24, 80)
     )

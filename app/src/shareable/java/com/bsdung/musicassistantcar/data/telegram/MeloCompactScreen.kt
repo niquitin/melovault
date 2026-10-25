@@ -250,7 +250,7 @@ internal class MeloCompactScreen(
     private fun dp(v: Int) = (v * context.resources.displayMetrics.density).toInt()
 
     /**
-     * Rows are 56dp edge to edge so 8 fit above the 72dp bar on the 574dp Shanling window;
+     * Rows are 52dp edge to edge so 8 fit above the 102dp bar on the 574dp Shanling window;
      * insetting the drawn background by 1dp on top and bottom leaves the 2dp visual gap.
      */
     private fun rowGap(row: View) {

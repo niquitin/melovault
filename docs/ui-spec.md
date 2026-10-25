@@ -41,7 +41,7 @@ Cỡ chữ và cỡ nút theo từng hồ sơ (đơn vị dp/sp của Android; r
 
 | Hồ sơ | Tên bài | Chữ phụ | Ảnh bìa trong danh sách | Chiều cao dòng | Nút Phát/Dừng | Vùng bấm tối thiểu |
 | --- | --- | --- | --- | --- | --- | --- |
-| Máy nhỏ (Shanling) | 16sp | 13sp | 40dp | 56dp | 56dp | 48dp |
+| Máy nhỏ (Shanling) | 16sp | 13sp | 40dp | 52dp | 56dp | 48dp |
 | Điện thoại (S25 Ultra) | 16sp | 13sp | 56dp | 72dp | 64dp | 48dp |
 | Tablet (Y700) | 17sp | 14sp | 64dp | 80dp | 72dp | 48dp |
 | Car Mode (FYT) | 40px | 30px | 128px | 160px | 240×160px | 100px (15mm) |
@@ -111,11 +111,11 @@ Hệ quả: cửa sổ thật cao 574dp (không phải 640dp), và khi bàn phí
 | Phần | Chiều cao |
 | --- | --- |
 | Đầu trang (☰, tên nhóm, tìm kiếm, ⋮) | 48dp |
-| Danh sách: 8 bài × 56dp | 448dp |
-| Thanh đáy gộp | 72dp |
-| Cộng | 568dp / 574dp |
+| Danh sách: 8 bài × 52dp | 416dp |
+| Thanh đáy gộp (tiến trình 2dp + thẻ Đang phát 48dp + hàng nút 52dp) | 102dp |
+| Cộng | 566dp / 574dp |
 
-Đã đối chiếu (Beta106, 18/10/2026): trong khung thử Shanling 384×640dp (Cài đặt giao diện) danh sách Gọn thấy 9 dòng 56dp sát nhau + thanh đáy 72dp, nên cửa sổ 574dp vẫn đủ 8 dòng (574 − 48 − 72 − 2 = 452 ≥ 448). Danh sách Gọn không dùng đường kẻ 4dp (chỉ vừa 7 dòng): dòng sát nhau, nền thụt 1dp trên/dưới để vẫn thấy khoảng cách 2dp. Đã xác nhận trên Shanling thật (chủ dự án chụp ảnh, 18/10/2026): cửa sổ app 384 × 574dp, danh sách Gọn thấy đủ 8 dòng trên thanh đáy 72dp, phím vật lý điều khiển được. Theo số đo thật, 1dp ≈ 0,2mm nên nút 48dp ≈ 9,5mm, bấm thoải mái. Không làm nút nhỏ hơn 48dp.
+Đã đối chiếu (Beta106, 18/10/2026): trong khung thử Shanling 384×640dp (Cài đặt giao diện) danh sách Gọn thấy 9 dòng 56dp sát nhau + thanh đáy 72dp, nên cửa sổ 574dp vẫn đủ 8 dòng (574 − 48 − 72 − 2 = 452 ≥ 448). Danh sách Gọn không dùng đường kẻ 4dp (chỉ vừa 7 dòng): dòng sát nhau, nền thụt 1dp trên/dưới để vẫn thấy khoảng cách 2dp. Đã xác nhận trên Shanling thật (chủ dự án chụp ảnh, 18/10/2026): cửa sổ app 384 × 574dp, danh sách Gọn thấy đủ 8 dòng trên thanh đáy 72dp, phím vật lý điều khiển được. Theo số đo thật, 1dp ≈ 0,2mm nên nút 48dp ≈ 9,5mm, bấm thoải mái. Không làm nút nhỏ hơn 48dp. REWORK-01 (25/10/2026): thanh đáy thêm thẻ Đang phát nên cao 102dp và dòng Gọn còn 52dp (ảnh 40dp): 574 − 48 − 102 − 2 = 422 ≥ 8 × 52 = 416, vẫn đủ 8 dòng.
 
 **FYT 7870 — tính theo pixel thật, không theo dp.** Màn rộng 282 × 176mm, nhìn từ khoảng 70cm (điện thoại khoảng 30cm), nên chữ và nút phải to gấp khoảng 2,3 lần điện thoại. Vì firmware FYT có thể đặt mật độ Android bất kỳ, Car Mode đọc mật độ vật lý thật của màn (xdpi/ydpi) và quy đổi từ milimet, nên hiển thị đúng kích thước dù firmware đặt 160 hay 240.
 
@@ -157,17 +157,17 @@ Mọi màn ghép từ cùng một bộ thành phần; chỉ cỡ và số thông
 
 **Thanh đáy gộp** (thay cho mini player + thanh điều hướng dưới riêng rẽ; học từ app MeloWave, 18/10/2026). Chỉ dùng cho bố cục dọc (Gọn, Điện thoại, Tablet dọc); bố cục ngang và Car Mode giữ cột điều hướng trái và khung trình phát lớn như cũ.
 
-- Một khối duy nhất ở đáy màn, gồm từ trên xuống: thanh tiến trình mảnh 2dp sát mép trên (màu nhấn chính); một dòng tên bài · tên kênh (bấm = mở màn Đang phát, vuốt lên cũng mở); một hàng nút.
+- Một khối duy nhất ở đáy màn, gồm từ trên xuống: thanh tiến trình mảnh 2dp sát mép trên (màu nhấn chính); **thẻ Đang phát** (REWORK-01, 25/10/2026): ảnh bìa bên trái, giữa là tên bài (đậm, một dòng, “…” cuối) và dưới là kênh/nghệ sĩ chữ nhỏ màu phụ, bên phải “⌃” ~24dp; bấm bất kỳ chỗ nào trên thẻ = mở màn Đang phát, vuốt lên cũng mở; nền thẻ theo bảng màu của giao diện đang dùng (Hiện tại hoặc Teal sáng); một hàng nút.
 - Hàng nút: tab bên trái · Lùi · **Phát/Dừng ở giữa, nút tròn to nhất** · Tiến · tab bên phải. Tab đang chọn có nền nhấn dịu và chữ nhấn chính.
-- Không được có chỗ điều khiển phát thứ hai trên cùng màn (không thêm thẻ “đang phát” riêng phía trên thanh đáy).
-- Khi chưa có bài nào phát: ẩn dòng tên bài và thanh tiến trình, nút Phát mờ đi.
+- Không được có chỗ điều khiển phát thứ hai trên cùng màn: thẻ Đang phát nằm trong Thanh đáy gộp, chỉ mở màn Đang phát, không có nút Phát riêng. Bấm tab hoặc ⏮ ⏯ ⏭ không mở màn Đang phát.
+- Khi chưa có bài nào phát: ẩn thẻ (giữ chỗ) và thanh tiến trình, nút Phát mờ đi. Thẻ cao tối thiểu theo bảng dưới, tăng theo cỡ chữ hệ thống, không bao giờ dưới 48dp.
 - Chưa đăng nhập Telegram: ẩn cả thanh (xem “Màn đăng nhập Telegram”).
 
-| Hồ sơ | Chiều cao thanh đáy | Dòng tên bài | Nút Phát | Lùi / Tiến | Tab |
-| --- | --- | --- | --- | --- | --- |
-| Gọn (Shanling) | 72dp | 18dp, chữ 13sp | tròn 52dp | 48dp | 2 tab: Thư viện · Telegram; Playlist, Đã tải, Cài đặt vào menu ☰ |
-| Điện thoại (S25) | 88dp | 22dp, chữ 14sp | tròn 60dp | 48dp | 4 tab: Thư viện · Telegram · Playlist · Đã tải (2 tab mỗi bên nút) |
-| Tablet dọc (Y700) | 96dp | 24dp, chữ 15sp | tròn 64dp | 56dp | 4 tab như điện thoại |
+| Hồ sơ | Chiều cao thanh đáy | Thẻ Đang phát (cao tối thiểu) | Ảnh bìa | Tên bài / kênh | Nút Phát | Lùi / Tiến | Tab |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Gọn (Shanling) | 102dp (2 + 48 + 52) | 48dp | 36dp | 14sp đậm / 12sp | tròn 52dp | 48dp | 2 tab: Thư viện · Telegram; Playlist, Đã tải, Cài đặt vào menu ☰ |
+| Điện thoại (S25) | 122dp (2 + 56 + 64) | 56dp | 40dp | 15sp đậm / 12sp | tròn 60dp | 48dp | 4 tab: Thư viện · Telegram · Playlist · Đã tải (2 tab mỗi bên nút) |
+| Tablet dọc (Y700) | 132dp (2 + 60 + 70) | 60dp | 44dp | 16sp đậm / 13sp | tròn 64dp | 56dp | 4 tab như điện thoại |
 
 Mọi vùng bấm vẫn tối thiểu 48dp. Trên Shanling, nút vật lý của máy cũng điều khiển Lùi / Phát / Tiến như thường.
 
@@ -195,7 +195,7 @@ Từ trên xuống:
 4. Tiêu đề nhóm đang xem (ví dụ “Nhạc Lạnh – Chillout (EMI) · 77 bài”) kèm nút Phát hết.
 5. Hàng thẻ nguồn nhạc (thu gọn khi cuộn xuống).
 6. Danh sách bài, dòng cao 72dp, ảnh bìa 56dp.
-7. Thanh đáy gộp 88dp (4 tab + Lùi / Phát / Tiến).
+7. Thanh đáy gộp 122dp (thẻ Đang phát + 4 tab + Lùi / Phát / Tiến).
 
 Các điểm riêng cho máy này:
 
@@ -215,7 +215,7 @@ Dùng hồ sơ Gọn: vẫn là bố cục dọc như S25 Ultra nhưng bớt th�
 | Chip lọc | Cuộn ngang | Bỏ; chọn qua menu ⋮ |
 | Dòng bài hát | 2 dòng, ảnh 56dp | 1 dòng tên + biểu tượng trạng thái nhỏ, ảnh 40dp |
 | Thẻ nguồn nhạc | Hàng thẻ đầu Thư viện | Bỏ; chọn nguồn qua menu ☰ |
-| Thanh đáy gộp | 88dp, 4 tab | 72dp, 2 tab (Thư viện · Telegram); mục còn lại vào menu ☰ góc trái |
+| Thanh đáy gộp | 122dp (thẻ Đang phát 56dp), 4 tab | 102dp (thẻ 48dp), 2 tab (Thư viện · Telegram); mục còn lại vào menu ☰ góc trái |
 | Màn Đang phát | Đầy đủ | Ảnh bìa, tên bài, hàng viên thông số chất lượng, thanh tiến trình, 3 nút Lùi / Phát / Tiến; phần còn lại vuốt lên mới thấy |
 
 Các điểm riêng:
@@ -245,7 +245,7 @@ Cầm ngang dùng bố cục Hai khung; cầm dọc dùng bố cục điện tho
 
 **Cầm ngang – Đang phát**: nguyên Studio Deck — khung trái đĩa nhạc + sóng âm + nút, khung phải hàng đợi đánh số với trạng thái từng bài.
 
-**Cầm dọc**: giống S25 Ultra, nhưng màn Telegram chia lưới 2 cột thẻ, Thanh đáy gộp cao 96dp.
+**Cầm dọc**: giống S25 Ultra, nhưng màn Telegram chia lưới 2 cột thẻ, Thanh đáy gộp cao 132dp (thẻ Đang phát 60dp).
 
 ## Màn hình ô tô FYT 7870 – Car Mode (máy dùng chính)
 

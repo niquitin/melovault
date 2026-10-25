@@ -37,7 +37,8 @@ class MeloDesignTokensTest {
         assertEquals(16f, compact.titleText, 0.01f)
         assertEquals(13f, compact.secondaryText, 0.01f)
         assertEquals(40, compact.rowArt)
-        assertEquals(56, compact.rowHeight)
+        // REWORK-01: 52dp so that 8 rows still fit above the taller bottom bar on the Shanling.
+        assertEquals(52, compact.rowHeight)
         assertEquals(56, compact.playButtonWidth)
         assertEquals(56, compact.miniPlayerHeight)
         assertEquals(16, compact.screenMargin)
@@ -61,7 +62,7 @@ class MeloDesignTokensTest {
     fun dpProfilesScaleWithDensityAndTextWithFontScale() {
         val s = MeloDesignTokens.sizes(Profile.COMPACT, 2f, 1.3f, 355f)
         assertEquals(80, s.rowArt)
-        assertEquals(112, s.rowHeight)
+        assertEquals(104, s.rowHeight)
         assertEquals(96, s.minTouch)
         assertEquals(16f * 2f * 1.3f, s.titleText, 0.01f)
     }

@@ -20,19 +20,27 @@ internal object MeloBottomBarPolicy {
     /** All sizes in dp (spec table); the view multiplies by the screen density. */
     data class Spec(
         val heightDp: Int,
-        val titleLineDp: Int,
+        /** Minimum height of the "Đang phát" card above the button row. */
+        val cardDp: Int,
+        val artDp: Int,
         val titleSp: Float,
+        val channelSp: Float,
         val playDp: Int,
         val skipDp: Int,
         val tabs: List<Tab>
     )
 
-    private val SPEC_COMPACT = Spec(72, 18, 13f, 52, 48, listOf(Tab.LIBRARY, Tab.TELEGRAM))
-    private val SPEC_PHONE = Spec(88, 22, 14f, 60, 48, listOf(Tab.LIBRARY, Tab.TELEGRAM, Tab.PLAYLIST, Tab.DOWNLOADED))
-    private val SPEC_TABLET = Spec(96, 24, 15f, 64, 56, listOf(Tab.LIBRARY, Tab.TELEGRAM, Tab.PLAYLIST, Tab.DOWNLOADED))
+    // heightDp = PROGRESS_DP + cardDp + button row (52 / 64 / 70).
+    private val SPEC_COMPACT = Spec(102, 48, 36, 14f, 12f, 52, 48, listOf(Tab.LIBRARY, Tab.TELEGRAM))
+    private val SPEC_PHONE = Spec(122, 56, 40, 15f, 12f, 60, 48, listOf(Tab.LIBRARY, Tab.TELEGRAM, Tab.PLAYLIST, Tab.DOWNLOADED))
+    private val SPEC_TABLET = Spec(132, 60, 44, 16f, 13f, 64, 56, listOf(Tab.LIBRARY, Tab.TELEGRAM, Tab.PLAYLIST, Tab.DOWNLOADED))
 
     const val PROGRESS_DP = 2
     const val MIN_TOUCH_DP = 48
+    const val CARD_PAD_DP = 6
+    const val CARD_MARGIN_DP = 4
+    /** Width of the "⌃" hint on the right of the card. */
+    const val CARD_CHEVRON_DP = 24
 
     /** Gọn list: rows sit edge to edge (pitch = row height); the 1dp inset on each side draws the gap. */
     const val COMPACT_ROW_INSET_DP = 1
@@ -93,6 +101,22 @@ internal object MeloBottomBarPolicy {
 
     fun contentDescription(title: String, sourceTitle: String?): String =
         "Đang phát: ${titleLine(title, sourceTitle)}. Bấm hoặc vuốt lên để mở màn Đang phát"
+
+    /** Second line of the card: the channel (or artist / folder for local songs); null when unknown. */
+    fun channelLine(sourceTitle: String?): String? = sourceTitle?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** Height of the transport row under the card; it never changes with the card. */
+    fun rowDp(spec: Spec): Int = spec.heightDp - PROGRESS_DP - spec.cardDp
+
+    /**
+     * Card height: the table value, grown when two text lines at the system font scale need more,
+     * and never below the 48dp touch target.
+     */
+    fun cardHeightDp(spec: Spec, fontScale: Float): Int {
+        val lines = (spec.titleSp + spec.channelSp) * 1.2f * fontScale.coerceAtLeast(1f)
+        val needed = Math.ceil((lines + CARD_PAD_DP * 2).toDouble()).toInt()
+        return maxOf(spec.cardDp, needed, MIN_TOUCH_DP)
+    }
 
     /** Width each tab may take: what is left of the row after the three transport buttons. */
     fun tabWidthDp(windowWidthDp: Int, spec: Spec, sideMarginsDp: Int): Int {
