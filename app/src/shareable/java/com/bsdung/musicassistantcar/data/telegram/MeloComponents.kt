@@ -935,9 +935,11 @@ internal class MeloSeekLine(
             }
 
             override fun onStopTrackingTouch(bar: SeekBar?) {
+                // Read the target first: onPreview(null) re-renders and set() puts the dot back at the play position.
+                val target = MeloNowPlayingPolicy.seekBarTarget(progress, durationMs)
                 dragging = false
                 onPreview(null)
-                MeloNowPlayingPolicy.seekBarTarget(progress, durationMs)?.let(onSeek)
+                target?.let(onSeek)
             }
         })
     }
