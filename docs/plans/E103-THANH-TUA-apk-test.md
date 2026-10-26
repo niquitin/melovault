@@ -2,7 +2,7 @@
 
 ## Bản hiện tại: vc119 (26/10/2026)
 
-**Trạng thái:** **QA CANDIDATE — CHƯA NGHIỆM THU** (BLOCKED — CHỜ CHỦ DỰ ÁN, xem `E103-THANH-TUA-nghiem-thu.md`). Chức năng tua đã QA trên Sony + Shanling; còn điểm F1 (thanh dày, chấm khó thấy) chờ chủ dự án chốt. Âm thanh thật chưa xác nhận; Teal/FYT/Y700/S25 chưa kiểm.
+**Trạng thái:** **QA CANDIDATE — CHƯA NGHIỆM THU** (**REWORK F1** 26/10: thanh dày, chấm khó thấy — chờ bản sửa mới; xem `E103-THANH-TUA-nghiem-thu.md` mục 10). Chức năng tua đã QA trên Sony + Shanling. Âm thanh thật chưa xác nhận; Teal/FYT/Y700/S25 chưa kiểm.
 
 - [MỞ APK TEST E103 (vc119) TRÊN GOOGLE DRIVE](https://drive.google.com/file/d/1SVXCseL2oRQoKewCkFHcFrfjIFE2gHiY/view)
 - [THƯ MỤC APK + ẢNH QA vc119](https://drive.google.com/drive/folders/1aeCnnh9bouU5iO6RpNQcW2o_JbVywifN)
