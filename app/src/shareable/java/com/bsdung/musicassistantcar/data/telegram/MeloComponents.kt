@@ -906,15 +906,23 @@ internal class MeloSeekLine(
     init {
         max = MeloNowPlayingPolicy.SEEK_BAR_MAX
         val radius = trackPx / 2f
-        val track = GradientDrawable().apply { setColor(trackColor); cornerRadius = radius; setSize(1, trackPx) }
+        val track = GradientDrawable().apply { setColor(trackColor); cornerRadius = radius }
         val fill = ClipDrawable(GradientDrawable().apply { setColor(fillColor); cornerRadius = radius }, Gravity.START, ClipDrawable.HORIZONTAL)
+        // SeekBar stretches the track to its style height (~16 dp); fixed layer height + gravity keeps it trackPx thick and centred.
         progressDrawable = LayerDrawable(arrayOf(track, fill)).apply {
             setId(0, android.R.id.background)
             setId(1, android.R.id.progress)
+            for (i in 0..1) {
+                setLayerHeight(i, trackPx)
+                setLayerGravity(i, Gravity.CENTER_VERTICAL or Gravity.FILL_HORIZONTAL)
+            }
         }
+        // The dot has the same colour as the played part, so a thin ring in the track colour keeps it visible on top of it.
+        val ringPx = maxOf(1, thumbPx / 8)
         thumb = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(thumbColor)
+            setStroke(ringPx, trackColor)
             setSize(thumbPx, thumbPx)
         }
         splitTrack = false
