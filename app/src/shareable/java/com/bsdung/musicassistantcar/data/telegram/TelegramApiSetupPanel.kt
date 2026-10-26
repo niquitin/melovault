@@ -21,8 +21,8 @@ internal class TelegramApiSetupPanel(
 ) {
     private fun dp(value: Int) = (value * context.resources.displayMetrics.density + 0.5f).toInt()
     private fun rounded() = GradientDrawable().apply {
-        setColor(colors.surface)
-        setStroke(dp(1), colors.border)
+        setColor(this@TelegramApiSetupPanel.colors.surface)
+        setStroke(dp(1), this@TelegramApiSetupPanel.colors.border)
         cornerRadius = dp(12).toFloat()
     }
     val root = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; isSaveEnabled = false }
@@ -58,11 +58,11 @@ internal class TelegramApiSetupPanel(
         text = "Lưu và tiếp tục"
         isAllCaps = false
         setTextColor(colors.onAccent)
-        background = GradientDrawable().apply { setColor(colors.accent); cornerRadius = dp(12).toFloat() }
+        background = GradientDrawable().apply { setColor(this@TelegramApiSetupPanel.colors.accent); cornerRadius = dp(12).toFloat() }
         minHeight = dp(MeloDesignTokens.MIN_TOUCH_DP)
         setOnClickListener {
             if (!busy) {
-                val result = TelegramApiCredentialPolicy.validate(id.text.toString(), hash.text.toString())
+                val result = TelegramApiCredentialPolicy.validate(this@TelegramApiSetupPanel.id.text.toString(), hash.text.toString())
                 show(idError, result.idError?.text)
                 show(hashError, result.hashError?.text)
                 showError(null)
