@@ -1,5 +1,7 @@
 package com.bsdung.musicassistantcar.data.telegram
 
+import com.bsdung.musicassistantcar.data.telegram.MeloRowArtPolicy.ArtChange
+import com.bsdung.musicassistantcar.data.telegram.MeloRowArtPolicy.Blur
 import com.bsdung.musicassistantcar.data.telegram.MeloRowArtPolicy.MissCache
 import com.bsdung.musicassistantcar.data.telegram.MeloRowArtPolicy.Scheduler
 import org.json.JSONObject
@@ -259,6 +261,53 @@ class MeloRowArtPolicyTest {
         assertEquals(0, s.pendingCount)
         assertEquals(0, s.inFlightCount)
         assertNull(s.next())
+    }
+
+    @Test
+    fun blurPlanSkipsTheBlurWhenTheSharpCoverIsOnDisk() {
+        listOf(true, false).forEach { onDisk ->
+            listOf(true, false).forEach { toDownload ->
+                assertEquals(Blur.NONE, MeloRowArtPolicy.blurPlan(false, onDisk, toDownload))
+            }
+        }
+        assertEquals(Blur.NONE, MeloRowArtPolicy.blurPlan(true, true, true))
+        assertEquals(Blur.NONE, MeloRowArtPolicy.blurPlan(true, true, false))
+        assertEquals(Blur.LATER, MeloRowArtPolicy.blurPlan(true, false, true))
+        assertEquals(Blur.NOW, MeloRowArtPolicy.blurPlan(true, false, false))
+    }
+
+    @Test
+    fun rowPictureLoaderWinsLegacyFillsIn() {
+        assertEquals("a", MeloRowArtPolicy.rowPicture("a", "b"))
+        assertEquals("b", MeloRowArtPolicy.rowPicture(null, "b"))
+        assertNull(MeloRowArtPolicy.rowPicture<String>(null, null))
+    }
+
+    @Test
+    fun artChangeNeverTakesAPictureAway() {
+        assertEquals(ArtChange.NONE, MeloRowArtPolicy.artChange(showing = true, sameAsShown = false, incoming = false))
+        assertEquals(ArtChange.NONE, MeloRowArtPolicy.artChange(showing = false, sameAsShown = false, incoming = false))
+        assertEquals(ArtChange.APPEAR, MeloRowArtPolicy.artChange(showing = false, sameAsShown = false, incoming = true))
+        assertEquals(ArtChange.NONE, MeloRowArtPolicy.artChange(showing = true, sameAsShown = true, incoming = true))
+        assertEquals(ArtChange.SWAP, MeloRowArtPolicy.artChange(showing = true, sameAsShown = false, incoming = true))
+    }
+
+    @Test
+    fun sendOrderPutsTheTopRowFirstOnTheScheduler() {
+        val rows = (0..8).map { "r$it" }
+        assertEquals(rows.reversed(), MeloRowArtPolicy.sendOrder(rows))
+        val s = Scheduler()
+        MeloRowArtPolicy.sendOrder(rows).forEach { s.request(it) }
+        assertEquals("r0", s.next())
+        assertEquals("r1", s.next())
+        assertEquals("r2", s.next())
+        assertNull(s.next())
+    }
+
+    @Test
+    fun blurAndFadeTimingsAreTheContract() {
+        assertEquals(400L, MeloRowArtPolicy.BLUR_DELAY_MS)
+        assertEquals(150L, MeloRowArtPolicy.FADE_MS)
     }
 
     @Test

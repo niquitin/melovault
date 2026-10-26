@@ -152,6 +152,42 @@ internal object MeloRowArtPolicy {
     /** A reply from TDLib or a decoder still counts only for the generation that asked. */
     fun isCurrent(askedGeneration: Long, currentGeneration: Long): Boolean = askedGeneration == currentGeneration
 
+    // ---- One change per row (E101) -------------------------------------------------------------
+
+    /** A blur waits this long for the real cover before it is shown. */
+    const val BLUR_DELAY_MS = 400L
+    /** The letter tile fades out over this long when a cover first appears. */
+    const val FADE_MS = 150L
+
+    enum class Blur { NONE, NOW, LATER }
+
+    /**
+     * NONE: no minithumbnail, or the real cover is already on disk. NOW: the blur is all there is.
+     * LATER: show it only if the download turns out to be slow.
+     */
+    fun blurPlan(hasMini: Boolean, sharpOnDisk: Boolean, sharpToDownload: Boolean): Blur = when {
+        !hasMini -> Blur.NONE
+        sharpOnDisk -> Blur.NONE
+        sharpToDownload -> Blur.LATER
+        else -> Blur.NOW
+    }
+
+    /** One picture source per row: the loader's cover wins, the old cache only fills in when the loader has none. */
+    fun <T : Any> rowPicture(loaded: T?, legacy: T?): T? = loaded ?: legacy
+
+    enum class ArtChange { NONE, APPEAR, SWAP }
+
+    /** What putting a picture into a row does: nothing, first picture over the letter tile, or one picture replacing another. */
+    fun artChange(showing: Boolean, sameAsShown: Boolean, incoming: Boolean): ArtChange = when {
+        !incoming -> ArtChange.NONE
+        !showing -> ArtChange.APPEAR
+        sameAsShown -> ArtChange.NONE
+        else -> ArtChange.SWAP
+    }
+
+    /** Requests in the order the scheduler should be asked: it sends the newest first, so the top row goes in last. */
+    fun <T> sendOrder(rowsTopDown: List<T>): List<T> = rowsTopDown.asReversed()
+
     /**
      * Request book-keeping: newest request first (the row that just came on screen wins), at most
      * [MAX_IN_FLIGHT] running, anything no longer wanted is dropped before it is sent.
