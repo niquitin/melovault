@@ -770,6 +770,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
         dialog.listView?.setSelection((at - 2).coerceAtLeast(0))
     }
 
+    // E102: Cài đặt returns RESULT_LOGOUT after the owner confirmed "Đăng xuất" there; still signed in → log out now.
+    private val settingsResult = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == MeloUiLabActivity.RESULT_LOGOUT && auth.isReady()) logoutUser()
+    }
+
     // Car Mode voice search: the spoken text only fills the search field; nothing is stored.
     private var voiceSearchCallback: ((String) -> Unit)? = null
     private val voiceSearchResult = registerForActivityResult(
@@ -938,6 +945,20 @@ class TelegramPreviewActivity : AppCompatActivity() {
         uiForeground = true
         // Picks up a changed "Bố cục Gọn" setting when returning from Cài đặt giao diện.
         applyMeloLayer()
+        // E102: Cài đặt writes the theme preset and the source display mode; apply a changed value here
+        // (same effects as the old dialogs) and never write them back.
+        val uiPrefs = getSharedPreferences(UiThemePolicy.PREFS_NAME, Context.MODE_PRIVATE)
+        val savedPreset = UiThemePolicy.getSavedPreset(uiPrefs)
+        if (savedPreset != currentThemePreset) {
+            currentThemePreset = savedPreset
+            applyThemeColors()
+        }
+        val savedSourceMode = TelegramVaultBentoPolicy.getSavedSourceDisplayMode(uiPrefs)
+        if (savedSourceMode != currentSourceDisplayMode) {
+            currentSourceDisplayMode = savedSourceMode
+            updateSourceViewModeToggleUi()
+            refreshSongRows()
+        }
         // E96 P5-A: coming back from Settings re-reads the Playlist status line (a local file read, no network).
         library.authorizedUser()?.let {
             if (playlistLoaded) {
@@ -3433,7 +3454,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     refreshSongRows()
                 }
                 MeloSettingsPolicy.MenuId.OPEN_FILE -> if (auth.isReady()) openAudioDocument()
-                MeloSettingsPolicy.MenuId.SETTINGS -> startActivity(uiLabIntent())
+                MeloSettingsPolicy.MenuId.SETTINGS -> settingsResult.launch(uiLabIntent())
                 MeloSettingsPolicy.MenuId.LOCAL -> openLocalMusic()
             }
         })
@@ -5032,7 +5053,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
             .setTitle("Bật Car Mode?")
             .setMessage("Màn hình này rộng như màn hình ô tô. Car Mode dùng nút to, chữ lớn, 5 bài mỗi trang và ẩn thanh hệ thống. " +
-                "Có thể đổi lại trong ⋮ → Cài đặt giao diện.")
+                "Có thể đổi lại trong ⋮ → Cài đặt → Thiết bị & màn hình.")
             .setNegativeButton("Không", null)
             .setPositiveButton("Bật Car Mode") { _, _ ->
                 MeloCarPolicy.saveSetting(prefs, MeloCarPolicy.CarSetting.ON)
@@ -5117,6 +5138,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun uiLabIntent(): Intent {
         val lab = Intent(this, MeloUiLabActivity::class.java)
             .putExtra(MeloUiLabActivity.EXTRA_SONG_COUNT, totalCountForCurrentView)
+            .putExtra(MeloUiLabActivity.EXTRA_SIGNED_IN, auth.isReady())
         meloLibraryDiag?.let { diag ->
             lab.putExtra(MeloUiLabActivity.EXTRA_LIB_LIVE_SONGS, diag.liveSongs)
                 .putExtra(MeloUiLabActivity.EXTRA_LIB_STORED_CHANNELS, diag.storedChannels)
@@ -5455,7 +5477,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         override fun openLegacyOverflow(anchor: View) = showLibraryOverflow(anchor)
 
         override fun openUiLab() {
-            startActivity(uiLabIntent())
+            settingsResult.launch(uiLabIntent())
         }
 
         override fun saveListAnchor(groupKey: String, songKey: Long?, offsetPx: Int) {

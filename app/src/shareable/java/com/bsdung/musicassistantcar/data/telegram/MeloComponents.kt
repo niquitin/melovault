@@ -609,7 +609,7 @@ internal class MeloComponents(
             addView(label, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             val d = sizes.gap
             addView(dot, LinearLayout.LayoutParams(d, d).apply { marginStart = sizes.gap; marginEnd = sizes.gap / 2 })
-            addView(vectorButton(R.drawable.ic_settings, "Cài đặt giao diện", palette.text) { onSettings() })
+            addView(vectorButton(R.drawable.ic_settings, "Cài đặt", palette.text) { onSettings() })
         }
 
         fun update(headline: CharSequence, state: MeloThemePolicy.SyncDot) {

@@ -82,7 +82,7 @@ internal class MeloPhoneScreen(
             titleRow.addView(c.logo(s.playerTitleText), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         } else {
             titleRow.addView(c.text("MeloVault", s.playerTitleText, p.text, bold = true), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            titleRow.addView(c.iconButton("⚙", "Cài đặt giao diện") { host.openUiLab() }.apply { background = null; setTextColor(p.text) })
+            titleRow.addView(c.iconButton("⚙", "Cài đặt") { host.openUiLab() }.apply { background = null; setTextColor(p.text) })
         }
         lateinit var more: View
         more = c.iconButton("⋮", "Tuỳ chọn thư viện") { host.openLegacyOverflow(more) }.apply { background = null; setTextColor(p.text) }

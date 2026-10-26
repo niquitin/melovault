@@ -367,7 +367,7 @@ internal class MeloCompactScreen(
             menu.add(0, 6, 4, "✓ Đã tải")
             menu.add(0, 7, 4, "♪ Nhạc trên máy")
             menu.add(0, 4, 5, "▶ Đang phát")
-            menu.add(0, 5, 6, "⚙ Cài đặt giao diện")
+            menu.add(0, 5, 6, "⚙ Cài đặt")
             setOnMenuItemClickListener {
                 when (it.itemId) {
                     1 -> { host.openSource(null); host.setMode(Mode.ALL) }
@@ -389,7 +389,7 @@ internal class MeloCompactScreen(
             menu.add(0, 1, 1, (if (mode == Mode.ALL) "✓ " else "") + "Tất cả")
             menu.add(0, 2, 2, (if (mode == Mode.DOWNLOADED) "✓ " else "") + "Đã tải")
             menu.add(0, 3, 3, (if (mode == Mode.PLAYLIST) "✓ " else "") + "Playlist")
-            menu.add(0, 4, 4, "Thêm… (đồng bộ, đăng xuất)")
+            menu.add(0, 4, 4, "Thêm… (đồng bộ, nguồn)")
             setOnMenuItemClickListener {
                 when (it.itemId) {
                     1 -> host.setMode(Mode.ALL)
