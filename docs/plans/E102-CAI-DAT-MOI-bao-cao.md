@@ -83,6 +83,111 @@ APK build trên Ni **không có Telegram config** nên **không dùng để cài
 - Màn Shanling/Sony: phiên 1 không đánh thức máy nào (`SHANLING_SCREEN_END`, `SONY_SCREEN_END`: không áp dụng ở phiên 1).
 - Rollback theo thứ tự S5 → S4 → S3 (độc lập); S1–S2 chỉ thêm code thuần và getter; giữ vc118 để không downgrade.
 
-### 8. APK QA cần Opus nghiệm thu bàn giao
+---
 
-**Chưa có.** Phiên 1 không build trên Tiny nên chưa có APK hợp lệ có Telegram config. Phiên 2 sẽ điền: Git commit, đường dẫn APK trên Tiny, package, versionCode/versionName, SHA-256, bytes, cert SHA-256, loại build, Telegram config true/false, kết quả test, kết quả ADB, điểm chưa QA.
+## Phiên 2 — build Tiny + QA thiết bị + bàn giao, 26/10/2026 11:25–11:37
+
+**Kết luận phiên 2 (Sonnet): Shanling bước 1–5 PASS; Sony bước 6 PASS; không FATAL/ANR. Chờ Opus nghiệm thu và chủ dự án xem ảnh.** Chưa xác nhận âm thanh thật (không phát nhạc).
+
+### 9. Build Tiny và gate cài
+
+| Mục | Giá trị |
+|---|---|
+| Git trên Ni khi bắt đầu | nhánh `dot/E102-CAI-DAT-MOI`, HEAD `2f4d736`, cây sạch, 5 commit S1–S5 + S6 có đủ trên nhánh, `git diff --check` sạch |
+| Bundle | `D:\Bots\_transfer\MeloVault_E102-CAI-DAT-MOI_full_2f4d736_20261026.bundle`, 12 765 802 byte, SHA-256 `CDCFA13356E5815AB33D375323EA75C8280EB5AECC3F98BF6496A2B41964F83C` (khớp sau khi chép sang Tiny) |
+| Clone cô lập Tiny | `C:\Bots\MeloVault-E102-IsolatedQA` @ `2f4d736`, sạch; `local.properties` chép nội bộ Tiny rồi xóa (nội dung không đọc, bản gốc không đổi: `original unchanged=True`) |
+| Build | `assembleShareableDebug` BUILD SUCCESSFUL 2m45s |
+| Telegram config | `telegram.config.valid=true` (chỉ boolean) |
+| Gradle test trên Ni (phiên 1) | Debug và Release đều 2089 test, 21 bỏ qua, 0 lỗi; phiên 2 không đổi mã nên không chạy lại |
+
+### 10. APK QA cần Opus nghiệm thu bàn giao
+
+| Mục | Giá trị |
+|---|---|
+| Nhãn | **QA CANDIDATE — CHƯA NGHIỆM THU** (Debug, ký bằng khóa debug Tiny, build Tiny) |
+| Git commit nguồn | `2f4d736` (nhánh `dot/E102-CAI-DAT-MOI`) |
+| Đường dẫn trên Tiny (đã xác minh tồn tại) | `C:\Bots\_qa_handoff\E102-CAI-DAT-MOI\MeloVault-E102-CAI-DAT-MOI-2f4d736-vc118-TinySigned-Debug.apk` |
+| Bản sao trên Ni | `D:\Bots\_transfer\E102\MeloVault-E102-CAI-DAT-MOI-2f4d736-vc118-TinySigned-Debug.apk` (SHA-256 và byte khớp Tiny) |
+| Package / version | `app.melovault.player` · versionCode **118** · versionName **0.6.93-beta** · native-code `arm64-v8a` |
+| SHA-256 | `0F1DB45A23D82E20CD1F0124CCAC33FD7B7BB21218D6BB16737DE78EE143D414` |
+| Bytes | 33 445 828 |
+| Cert SHA-256 | `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8` (bằng cert của bản vc117 đang cài trên Shanling và Sony) |
+| Telegram config hợp lệ | true |
+| Chưa làm | Không upload Drive, không công bố, không đổi quyền; Opus nghiệm thu tự kiểm toán |
+
+### 11. Cài thiết bị (chỉ `adb install -r`)
+
+| Thiết bị | Gate | Kết quả |
+|---|---|---|
+| Shanling M3 Ultra, Android 10, `30313860180939` (Ni) | model `Shanling M3 Ultra` / `Shanling`, trạng thái `device`; package đúng; đang vc117 (SHA `0EBA0E68…`, cert khớp) → vc118 không downgrade; media_session state=0 (không PLAYING); màn OFF, không ai đang dùng | `install -r` **Success** → vc118 / 0.6.93-beta |
+| Sony XQ-AS52, Android 12, `QV725WEQ54` (Tiny) | model `XQ-AS52` / `Sony`, `device`; vc117; cert cài và cert APK đều khớp; không PLAYING (state 2 = PAUSED có sẵn) | `install -r` **Success** → vc118 / 0.6.93-beta |
+
+Không dùng `uninstall`, `pm clear`, `-d`, logout, xóa dữ liệu/cache/TDLib, đổi tài khoản, airplane.
+
+### 12. Giá trị ban đầu của Shanling (ghi trước khi cài, từ màn cài đặt cũ vc117) và khôi phục
+
+| Lựa chọn | Trước | Sau QA |
+|---|---|---|
+| Kiểu thư viện | Mới | **Mới** (đổi thành Cũ ở bước 3 rồi trả lại; ảnh `03b`) |
+| Kiểu giao diện cũ (preset) | Portrait Edge-to-Edge Pro | không đụng (menu cũ ghi ✓) |
+| Hiển thị nguồn | Bento Grid | Bento Grid (không đụng; ảnh `03b`) |
+| Kiểu màu / Tải ảnh bìa | Teal sáng / BẬT | không đụng |
+| Màn Đang phát | Studio Deck | không đụng |
+| Chừa chỗ ••• / Car Mode / Gọn / Giả lập / Xem như Car Mode | Tự động / Tắt / Tự động / Tắt / bỏ chọn | không đụng (đối chiếu ở trang chính và trang Thiết bị) |
+
+Cách ghi lại: ảnh màn Cài đặt cũ `00_shanling_vc117_truoc_cai_dat_a…h`, `00_…_truoc_menu_them`. Không đọc file prefs trong máy (thử `run-as` bị bộ kiểm tra từ chối tạm thời nên bỏ).
+
+### 13. QA UI đã tự làm (ảnh private ở `docs/plans/artifacts/E102-CAI-DAT-MOI/`, git bỏ qua cả thư mục)
+
+Ảnh ghép: **`00_tong_hop.png`** (1600 × 1520, 8 ảnh có số bước).
+
+| # | Thiết bị | Hành động | Kỳ vọng | Thực tế | Kết quả | Ảnh |
+|---|---|---|---|---|---|---|
+| 0 | Shanling vc117 (trước) | Mở menu lọc → Thêm… → Cài đặt giao diện (thử nghiệm), cuộn hết | ghi giá trị mọi lựa chọn | Menu cũ 11 mục có Đăng xuất, Giao diện: …✓, Hiển thị nguồn; trang cũ dài, số đo ngay đầu | ghi nhận | `00_shanling_vc117_truoc_*` |
+| 1 | Shanling vc118 (Gọn) | Thư viện → ⋮ → "Thêm… (đồng bộ, nguồn)" | popup mới đủ 6 phần, không còn Đăng xuất/Giao diện/Hiển thị nguồn, chữ không cắt | Thẻ "Thư viện đã đồng bộ · Cập nhật lúc 11:30 · 29.842 bài" + Lấy bài mới/Quét toàn bộ; Tin đã lưu, Nhạc trên máy, Nhóm/kênh/bot, Mở tệp nhạc, đường kẻ, Cài đặt; nằm trong màn | **PASS** | `01_shanling_vc118_popup_moi_113058.png` |
+| 2 | Shanling | Bấm Cài đặt; chụp; vuốt xuống; chụp | thẻ tài khoản, 5 nhóm đúng thứ tự, chân trang `0.6.93-beta · vc118` | Thẻ "Đã đăng nhập · 29.842 bài · 29 nguồn · Đồng bộ xong lúc 11:30"; Giao diện / Thư viện & đồng bộ (+ nhãn Thử nghiệm) / Thiết bị & màn hình / Nâng cao / Tài khoản; chân trang đúng | **PASS** | `02a…113112`, `02b…113115` |
+| 3 | Shanling | Giao diện & màu sắc → Cũ → Mới → Back | Cũ hiện 3 kiểu; Mới ẩn; Back về trang chính | Cũ: Portrait ✓ / Cockpit / Cổ điển hiện ra; Mới: ẩn; **BACK hệ thống** về "Cài đặt", không thoát (`focus` vẫn `MeloUiLabActivity`) | **PASS** | `03a…113138`, `03b…113156`, `03c…113208` |
+| 4 | Shanling | Thiết bị & màn hình → ← → Nâng cao → Xem tất cả số đo | "Tự động" được chọn, "Máy này đang dùng: Gọn (máy nhỏ)"; Nâng cao 6 dòng rồi bung đủ | Đúng; Nâng cao đúng 6 dòng (Bố cục thực tế, Rộng × cao, Cạnh ngắn, Mật độ, Kích thước, Máy + Android), sau nút bung đủ (Tấm nền … Máy, Inset…) | **PASS** | `04a…113211`, `04b…113227`, `04c…113237/113240` |
+| 5 | Shanling | Đăng xuất Telegram → chụp hộp → **Hủy** → Back về thư viện | hộp đúng chữ cũ; vẫn đăng nhập | Hộp "Đăng xuất tài khoản Telegram?" / "Bài đã tải và phiên đăng nhập trên thiết bị sẽ thay đổi." / HỦY · ĐĂNG XUẤT. Bấm HỦY (415,733), không phải ĐĂNG XUẤT; còn ở Cài đặt, Back → thư viện 29.842 bài, vẫn đăng nhập | **PASS** | `05a…113303`, `05b…113318`, `05c…113327` |
+| 6 | Sony XQ-AS52 vc118 (Điện thoại dọc, 1080×2520) | ⋮ → popup → Cài đặt → Back | như bước 1–2, popup trong màn | Popup nằm trọn trong màn (thẻ "Cập nhật lúc 11:34 · 25.332 bài"); Cài đặt đủ nhóm, "Màu Hiện tại" (Sony không dùng Teal); Back về thư viện; đã kiểm focus trước mỗi tap | **PASS** | `06a_sony_…_2_113552`, `06b_sony_…113555` |
+
+Ghi chú: lần chạy đầu của bước 6 (script `e102_sony4`) không tap vì focus lúc đó là `PopupWindow` (popup còn mở) và regex của script chỉ nhận tên app; script rơi vào nhánh "không tap" và tắt màn đúng quy định, popup đóng theo `onPause`. Chạy lại bằng `e102_sony5` kiểm `mResumedActivity` rồi mới tap.
+
+### 14. Log, Media3, màn hình
+
+| Mục | Kết quả |
+|---|---|
+| logcat Shanling (xóa buffer trước QA, đọc sau QA, 3119 dòng) | `FATAL EXCEPTION` = 0; `ANR` = 0; 105 dòng `AndroidRuntime` đều từ lệnh `adb shell input`/`monkey`; một dòng `InputDispatcher … MeloUiLabActivity has no registered input channel` ở lúc đóng màn Cài đặt (thông báo hệ thống khi cửa sổ vừa đóng, không crash) |
+| logcat Sony | FATAL = 0, ANR = 0 |
+| Media3 | Shanling `state=0` đầu và cuối (không PLAYING); Sony `state=2` (PAUSED, vị trí cũ 90 184 ms, không đổi) và một session `state=7` lỗi Bluetooth có sẵn. Không phát nhạc. **CHƯA XÁC NHẬN ÂM THANH THỰC** |
+| Đồng bộ | App tự đồng bộ nhẹ lúc mở (Shanling 29.840 → 29.842 bài, cập nhật 11:30; Sony 11:34). Mình không bấm Lấy bài mới / Quét toàn bộ / Tạm dừng / Tiếp tục |
+| `SHANLING_SCREEN_END` | **OFF** — `mState=OFF`, `mWakefulness=Asleep`, xác nhận 11:33:42 và lại 11:36:40 (tắt bằng keyevent 223 sau khi làm xong, không giữ sáng lúc build) |
+| `SONY_SCREEN_END` | **OFF** — `Display State=OFF`, `mWakefulness=Dozing`, xác nhận ~11:36 (script `finally`) và lại 11:36:43 |
+
+### 15. Sự cố và điểm cần Opus biết
+
+1. **Mình đã ghi đè hai tệp tạm cũ trên Tiny**: script build E102 tạo bằng `sed` từ script E101 chỉ đổi chữ hoa `E101→E102`, nên log/exit trỏ vẫn là `C:\Bots\_qa_temp\e101_build.log` và `e101_build.exit`; chúng bị ghi đè bằng log build E102. Đây là log tạm (không phải artifact trong repo, không phải APK); kết quả E101 vẫn ghi trong `docs/plans/E101-ANH-BIA-NHAY-bao-cao.md`. Không khôi phục được tệp cũ. Log E102 đọc được tại tệp đó (mã hóa UTF-16).
+2. Các script Sony mới đều có tên riêng `e102_*` và ghi vào `C:\Bots\_qa_handoff\E102-CAI-DAT-MOI\sony\`.
+3. `git bundle` dùng `dot/E102-CAI-DAT-MOI`; clone ở Tiny báo "remote HEAD refers to nonexistent ref" (bình thường với bundle không có HEAD), sau đó checkout nhánh đúng và HEAD `2f4d736`.
+4. Màn Cài đặt cũ có "Thông tin màn hình" ngay đầu; bản mới đã đưa xuống trang Nâng cao đúng thiết kế.
+
+### 16. Chưa kiểm chứng / giới hạn
+
+- Âm thanh thật; nút Tạm dừng / Tiếp tục khi đồng bộ thật (không bấm theo yêu cầu); đăng xuất thật (cấm); Lấy bài mới / Quét toàn bộ.
+- Đổi Cũ/Mới và Bento có hiệu lực **khi quay lại thư viện** (`onResume`): trên Shanling (Gọn) lựa chọn này không đổi màn nên chưa thấy tác dụng thị giác; Cockpit/Portrait/Classic và Bento chưa đổi thử trên máy thật (chỉ có đường lưu + mã `onResume`).
+- Xoay màn giữ trang; Y700, S25, FYT, Car Mode, Tablet; Android 10 chỉ kiểm trên Shanling (Sony Android 12).
+- Sony đang ở giao diện Màu Hiện tại, không phải Teal; không đổi cài đặt UI trên Sony.
+
+### 17. Kết quả theo mục 8 của kế hoạch
+
+| Tiêu chí | Kết quả |
+|---|---|
+| Test Debug + Release 0 lỗi, có test mới, build OK, `git diff --check` sạch, chỉ đổi file trong mục 4 | Đạt (phiên 1) |
+| Shanling bước 1–5 PASS; Sony bước 6 PASS | Đạt |
+| Mọi lựa chọn cũ đổi được và ghi đúng khóa prefs | Đạt qua mã + test policy + bước 3 (Cũ/Mới); các lựa chọn khác chưa bấm đổi trên máy |
+| Không crash/ANR | Đạt |
+| Chủ dự án xem ảnh hoặc cài vc118 và nói ĐẠT | **Chờ** |
+
+**Tổng hợp: PASS về phía Sonnet, chờ Opus nghiệm thu và chủ dự án.**
+
+Artifacts: `docs/plans/artifacts/E102-CAI-DAT-MOI/` (Ni, gồm `00_tong_hop.png`, `sony_logs/`); `C:\Bots\_qa_handoff\E102-CAI-DAT-MOI\` (Tiny: APK, ảnh và log Sony).
