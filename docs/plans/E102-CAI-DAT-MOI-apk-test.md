@@ -2,7 +2,7 @@
 
 ## Bản hiện tại: vc118 (26/10/2026)
 
-**Trạng thái:** **QA CANDIDATE — CHƯA NGHIỆM THU** (chờ chủ dự án nói ĐẠT, xem `E102-CAI-DAT-MOI-nghiem-thu.md`). Bản test nội bộ; giới hạn: đổi Cũ/Mới và Bento khi quay lại thư viện chỉ kiểm bằng mã; Y700/S25/FYT/Car Mode/Tablet chưa kiểm; âm thanh không liên quan.
+**Trạng thái:** **ĐÃ NGHIỆM THU — PASS** (chủ dự án "ĐẠT" 26/10/2026, xem `E102-CAI-DAT-MOI-nghiem-thu.md` mục 12). Bản test nội bộ; giới hạn: đổi Cũ/Mới và Bento khi quay lại thư viện chỉ kiểm bằng mã; Y700/S25/FYT/Car Mode/Tablet chưa kiểm; âm thanh không liên quan.
 
 - [MỞ APK TEST E102 (vc118) TRÊN GOOGLE DRIVE](https://drive.google.com/file/d/1j_sX4daXfznKWdYCFBvhNlXHP7iWvJ0M/view)
 - [THƯ MỤC APK + ẢNH QA vc118](https://drive.google.com/drive/folders/1l1vi3uG7dqghS0OD0ghbvfun7SV4uxc3)

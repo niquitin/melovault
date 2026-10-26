@@ -4,7 +4,7 @@
 
 ## 1. Trạng thái
 
-**BLOCKED — CHỜ CHỦ DỰ ÁN.** Phía kỹ thuật đạt: phạm vi đúng, test/build Opus tự chạy lại xanh, APK đạt gate và đã lên Drive owner-only, ảnh QA Shanling bước 1–5 và Sony bước 6 khớp kỳ vọng. Còn thiếu đúng tiêu chí cuối của kế hoạch mục 8: chủ dự án xem ảnh (hoặc dùng vc118 đã cài trên Shanling) và nói **ĐẠT**.
+**PASS** (chủ dự án "ĐẠT" 26/10/2026, xem mục 12; trước đó BLOCKED — CHỜ CHỦ DỰ ÁN ở `1a928e6`). Phía kỹ thuật đạt: phạm vi đúng, test/build Opus tự chạy lại xanh, APK đạt gate và đã lên Drive owner-only, ảnh QA Shanling bước 1–5 và Sony bước 6 khớp kỳ vọng. Tiêu chí cuối của kế hoạch mục 8 (chủ dự án xem ảnh và nói **ĐẠT**) đã đạt ngày 26/10.
 
 ## 2. Git
 
@@ -83,7 +83,7 @@ Log: FATAL 0, ANR 0 trên cả 2 máy (theo báo cáo). Lựa chọn trên Shanl
 | Lựa chọn cũ còn đủ, ghi đúng prefs | ĐẠT qua mã + test policy + bước 3 |
 | Không crash/ANR | ĐẠT (log Sonnet) |
 | Không sửa logic đồng bộ/TDLib/DB/Media3/service | ĐẠT (chỉ thêm getter) |
-| Chủ dự án nói ĐẠT | **CHỜ** |
+| Chủ dự án nói ĐẠT | **ĐẠT** (26/10, mục 12) |
 
 Không có điều kiện FAIL nào bị chạm.
 
@@ -102,3 +102,9 @@ Không có điều kiện FAIL nào bị chạm.
 ## 11. Việc tiếp theo
 
 Chủ dự án xem ảnh (link trong `E102-CAI-DAT-MOI-hinh-nghiem-thu.md`) hoặc thử trực tiếp vc118 đang cài trên Shanling theo 5 bước "Bác sĩ tự kiểm tra" của kế hoạch, rồi nói **ĐẠT** hoặc báo lỗi. Khi ĐẠT: đổi trạng thái thành PASS, xin xác nhận thao tác merge rồi `git merge --no-ff` vào `feature/e93-03d-y700-offline-cockpit`.
+
+## 12. Chủ dự án duyệt — PASS
+
+- 26/10/2026 chủ dự án trả lời trong phiên Opus nghiệm thu: **"ĐẠT — đổi E102 thành PASS và merge."** (sau khi nhận ảnh tổng hợp, ảnh menu cũ/mới, ảnh sau Hủy đăng xuất và link Drive owner-only).
+- **E102-CAI-DAT-MOI: PASS** trong phạm vi đã kiểm (Shanling Gọn bước 1–5, Sony bước 6). Giới hạn mục 9 giữ nguyên.
+- APK đã duyệt: vc118 / `0.6.93-beta` @ `2f4d736`, SHA-256 `0F1DB45A…E143D414` (`E102-CAI-DAT-MOI-apk-test.md`).
