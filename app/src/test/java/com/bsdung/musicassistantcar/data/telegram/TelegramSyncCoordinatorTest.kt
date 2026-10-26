@@ -429,4 +429,29 @@ class TelegramSyncCoordinatorTest {
         )
         assertEquals(TelegramSyncAction.DiscardedStale, staleAction)
     }
+
+    @Test
+    fun testIsPausedOnlyBetweenPauseAndNextStartOrCancel() {
+        assertFalse(coordinator.isPaused())
+        coordinator.startSync(100L, TelegramSyncMode.FULL_DISCOVERY)
+        assertTrue(coordinator.isBusy())
+        assertFalse(coordinator.isPaused())
+
+        assertNotNull(coordinator.pauseSync())
+        assertFalse(coordinator.isBusy())
+        assertTrue(coordinator.isPaused())
+        // A second pause changes nothing (the menu card relies on this).
+        assertEquals(null, coordinator.pauseSync())
+        assertTrue(coordinator.isPaused())
+
+        coordinator.startSync(100L, TelegramSyncMode.FULL_DISCOVERY)
+        assertTrue(coordinator.isBusy())
+        assertFalse(coordinator.isPaused())
+
+        coordinator.pauseSync()
+        assertTrue(coordinator.isPaused())
+        coordinator.cancelSync()
+        assertFalse(coordinator.isPaused())
+        assertFalse(coordinator.isBusy())
+    }
 }
