@@ -94,6 +94,10 @@ class TelegramSyncCoordinator(
     @Synchronized
     fun isBusy(): Boolean = isSyncing
 
+    /** True after [pauseSync] until the next [startSync] or [cancelSync]; read-only, for the ⋮ menu card. */
+    @Synchronized
+    fun isPaused(): Boolean = isPaused
+
     @Synchronized
     fun getActiveGeneration(): Long = activeGeneration
 
