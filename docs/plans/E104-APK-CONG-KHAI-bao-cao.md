@@ -1,0 +1,132 @@
+Thực thi: Codex gpt-6-astra medium, phiên 1
+
+| Nội dung | Kết quả phiên 1 trên Ni |
+|---|---|
+| Phạm vi | E104-APK-CONG-KHAI, S1–S9; chưa chạy phiên 2 |
+| Nhánh | `dot/E104-APK-CONG-KHAI` |
+| Baseline / plan | `a638099` / `1d278c3f50bb1145464ab3d6be7fc35558ec6f64` |
+| Commit mã nguồn | `03e9dc9eb8f11d83ee10d4d3254f9f5b41601a14` |
+| Test mới | 34 thành công, 0 bỏ qua, 0 thất bại/lỗi |
+| Test toàn bộ, mỗi biến thể | 2.128 định nghĩa; 2.107 thành công; 21 bỏ qua; 0 thất bại; 0 lỗi |
+| Build / metadata APK | Bốn APK thường/open Debug/Release build thành công; package/vc/vname đúng kế hoạch |
+| Personal / cờ xung đột | Personal Debug build thành công; open + sync QA bị chặn đúng thông báo |
+| Quét hash trên Ni | Cả open Debug và Release: `SKIPPED_NO_LOCAL_HASH`; chưa chứng minh P3 |
+| Thiết bị / Tiny | Chưa dùng ADB, chưa bật Shanling, chưa truy cập Tiny/Desktop Commander |
+| Nghiệm thu | Chưa nghiệm thu; chờ phiên 2 và Opus |
+
+## Phiên 1 — mã và phạm vi
+
+S1: đã đọc CLAUDE.md (mục 0 trước), AGENTS.md, đầu HANDOFF, quy trình ba vai trò, PROMPT_SONNET, PROMPT_CODEX, vòng đời màn hình và kế hoạch E104.
+Đã kiểm `git status --short`, branch, HEAD, `git log -5 --oneline`, `git diff --check` và tiến trình đầu phiên: đúng nhánh/plan commit, cây sạch, không phát hiện sửa mã đồng thời trong repo.
+Không tạo/đổi nhánh. Baseline test chạy một lần trước S2; số liệu lấy từ XML, không coi task up-to-date là chạy lại mọi test.
+
+| Bước / commit | File thay đổi | Nội dung |
+|---|---|---|
+| S2 `faeaeb6` | `TelegramApiCredentialPolicy.kt`, `TelegramApiCredentialPolicyTest.kt` | Kiểm định/chuẩn hóa ID và hash; chọn nguồn; che mã; lỗi tiếng Việt; 34 test |
+| S3 `223a076` | `TelegramApiCredentialStore.kt` | AES-256-GCM, AndroidKeyStore, file riêng trong noBackup, ghi `.part` rồi rename |
+| S4 `bc11fee` | `TelegramApiSetupPanel.kt` | Views nhập mã, hash dạng password, không lưu view state/autofill, validation theo ô, mở my.telegram.org |
+| S5 `d09be83` | `TelegramPreviewActivity.kt` | Ưu tiên mã nhúng; đọc/lưu nền; gửi credentials đã resolve; thông báo lỗi; nhập lại mã |
+| S6 `3c1b82f` | `app/build.gradle` | Cờ open, package riêng, vc120, kiểm hash APK, chặn kết hợp sync QA |
+| Sửa biên dịch `0b54a6a` | `TelegramApiSetupPanel.kt` | Chỉ rõ receiver của trường panel để tránh trùng thuộc tính Android View |
+| Hoàn thiện `03e9dc9` | `TelegramPreviewActivity.kt` | Tuần tự hóa I/O qua các lần tạo Activity; bỏ qua callback sau yêu cầu khởi động lại |
+
+Các file Kotlin production ở `app/src/shareable/java/com/bsdung/musicassistantcar/data/telegram/`.
+File test mới ở `app/src/test/java/com/bsdung/musicassistantcar/data/telegram/`.
+Ngoài sáu file mục 6 của kế hoạch, chỉ thêm báo cáo này. Các commit dùng Git identity theo lệnh, không đổi cấu hình Git toàn máy.
+
+`tdlibDatabaseKey()` đã đối chiếu với plan commit, nội dung giữ nguyên. Không sửa Owner, TDLib directories, personal flavor, DB/schema, songKey, backend, Media3/queue hoặc workflow.
+Không đọc/in/copy local.properties, secrets, keystore hay dữ liệu phiên Telegram qua công cụ; Gradle dùng cơ chế cấu hình sẵn có khi build.
+
+### Quyết định 6.5-7: dùng phương án dự phòng
+
+Đã dùng **“đóng hẳn ứng dụng rồi mở lại”** sau khi xóa mã API đã lưu, không khởi tạo lại client trong cùng process.
+Lý do: `detachUi` không bảo đảm client đã đóng khi playback service còn giữ owner; API singleton hiện có không cung cấp xác nhận đóng client riêng cho UI để chờ an toàn.
+Chỉ khi chưa đăng nhập, nút nhập lại mới khả dụng; có kiểm tra trạng thái chờ getMe và account của Owner.
+Xóa đúng file credential mới và `.part`, tách callback UI, rồi hiện câu dự phòng theo kế hoạch. Cờ ở mức process ngăn Activity recreation tái sử dụng client cũ với mã mới.
+Không gọi logOut, không xóa khóa DB, thư mục TDLib, cache hay dữ liệu thư viện. Không sửa Owner/service để mở rộng kiến trúc.
+
+## Kiểm thử và build Ni
+
+| Lượt | Defined | Thành công | Skipped | Failed | Errors |
+|---|---:|---:|---:|---:|---:|
+| Baseline Debug | 2.094 | 2.073 | 21 | 0 | 0 |
+| Baseline Release | 2.094 | 2.073 | 21 | 0 | 0 |
+| S2 test policy Debug | 34 | 34 | 0 | 0 | 0 |
+| Cuối phiên Debug | 2.128 | 2.107 | 21 | 0 | 0 |
+| Cuối phiên Release | 2.128 | 2.107 | 21 | 0 | 0 |
+
+So baseline: thêm 34 test mỗi biến thể; skipped không tăng. Có test riêng cho scrub chuỗi rỗng và blank, tràn Int, hash sai độ dài/hex, ưu tiên nguồn, mask và ba mã lỗi API.
+Số liệu cuối lấy từ `app/build/test-results/testShareable{Debug,Release}UnitTest/TEST-*.xml`, lưu bản tổng hợp private tại `05-final-test-counts.json`.
+
+| Lệnh Gradle (đều `--console=plain`, redirect toàn bộ ra file) | Tổng kết / log |
+|---|---|
+| `:app:testShareableDebugUnitTest :app:testShareableReleaseUnitTest` trước S2 | BUILD SUCCESSFUL, 5s; `01-baseline-tests.log` |
+| `:app:testShareableDebugUnitTest --tests '*TelegramApiCredentialPolicyTest*'` | BUILD SUCCESSFUL, 17s; `02-policy-tests.log` |
+| Test tích hợp lượt đầu | BUILD FAILED do receiver Kotlin panel; đã sửa; `03-full-tests.log` |
+| Test tích hợp sau sửa | BUILD SUCCESSFUL, 3m23s; `04-full-tests.log` |
+| Test toàn bộ trên commit mã cuối | BUILD SUCCESSFUL, 2m49s; `05-final-tests.log` |
+| `:app:assembleShareableDebug :app:assembleShareableRelease :app:reportTelegramConfig` | BUILD SUCCESSFUL, 1m35s; config=false; `06-normal-build.log` |
+| `-PmeloOpen=true :app:assembleShareableDebug :app:assembleShareableRelease :app:reportOpenBuild :app:reportTelegramConfig` | BUILD SUCCESSFUL, 1m4s; melo.open=true, config=false; `07-open-build.log` |
+| `:app:assemblePersonalDebug` | BUILD SUCCESSFUL, 49s; `08-personal-build.log` |
+| `-PmeloOpen=true -PmeloSyncQa=true :app:reportOpenBuild` | BUILD FAILED, 1s, đúng thông báo chặn kết hợp cờ; `09-conflict-flags.log` |
+| `-PmeloOpen=true -PopenApk=<open Debug> :app:verifyOpenApkHasNoTelegramHash` | BUILD SUCCESSFUL, 1s; `SKIPPED_NO_LOCAL_HASH`; `10-hash-debug.log` |
+| Tương tự với `<open Release>` | BUILD SUCCESSFUL, 1s; `SKIPPED_NO_LOCAL_HASH`; `10-hash-release.log` |
+
+Đã dùng `aapt2 dump badging` và `apksigner verify --print-certs` từ Android build-tools 36.0.0 cho cả bốn APK; xác minh chữ ký thành công, không đọc keystore.
+Lượt test tích hợp đầu có lỗi biên dịch đã sửa, không phải lỗi test. Có lỗi cú pháp lọc log PowerShell khi kiểm cờ xung đột; đã đọc lại đúng dòng kết quả của cùng log, không chạy lại hay che lỗi Gradle.
+Personal Debug chỉ là smoke build, không sửa flavor và không đề nghị cài/bàn giao bản Stable. File giữ riêng tại `personal/app-personal-debug.apk` trong artifact root.
+Task kiểm hash chỉ ghi trạng thái, không in ID/hash/tên entry. Trạng thái SKIPPED không được hiểu là đã quét và không thấy hash; phiên 2 phải có đối chứng P3 trên Tiny.
+
+## APK QA cần Opus nghiệm thu bàn giao
+
+**QA CANDIDATE — CHƯA NGHIỆM THU — KHÔNG ĐĂNG CÔNG KHAI.**
+APK Ni phục vụ kiểm tra build; chưa dùng thay APK Tiny có signer/config đúng để cài lên thiết bị.
+Các APK cũ trước build đã lưu riêng ở `preexisting-apks/`; không đưa vào danh sách candidate E104.
+
+Commit nguồn của cả bốn APK: `03e9dc9eb8f11d83ee10d4d3254f9f5b41601a14`.
+Cert SHA-256 Ni (cả bốn): `a9b8cb6b5b0bc0400955b24dbc85801f5e8855356287caca2dcf3bb4e13db280`.
+Đây là signer Ni, chưa đối chiếu chứng chỉ app đang cài trên thiết bị; không dùng APK Ni để cài thay Beta Tiny.
+
+| APK | Package | vc / versionName | Bytes | Telegram config embedded hợp lệ |
+|---|---|---|---:|---|
+| Thường Debug | `app.melovault.player` | 120 / `0.6.95-beta` | 33.462.212 | false |
+| Thường Release | `app.melovault.player` | 120 / `0.6.95-beta` | 30.703.982 | false |
+| Open Debug | `app.melovault.player.open` | 120 / `0.6.95-open` | 33.462.216 | false |
+| Open Release | `app.melovault.player.open` | 120 / `0.6.95-open` | 30.703.990 | false |
+
+| APK | SHA-256 |
+|---|---|
+| Thường Debug | `fbc0c3eec5e224b84108a7eda1c5130fe755430143cf20bd878d2fea2ea1b2b7` |
+| Thường Release | `dd8ed57ea2c541fae831469790b543638869d6d52c7decd4a6d6e320016c1fe0` |
+| Open Debug | `83131276bf863b632592ca195c358f448d7584131ae3bdcb23a6ee316e112b1a` |
+| Open Release | `349b63eb7e5101e1b627a7371c6d699e9be318d51780c3c9cbbe5bfa216b5cdc` |
+
+Đường dẫn Ni đã xác minh tồn tại:
+
+- Thường Debug: `D:\Bots\MeloVault-E91-Shareable\docs\plans\artifacts\E104-APK-CONG-KHAI\normal\app-shareable-debug.apk`
+- Thường Release: `D:\Bots\MeloVault-E91-Shareable\docs\plans\artifacts\E104-APK-CONG-KHAI\normal\app-shareable-release.apk`
+- Open Debug: `D:\Bots\MeloVault-E91-Shareable\docs\plans\artifacts\E104-APK-CONG-KHAI\open\app-shareable-debug.apk`
+- Open Release: `D:\Bots\MeloVault-E91-Shareable\docs\plans\artifacts\E104-APK-CONG-KHAI\open\app-shareable-release.apk`
+
+Bản thường Ni thiếu config nên chưa dùng kiểm đăng nhập. Bản open cố ý không nhúng config; cần nhập mã người dùng và kiểm UI trong phiên 2. Chưa có kết quả install-r hợp lệ trên thiết bị, chưa cài bất kỳ APK nào.
+
+## Chưa kiểm chứng, rủi ro và bàn giao phiên 2
+
+| Việc | Trạng thái |
+|---|---|
+| P3 kiểm hash thật trên Tiny + đối chứng APK thường | Chưa thực hiện; Ni không thay thế được chứng cứ này |
+| Q1–Q4 UI/validation/lưu Keystore/khởi động lại | Chưa kiểm thử trên Android |
+| Q5 bản riêng giữ phiên, thư viện, phát nhạc | Chưa kiểm chứng trên thiết bị |
+| Q6 logcat hash giả, crash/ANR | Chưa chạy ADB/logcat |
+| API thật, đăng nhập thật, âm thanh nghe được | Chưa xác nhận; không nhập tài khoản hay mã thật |
+| Ảnh/video và `00_tong_hop.png` | Chưa tạo vì phiên 1 không thao tác thiết bị |
+| `SHANLING_SCREEN_END` | `UNKNOWN` — không dùng ADB, không wake/sleep, không đọc display |
+| `SONY_SCREEN_END` | `UNKNOWN` — không truy cập Tiny hay dùng ADB |
+
+Rủi ro cần QA: Keystore trên thiết bị thật, bàn phím/scroll ở panel, vòng đời process khi nhập lại, hai sandbox cài song song và hồi quy đăng nhập bản riêng. JVM/build thành công không chứng minh các hành vi này.
+APK vẫn dùng debug signer theo kế hoạch, chưa đủ điều kiện phát hành công khai.
+Phiên 2 nhận đúng commit trên nhánh này bằng Git bundle, đối chiếu SHA-256 hai đầu; Tiny chỉ qua Desktop Commander trong clone cô lập mới. Chưa tạo/chuyển bundle hoặc sửa bất kỳ repo Tiny nào trong phiên 1.
+Phiên 2 thực hiện S10–S16, kiểm signer/package/version/config trước cài và vòng đời màn hình theo workflow. Chờ Opus nghiệm thu; chưa merge, push, upload hoặc công bố APK.
+
+Artifact private của phiên: `D:\Bots\MeloVault-E91-Shareable\docs\plans\artifacts\E104-APK-CONG-KHAI\` (Git ignored).
+S9: đã rà diff đúng phạm vi, `git diff 1d278c3 --check` không lỗi; báo cáo được commit riêng sau các commit mã. Không ghi kết luận nghiệm thu thay Opus.
