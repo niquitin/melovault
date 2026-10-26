@@ -223,14 +223,21 @@ internal class MeloCompactScreen(
         var shown = 0
         var withArt = 0
         var settled = 0
+        var appeared = 0
+        var swapped = 0
         for (i in 0 until list.childCount) {
             val frame = findRowArtFrame(list.getChildAt(i)) ?: continue
             val key = (frame.tag as MeloArtTag).key
             shown++
-            if (c.applyRowArt(frame, host.peekRowArt(key))) withArt++
+            when (c.applyRowArt(frame, host.peekRowArt(key), animate = true)) {
+                MeloRowArtPolicy.ArtChange.APPEAR -> appeared++
+                MeloRowArtPolicy.ArtChange.SWAP -> swapped++
+                MeloRowArtPolicy.ArtChange.NONE -> Unit
+            }
+            if (c.rowArtShowing(frame)) withArt++
             if (host.rowArtSettled(key)) settled++
         }
-        android.util.Log.i("MeloRowArt", "compact visible=$shown withArt=$withArt settled=$settled")
+        android.util.Log.i("MeloRowArt", "compact visible=$shown withArt=$withArt settled=$settled appeared=$appeared swapped=$swapped")
     }
 
     private fun onRowClick(position: Int) {
@@ -272,7 +279,7 @@ internal class MeloCompactScreen(
             status = status,
             qualityLabel = quality,
             progressPercent = row.downloadingPercent,
-            art = row.art ?: if (rowArt) host.peekRowArt(row.artKey) else null,
+            art = if (rowArt) MeloRowArtPolicy.rowPicture(host.peekRowArt(row.artKey), row.art) else row.art,
             local = snap.local || row.local,
             artKey = if (rowArt) row.artKey else null
         )).also { rowGap(it); unclickable(it, position) }
