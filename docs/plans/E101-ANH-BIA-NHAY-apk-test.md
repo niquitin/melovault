@@ -2,7 +2,7 @@
 
 ## Bản hiện tại: vc117 (26/10/2026)
 
-**Trạng thái:** **QA CANDIDATE — CHƯA NGHIỆM THU** (chờ chủ dự án xem ảnh/video và nói ĐẠT, xem `E101-ANH-BIA-NHAY-nghiem-thu.md`). Bản test nội bộ; giới hạn: Sony đường `MeloLibraryPane` (Teal) chưa kiểm vì Sony không ở Teal; nhánh ảnh mờ hoãn 400 ms chưa thấy chạy trên máy; Tablet/Hai khung/Y700/S25/FYT chưa kiểm.
+**Trạng thái:** **ĐÃ NGHIỆM THU — PASS** (chủ dự án "ĐẠT" 26/10/2026, xem `E101-ANH-BIA-NHAY-nghiem-thu.md` mục 9). Bản test nội bộ; giới hạn: Sony đường `MeloLibraryPane` (Teal) chưa kiểm vì Sony không ở Teal; nhánh ảnh mờ hoãn 400 ms chưa thấy chạy trên máy; Tablet/Hai khung/Y700/S25/FYT chưa kiểm.
 
 - [MỞ APK TEST E101 (vc117) TRÊN GOOGLE DRIVE](https://drive.google.com/file/d/1743HVhmXFc9jvEECQPYCcSVDSn1PMV2s/view)
 - [THƯ MỤC APK + ẢNH/VIDEO QA vc117](https://drive.google.com/drive/folders/1Y2xEzSYnj9cxzMyfP-BHDvp0pYJZ2Xra)

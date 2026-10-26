@@ -2,7 +2,7 @@
 
 Ngày: 26/10/2026. Người nghiệm thu: Claude Opus (phiên mới, độc lập với phiên lập kế hoạch và Sonnet), theo `docs/workflow/PROMPT_OPUS_NGHIEM_THU.md` (nhánh `dot/workflow-opus-nghiem-thu`).
 
-**Trạng thái: BLOCKED — CHỜ CHỦ DỰ ÁN** (kỹ thuật đạt; chờ chủ dự án xem ảnh/video và nói ĐẠT hoặc báo lỗi).
+**Trạng thái: PASS** (chủ dự án "ĐẠT" 26/10/2026, xem mục 9; trước đó BLOCKED — CHỜ CHỦ DỰ ÁN ở `78186ae`).
 
 ## 1. Git
 
@@ -70,7 +70,7 @@ Màn hình: `SHANLING_SCREEN_END` OFF (Opus kiểm lại ~10:15: `mGlobalDisplay
 | Test 0 lỗi, ≥ 2055 + mới, skipped 21; build OK; `diff --check` sạch; đúng file | ĐẠT |
 | Shanling bước 2–5: không dòng 2 ảnh khác; `swapped` ≤ 10%; bước 5 giống hệt + `swapped=0`; 8 dòng; không crash/ANR | ĐẠT |
 | Ảnh ghép sau ít đổi hình hơn rõ rệt so với trước | **Một phần**: "sau" rõ ràng (mỗi dòng một lần); "trước" của Sonnet không tái hiện mạnh lỗi do bộ đệm ấm. Bằng chứng "trước" mạnh hơn là video Opus quay lúc lập kế hoạch (09:19, 2–3 lần đổi/dòng, `withArt` 8→2→9). Để chủ dự án chấm bằng mắt |
-| Chủ dự án nói ĐẠT | **CHƯA** |
+| Chủ dự án nói ĐẠT | **ĐẠT** (26/10, mục 9) |
 
 Không có tiêu chí FAIL nào bị vi phạm.
 
@@ -85,3 +85,10 @@ Không có tiêu chí FAIL nào bị vi phạm.
 ## 8. Kết luận
 
 **BLOCKED — CHỜ CHỦ DỰ ÁN.** Mã đúng phạm vi và đúng 4 nguyên nhân, test/build Opus tự chạy xanh (2060/21/0 mỗi biến thể), APK đạt gate và đã lên Drive owner-only, QA Shanling bước 2–5 đạt bằng số đếm và ảnh. Chủ dự án xem video `03b` (hoặc dùng vc117 đã cài sẵn trên Shanling) theo 5 bước "Bác sĩ tự kiểm tra" của kế hoạch, rồi nói **ĐẠT** hoặc báo lỗi. Khi ĐẠT: đổi thành PASS, xin xác nhận rồi `git merge --no-ff` vào `feature/e93-03d-y700-offline-cockpit`.
+
+## 9. Chủ dự án duyệt — PASS
+
+- 26/10/2026 chủ dự án trả lời trong phiên Opus nghiệm thu: **"ĐẠT — đổi E101 thành PASS và merge."** (sau khi nhận ảnh tổng hợp, ảnh ghép trước/sau và video `03b`, link Drive owner-only).
+- **E101-ANH-BIA-NHAY: PASS** trong phạm vi đã kiểm (Shanling Gọn bước 2–5). Giới hạn mục 7 giữ nguyên: Sony/Teal `MeloLibraryPane`, Tablet/Hai khung, ảnh mờ hoãn 400 ms và mờ dần 150 ms trên máy, Y700/S25/FYT chưa kiểm.
+- APK đã duyệt: vc117 / `0.6.92-beta` @ `00c4901`, SHA-256 `0EBA0E68…A6537CF` (`E101-ANH-BIA-NHAY-apk-test.md`).
+- Merge `--no-ff` vào `feature/e93-03d-y700-offline-cockpit` theo yêu cầu chủ dự án; merge commit ghi ở `HANDOFF.md`. Chưa push.
