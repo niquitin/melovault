@@ -568,7 +568,7 @@ internal class MeloLibraryPane(
             return c.songRow(
                 SongRowModel(
                     row.title, row.sourceTitle, row.durationSeconds, status, quality, row.downloadingPercent,
-                    row.art ?: if (c.teal) host.peekRowArt(row.artKey) else null,
+                    if (c.teal) MeloRowArtPolicy.rowPicture(host.peekRowArt(row.artKey), row.art) else row.art,
                     local = snap.local || row.local,
                     artKey = if (c.teal) row.artKey else null
                 )
@@ -596,15 +596,21 @@ internal class MeloLibraryPane(
         var shown = 0
         var withArt = 0
         var settled = 0
+        var appeared = 0
+        var swapped = 0
         for (i in 0 until list.childCount) {
             val artHost = findRowArtFrame(list.getChildAt(i)) ?: continue
             val key = (artHost.tag as MeloArtTag).key
             shown++
-            val bmp = host.peekRowArt(key)
-            if (c.applyRowArt(artHost, bmp)) withArt++
+            when (c.applyRowArt(artHost, host.peekRowArt(key), animate = true)) {
+                MeloRowArtPolicy.ArtChange.APPEAR -> appeared++
+                MeloRowArtPolicy.ArtChange.SWAP -> swapped++
+                MeloRowArtPolicy.ArtChange.NONE -> Unit
+            }
+            if (c.rowArtShowing(artHost)) withArt++
             if (host.rowArtSettled(key)) settled++
         }
-        android.util.Log.i("MeloRowArt", "visible=$shown withArt=$withArt settled=$settled")
+        android.util.Log.i("MeloRowArt", "visible=$shown withArt=$withArt settled=$settled appeared=$appeared swapped=$swapped")
     }
 
     /**

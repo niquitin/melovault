@@ -203,21 +203,31 @@ internal class MeloComponents(
         return frame
     }
 
+    /** Whether a [rowArtView] frame currently shows a picture over its letter tile. */
+    fun rowArtShowing(frame: FrameLayout): Boolean = (frame.getChildAt(0) as? ImageView)?.visibility == View.VISIBLE
+
     /**
      * Puts [bmp] into a [rowArtView] frame in place (no relayout, same bitmap not set twice).
-     * Returns whether the frame now shows a picture. A null [bmp] never takes a picture away.
+     * A null [bmp] never takes a picture away. With [animate] the letter tile fades out when the
+     * first picture appears. Returns what the call did to the row.
      */
-    fun applyRowArt(frame: FrameLayout, bmp: Bitmap?): Boolean {
-        val image = frame.getChildAt(0) as? ImageView ?: return false
+    fun applyRowArt(frame: FrameLayout, bmp: Bitmap?, animate: Boolean = false): MeloRowArtPolicy.ArtChange {
+        val image = frame.getChildAt(0) as? ImageView ?: return MeloRowArtPolicy.ArtChange.NONE
         val tile = frame.getChildAt(1)
-        if (bmp == null) return image.visibility == View.VISIBLE
-        if (image.tag !== bmp) {
-            image.setImageBitmap(bmp)
-            image.tag = bmp
+        val change = MeloRowArtPolicy.artChange(image.visibility == View.VISIBLE, image.tag === bmp, bmp != null)
+        if (change == MeloRowArtPolicy.ArtChange.NONE) return change
+        image.setImageBitmap(bmp)
+        image.tag = bmp
+        if (change == MeloRowArtPolicy.ArtChange.APPEAR) {
+            image.visibility = View.VISIBLE
+            if (animate) {
+                tile.animate().alpha(0f).setDuration(MeloRowArtPolicy.FADE_MS)
+                    .withEndAction { tile.visibility = View.GONE; tile.alpha = 1f }
+            } else {
+                tile.visibility = View.GONE
+            }
         }
-        image.visibility = View.VISIBLE
-        tile.visibility = View.GONE
-        return true
+        return change
     }
 
     /**
