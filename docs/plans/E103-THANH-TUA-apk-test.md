@@ -2,7 +2,7 @@
 
 ## Bản hiện tại: vc119 `0a9beda` — REWORK vòng 1 (26/10/2026)
 
-**Trạng thái:** **QA CANDIDATE — CHƯA NGHIỆM THU** (BLOCKED — CHỜ CHỦ DỰ ÁN; F1 đã sửa: thanh mảnh, chấm tròn rõ — xem `E103-THANH-TUA-nghiem-thu.md` mục 11). Âm thanh thật chưa xác nhận; Teal/FYT/Y700/S25 chưa kiểm.
+**Trạng thái:** **ĐÃ NGHIỆM THU — PASS** (chủ dự án "ĐẠT" 26/10/2026, xem `E103-THANH-TUA-nghiem-thu.md` mục 12). Bản test nội bộ, F1 đã sửa (thanh mảnh, chấm tròn rõ). Âm thanh thật chưa xác nhận; Teal/FYT/Y700/S25 chưa kiểm.
 
 - [MỞ APK TEST E103 (vc119, 0a9beda) TRÊN GOOGLE DRIVE](https://drive.google.com/file/d/14t6QbFxB_G3DfmzPct8-ytbx7pZKDtFz/view)
 - [THƯ MỤC APK + ẢNH QA vc119 0a9beda](https://drive.google.com/drive/folders/1XiaVUvVMou8mMTboD2XWCRc1e1t819En)

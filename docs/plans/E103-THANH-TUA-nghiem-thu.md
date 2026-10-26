@@ -2,7 +2,7 @@
 
 ## 1. Kết luận
 
-**Hiện tại (sau REWORK vòng 1, `0a9beda`): BLOCKED — CHỜ CHỦ DỰ ÁN.** F1 đã sửa và kiểm (mục 11); kỹ thuật đạt, chờ chủ dự án xem ảnh/cài và nói ĐẠT.
+**PASS** (chủ dự án "ĐẠT" 26/10/2026, mục 12) — bản `0a9beda`, vc119 / 0.6.94-beta. Trước đó: BLOCKED — CHỜ CHỦ DỰ ÁN ở `4899544` (F1 đã sửa và kiểm, mục 11). Giới hạn giữ nguyên: âm thanh thật chưa xác nhận; Teal, FYT, Y700, S25, Car Mode chưa kiểm.
 
 Lịch sử: **REWORK (vòng 1, F1)** — chủ dự án chốt 26/10/2026: *"REWORK F1 — đưa prompt Sonnet sửa thanh tua thành thanh mảnh có chấm tròn thấy rõ."* Xem mục 10. (Trước đó: BLOCKED — CHỜ CHỦ DỰ ÁN ở `6b9dee6`.) Phần kỹ thuật đạt: đúng phạm vi file, test/build Opus tự chạy lại xanh, APK đạt cổng và đã lên Drive owner-only, QA Sony bước 1–4, 6a, 6b và Shanling bước 5 khớp kỳ vọng về **chức năng** (tua đúng mốc, chỉ tua khi thả tay).
 
@@ -126,3 +126,9 @@ Chưa kiểm ở vòng này: bước 3 (chạm 25%, ±30/60 s) và 4 (cuộn) kh
 Điểm phụ (không chặn): viền chấm 2 px màu `p.border`, trên nền tối vẫn rõ; điểm "Nghe tiếp" Sony là NONSTOP do QA. Chặn mép cuối 1 s và versionName `0.6.94` vẫn [CẦN XÁC NHẬN] theo kế hoạch mục 11.
 
 **Chờ chủ dự án:** xem ảnh hoặc cài APK `0a9beda` rồi nói **ĐẠT** (Opus đổi PASS, xin xác nhận merge `--no-ff` vào `feature/e93-03d-y700-offline-cockpit`) hoặc báo lỗi.
+
+## 12. Chủ dự án duyệt
+
+- 26/10/2026 chủ dự án trả lời trong phiên Opus nghiệm thu: **"ĐẠT — đổi E103 thành PASS và merge."** (sau khi nhận ảnh tổng hợp `rw1/00_tong_hop.png`, ảnh Deck dọc, ảnh Hai khung và link Drive owner-only của APK `0a9beda`).
+- Trạng thái cuối: **PASS** trong phạm vi đã kiểm (Sony bước 1–4, 6a, 6b; Shanling Gọn bước 5). Vẫn CHƯA XÁC NHẬN ÂM THANH THỰC; Teal, FYT (núm xoay/DPAD/TalkBack), Y700, S25, Car Mode chưa kiểm; chặn mép cuối 1 s giữ như kế hoạch.
+- Merge `--no-ff` vào `feature/e93-03d-y700-offline-cockpit` theo lời chủ dự án; không push.
