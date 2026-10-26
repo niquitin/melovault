@@ -213,4 +213,49 @@ class MeloBottomBarPolicyTest {
         // A font scale below 1 never shrinks the label need below the base.
         assertTrue(MeloBottomBarPolicy.tabIconOnly(41, 0.85f))
     }
+
+    @Test
+    fun idleCardPrefersResumeThenPlayAllThenPick() {
+        assertEquals(MeloBottomBarPolicy.Idle.RESUME, MeloBottomBarPolicy.idle(hasResume = true, canPlayAll = true))
+        assertEquals(MeloBottomBarPolicy.Idle.RESUME, MeloBottomBarPolicy.idle(hasResume = true, canPlayAll = false))
+        assertEquals(MeloBottomBarPolicy.Idle.PLAY_ALL, MeloBottomBarPolicy.idle(hasResume = false, canPlayAll = true))
+        assertEquals(MeloBottomBarPolicy.Idle.PICK, MeloBottomBarPolicy.idle(hasResume = false, canPlayAll = false))
+    }
+
+    @Test
+    fun onlyThePickStateIsNotClickable() {
+        assertTrue(MeloBottomBarPolicy.idleActionable(MeloBottomBarPolicy.Idle.RESUME))
+        assertTrue(MeloBottomBarPolicy.idleActionable(MeloBottomBarPolicy.Idle.PLAY_ALL))
+        assertFalse(MeloBottomBarPolicy.idleActionable(MeloBottomBarPolicy.Idle.PICK))
+    }
+
+    @Test
+    fun resumeLineNamesTheChannelWhenKnown() {
+        assertEquals("Nghe tiếp", MeloBottomBarPolicy.resumeLine(null))
+        assertEquals("Nghe tiếp", MeloBottomBarPolicy.resumeLine("  "))
+        assertEquals("Nghe tiếp · Kênh A", MeloBottomBarPolicy.resumeLine("Kênh A"))
+        assertEquals("Nghe tiếp · Kênh A", MeloBottomBarPolicy.resumeLine(" Kênh A "))
+    }
+
+    @Test
+    fun idleHintTextAndDescriptions() {
+        assertEquals("Chưa phát bài nào", MeloBottomBarPolicy.HINT_TITLE)
+        assertEquals("Bấm để phát danh sách đang xem", MeloBottomBarPolicy.hintLine(MeloBottomBarPolicy.Idle.PLAY_ALL))
+        assertEquals("Chọn một bài trong danh sách", MeloBottomBarPolicy.hintLine(MeloBottomBarPolicy.Idle.PICK))
+        assertEquals(
+            "Nghe tiếp: Bài 1 · Kênh A. Bấm để phát",
+            MeloBottomBarPolicy.idleDescription(MeloBottomBarPolicy.Idle.RESUME, "Bài 1", "Kênh A")
+        )
+        assertEquals(
+            "Chưa phát bài nào. Bấm để phát danh sách đang xem",
+            MeloBottomBarPolicy.idleDescription(MeloBottomBarPolicy.Idle.PLAY_ALL, null, null)
+        )
+        assertEquals(
+            "Chưa phát bài nào. Chọn một bài trong danh sách",
+            MeloBottomBarPolicy.idleDescription(MeloBottomBarPolicy.Idle.PICK, null, null)
+        )
+        assertEquals("Nghe tiếp", MeloBottomBarPolicy.idlePlayDescription(MeloBottomBarPolicy.Idle.RESUME))
+        assertEquals("Phát hết", MeloBottomBarPolicy.idlePlayDescription(MeloBottomBarPolicy.Idle.PLAY_ALL))
+        assertEquals("Phát", MeloBottomBarPolicy.idlePlayDescription(MeloBottomBarPolicy.Idle.PICK))
+    }
 }
