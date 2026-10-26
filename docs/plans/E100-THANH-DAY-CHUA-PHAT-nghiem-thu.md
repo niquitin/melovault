@@ -72,7 +72,7 @@ Màn hình: `SHANLING_SCREEN_END=OFF`, `SONY_SCREEN_END=OFF` theo báo cáo; Opu
 | Shanling bước 1–6 | ĐẠT |
 | Khi đang có bài: thẻ mở Đang phát, ▶ Phát/Dừng như vc115 | ĐẠT theo mã + ảnh 04/07 (thẻ kiểu Đang phát, nút ⏸) |
 | Prefs chỉ số; xóa ở 2 đường đăng xuất; unit test theo account | ĐẠT theo mã + test |
-| Chủ dự án xem ảnh / dùng vc116 và nói **ĐẠT** | **CHỜ** |
+| Chủ dự án xem ảnh / dùng vc116 và nói **ĐẠT** | **ĐẠT** (26/10, xem mục 9) |
 
 ## 7. Chưa kiểm chứng (không chặn theo kế hoạch, cần chủ dự án biết)
 
@@ -84,6 +84,13 @@ Màn hình: `SHANLING_SCREEN_END=OFF`, `SONY_SCREEN_END=OFF` theo báo cáo; Opu
 - Ảnh bìa thẻ Nghe tiếp khi mở lạnh là ô chữ cái (chỉ đọc cache) — đúng thiết kế.
 - Tablet dọc, Hai khung, Y700/S25/FYT/Car Mode chưa kiểm trên máy; Janky chưa đo.
 
-## 8. Kết luận
+## 8. Kết luận vòng kỹ thuật (trước phản hồi chủ dự án — đã thay bằng mục 9: **PASS**)
 
 **BLOCKED — CHỜ CHỦ DỰ ÁN.** Mã đúng phạm vi, test/build Opus tự chạy xanh, APK đạt gate và đã lên Drive owner-only, QA Shanling thật đạt bước 1–6 và Sony hồi quy đạt phần hiển thị. Còn chờ chủ dự án xem ảnh (hoặc dùng vc116 trên Shanling, đã cài sẵn) theo 5 bước "Bác sĩ tự kiểm tra" của kế hoạch, rồi nói **ĐẠT** hoặc báo lỗi. Khi ĐẠT: đổi thành PASS, xin xác nhận rồi `git merge --no-ff` vào `feature/e93-03d-y700-offline-cockpit`.
+
+## 9. Phản hồi chủ dự án và kết luận cuối
+
+**Phản hồi chủ dự án (26/10/2026):** "ĐẠT. Đổi nghiệm thu E100 thành PASS và chuẩn bị merge."
+
+**Kết luận cuối: PASS** theo phạm vi đã kiểm (mục 5–6). APK đã duyệt: vc116 / `0.6.91-beta` @ `8295598`, SHA-256 `F5E358CE…FEA19515`. Các giới hạn ở mục 7 vẫn giữ nguyên (âm thanh thật, xóa khi đăng xuất trên máy, nhánh bài chưa tải, Tablet/Hai khung/Y700/S25/FYT/Car Mode) — không đảo kết luận, có thể tách kiểm riêng khi cần.
+Bước kế: chủ dự án xác nhận thao tác rồi mới `git merge --no-ff dot/E100-THANH-DAY-CHUA-PHAT` vào `feature/e93-03d-y700-offline-cockpit` (không force, không push).

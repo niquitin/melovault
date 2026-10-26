@@ -2,7 +2,7 @@
 
 ## Bản hiện tại: vc116 (26/10/2026)
 
-**Trạng thái:** **QA CANDIDATE — CHƯA NGHIỆM THU** (chờ chủ dự án xem ảnh / dùng thử và nói ĐẠT, xem `E100-THANH-DAY-CHUA-PHAT-nghiem-thu.md`). Bản test nội bộ; giới hạn: âm thanh thật chưa xác nhận, xóa khi đăng xuất chỉ kiểm bằng mã + unit test, nhánh "bài chưa tải phát từ đầu" chưa kiểm trên máy, Tablet/Hai khung/Y700/S25/FYT/Car chưa kiểm.
+**Trạng thái:** **ĐÃ NGHIỆM THU — PASS** (chủ dự án "ĐẠT" 26/10/2026, xem `E100-THANH-DAY-CHUA-PHAT-nghiem-thu.md` mục 9). Bản test nội bộ; giới hạn: âm thanh thật chưa xác nhận, xóa khi đăng xuất chỉ kiểm bằng mã + unit test, nhánh "bài chưa tải phát từ đầu" chưa kiểm trên máy, Tablet/Hai khung/Y700/S25/FYT/Car chưa kiểm.
 
 - [MỞ APK TEST E100 (vc116) TRÊN GOOGLE DRIVE](https://drive.google.com/file/d/14LGhgoPnFf96ZYhsR7k3HMpYdFQrYms0/view)
 - [THƯ MỤC APK + ẢNH QA vc116](https://drive.google.com/drive/folders/1LBH9TFftaesZSuf3osufbDYzEjyllX9Z)
