@@ -105,6 +105,47 @@ internal object MeloBottomBarPolicy {
     /** Second line of the card: the channel (or artist / folder for local songs); null when unknown. */
     fun channelLine(sourceTitle: String?): String? = sourceTitle?.trim()?.takeIf { it.isNotEmpty() }
 
+    // ---- E100: the card while nothing is loaded in the player --------------------------------
+
+    /** What the card offers with no song loaded: continue the last song, play the list on screen, or nothing yet. */
+    enum class Idle { RESUME, PLAY_ALL, PICK }
+
+    fun idle(hasResume: Boolean, canPlayAll: Boolean): Idle = when {
+        hasResume -> Idle.RESUME
+        canPlayAll -> Idle.PLAY_ALL
+        else -> Idle.PICK
+    }
+
+    /** The card and Play do something in every state but PICK. */
+    fun idleActionable(idle: Idle): Boolean = idle != Idle.PICK
+
+    const val HINT_TITLE = "Chưa phát bài nào"
+    const val HINT_PLAY_ALL = "Bấm để phát danh sách đang xem"
+    const val HINT_PICK = "Chọn một bài trong danh sách"
+    const val RESUME_LABEL = "Nghe tiếp"
+
+    /** Second line of the resume card: "Nghe tiếp · kênh", or just "Nghe tiếp" when the channel is unknown. */
+    fun resumeLine(sourceTitle: String?): String {
+        val channel = sourceTitle?.trim().orEmpty()
+        return if (channel.isEmpty()) RESUME_LABEL else "$RESUME_LABEL · $channel"
+    }
+
+    /** Second line of the idle card for the two states without a remembered song. */
+    fun hintLine(idle: Idle): String = if (idle == Idle.PLAY_ALL) HINT_PLAY_ALL else HINT_PICK
+
+    fun idleDescription(idle: Idle, title: String?, sourceTitle: String?): String = when (idle) {
+        Idle.RESUME -> "Nghe tiếp: ${titleLine(title.orEmpty(), sourceTitle)}. Bấm để phát"
+        Idle.PLAY_ALL -> "$HINT_TITLE. $HINT_PLAY_ALL"
+        Idle.PICK -> "$HINT_TITLE. $HINT_PICK"
+    }
+
+    /** What the Play button says while nothing is loaded. */
+    fun idlePlayDescription(idle: Idle): String = when (idle) {
+        Idle.RESUME -> RESUME_LABEL
+        Idle.PLAY_ALL -> "Phát hết"
+        Idle.PICK -> "Phát"
+    }
+
     /** Height of the transport row under the card; it never changes with the card. */
     fun rowDp(spec: Spec): Int = spec.heightDp - PROGRESS_DP - spec.cardDp
 

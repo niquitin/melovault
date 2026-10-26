@@ -141,6 +141,7 @@ internal class MeloPhoneScreen(
         }
         backCallback.isEnabled = !snap.showingSources && snap.sourceTitle != null
         bar.renderTabs(snap.showingSources, snap.mode)
+        bar.refreshIdle()
         pane.onLibraryChanged()
     }
 
