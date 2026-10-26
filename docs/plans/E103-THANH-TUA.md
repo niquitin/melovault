@@ -156,13 +156,17 @@ git diff --check
 | 3 | Sony | Chạm một điểm ~25% trên thanh; rồi bấm +60s; rồi −30s | Lần lượt ≈ 25%; +60 s; −30 s (±2 s mỗi lần) | 03a, 03b |
 | 4 | Sony | Cuộn hàng đợi xuống cuối | Thanh tua và 5 nút **vẫn trên màn** (hồi quy F01) | 04 |
 | 5 | Shanling `30313860180939` vc119, Gọn | Đang phát Gọn → kéo `SeekBar` tới ~50% | Màn Gọn không đổi so với vc118; `position` ≈ 50%; không crash | 05 |
-| 6 | Sony ngang (Hai khung) | **Chỉ khi chủ dự án cho phép xoay màn Sony.** Khung trái → kéo thanh | Như bước 2 trên Hai khung | 06 |
+| 6 | Sony ngang (đã được phép xoay, xem dưới bảng) | (a) Thư viện ngang → khung trái → kéo thanh tới ~60%; (b) mở Đang phát (Deck ngang) → kéo thanh ở bến trái tới ~30% | (a) Bố cục là **Hai khung**, thanh nằm trên dòng giờ, `position` ≈ 60%; (b) Deck 2 cột, thanh trong bến trái, `position` ≈ 30%; vẫn cùng bài, không crash khi xoay | 06a, 06b |
 
-- **Bước 6** mặc định **CHƯA KIỂM**: xoay màn bằng ADB là đổi cài đặt hệ thống (`user_rotation`), cần chủ dự án cho phép riêng. Nếu được phép, phải trả lại đúng giá trị cũ trong `finally`.
+- **Bước 6, chủ dự án CHO PHÉP (26/10/2026, phiên Opus):** *"Cho phép Sonnet xoay màn Sony qua ADB ở bước 6, và phải trả lại đúng cài đặt xoay cũ trong finally."* Chỉ áp dụng cho Sony `QV725WEQ54`, chỉ ở bước 6. Quy trình:
+  1. Trước khi xoay, đọc và ghi vào báo cáo: `adb -s QV725WEQ54 shell settings get system accelerometer_rotation` và `… settings get system user_rotation` (có thể là `null`).
+  2. Xoay ngang: `settings put system accelerometer_rotation 0` rồi `settings put system user_rotation 1`. Chờ app dựng lại, chụp, kiểm qua ảnh rằng đã ra Hai khung.
+  3. **`finally` (kể cả khi FAIL/BLOCKED):** trả **đúng** hai giá trị cũ (giá trị cũ là `null` thì `settings delete system user_rotation`). Đọc lại cả hai và ghi `SONY_ROTATION_END accelerometer_rotation=<…> user_rotation=<…>`, phải khớp giá trị ban đầu. Không đổi cài đặt nào khác.
+  4. Xoay rồi mà app không ra Hai khung (bố cục không tái hiện): chụp ảnh, trả lại xoay, ghi bước 6 là **BLOCKED** kèm ảnh. Không tự đổi cỡ màn (`wm size`/`wm density`) hay cài đặt khác để ép.
 - Không tua bài đang tải dở trên máy (chỉ ghi nhận rủi ro mục 10). Không đổi Kiểu màu hay bố cục trong Cài đặt.
 - **Cleanup (`finally`):** dừng phát (`input keyevent 127` hoặc nút ⏸), `input keyevent 223`, kiểm `dumpsys display` có `Display State=OFF`, ghi `SHANLING_SCREEN_END` / `SONY_SCREEN_END`.
 - Ảnh lưu ở `docs/plans/artifacts/E103-THANH-TUA/NN_<máy>_<mô tả>_<HHMMSS>.png` rồi ghép `00_tong_hop.png`. Ảnh có tên bài/kênh **không commit**.
-- **Không kiểm được:** âm thanh thật (CHƯA XÁC NHẬN ÂM THANH THỰC), Hai khung Teal/thường trên máy thật nếu không xoay, Deck ngang, FYT/Y700/S25, núm xoay/DPAD trên FYT, tua vào phần chưa tải.
+- **Không kiểm được:** âm thanh thật (CHƯA XÁC NHẬN ÂM THANH THỰC), Hai khung kiểu Teal (Sony không ở Teal; không đổi Kiểu màu), FYT/Y700/S25, núm xoay/DPAD trên FYT, tua vào phần chưa tải.
 
 ### Bác sĩ tự kiểm tra (Sony hoặc điện thoại, sau khi có APK candidate vc119, hoặc duyệt ảnh từ xa)
 1. Mở MeloVault, phát một bài, bấm thẻ Đang phát ở dưới: thấy **thanh tua** ngay trên dòng giờ, dưới nữa là −30s / ⏮ / ⏸ / ⏭ / +60s.
@@ -175,7 +179,7 @@ git diff --check
 
 **PASS khi đạt tất cả:**
 - Test Debug + Release 0 lỗi, có đủ test mới; build OK; `git diff --check` sạch; chỉ đổi file ở mục 4 (cùng báo cáo).
-- Sony bước 1–4 PASS; Shanling bước 5 PASS; bước 6 PASS hoặc CHƯA KIỂM có lý do.
+- Sony bước 1–4 PASS; Shanling bước 5 PASS; bước 6 PASS hoặc BLOCKED kèm ảnh và lý do; `SONY_ROTATION_END` khớp giá trị xoay ban đầu.
 - Không crash/ANR trong logcat suốt QA.
 - Chủ dự án xem ảnh hoặc tự cài vc119 và nói **ĐẠT**.
 
@@ -194,7 +198,7 @@ git diff --check
 - Phải sửa `MeloScreenHost.seekTo`, `TelegramPreviewActivity`, service, Media3, Gọn hoặc Car Mode thì mới làm được.
 - `SeekBar` trong `Dialog` của Deck không nhận kéo (ví dụ bị cử chỉ vuốt-đóng hay `ScrollView` chặn): ghi lại và STOP, không tự đổi cấu trúc bến.
 - Bến cao thêm làm ảnh bìa Deck dọc trên Sony nhỏ hơn `rowArt` hoặc đè chữ: STOP, gửi ảnh.
-- ADB không thấy máy / unauthorized / signature mismatch / downgrade / sai package / APK thiếu Telegram config: BLOCKED phần QA. Cấm `uninstall`, `pm clear`, `-d`, xóa dữ liệu/cache/TDLib, đăng xuất, đổi tài khoản, tự xoay màn khi chưa được phép.
+- ADB không thấy máy / unauthorized / signature mismatch / downgrade / sai package / APK thiếu Telegram config: BLOCKED phần QA. Cấm `uninstall`, `pm clear`, `-d`, xóa dữ liệu/cache/TDLib, đăng xuất, đổi tài khoản, xoay màn ngoài bước 6, đổi cỡ/mật độ màn (`wm size`/`wm density`).
 - Không có đường Git bundle tới Tiny: STOP và hỏi.
 
 ## 10. Rủi ro và rollback
@@ -213,6 +217,6 @@ git diff --check
 ## 11. Chưa kiểm chứng / cần xác nhận
 
 - [CẦN XÁC NHẬN] versionName `0.6.94` cho vc119.
-- [CẦN XÁC NHẬN] Cho phép Sonnet xoay màn Sony qua ADB (bước 6) hay để chủ dự án tự xem Hai khung trên máy tính bảng/FYT. Mặc định: **không xoay**.
+- Xoay màn Sony: **đã chốt 26/10, cho phép ở bước 6**, bắt buộc trả lại cài đặt xoay cũ trong `finally` (mục 7).
 - [CẦN XÁC NHẬN] Chặn mép cuối 1 s (mục tiêu 5). Nếu chủ dự án muốn kéo tới cuối là sang bài kế thì đặt `SEEK_BAR_END_GUARD_MS = 0`.
 - Âm thanh thật, FYT, Y700, S25, Deck ngang: chưa kiểm (chủ dự án tự xem).
