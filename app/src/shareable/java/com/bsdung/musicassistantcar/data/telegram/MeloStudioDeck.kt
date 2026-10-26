@@ -42,7 +42,7 @@ import java.util.concurrent.atomic.AtomicLong
  *
  * E95: the waveform scrubber is gone. The time line and the −30s / Lùi / Phát / Tiến / +60s row
  * form a "bến điều khiển" pinned under the scrolling part, so the controls never leave the screen
- * while the queue scrolls.
+ * while the queue scrolls. E103: a draggable seek line is back in that dock, above the time line.
  */
 internal class MeloStudioDeck(private val activity: Activity, private val host: MeloScreenHost) {
 
@@ -65,6 +65,9 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
     /** Only the download progress ("Đang tải 45%"); the quality itself is the pill row above it. */
     private val qualityNote: TextView
     private val time: TextView
+    private val seekLine: MeloSeekLine
+    /** The drag target shown in the time line while the finger is on the seek line; null otherwise. */
+    private var previewMs: Long? = null
     private lateinit var play: TextView
     private lateinit var shuffle: TextView
     private lateinit var repeat: TextView
@@ -117,6 +120,11 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         qualityChips = MeloQualityChipRow(activity, c, s.minTouch * 2 / 3).apply { visibility = View.GONE }
         qualityNote = c.text("", s.secondaryText, p.accent, maxLines = 1).apply { visibility = View.GONE }
         time = c.text("", s.secondaryText, p.textSecondary)
+        seekLine = MeloSeekLine(
+            activity, p.border, p.accent, p.accent, s.progressHeight, s.progressThumb, s.minTouch,
+            onPreview = { previewMs = it; renderTime(host.nowPlaying()) },
+            onSeek = { host.seekTo(it); refresh() }
+        )
         queueTitle = c.text("Hàng đợi", s.titleText, p.text, bold = true)
         prefetchSwitch = Switch(activity).apply {
             text = "Tải trước bài kế"
@@ -241,7 +249,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
     }
 
     /**
-     * "Bến điều khiển": the time line and the five buttons, fixed height, outside every
+     * "Bến điều khiển": the seek line (E103), the time line and the five buttons, fixed height, outside every
      * ScrollView and never touched by [applyTight], so they stay on screen whatever the queue does.
      */
     private fun buildDock(horizontalPadding: Int): View {
@@ -250,7 +258,8 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
             setBackgroundColor(p.background)
             setPadding(horizontalPadding, s.gap, horizontalPadding, s.gap)
         }
-        dock.addView(time.apply { gravity = Gravity.END }, matchWrap())
+        dock.addView(seekLine, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, s.minTouch))
+        dock.addView(time.apply { gravity = Gravity.END }, matchWrap().apply { topMargin = s.gap / 2 })
         val transport = transportRow.apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         fun small(label: String, description: String, action: () -> Unit) =
             c.iconButton(label, description) { action() }.apply {
@@ -420,12 +429,22 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         return true
     }
 
+    /** Seek line plus time text; while the line is being dragged the shown time is the drag target. */
+    private fun renderTime(now: NowPlaying?) {
+        seekLine.set(now?.positionMs ?: 0L, now?.durationMs ?: 0L)
+        time.show(
+            if (now == null) "" else MeloComponentPolicy.progressText(
+                ((previewMs ?: now.positionMs) / 1000).toInt(), (now.durationMs / 1000).toInt()
+            )
+        )
+    }
+
     private fun renderNow(now: NowPlaying?) {
         if (now == null) {
             if (title.show("Chưa phát bài nào")) requestArtFit()
             source.show("")
             showQuality(emptyList(), "")
-            time.show("")
+            renderTime(null)
             play.show("▶")
             showArt(null, null, "♪")
             return
@@ -433,7 +452,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         var relayout = title.show(now.title)
         source.show(MeloNowPlayingPolicy.sourceLine(now.sourceTitle, now.local, now.sourceIsFolder).orEmpty())
         showQuality(host.qualityChips(fileBitDepth), now.downloadNote?.takeUnless { it.startsWith("Đã tải") }.orEmpty())
-        time.show(MeloComponentPolicy.progressText((now.positionMs / 1000).toInt(), (now.durationMs / 1000).toInt()))
+        renderTime(now)
         play.show(if (now.playing) "❚❚" else "▶")
         play.contentDescription = if (now.playing) "Dừng" else "Phát"
         relayout = styleToggle(shuffle, now.shuffle, "⇄ Đảo") or relayout
