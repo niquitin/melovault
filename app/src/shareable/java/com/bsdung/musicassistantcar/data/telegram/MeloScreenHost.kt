@@ -63,6 +63,16 @@ internal interface MeloScreenHost {
 
     /** "Phát hết": plays the group on screen from its first loaded song; [shuffle] turns shuffle on first. */
     fun playAll(shuffle: Boolean)
+
+    // ---- E100: the bottom card while nothing is loaded (defaults keep Car, Hai khung and fakes as they were) ----
+
+    /** The Telegram song this account listened to last, for the "Nghe tiếp" card; null when there is none. */
+    fun resumeCard(): Resume? = null
+    /** "Phát hết" would start a song now: the list on screen is a playable song list. */
+    fun canPlayAll(): Boolean = false
+    /** Plays the remembered song (from where it stopped when its file is fully downloaded). */
+    fun playResume() = Unit
+
     fun openNowPlaying()
     /** The same sync line the legacy header shows (real counts), or null when there is none. */
     fun syncSubtitle(): String?
@@ -162,6 +172,9 @@ internal interface MeloScreenHost {
     )
 
     data class SourceRow(val chatId: Long, val title: String, val count: Int)
+
+    /** The remembered last song of this account; [art] only when a cover is already in memory. */
+    data class Resume(val songKey: Long, val title: String, val sourceTitle: String?, val art: Bitmap?)
 
     /** The first visible song of a group and how far its top edge sits from the list's top. */
     data class ListAnchor(val groupKey: String, val songKey: Long?, val offsetPx: Int)

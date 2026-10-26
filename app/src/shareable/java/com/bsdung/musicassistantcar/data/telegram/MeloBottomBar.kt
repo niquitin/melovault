@@ -53,6 +53,9 @@ internal class MeloBottomBar(
     private var shownArt: Bitmap? = null
     private var shownArtKey: String? = null
     private var iconOnly = false
+    /** E100: what the card offers while no song is loaded, and the key of what is drawn (so a tick does not redraw it). */
+    private var idle = MeloBottomBarPolicy.Idle.PICK
+    private var idleKey: String? = null
 
     init {
         view.apply {
@@ -93,11 +96,8 @@ internal class MeloBottomBar(
         // The window can be resized without rebuilding this bar: re-check the label fit each time.
         row.addOnLayoutChangeListener { _, l, _, r, _, ol, _, or_, _ -> if (r - l != or_ - ol) row.post { updateTabLabels() } }
         installOpenGestures()
-        // No song yet: setOnClickListener made the bar and the card clickable, so switch them and Play off again.
+        // setOnClickListener made the bar clickable; with no song only the card may be (update(null) decides).
         view.isClickable = false
-        card.isClickable = false
-        play.alpha = MeloBottomBarPolicy.playAlpha(false)
-        play.isEnabled = MeloBottomBarPolicy.playEnabled(false)
         update(null)
     }
 
@@ -109,8 +109,6 @@ internal class MeloBottomBar(
             background = c.roundedBackground(p.surface, stroke = p.border)
             minimumHeight = dp(MeloBottomBarPolicy.cardHeightDp(spec, fontScale))
             setPadding(dp(MeloBottomBarPolicy.CARD_PAD_DP), dp(MeloBottomBarPolicy.CARD_PAD_DP), 0, dp(MeloBottomBarPolicy.CARD_PAD_DP))
-            visibility = View.INVISIBLE
-            isClickable = false
         }
         card.addView(artSlot, LinearLayout.LayoutParams(dp(spec.artDp), dp(spec.artDp)).apply { marginEnd = s.gap })
         val texts = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
@@ -125,14 +123,14 @@ internal class MeloBottomBar(
     }
 
     /** The cover goes through [MeloComponents.artView]: no picture means the letter tile that is already there. */
-    private fun showArt(now: NowPlaying) {
-        val key = now.sourceTitle ?: now.title
-        if (shownArt === now.art && shownArtKey == key && artSlot.childCount > 0) return
-        shownArt = now.art
+    private fun showArt(art: Bitmap?, sourceTitle: String?, title: String) {
+        val key = sourceTitle ?: title
+        if (shownArt === art && shownArtKey == key && artSlot.childCount > 0) return
+        shownArt = art
         shownArtKey = key
         artSlot.removeAllViews()
         artSlot.addView(
-            c.artView(now.art, now.sourceTitle, now.title, dp(spec.artDp)),
+            c.artView(art, sourceTitle, title, dp(spec.artDp)),
             FrameLayout.LayoutParams(dp(spec.artDp), dp(spec.artDp))
         )
     }
@@ -201,20 +199,19 @@ internal class MeloBottomBar(
         val has = now != null
         if (has != hasSong) {
             hasSong = has
-            val showInfo = MeloBottomBarPolicy.showsSongInfo(has)
-            progress.visibility = if (showInfo) View.VISIBLE else View.INVISIBLE
-            card.visibility = if (showInfo) View.VISIBLE else View.INVISIBLE
-            card.isClickable = showInfo
-            view.isClickable = showInfo
-            val alpha = MeloBottomBarPolicy.playAlpha(has)
-            play.alpha = alpha
+            // Whatever the card showed before (song or idle text) is redrawn for the new state.
+            shownTitle = null
+            shownArtKey = null
+            idleKey = null
+            progress.visibility = if (MeloBottomBarPolicy.showsSongInfo(has)) View.VISIBLE else View.INVISIBLE
+            card.visibility = View.VISIBLE
+            card.isClickable = has
+            view.isClickable = has
+            play.alpha = MeloBottomBarPolicy.playAlpha(has)
             play.isEnabled = MeloBottomBarPolicy.playEnabled(has)
         }
         if (now == null) {
-            shownTitle = null
-            play.text = "▶"
-            play.contentDescription = MeloBottomBarPolicy.playDescription(false, false)
-            card.contentDescription = null
+            showIdle()
             return
         }
         val line = MeloBottomBarPolicy.titleLine(now.title, now.sourceTitle)
@@ -226,7 +223,7 @@ internal class MeloBottomBar(
             channelText.visibility = if (channel == null) View.GONE else View.VISIBLE
             card.contentDescription = MeloBottomBarPolicy.contentDescription(now.title, now.sourceTitle)
         }
-        showArt(now)
+        showArt(now.art, now.sourceTitle, now.title)
         val durationSeconds = (now.durationMs / 1000).toInt()
         progress.max = maxOf(durationSeconds, 1)
         progress.progress = (now.positionMs / 1000).toInt().coerceIn(0, progress.max)
@@ -236,8 +233,48 @@ internal class MeloBottomBar(
         play.contentDescription = MeloBottomBarPolicy.playDescription(true, now.paused)
     }
 
+    /**
+     * E100: nothing is loaded. The card says what a tap does: continue the last song ("Nghe tiếp"),
+     * play the list on screen, or ask for a song. Only reads host state, so it is cheap to repeat.
+     */
+    private fun showIdle() {
+        val resume = host.resumeCard()
+        idle = MeloBottomBarPolicy.idle(resume != null, host.canPlayAll())
+        val actionable = MeloBottomBarPolicy.idleActionable(idle)
+        val key = "$idle|${resume?.songKey}|${resume?.title}|${resume?.sourceTitle}"
+        if (key != idleKey) {
+            idleKey = key
+            val title = if (resume != null) resume.title.trim() else MeloBottomBarPolicy.HINT_TITLE
+            titleText.text = title
+            channelText.text = if (resume != null) MeloBottomBarPolicy.resumeLine(resume.sourceTitle) else MeloBottomBarPolicy.hintLine(idle)
+            channelText.visibility = View.VISIBLE
+            card.contentDescription = MeloBottomBarPolicy.idleDescription(idle, resume?.title, resume?.sourceTitle)
+            card.isClickable = actionable
+            play.alpha = MeloBottomBarPolicy.playAlpha(actionable)
+            play.isEnabled = actionable
+            play.text = "▶"
+            play.contentDescription = MeloBottomBarPolicy.idlePlayDescription(idle)
+        }
+        // A cover can arrive later than the record (the host only reads what is already in memory).
+        if (resume != null) showArt(resume.art, resume.sourceTitle, resume.title)
+        else showArt(null, null, MeloBottomBarPolicy.HINT_TITLE)
+    }
+
+    /** Redraws the idle card after the list on screen changed (what "Phát hết" would play). */
+    fun refreshIdle() {
+        if (!hasSong) update(null)
+    }
+
+    private fun idleAction() {
+        when (idle) {
+            MeloBottomBarPolicy.Idle.RESUME -> host.playResume()
+            MeloBottomBarPolicy.Idle.PLAY_ALL -> host.playAll(false)
+            MeloBottomBarPolicy.Idle.PICK -> Unit
+        }
+    }
+
     private fun onPlayClick() {
-        if (hasSong) host.playPause()
+        if (hasSong) host.playPause() else idleAction()
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -250,7 +287,7 @@ internal class MeloBottomBar(
         })
         // The card is clickable itself (a tap anywhere on it opens once), so a swipe up must be read on it as well.
         listOf(view, card).forEach { target ->
-            target.setOnClickListener { if (hasSong) onOpenNowPlaying() }
+            target.setOnClickListener { if (hasSong) onOpenNowPlaying() else if (target === card) idleAction() }
             // A swipe up consumes its ACTION_UP so the tap listener does not open a second time.
             target.setOnTouchListener { _, event -> detector.onTouchEvent(event) && event.action == MotionEvent.ACTION_UP }
         }

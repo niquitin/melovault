@@ -195,6 +195,7 @@ internal class MeloCompactScreen(
         backCallback.isEnabled = nowPage != null || searchBar.visibility == View.VISIBLE ||
             (!snap.showingSources && snap.sourceTitle != null)
         bar.renderTabs(snap.showingSources, snap.mode)
+        bar.refreshIdle()
         adapter.notifyDataSetChanged()
         if (rowArt) {
             lastArtFirst = -1
