@@ -25,4 +25,4 @@
 - Sonnet ghi `SHANLING_SCREEN_END=OFF/ON (lý do)/UNKNOWN` và `SONY_SCREEN_END=OFF/ON (lý do)/UNKNOWN` cùng thời điểm xác nhận trong `docs/plans/<TASK_ID>-bao-cao.md`. ChatGPT khi QA lại cũng tuân thủ.
 - Chủ dự án nghiệm thu bằng ảnh/video **sau khi màn đã tắt**, không yêu cầu thiết bị sáng liên tục trong lúc chờ chủ dự án trả lời.
 
-Quy tắc này thuộc tài liệu quy trình; **chỉ ChatGPT được sửa**. Không thay đổi mã nguồn ứng dụng chỉ để thực hiện chính sách này.
+Từ 25/10/2026, "ChatGPT" trong tài liệu này đọc là **Opus nghiệm thu** (CLAUDE.md). Quy tắc này thuộc tài liệu quy trình; **chỉ Opus được sửa khi chủ dự án yêu cầu**. Không thay đổi mã nguồn ứng dụng chỉ để thực hiện chính sách này.
