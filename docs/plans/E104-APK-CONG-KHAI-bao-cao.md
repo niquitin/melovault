@@ -1,3 +1,4 @@
+Thực thi: Codex gpt-6-astra medium, phiên 2
 Thực thi: Codex gpt-6-astra medium, phiên 1
 
 | Nội dung | Kết quả phiên 1 trên Ni |
@@ -130,3 +131,59 @@ Phiên 2 thực hiện S10–S16, kiểm signer/package/version/config trước 
 
 Artifact private của phiên: `D:\Bots\MeloVault-E91-Shareable\docs\plans\artifacts\E104-APK-CONG-KHAI\` (Git ignored).
 S9: đã rà diff đúng phạm vi, `git diff 1d278c3 --check` không lỗi; báo cáo được commit riêng sau các commit mã. Không ghi kết luận nghiệm thu thay Opus.
+
+## Phiên 2 — BLOCKED trước S10–S14 (26/10/2026)
+
+| Nội dung | Kết quả |
+|---|---|
+| Git đầu phiên | `dot/E104-APK-CONG-KHAI`, HEAD `a10e8162b9f671d9b631799a659fe2b26c2a10e2`, cây sạch, diff check không lỗi |
+| Baseline / plan | `a638099` và `1d278c3` đều là tổ tiên HEAD; nguồn code vẫn `03e9dc9` |
+| Hoạt động đồng thời | Commit cuối 21:00:19 +07, cách kiểm tra khoảng 20 phút; hai Java process là Gradle/Kotlin daemon, không phát hiện thay đổi Git mới |
+| Tiny | Desktop Commander xác nhận online; `hostname` trả `DESKTOP-HNP4GVR` |
+| Shanling | ADB `30313860180939` trạng thái device; model `Shanling M3 Ultra`, manufacturer `Shanling` |
+| Package open trước cài | `pm list packages app.melovault.player.open` trả rỗng |
+| S10 bundle / clone | Chưa thực hiện: dừng khi phát hiện thiếu cách cấp config hợp lệ cho S11 |
+| S11 build Tiny | BLOCKED; chưa chạy Gradle, chưa kiểm boolean config trên Tiny |
+| S12 / P3 | Chưa chạy open Debug/Release hoặc đối chứng thường; chưa có kết quả found=true/false |
+| S13–S14 | Chưa tạo/chuyển APK, chưa kiểm signer/package/vc của APK Tiny, chưa cài |
+| S15–S16 | Ghi blocker vào báo cáo này, chỉ commit báo cáo; không sửa code |
+
+### Điểm dừng: thiếu phương thức cấp cấu hình trong clone mới
+
+`app/build.gradle` dòng 6–9, 24–25 chỉ nạp Telegram config từ `local.properties` ở gốc project.
+Đã đọc script lịch sử `C:\Bots\_qa_temp\e103c_build.ps1` qua Desktop Commander để xác định cách build cũ; không chạy script.
+Script cũ lấy `local.properties` từ repo gốc Tiny và `Copy-Item` vào clone cô lập.
+Chỉ dẫn phiên này cấm đọc/copy `local.properties` và cấm chạm repo gốc Tiny; không áp dụng lại thao tác cũ.
+S11 yêu cầu config thật trong clone MỚI, nhưng kế hoạch chưa chỉ rõ cách cấp config tuân các giới hạn trên.
+Đây là thiếu hướng dẫn chuẩn bị môi trường, **không phải kết luận Tiny thiếu config hay lỗi code**.
+Theo yêu cầu “Plan sai/thiếu → DỪNG”, không tự sửa build config, tạo liên kết tới secret, sao chép secret hoặc dùng APK Ni thay thế.
+Cần chủ dự án/Opus làm rõ phương thức cấp config được phép cho clone mới trước khi tiếp tục; không yêu cầu gửi giá trị bí mật vào hội thoại.
+Chưa đọc/in/copy file bí mật, chưa ghi lên Tiny, chưa đụng các repo cấm.
+
+### QA và màn hình
+
+| Bước | Thực tế | Bằng chứng UI |
+|---|---|---|
+| Q1 | Chưa cài/mở app open | Chưa có |
+| Q2 | Chưa thử validation | Chưa có |
+| Q3 | Chưa nhập mã giả; không nhập số điện thoại/OTP/mã thật | Chưa có |
+| Q4 | Chưa thử lưu bền hoặc câu dự phòng rồi force-stop/mở lại | Chưa có |
+| Q5 | Chưa cài bản thường, chưa mở thư viện/phát nhạc | Chưa có |
+| Q6 | Chưa thu logcat; không có kết luận hash giả/crash/ANR | Chưa có |
+
+Không wake màn. Cleanup trong `finally` đã gửi `keyevent 223`; tại 21:22:37 +07, `dumpsys display` ghi `mGlobalDisplayState=OFF` và màn tích hợp `state OFF`, `mWakefulness=Asleep`.
+`SHANLING_SCREEN_END=OFF` (Android này không in nguyên nhãn `Display State=OFF`; ghi đúng nhãn đầu ra thực tế ở trên).
+`SONY_SCREEN_END=UNKNOWN` — không dùng ADB Sony, không wake hay QA Sony (không bắt buộc E104).
+Chưa có ảnh Q1–Q5 nên chưa tạo `00_tong_hop.png`; không dùng ảnh cũ thay bằng chứng phiên này.
+
+### APK QA cần Opus nghiệm thu bàn giao — phiên 2
+
+| Candidate yêu cầu | Trạng thái bàn giao |
+|---|---|
+| Thường Debug Tiny, `app.melovault.player`, vc120 / `0.6.95-beta` | BLOCKED — chưa build, chưa có đường dẫn/SHA-256/bytes/cert/config được kiểm |
+| Open Debug + Release Tiny, `app.melovault.player.open`, vc120 / `0.6.95-open` | BLOCKED — chưa build, chưa có đường dẫn/SHA-256/bytes/cert/P3 được kiểm |
+
+APK Ni và số liệu test phiên 1 ở trên giữ nguyên; không phải APK Tiny được phép cài/bàn giao.
+Không chạy lại test/build Ni vì chưa thay code, nhiệm vụ phiên 2 dừng ở chuẩn bị môi trường.
+Chưa xác nhận đăng nhập thật, Keystore/UI/TDLib trên máy, hồi quy bản riêng hoặc âm thanh thật.
+Không upload, công bố APK, merge, push hoặc viết file nghiệm thu. Dừng chờ Opus xử lý điểm thiếu của kế hoạch.
