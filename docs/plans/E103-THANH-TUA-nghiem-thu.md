@@ -2,7 +2,7 @@
 
 ## 1. Kết luận
 
-**BLOCKED — CHỜ CHỦ DỰ ÁN.** Phần kỹ thuật đạt: đúng phạm vi file, test/build Opus tự chạy lại xanh, APK đạt cổng và đã lên Drive owner-only, QA Sony bước 1–4, 6a, 6b và Shanling bước 5 khớp kỳ vọng về **chức năng** (tua đúng mốc, chỉ tua khi thả tay).
+**REWORK (vòng 1, F1)** — chủ dự án chốt 26/10/2026: *"REWORK F1 — đưa prompt Sonnet sửa thanh tua thành thanh mảnh có chấm tròn thấy rõ."* Xem mục 10. (Trước đó: BLOCKED — CHỜ CHỦ DỰ ÁN ở `6b9dee6`.) Phần kỹ thuật đạt: đúng phạm vi file, test/build Opus tự chạy lại xanh, APK đạt cổng và đã lên Drive owner-only, QA Sony bước 1–4, 6a, 6b và Shanling bước 5 khớp kỳ vọng về **chức năng** (tua đúng mốc, chỉ tua khi thả tay).
 
 Có **một lệch giao diện so với kế hoạch** (F1 dưới đây): thanh vẽ ra **dày khoảng 16 dp, gần như không thấy chấm tròn**, trong khi kế hoạch mục 3.2 yêu cầu "thanh mảnh có chấm tròn" (track cao `s.progressHeight` = 3 dp, chấm 16 dp) và mục 10 hứa Hai khung Teal "cùng cỡ track/thumb" như E98. Mục 8 không liệt kê lỗi này trong danh sách FAIL, nên Opus không tự xếp REWORK; **đề xuất REWORK nhỏ** và để chủ dự án chốt: chấp nhận thanh dày như ảnh, hoặc cho Sonnet sửa thành thanh mảnh có chấm.
 
@@ -89,3 +89,17 @@ APK `fc98e0e` (SHA `692C983E…`) có lỗi thả tay — không bàn giao.
 Chủ dự án xem ảnh (Drive/chat) hoặc cài vc119 rồi trả lời một trong hai:
 - **"REWORK F1"** — Sonnet sửa thanh mảnh có chấm (khuyến nghị), Opus nghiệm thu lại; hoặc
 - **"ĐẠT"** — chấp nhận thanh dày như ảnh; Opus đổi thành PASS và xin xác nhận merge.
+
+## 10. REWORK vòng 1 — việc Sonnet phải làm (26/10/2026)
+
+Chỉ sửa F1, không đổi logic tua đã đạt.
+
+| # | Yêu cầu | Tiêu chí đạt |
+|---|---|---|
+| R1 | `MeloSeekLine` (`MeloComponents.kt`, khối `init`) vẽ track + fill **cao đúng `trackPx`** (3 dp ở điện thoại), căn giữa theo chiều dọc trong vùng chạm `s.minTouch` | Trên ảnh Sony 1080 px, track ≤ ~12 px (≈ 4 dp) |
+| R2 | Chấm tròn `thumbPx` (16 dp) **nhìn rõ** ở mọi vị trí, kể cả 0% và khi nằm trên phần đã chạy | Thấy chấm tròn tách khỏi thanh trên ảnh Deck dọc, Hai khung, Deck ngang; giống kiểu thanh của Gọn |
+| R3 | Giữ vùng chạm `s.minTouch`, giữ toàn bộ hành vi: kéo chỉ xem trước, thả mới tua, phím/TalkBack tua ngay, khóa khi chưa có thời lượng, chặn mép cuối 1 s | QA lại bước 1, 2, 6a (và 6b nếu tiện) đạt như vòng trước (±3%) |
+| R4 | Phạm vi: chỉ `MeloComponents.kt` (+ test nếu có hàm thuần mới, + báo cáo). **Không** đụng Car Mode/Gọn (dù Car Mode dùng cùng kiểu `progressTrack`), Deck/Hai khung, policy, service, Media3 | `git diff --stat 3d576bb..HEAD` chỉ gồm file trên |
+| R5 | Không tăng versionCode (giữ vc119 / 0.6.94-beta, `install -r` cùng vc như vòng trước); APK mới build ở Tiny, có Telegram config | Báo cáo mục "APK QA cần Opus nghiệm thu bàn giao" cho commit mới; APK `3d576bb` thành bản cũ, không xóa |
+
+Gợi ý kỹ thuật (Sonnet tự kiểm trên máy, không bắt buộc đúng cách này): `SeekBar` co `progressDrawable` theo chiều cao giới hạn của style, nên `setSize(1, trackPx)` không đủ. Với minSdk 26 có thể dùng `LayerDrawable.setLayerHeight(i, trackPx)` + `setLayerGravity(i, Gravity.CENTER_VERTICAL or Gravity.FILL_HORIZONTAL)` cho cả hai lớp (API 23+), hoặc bọc bằng `InsetDrawable`; `setMaxHeight` chỉ có từ API 29 nên không dùng một mình. Nếu chấm vẫn lẫn vào phần fill cùng màu, có thể thêm viền mảnh màu nền cho chấm — chỉ trong `MeloSeekLine`.
