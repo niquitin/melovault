@@ -2,7 +2,9 @@
 
 ## 1. Kết luận
 
-**REWORK (vòng 1, F1)** — chủ dự án chốt 26/10/2026: *"REWORK F1 — đưa prompt Sonnet sửa thanh tua thành thanh mảnh có chấm tròn thấy rõ."* Xem mục 10. (Trước đó: BLOCKED — CHỜ CHỦ DỰ ÁN ở `6b9dee6`.) Phần kỹ thuật đạt: đúng phạm vi file, test/build Opus tự chạy lại xanh, APK đạt cổng và đã lên Drive owner-only, QA Sony bước 1–4, 6a, 6b và Shanling bước 5 khớp kỳ vọng về **chức năng** (tua đúng mốc, chỉ tua khi thả tay).
+**Hiện tại (sau REWORK vòng 1, `0a9beda`): BLOCKED — CHỜ CHỦ DỰ ÁN.** F1 đã sửa và kiểm (mục 11); kỹ thuật đạt, chờ chủ dự án xem ảnh/cài và nói ĐẠT.
+
+Lịch sử: **REWORK (vòng 1, F1)** — chủ dự án chốt 26/10/2026: *"REWORK F1 — đưa prompt Sonnet sửa thanh tua thành thanh mảnh có chấm tròn thấy rõ."* Xem mục 10. (Trước đó: BLOCKED — CHỜ CHỦ DỰ ÁN ở `6b9dee6`.) Phần kỹ thuật đạt: đúng phạm vi file, test/build Opus tự chạy lại xanh, APK đạt cổng và đã lên Drive owner-only, QA Sony bước 1–4, 6a, 6b và Shanling bước 5 khớp kỳ vọng về **chức năng** (tua đúng mốc, chỉ tua khi thả tay).
 
 Có **một lệch giao diện so với kế hoạch** (F1 dưới đây): thanh vẽ ra **dày khoảng 16 dp, gần như không thấy chấm tròn**, trong khi kế hoạch mục 3.2 yêu cầu "thanh mảnh có chấm tròn" (track cao `s.progressHeight` = 3 dp, chấm 16 dp) và mục 10 hứa Hai khung Teal "cùng cỡ track/thumb" như E98. Mục 8 không liệt kê lỗi này trong danh sách FAIL, nên Opus không tự xếp REWORK; **đề xuất REWORK nhỏ** và để chủ dự án chốt: chấp nhận thanh dày như ảnh, hoặc cho Sonnet sửa thành thanh mảnh có chấm.
 
@@ -103,3 +105,24 @@ Chỉ sửa F1, không đổi logic tua đã đạt.
 | R5 | Không tăng versionCode (giữ vc119 / 0.6.94-beta, `install -r` cùng vc như vòng trước); APK mới build ở Tiny, có Telegram config | Báo cáo mục "APK QA cần Opus nghiệm thu bàn giao" cho commit mới; APK `3d576bb` thành bản cũ, không xóa |
 
 Gợi ý kỹ thuật (Sonnet tự kiểm trên máy, không bắt buộc đúng cách này): `SeekBar` co `progressDrawable` theo chiều cao giới hạn của style, nên `setSize(1, trackPx)` không đủ. Với minSdk 26 có thể dùng `LayerDrawable.setLayerHeight(i, trackPx)` + `setLayerGravity(i, Gravity.CENTER_VERTICAL or Gravity.FILL_HORIZONTAL)` cho cả hai lớp (API 23+), hoặc bọc bằng `InsetDrawable`; `setMaxHeight` chỉ có từ API 29 nên không dùng một mình. Nếu chấm vẫn lẫn vào phần fill cùng màu, có thể thêm viền mảnh màu nền cho chấm — chỉ trong `MeloSeekLine`.
+
+## 11. Nghiệm thu lại sau REWORK vòng 1 (Opus, 26/10/2026 14:54–15:00)
+
+**Kết luận: BLOCKED — CHỜ CHỦ DỰ ÁN.** F1 đã sửa; R1–R5 đạt; không thấy lỗi mới.
+
+| Mục | Kết quả (Opus tự kiểm) |
+|---|---|
+| Git | HEAD `ec8a3cd`, cây sạch; mới từ `c2ccf3a`: `0a9beda` (code) + `ec8a3cd` (báo cáo). `git diff --stat 3d576bb..HEAD` phần production chỉ `MeloComponents.kt` (+9/−1); `git diff --check` sạch |
+| Mã (`MeloComponents.kt:906-928`) | Track/fill: bỏ `setSize`, thêm `setLayerHeight(i, trackPx)` + `setLayerGravity(i, CENTER_VERTICAL or FILL_HORIZONTAL)` cho cả 2 lớp (API 23+, minSdk 26 OK). Chấm: thêm viền `max(1, thumbPx/8)` màu track. Logic kéo/thả/phím/khóa/chặn mép không đổi. Car Mode/Gọn không đụng — **R1, R3, R4 đạt** |
+| Test/build (`--rerun` hai task test + assemble Debug/Release) | BUILD SUCCESSFUL 2m; Debug **2094**/21 bỏ qua/0 lỗi; Release **2094**/21/0 — khớp báo cáo |
+| APK `0a9beda` | SHA-256 `15A596FF…2EEC5425`, 34.334.950 B, `app.melovault.player` vc119 / 0.6.94-beta, cert `eecd3df7…c3fce8`; trùng `base.apk` đang cài trên Shanling (`sha256sum` trên máy) — **R5 đạt** (vc giữ 119) |
+| Drive | thư mục mới `MeloVault_QA/E103-THANH-TUA-20261026-vc119-0a9beda`: APK + 7 PNG + `SHA256.txt`, SHA khớp khi chép; quyền chỉ owner (APK, thư mục) — `E103-THANH-TUA-apk-test.md`, `-hinh-nghiem-thu.md` |
+| Ảnh `rw1/00_tong_hop.png` | Deck dọc, Deck ngang, Hai khung: **thanh mảnh, chấm tròn có viền tách rõ** (4 ô cận) — **R2 đạt**. Bước 2: giữa kéo giờ `1:58:15`, thả `2:30:28/3:21:07` (≈74,8%); 6b 30,1%; 6a 60,0% (±3%) |
+| Shanling | Gọn (thư viện + mini player) không đổi; Opus đọc `mState=OFF` sau phiên |
+| Xoay / màn / logcat | `SONY_ROTATION_END` = `1 0` khớp đầu; `SONY_SCREEN_END`, `SHANLING_SCREEN_END` OFF; FATAL=0, ANR=0 hai máy (báo cáo) |
+
+Chưa kiểm ở vòng này: bước 3 (chạm 25%, ±30/60 s) và 4 (cuộn) không chạy lại — chấp nhận vì mã logic và bến không đổi, vòng trước đạt; Deck/Hai khung trên Shanling (máy dùng Gọn). Vẫn **CHƯA XÁC NHẬN ÂM THANH THỰC**; Teal, FYT (núm xoay/DPAD), Y700, S25, Car Mode chưa kiểm.
+
+Điểm phụ (không chặn): viền chấm 2 px màu `p.border`, trên nền tối vẫn rõ; điểm "Nghe tiếp" Sony là NONSTOP do QA. Chặn mép cuối 1 s và versionName `0.6.94` vẫn [CẦN XÁC NHẬN] theo kế hoạch mục 11.
+
+**Chờ chủ dự án:** xem ảnh hoặc cài APK `0a9beda` rồi nói **ĐẠT** (Opus đổi PASS, xin xác nhận merge `--no-ff` vào `feature/e93-03d-y700-offline-cockpit`) hoặc báo lỗi.
