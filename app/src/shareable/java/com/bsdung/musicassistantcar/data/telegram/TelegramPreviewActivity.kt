@@ -274,6 +274,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var libraryDb: TelegramLibraryDao? = null
     private var syncCoordinator: TelegramSyncCoordinator? = null
+    private val overflowMenu by lazy { MeloOverflowMenu(this) }
     private val dbExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val uiQueryGeneration = java.util.concurrent.atomic.AtomicLong(1L)
     private val offlineExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
@@ -922,6 +923,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        overflowMenu.dismiss()
         if (downloadedCountScheduled) android.util.Log.w("MeloVaultCount", "stage=pause_cancels_pending")
         uiForeground = false
         player?.let { rememberResume(it.currentMediaItem?.mediaId, it.currentPosition) }
@@ -1407,6 +1409,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
     }
 
+    // E102: không còn lối vào, giữ để rollback
     private fun showThemePickerDialog() {
         val presets = UiThemePolicy.ThemePreset.entries.toTypedArray()
         val names = presets.map { preset ->
@@ -1432,6 +1435,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             .show()
     }
 
+    // E102: không còn lối vào, giữ để rollback
     private fun toggleThemePreset() {
         showThemePickerDialog()
     }
@@ -1471,6 +1475,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         hideZeroSourcesToggle.contentDescription = if (isHidden) "Đang ẩn các kênh không có bài. Bấm để hiện lại." else "Đang hiện tất cả các kênh. Bấm để ẩn kênh 0 bài."
     }
 
+    // E102: không còn lối vào, giữ để rollback
     private fun showSourceDisplayModeDialog() {
         val modes = TelegramVaultBentoPolicy.SourceDisplayMode.entries.toTypedArray()
         val names = modes.map { mode ->
@@ -3370,48 +3375,51 @@ class TelegramPreviewActivity : AppCompatActivity() {
         applyMeloLayer()
     }
 
+    /**
+     * E102: the ⋮ menu is one popup (sync card + a few rows + "Cài đặt"). Each action below is the body of the
+     * old menu item of the same job; Đăng xuất, Giao diện and Hiển thị nguồn moved into the settings screen.
+     */
     private fun showLibraryOverflow(anchor: View) {
-        val themed = ContextThemeWrapper(this, R.style.Theme_MeloVault_Dialog)
-        val menu = PopupMenu(themed, anchor)
-        menu.menu.add(0, 1, 1, "☆ Tin đã lưu")
-        menu.menu.add(0, 2, 2, "Đồng bộ nhanh (Cập nhật bài mới)")
-        menu.menu.add(0, 3, 3, "Đồng bộ toàn bộ thư viện")
-        val pauseResumeLabel = if (syncCoordinator?.isBusy() == true) "Tạm dừng đồng bộ" else "Tiếp tục đồng bộ"
-        menu.menu.add(0, 4, 4, pauseResumeLabel)
-        menu.menu.add(0, 5, 5, "Nhóm / kênh / bot Telegram")
-        menu.menu.add(0, 6, 6, "Chọn tệp nhạc (Google Drive / thiết bị)")
-        menu.menu.add(0, 7, 7, "Đăng xuất Telegram")
-        val themeLabel = "Giao diện: ${currentThemePreset.displayName} ✓"
-        menu.menu.add(0, 8, 8, themeLabel)
-        val bentoLabel = "Hiển thị nguồn: ${currentSourceDisplayMode.displayName} ›"
-        menu.menu.add(0, 9, 9, bentoLabel)
-        menu.menu.add(0, 10, 10, "⚙ Cài đặt giao diện (thử nghiệm)")
+        val ready = auth.isReady()
+        val coord = syncCoordinator
+        val card = MeloSettingsPolicy.syncCard(
+            authReady = ready,
+            syncing = globalScanLoading || coord?.isBusy() == true,
+            paused = coord?.isPaused() == true,
+            liveSongs = meloLibraryDiag?.liveSongs,
+            lastSyncCompletedMs = meloLibraryDiag?.lastSyncCompletedMs ?: 0L,
+            nowMs = System.currentTimeMillis()
+        )
         // Car Mode has no device-music list.
-        if (meloLayer != null && carScreen == null) menu.menu.add(0, 11, 11, "♪ ${MeloLocalSourcePolicy.SOURCE_TITLE}")
-        menu.setOnMenuItemClickListener {
+        val items = MeloSettingsPolicy.menuItems(ready, showLocal = meloLayer != null && carScreen == null)
+        overflowMenu.show(anchor, card, items, onSync = { button ->
             val user = library.authorizedUser()?.value ?: 0L
-            when (it.itemId) {
-                1 -> if (auth.isReady()) {
-                    closeLocalMusic()
-                    loadSavedMessages()
-                }
-                2 -> if (auth.isReady()) {
+            when (button) {
+                MeloSettingsPolicy.SyncButton.FETCH_NEW -> if (auth.isReady()) {
                     autoRecoveryPolicy.onManualScanRequested()
                     scanAllTelegramAudio(browseAfter = false, incremental = true)
                 }
-                3 -> if (auth.isReady()) {
+                MeloSettingsPolicy.SyncButton.FULL_SCAN -> if (auth.isReady()) {
                     autoRecoveryPolicy.onManualScanRequested()
                     scanAllTelegramAudio(browseAfter = false, incremental = false, forceRestart = true)
                 }
-                4 -> if (auth.isReady() && user > 0L) {
-                    val coord = syncCoordinator
-                    if (coord != null && coord.isBusy()) {
-                        coord.pauseSync()?.let { action -> handleSyncAction(action, user) }
+                MeloSettingsPolicy.SyncButton.PAUSE, MeloSettingsPolicy.SyncButton.RESUME -> if (auth.isReady() && user > 0L) {
+                    val c = syncCoordinator
+                    if (c != null && c.isBusy()) {
+                        c.pauseSync()?.let { action -> handleSyncAction(action, user) }
                     } else {
                         scanAllTelegramAudio(browseAfter = false, incremental = false, forceRestart = false)
                     }
                 }
-                5 -> if (auth.isReady()) {
+            }
+        }, onItem = { id ->
+            val user = library.authorizedUser()?.value ?: 0L
+            when (id) {
+                MeloSettingsPolicy.MenuId.SAVED -> if (auth.isReady()) {
+                    closeLocalMusic()
+                    loadSavedMessages()
+                }
+                MeloSettingsPolicy.MenuId.SOURCES -> if (auth.isReady()) {
                     closeLocalMusic()
                     val shouldScan = autoRecoveryPolicy.shouldTabTriggerScan(
                         auth.isReady(), allChatsMode, globalScanLoading, songs.size,
@@ -3424,23 +3432,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     songFilter.text?.clear()
                     refreshSongRows()
                 }
-                6 -> if (auth.isReady()) openAudioDocument()
-                7 -> if (auth.isReady()) {
-                    AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
-                        .setTitle("Đăng xuất tài khoản Telegram?")
-                        .setMessage("Bài đã tải và phiên đăng nhập trên thiết bị sẽ thay đổi.")
-                        .setNegativeButton("Hủy", null)
-                        .setPositiveButton("Đăng xuất") { _, _ -> logoutUser() }
-                        .show()
-                }
-                8 -> toggleThemePreset()
-                9 -> showSourceDisplayModeDialog()
-                10 -> startActivity(uiLabIntent())
-                11 -> openLocalMusic()
+                MeloSettingsPolicy.MenuId.OPEN_FILE -> if (auth.isReady()) openAudioDocument()
+                MeloSettingsPolicy.MenuId.SETTINGS -> startActivity(uiLabIntent())
+                MeloSettingsPolicy.MenuId.LOCAL -> openLocalMusic()
             }
-            true
-        }
-        menu.show()
+        })
     }
 
     private fun applyResponsiveLibraryUi() {

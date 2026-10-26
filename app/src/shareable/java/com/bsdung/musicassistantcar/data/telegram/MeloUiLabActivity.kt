@@ -101,6 +101,18 @@ class MeloUiLabActivity : AppCompatActivity() {
         }
 
         /**
+         * Sizes for the settings screens and the ⋮ menu: the real device's (Gọn on Shanling, else the same
+         * phone/tablet rule as the library and the deck), never Car pixels.
+         */
+        internal fun settingsSizes(activity: Activity): MeloDesignTokens.Sizes {
+            val m = realMeasurements(activity)
+            val layout = MeloScreenPolicy.chooseLayout(m.windowWidthDp, m.windowHeightDp, carMode = false, panelCompact = m.panelCompact)
+            val profile = if (layout == MeloScreenPolicy.Layout.COMPACT) MeloDesignTokens.Profile.COMPACT
+            else MeloLibraryPolicy.profileFor(m.smallestWidthDp)
+            return MeloDesignTokens.sizes(profile, m.display.density, m.display.fontScale, m.display.physicalPpi)
+        }
+
+        /**
          * Extra top room for the head unit's "•••" card handle at [view]'s window (E95 F04): the
          * policy's answer from where the window really sits on the screen and the owner's
          * "Chừa chỗ nút •••" setting. 0 on a phone's full screen, on Shanling and in the lower
