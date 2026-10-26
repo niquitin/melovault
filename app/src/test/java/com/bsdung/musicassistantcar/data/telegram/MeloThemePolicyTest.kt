@@ -36,6 +36,36 @@ class MeloThemePolicyTest {
     }
 
     @Test
+    fun rowArtLayerAlwaysCoversTheCompactScreenWhateverTheTheme() {
+        // Gọn has no new layer (null) and shows covers with every colour theme; Car Mode never does.
+        for (theme in ColorTheme.entries) {
+            assertTrue(MeloThemePolicy.rowArtLayer(theme, null, Profile.COMPACT))
+            assertFalse(MeloThemePolicy.rowArtLayer(theme, null, Profile.CAR))
+            NewLayer.entries.forEach { assertFalse(MeloThemePolicy.rowArtLayer(theme, it, Profile.CAR)) }
+        }
+        assertTrue(MeloThemePolicy.rowArtLayer(ColorTheme.CURRENT, null, Profile.COMPACT))
+        assertTrue(MeloThemePolicy.rowArtLayer(ColorTheme.TEAL_BRIGHT, null, Profile.COMPACT))
+        assertFalse(MeloThemePolicy.rowArtLayer(ColorTheme.TEAL_BRIGHT, null, Profile.PHONE))
+    }
+
+    @Test
+    fun rowArtLayerKeepsTheE98BehaviourForPhoneAndTablet() {
+        for (theme in ColorTheme.entries) for (layer in NewLayer.entries) {
+            for (profile in listOf(Profile.PHONE, Profile.TABLET)) {
+                assertEquals(
+                    MeloThemePolicy.appliesTo(theme, layer, profile),
+                    MeloThemePolicy.rowArtLayer(theme, layer, profile),
+                )
+            }
+        }
+        NewLayer.entries.forEach {
+            assertTrue(MeloThemePolicy.rowArtLayer(ColorTheme.TEAL_BRIGHT, it, Profile.PHONE))
+            assertTrue(MeloThemePolicy.rowArtLayer(ColorTheme.TEAL_BRIGHT, it, Profile.TABLET))
+            assertFalse(MeloThemePolicy.rowArtLayer(ColorTheme.CURRENT, it, Profile.PHONE))
+        }
+    }
+
+    @Test
     fun noLayerMeansNoTheme() {
         // Gọn, Car Mode, the legacy library and a signed-out app have no new layer.
         assertFalse(MeloThemePolicy.appliesTo(ColorTheme.TEAL_BRIGHT, null, Profile.PHONE))

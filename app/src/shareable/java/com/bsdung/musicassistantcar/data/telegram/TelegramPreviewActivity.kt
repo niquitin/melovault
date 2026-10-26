@@ -4761,12 +4761,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
             showNewLayer(prefs, measured)
             return
         }
-        val key = "compact:${setting.key}:${display.widthPx}x${display.heightPx}:${display.densityDpi}:${display.fontScale}"
+        // E99: Gọn keeps its colours but shows the row covers when the teal theme is chosen; the flag is part of the key.
+        val rowArt = MeloThemePolicy.rowArtLayer(MeloThemePolicy.load(prefs), null, MeloDesignTokens.Profile.COMPACT)
+        val key = MeloCompactPolicy.layerKey(setting.key, display.widthPx, display.heightPx, display.densityDpi, display.fontScale, rowArt)
         if (compactScreen != null && meloLayerKey == key) {
             scheduleMeloLibraryRefresh()
             return
         }
         detachMeloLayer()
+        // After detachMeloLayer(), which clears the flag.
+        rowArtThemeActive = rowArt
         if (MeloCompactPolicy.needsDefaultDownloadedFilter(MeloCompactPolicy.defaultApplied(prefs))) {
             MeloCompactPolicy.markDefaultApplied(prefs)
             playlistMode = false
@@ -4780,7 +4784,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val spec = if (emulate) MeloScreenPolicy.Emulation.SHANLING_M3_ULTRA.spec() ?: display else display
         val frameContext = if (emulate) MeloEmulation.emulatedContext(this, spec) else this
         val sizes = MeloDesignTokens.sizes(MeloDesignTokens.Profile.COMPACT, spec.density, spec.fontScale, spec.physicalPpi)
-        val screen = MeloCompactScreen(frameContext, sizes, meloHost, onBackPressedDispatcher)
+        val screen = MeloCompactScreen(frameContext, sizes, meloHost, onBackPressedDispatcher, rowArt)
         val layer: View = if (emulate) {
             MeloEmulation.FrameHost(this, frameContext, spec, MeloDesignTokens.PALETTE.background).also {
                 it.frame.addView(screen.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -4830,7 +4834,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             return
         }
         detachMeloLayer()
-        rowArtThemeActive = theme == MeloThemePolicy.ColorTheme.TEAL_BRIGHT
+        rowArtThemeActive = MeloThemePolicy.rowArtLayer(theme, layer, profile)
         val sizes = MeloDesignTokens.sizes(profile, display.density, display.fontScale, display.physicalPpi)
         val view: View
         if (layer == MeloLibraryPolicy.NewLayer.TWO_PANE) {

@@ -48,6 +48,14 @@ internal const val MELO_SONG_ROW_MORE_TAG = "melo.songrow.more"
 /** Tag on the cover frame of a teal-theme song row: which cover ([MeloRowArtPolicy] key) belongs there. */
 internal class MeloArtTag(val key: String)
 
+/** The cover frame ([MeloArtTag]) inside a list row, or null. Shared by the teal library pane and the Gọn list (E99). */
+internal fun findRowArtFrame(v: View?, depth: Int = 0): FrameLayout? {
+    if (v == null || depth > 4) return null
+    if (v is FrameLayout && v.tag is MeloArtTag) return v
+    if (v is ViewGroup) for (i in 0 until v.childCount) findRowArtFrame(v.getChildAt(i), depth + 1)?.let { return it }
+    return null
+}
+
 /**
  * Shared MeloVault building blocks (docs/ui-spec.md "Thành phần dùng chung").
  * Every size comes from [Sizes] in device pixels, so the same code renders the
@@ -249,7 +257,7 @@ internal class MeloComponents(
                 layoutParams = LinearLayout.LayoutParams(sizes.minTouch * 6 / 10, ViewGroup.LayoutParams.WRAP_CONTENT)
             })
         }
-        if (teal && model.artKey != null) {
+        if ((teal || isCompact) && model.artKey != null) {
             row.addView(rowArtView(model.art, shownSource, shownTitle, sizes.rowArt, model.artKey))
         } else {
             row.addView(artView(model.art, shownSource, shownTitle, sizes.rowArt))
