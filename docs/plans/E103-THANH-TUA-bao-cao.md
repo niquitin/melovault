@@ -165,3 +165,99 @@ Cách đo: tọa độ thanh lấy từ `uiautomator dump` (content-desc "Thanh 
 | Chủ dự án xem ảnh/cài vc119 và nói ĐẠT | **Chờ chủ dự án** |
 
 Artifacts: `docs/plans/artifacts/E103-THANH-TUA/` (Ni; `sony/`, `shanling/`, `00_tong_hop.png`; git bỏ qua) và `C:\Bots\_qa_handoff\E103-THANH-TUA\` (Tiny: APK, ảnh/log Sony).
+
+---
+
+## REWORK vòng 1 (F1: thanh tua dày, chấm tròn không thấy) — Sonnet, 26/10/2026 14:30–14:47
+
+**Kết luận (Sonnet): F1 đã sửa trên máy. Thanh mảnh ≈ 3 dp căn giữa, chấm tròn 16 dp có viền thấy rõ ở Deck dọc, Deck ngang và Hai khung. Sony bước 1, 2, 6a, 6b PASS (chức năng như vòng trước); Shanling Gọn không đổi. Không FATAL/ANR. CHƯA XÁC NHẬN ÂM THANH THỰC.** Chờ Opus nghiệm thu và chủ dự án xem ảnh.
+
+### R-1. Commit và file đổi
+
+| Mục | Giá trị |
+|---|---|
+| Git đầu phiên | `dot/E103-THANH-TUA` @ `c2ccf3a`, cây sạch, `git diff --check` sạch (có `java.exe` Gradle daemon và `adb.exe` chạy nền, không phải agent code) |
+| Commit sửa | **`0a9beda`** `E103 R1: thin seek track with visible dot` |
+| File production đổi | Chỉ `MeloComponents.kt` (khối `init` của `MeloSeekLine`), +9/−1 dòng. `git diff --stat 3d576bb..HEAD` ngoài file này chỉ có tài liệu (báo cáo, nghiệm thu, apk-test, hình nghiệm thu) |
+| Không đụng | Car Mode/Gọn, Deck, Hai khung, policy, service, Media3, DB, TDLib, build.gradle (vc119 / 0.6.94-beta giữ nguyên) |
+
+Nguyên nhân và cách sửa: `SeekBar` kéo giãn `progressDrawable` theo chiều cao style (~16 dp) nên `setSize(1, trackPx)` không đủ. Sửa: `LayerDrawable.setLayerHeight(i, trackPx)` + `setLayerGravity(i, CENTER_VERTICAL | FILL_HORIZONTAL)` cho cả lớp nền và lớp đã chạy (API 23+, minSdk 26). Chấm giữ 16 dp, thêm viền `thumbPx/8` màu track (`p.border`) để chấm tách khỏi phần đã chạy cùng màu. Logic kéo/thả/phím/khóa/chặn mép không đổi. Không có hàm thuần mới nên không thêm test.
+
+### R-2. Test và build trên Ni (commit `0a9beda`)
+
+| Lệnh | Kết quả |
+|---|---|
+| `gradlew :app:testShareableDebugUnitTest :app:testShareableReleaseUnitTest :app:assembleShareableDebug :app:assembleShareableRelease --console=plain` | BUILD SUCCESSFUL 3m30s (log ra file, chỉ đọc dòng tổng kết) |
+| Debug (XML) | **2094** test, **21** bỏ qua, **0** failure, **0** error |
+| Release (XML) | **2094** test, **21** bỏ qua, **0** failure, **0** error |
+| `git diff --check` | sạch |
+
+JVM test không chứng minh hình dạng thanh; chỉ ảnh thiết bị chứng minh (mục R-5).
+
+### R-3. Bundle và build Tiny
+
+| Mục | Giá trị |
+|---|---|
+| Bundle | `D:\Bots\_transfer\MeloVault_E103-THANH-TUA_full_0a9beda_20261026.bundle`, 12 813 837 B, SHA-256 `0237FFD022EBBEAFCBEBFD6D1D508CC6FC0057B62E2EA01A9376D56F49677FBB`; hash khớp sau khi chép sang Tiny (`C:\Bots\_MeloVault_Git_Transfer\`), script build kiểm lại hash trước khi dùng |
+| Clone cô lập Tiny | `C:\Bots\MeloVault-E103-IsolatedQA2` (detached `0a9beda`, sạch); `local.properties` chép nội bộ Tiny rồi xóa, bản gốc không đổi (`original unchanged=True`, `copy gone=True`) |
+| Build | `assembleShareableDebug` BUILD SUCCESSFUL 40 s; `telegram.config.valid=true` (chỉ boolean) |
+| Đối chiếu APK cũ | `unzip -l`: cùng danh sách và kích thước mục, chỉ `classes5.dex` +140 B. Tệp lớn hơn bản `3d576bb` khoảng 0,9 MB do nén ZIP khác, không do nội dung |
+
+### R-4. APK QA cần Opus nghiệm thu bàn giao
+
+| Mục | Giá trị |
+|---|---|
+| Nhãn | **QA CANDIDATE — CHƯA NGHIỆM THU** (Debug, ký khóa debug Tiny, build Tiny) |
+| Git commit nguồn | `0a9beda` (nhánh `dot/E103-THANH-TUA`) |
+| Đường dẫn Tiny (đã xác minh tồn tại) | `C:\Bots\_qa_handoff\E103-THANH-TUA\MeloVault-E103-THANH-TUA-0a9beda-vc119-TinySigned-Debug.apk` |
+| Bản sao trên Ni (đã xác minh) | `D:\Bots\_transfer\E103\MeloVault-E103-THANH-TUA-0a9beda-vc119-TinySigned-Debug.apk` (SHA-256 và byte khớp Tiny) |
+| Package / version | `app.melovault.player` · versionCode **119** · versionName **0.6.94-beta** · `arm64-v8a` (`aapt2 dump badging`) |
+| SHA-256 | `15A596FFF75B7D69810AA8C97CB623AB1A1F53E4133DD7F1324DF99B2EEC5425` |
+| Bytes | 34 334 950 |
+| Cert SHA-256 | `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8` (`apksigner verify --print-certs`), bằng cert các bản trước; `install -r` thành công trên cả hai máy nghĩa là chữ ký khớp bản đang cài |
+| Telegram config hợp lệ | true |
+| Không làm | Không upload Drive, không công bố, không đổi quyền. APK `3d576bb` (SHA `DF7EA87A…`) thành bản cũ, không xóa; hai máy đã được thay bằng `0a9beda` |
+
+### R-5. Cài đặt và QA (chỉ `adb install -r`, cùng versionCode 119)
+
+| Thiết bị | Gate | Kết quả |
+|---|---|---|
+| Shanling M3 Ultra (`30313860180939`, Ni), Android 10 | `adb devices -l` = device; model `Shanling M3 Ultra`/`Shanling`; media_session state=2 (không PLAYING) | `install -r`: `Success`, vc119 / 0.6.94-beta |
+| Sony XQ-AS52 (`QV725WEQ54`, Tiny), Android 12 | `device`; model `XQ-AS52`/`Sony`; state=2 (không PLAYING) | `install -r`: `Success`, vc119 / 0.6.94-beta |
+
+Không dùng `uninstall`, `pm clear`, `-d`, logout, xóa dữ liệu/cache/TDLib, đổi tài khoản, `wm size/density`. Sau khi cài, màn Sony hiện hộp thoại hệ thống USB "Cho phép truy cập?" (ngoài app): **không bấm**, mở MeloVault bằng `monkey` đè lên.
+
+Cách đo: tọa độ thanh từ `uiautomator dump` (content-desc "Thanh tua bài hát", Deck dọc `[42,2008][1038,2134]`); vị trí phát từ `dumpsys media_session` trước/sau. Ảnh ở `docs/plans/artifacts/E103-THANH-TUA/rw1/` (`sony/`, `shanling/`; git bỏ qua); ảnh ghép `rw1/00_tong_hop.png` (1600×1480, có số bước và 4 ô CẬN thanh).
+
+| # | Máy | Hành động | Kỳ vọng | Thực tế | KQ | Ảnh |
+|---|---|---|---|---|---|---|
+| 1 | Sony vc119 (`0a9beda`), dọc | Mở Deck bài NONSTOP 3:21:07 (đang phát) | Bến: thanh mảnh + chấm tròn rõ, giờ, 5 nút; bìa không bị đè | Thanh mảnh căn giữa (ô cận: dày ước lượng 8–10 px trên 1080 px, trước đây ≈ 45 px), chấm tròn tách rõ, 5 nút đủ, bìa/chữ không đè | PASS | `r1_03_deck_144227`, ô cận trong `00_tong_hop.png` |
+| 2 | Sony, dọc | Kéo từ đầu tới ~75% (swipe 5 s) | Giữa lúc kéo giờ hiện mốc đích, nhạc không tua; thả mới tua ≈75% ±3% | Giữa kéo: giờ `1:58:15` (≈ 58,8%, đúng điểm dọc đường kéo), nhạc vẫn chạy tự nhiên. Sau thả: **9 026 766 ms ≈ 74,8%**, vẫn PLAYING cùng bài | PASS | `r1_04_drag75_before/mid/after_14425x–144303` |
+| 6b | Sony ngang | Xoay ngang (Deck 2 cột), kéo thanh bến trái tới ~30% | Deck 2 cột, thanh mảnh có chấm, ≈30% | Deck 2 cột; **3 632 445 ms = 30,1%**; chấm rõ | PASS | `r1_05_land_144503`, `r1_06b_deckland30_before/mid/after_144517–144524` |
+| 6a | Sony ngang | Đóng Deck → Hai khung (màu thường), kéo thanh tới ~60% | Hai khung, thanh trên giờ, mảnh có chấm, ≈60% | Ra Hai khung, thanh trên dòng giờ; **7 240 728 ms = 60,0%** | PASS | `r1_06a_library_land_144535`, `r1_06a_twopane60_before/mid/after_144552–144559` |
+| 5 | **Shanling** vc119, Gọn | Mở app, chụp màn Gọn (thư viện + mini player), 1 ảnh | Gọn không đổi | Gọn y như vòng trước (thư viện, mini player, nút Thư viện/Telegram); không bấm "Nghe tiếp" nên không phát nhạc | PASS | `shanling/r1_s00_launch.png` |
+
+Bước 3 (chạm 25%, ±30/60 s) và 4 (cuộn) không chạy lại vì kế hoạch rework chỉ yêu cầu 1, 2, 6a (6b nếu tiện). Hành vi kéo/thả giữ nguyên mã nên số đo khớp vòng trước (±3%).
+
+### R-6. Màn hình, xoay, logcat
+
+| Mục | Kết quả |
+|---|---|
+| `SONY_ROTATION_START` / `SONY_ROTATION_END` | `accelerometer_rotation=1 user_rotation=0` / `1 0` (khớp; đọc lại sau khi trả; `rw1/sony/rotation_start.txt`) |
+| `SONY_SCREEN_END` | **OFF**: `Display State=OFF`, `mWakefulness=Dozing` (≈14:46) |
+| `SHANLING_SCREEN_END` | **OFF**: `mState=OFF`, `Display Power state=OFF`, `mWakefulness=Asleep` (14:46:49); màn chỉ sáng ≈1 phút để chụp 1 ảnh |
+| logcat Sony (23 768 dòng) / Shanling (3 518 dòng) | `FATAL EXCEPTION`=0, `ANR in`=0 cả hai |
+| Media3 | Sony cuối QA: state=2 (PAUSED, ≈2:00:54 NONSTOP, tạm dừng bằng nút trong app); Shanling state=0, không phát. Chỉ chứng minh luồng phát; **CHƯA XÁC NHẬN ÂM THANH THỰC** |
+
+### R-7. Sự cố / điểm cần Opus biết
+
+1. Lệnh commit đầu thất bại vì máy Ni chưa có `user.name/user.email`; commit lại bằng `-c user.name="Claude Code" -c user.email="noreply@anthropic.com"` (đúng tác giả các commit trước), không đổi cấu hình git.
+2. Trên Sony, chạm thẻ "Nghe tiếp" để mở Deck đã **bắt đầu phát NONSTOP** (như vòng trước); sau QA đã tạm dừng. Điểm "Nghe tiếp" của Sony vẫn là NONSTOP (≈2:00:54).
+3. Hộp thoại USB "Cho phép truy cập?" trên Sony không bấm.
+4. Viền chấm màu `p.border` mảnh (2 px); trên nền tối chấm vẫn nổi rõ trên ảnh. Nếu muốn viền tương phản mạnh hơn thì là chỉnh nhỏ tiếp trong `MeloSeekLine`.
+
+### R-8. Chưa kiểm chứng
+
+- Âm thanh thật; Hai khung kiểu **Teal**; FYT, Y700, S25, Car Mode (không đổi mã).
+- Deck/Hai khung trên Shanling (Gọn là kiểu mặc định ở máy này nên không có thanh Deck để chụp).
+- Bước 3 và 4 không chạy lại ở vòng này; kéo tới mép phải trên máy; tua vào phần bài chưa tải.
