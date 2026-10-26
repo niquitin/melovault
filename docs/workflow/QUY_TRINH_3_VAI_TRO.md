@@ -1,5 +1,15 @@
 # MELOVAULT — Quy trình 3 vai trò, hội thoại độc lập
 
+## CẬP NHẬT 26/10/2026 — Codex thực thi, Claude nghiệm thu (ưu tiên hơn mọi mục bên dưới)
+
+Chủ dự án quyết định ngày 26/10/2026 (chi tiết CLAUDE.md mục 0): **Codex thay Sonnet ở vai thực thi**; ở mọi mục bên dưới "Sonnet" đọc là **"Codex thực thi"**. Claude Opus vẫn nghiệm thu.
+
+- **Nhiệm vụ nhỏ** (đạt đủ điều kiện làn nhanh): chủ dự án CHỐT → **Codex `gpt-6-astra` medium** (phiên mới) viết `docs/plans/<TASK_ID>.md` và chỉ commit plan → **Codex `gpt-6.1-sol` xhigh** (phiên mới, GỘP) code + test + build + QA + báo cáo → **Claude Opus nghiệm thu**.
+- **Nhiệm vụ lớn**: chủ dự án CHỐT → **Claude Opus lập kế hoạch** (phiên mới) → **Codex `gpt-6-astra` medium** phiên 1 (code + test Ni) và phiên 2 (build Tiny + QA + báo cáo), mỗi phiên là phiên Codex mới → **Claude Opus nghiệm thu** (phiên mới, khác phiên lập kế hoạch).
+- REWORK: phiên Codex MỚI, cùng model thực thi, trên chính nhánh. Codex lỗi/hết hạn mức: dừng, chủ dự án có thể chuyển dự phòng Sonnet.
+- Prompt mẫu Codex: `docs/workflow/PROMPT_CODEX.md`. Codex đọc luật qua `AGENTS.md` ở gốc repo. Codex không sửa tài liệu quy trình/nghiệm thu, không upload APK, không merge.
+- Tính độc lập: nghiệm thu luôn là phiên Claude mới; với nhiệm vụ lớn, phiên nghiệm thu không phải phiên đã lập kế hoạch và chấm đúng tiêu chí PASS/FAIL đã ghi, không nới.
+
 ## CẬP NHẬT 25/10/2026 — Opus nghiệm thu thay ChatGPT (ưu tiên hơn mọi mục bên dưới)
 
 Chủ dự án quyết định ngày 25/10/2026: **Claude Opus trong một hội thoại MỚI (không Resume phiên lập kế hoạch) làm vai NGHIỆM THU thay ChatGPT.** Ở mọi mục bên dưới, chữ "ChatGPT" ở vai đề xuất/kiểm toán/nghiệm thu/merge/chuẩn hóa ảnh/bàn giao link APK đọc là **"Opus nghiệm thu"**. Chỉ Opus (khi chủ dự án yêu cầu) biên tập SOP, prompt mẫu và tài liệu nghiệm thu; Sonnet không.

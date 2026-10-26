@@ -1,8 +1,24 @@
 # CLAUDE.md — MeloVault / quy trình AI 3 vai trò
 
-**Hiệu lực: 25/10/2026** (thay bản 18/10). Trả lời bằng tiếng Việt, dễ hiểu. Không tạo dự án mới. **Chủ dự án giao Claude Opus vai trò NGHIỆM THU thay ChatGPT từ 25/10/2026.** Chỉ Opus (phiên lập kế hoạch hoặc phiên nghiệm thu, khi chủ dự án yêu cầu) được chỉnh CLAUDE.md, docs/workflow/*, tài liệu nghiệm thu và quyết định quy trình. Sonnet không chỉnh các file này. Tài liệu cũ ghi "ChatGPT" ở vai kiểm toán/nghiệm thu/bàn giao link nay đọc là **"Opus nghiệm thu"**.
+**Hiệu lực: 26/10/2026** (thay bản 25/10; mục 0 mới). Trả lời bằng tiếng Việt, dễ hiểu. Không tạo dự án mới. **Chủ dự án giao Claude Opus vai trò NGHIỆM THU thay ChatGPT từ 25/10/2026.** Chỉ Opus (phiên lập kế hoạch hoặc phiên nghiệm thu, khi chủ dự án yêu cầu) được chỉnh CLAUDE.md, docs/workflow/*, tài liệu nghiệm thu và quyết định quy trình. Sonnet không chỉnh các file này. Tài liệu cũ ghi "ChatGPT" ở vai kiểm toán/nghiệm thu/bàn giao link nay đọc là **"Opus nghiệm thu"**.
 
 Đọc: CLAUDE.md → HANDOFF.md (**chỉ mục cập nhật đầu tiên**, phần dưới khi cần) → docs/plans/BACKLOG.md → docs/workflow/QUY_TRINH_3_VAI_TRO.md → kế hoạch đúng TASK_ID. Git/source và kết quả test mới hơn luôn có ưu tiên so với handoff cũ.
+
+## 0. Phân vai Codex — 26/10/2026 (ưu tiên hơn mọi mục bên dưới)
+
+**Quyết định chủ dự án 26/10/2026:** để tiết kiệm quota Claude, **Codex (OpenAI) nhận vai THỰC THI thay Claude Sonnet**, và nhận cả vai LẬP KẾ HOẠCH ở nhiệm vụ nhỏ. **Claude Opus vẫn là NGHIỆM THU** (và lập kế hoạch nhiệm vụ lớn). Ở mọi mục bên dưới, "Sonnet" đọc là **"Codex thực thi"**; luật an toàn, gate, báo cáo, ảnh, màn hình, APK giữ nguyên. Codex đọc luật qua `AGENTS.md` (trỏ về file này).
+
+| Loại nhiệm vụ | Lập kế hoạch | Thực thi (code + test + build + QA) | Nghiệm thu |
+|---|---|---|---|
+| **Nhỏ** | Codex `gpt-6-astra`, effort **medium** (phiên Codex mới) | Codex `gpt-6.1-sol`, effort **xhigh** (phiên Codex mới, GỘP 1 phiên) | Claude Opus (phiên mới) |
+| **Lớn** | Claude Opus (phiên mới) | Codex `gpt-6-astra`, effort **medium** (phiên 1 = code + test Ni; phiên 2 = build Tiny + QA) | Claude Opus (phiên mới, khác phiên lập kế hoạch) |
+
+- **Nhỏ** = đạt **đồng thời** mọi điều kiện của Làn nhanh (mục 2): 1 màn hình, ≤ 2 file production, ≤ 80 dòng production, không DB/schema/Telegram/TDLib/account/cache/Media3/queue/kiến trúc/security/permission/signing/build config, không di trú dữ liệu. Sai một điều kiện = **Lớn**. Opus nghiệm thu đề xuất loại, chủ dự án CHỐT; Codex không tự xếp loại hay tự nâng/hạ loại.
+- Codex chạy trong **phiên/hội thoại Codex mới** cho mỗi vai (Codex app, hoặc `codex exec -m <model> -c model_reasoning_effort="<effort>" -C D:\Bots\MeloVault-E91-Shareable`), prompt điền từ `docs/workflow/PROMPT_CODEX.md`. Không Resume phiên Codex cũ cho vai khác. REWORK: phiên Codex MỚI, cùng model thực thi của nhiệm vụ, trên chính dot/<TASK_ID>.
+- Codex được chủ dự án cấp ADB và Desktop Commander (Ni + Tiny DESKTOP-HNP4GVR). Cấu hình Codex không chặn lệnh, nên **danh sách cấm trong AGENTS.md và các mục 1, 3, 4, 7 là ranh giới bắt buộc**; vi phạm = REWORK/BLOCKED dù kết quả đúng.
+- Codex KHÔNG sửa CLAUDE.md, AGENTS.md, docs/workflow/*, file nghiệm thu/apk-test/hinh-nghiem-thu; không upload/công bố APK, không merge, không chọn nhiệm vụ kế.
+- **Dự phòng:** Codex hết hạn mức/lỗi công cụ → dừng, giữ nguyên nhánh; chủ dự án có thể giao Claude Sonnet tiếp theo PROMPT_SONNET.md. Báo cáo ghi rõ phần nào do Codex, phần nào do Sonnet.
+- Vẫn **chỉ MỘT agent sửa code** mỗi lúc (Codex hoặc Claude), kể cả khi Claude đang chờ hồi quota.
 
 ## 1. Repo duy nhất và khóa phiên
 
@@ -49,9 +65,10 @@
 ## 5. Lời kết bắt buộc của Claude
 
 Mọi phiên Claude nói tiếng Việt thường, gồm 3 phần ngắn: **Đã làm** (kèm bằng chứng/commit), **Chưa kiểm chứng**, **Rủi ro hoặc điểm dừng**.
-- Opus lập kế hoạch: thêm prompt Sonnet (mục 2A) và đúng dòng **"Giờ mở phiên mới, chọn Sonnet."**
+- Opus lập kế hoạch (nhiệm vụ lớn, mục 0): thêm prompt Codex thực thi phiên 1 điền từ docs/workflow/PROMPT_CODEX.md và đúng dòng **"Giờ mở phiên Codex mới, chọn gpt-6-astra medium."** (Chỉ khi chủ dự án chọn dự phòng Sonnet mới dùng prompt Sonnet và dòng "Giờ mở phiên mới, chọn Sonnet.")
+- Codex lập kế hoạch (nhiệm vụ nhỏ) và Codex thực thi: lời kết theo docs/workflow/PROMPT_CODEX.md; phiên cuối kết bằng **"Đã dừng, chờ Claude Opus nghiệm thu."** và dòng `Nghiệm thu <TASK_ID> theo docs/workflow/PROMPT_OPUS_NGHIEM_THU.md`.
 - Sonnet phiên 1 (khi chia 2 phiên): thêm **"Đã dừng. Mở phiên Sonnet mới cho phiên 2 (build + QA)."** Sonnet phiên cuối: thêm **"Đã dừng, chờ Opus nghiệm thu."** và một dòng prompt: `Nghiệm thu <TASK_ID> theo docs/workflow/PROMPT_OPUS_NGHIEM_THU.md`.
-- Opus nghiệm thu: trạng thái PASS/REWORK/BLOCKED, ảnh chính gửi trong chat, câu hỏi **ĐẠT hay báo lỗi**; nếu REWORK thêm prompt Sonnet REWORK điền từ mẫu.
+- Opus nghiệm thu: trạng thái PASS/REWORK/BLOCKED, ảnh chính gửi trong chat, câu hỏi **ĐẠT hay báo lỗi**; nếu REWORK thêm prompt **Codex REWORK** điền từ PROMPT_CODEX.md (ghi đúng model thực thi của nhiệm vụ).
 - Ngoài các prompt trên, **KHÔNG** tự chọn hoặc triển khai nhiệm vụ mới.
 
 ## 6. QUY TẮC MỚI 19/10/2026 — Agent tự kiểm thử, chủ dự án nghiệm thu từ xa

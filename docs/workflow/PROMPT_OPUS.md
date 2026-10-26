@@ -20,8 +20,9 @@ Nhánh dự kiến: dot/<TASK_ID>
 
 7. Nhiệm vụ lớn: chia rõ **Sonnet phiên 1** (code + test Ni, các bước nào) và **Sonnet phiên 2** (build Tiny + QA + báo cáo); nhiệm vụ nhỏ ghi GỘP. Tiêu chí PASS/FAIL phải đo được để phiên Opus nghiệm thu chấm thẳng.
 
-Kết thúc bằng ba đoạn dễ hiểu: Đã làm / Chưa kiểm chứng / Rủi ro, rồi **prompt Sonnet phiên 1** (hoặc GỘP) điền từ docs/workflow/PROMPT_SONNET.md (chỉ thay TASK_ID, baseline, PHIÊN và ≤ 8 dòng lưu ý riêng), và đúng câu:
-"Giờ mở phiên mới, chọn Sonnet."
+Kết thúc bằng ba đoạn dễ hiểu: Đã làm / Chưa kiểm chứng / Rủi ro, rồi **prompt Codex thực thi phiên 1** điền từ docs/workflow/PROMPT_CODEX.md mục B (model `gpt-6-astra`, effort medium; chỉ thay TASK_ID, baseline, PHIÊN và ≤ 8 dòng lưu ý riêng), và đúng câu:
+"Giờ mở phiên Codex mới, chọn gpt-6-astra medium."
+(Cập nhật 26/10/2026: Opus chỉ lập kế hoạch nhiệm vụ LỚN; nhiệm vụ nhỏ do Codex Astra lập. "Sonnet" trong mẫu này đọc là "Codex thực thi". Chỉ dùng PROMPT_SONNET.md khi chủ dự án chọn dự phòng Sonnet.)
 
 DỪNG. Không tự triển khai code.
 

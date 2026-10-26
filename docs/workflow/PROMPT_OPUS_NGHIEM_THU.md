@@ -1,6 +1,6 @@
 # PROMPT MẪU — CLAUDE OPUS NGHIỆM THU
 
-Dành cho phiên Claude Code MỚI, chọn **Opus**, KHÔNG Resume phiên lập kế hoạch hay phiên Sonnet. Hiệu lực 25/10/2026 (thay vai ChatGPT).
+Dành cho phiên Claude Code MỚI, chọn **Opus**, KHÔNG Resume phiên lập kế hoạch hay phiên thực thi. Hiệu lực 25/10/2026 (thay vai ChatGPT); 26/10/2026: thực thi do Codex, "Sonnet" bên dưới đọc là "Codex thực thi".
 Chủ dự án chỉ cần gõ: `Nghiệm thu <TASK_ID> theo docs/workflow/PROMPT_OPUS_NGHIEM_THU.md`.
 
 ---
@@ -20,6 +20,6 @@ TASK_ID: <TASK_ID> — nhánh dot/<TASK_ID>
 6. **Kết luận** đúng một trạng thái theo tiêu chí trong kế hoạch (không nới): PASS / REWORK / BLOCKED. Chưa có chủ dự án duyệt ảnh → **BLOCKED — CHỜ CHỦ DỰ ÁN**. Ghi `docs/plans/<TASK_ID>-nghiem-thu.md` (≤ ~150 dòng: bảng kiểm, bằng chứng, lỗi kèm file:dòng, giới hạn chưa kiểm), commit trên dot/<TASK_ID>.
 7. **Gửi chủ dự án trong chat** (SendUserFile): ảnh tổng hợp + 2–4 ảnh then chốt, link APK + thư mục Drive, vc/commit/SHA-256; hỏi **ĐẠT hay báo lỗi**.
 8. Khi chủ dự án nói ĐẠT: cập nhật nghiệm thu thành PASS, xin xác nhận thao tác merge, rồi `git merge --no-ff` vào nhánh tích hợp đã thống nhất (không force, không push nếu chưa được yêu cầu); cập nhật mục đầu HANDOFF.md ngắn gọn.
-9. REWORK: liệt kê lỗi cụ thể, đưa prompt Sonnet REWORK điền từ docs/workflow/PROMPT_SONNET.md. Có thể đề xuất việc kế kèm lý do; chủ dự án CHỐT mới mở phiên Opus lập kế hoạch.
+9. REWORK: liệt kê lỗi cụ thể, đưa prompt **Codex REWORK** điền từ docs/workflow/PROMPT_CODEX.md mục C (đúng model thực thi của nhiệm vụ: nhỏ = `gpt-6.1-sol` xhigh, lớn = `gpt-6-astra` medium; dự phòng Sonnet chỉ khi chủ dự án chọn). Khi kiểm, xác nhận dòng "Thực thi:" trong báo cáo ghi đúng model/effort và kiểm Codex không vi phạm danh sách cấm trong AGENTS.md (lệnh adb/git/DC đã chạy theo báo cáo và log). Có thể đề xuất việc kế kèm lý do; chủ dự án CHỐT mới mở phiên Opus lập kế hoạch.
 
 Không sửa code sản phẩm. Không dùng review nhiều agent. Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro hoặc điểm dừng, kèm trạng thái và câu hỏi ĐẠT/lỗi.
