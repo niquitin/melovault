@@ -148,9 +148,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var reenterApi: Button
     @Volatile private var apiCredentials: TelegramApiCredentialPolicy.Credentials? = null
     private val apiStore by lazy { TelegramApiCredentialStore(applicationContext) }
-    private val apiExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private var apiOperationPending = false
     companion object {
+        // Serialize reads/writes even across Activity recreation during a save.
+        private val apiExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
         // The fallback requires process shutdown, not just Activity recreation.
         @Volatile private var apiRestartRequired = false
     }
@@ -2724,7 +2725,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             this,
             TelegramLoginPanel.Colors(ink, subtle, accent, accentContrast, panel, border),
             onSubmit = { if (!apiOperationPending && !apiRestartRequired) {
-                reenterApi.isEnabled = false
+                if (!input.text.isNullOrBlank()) reenterApi.isEnabled = false
                 submitAuthentication()
             } },
             onResend = { requestResendCode() },
@@ -6177,6 +6178,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun onNativeEvent(result: JSONObject, sessionDb: File, secret: String) {
+        if (apiRestartRequired) return
         val kind = result.optString("@type")
         val tag = result.optString("@extra")
         if (tag.startsWith("rowArt")) {
@@ -7503,7 +7505,6 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        apiExecutor.shutdown()
         detachMeloLayer()
         if (::mainRoot.isInitialized) {
             mainRoot.removeCallbacks(miniPlayerProgressTick)
