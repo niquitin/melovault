@@ -32,6 +32,7 @@ import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ProgressBar
+import android.widget.SeekBar
 import android.widget.TextView
 import com.bsdung.musicassistantcar.R
 import com.bsdung.musicassistantcar.data.telegram.MeloComponentPolicy.ColorRole
@@ -881,56 +882,92 @@ internal class MeloComponents(
 }
 
 /**
- * E98 teal theme: a thin progress line with a round dot at its head. Display only - it takes no
- * touch, so it can not be mistaken for a seek bar (E95 F09 / E97A keep seeking off this screen).
+ * E103: a thin seek line with a round dot, shared by the Studio Deck dock and the two-pane player
+ * (it replaces the display-only E98 `MeloThumbProgress`). A real [SeekBar] so touch, DPAD / rotary
+ * keys and TalkBack work. A drag only previews the target ([onPreview]); the seek happens when the
+ * finger lifts. A key or TalkBack change ([fromUser] without a drag) seeks at once. While the finger
+ * is down the 1 s refresh in [set] leaves the dot alone.
  */
-internal class MeloThumbProgress(
+internal class MeloSeekLine(
     context: Context,
-    private val trackColor: Int,
-    private val fillColor: Int,
-    private val thumbColor: Int,
-    private val trackPx: Int,
-    private val thumbPx: Int
-) : View(context) {
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val rect = RectF()
-    private var fraction = 0f
+    trackColor: Int,
+    fillColor: Int,
+    thumbColor: Int,
+    trackPx: Int,
+    thumbPx: Int,
+    touchPx: Int,
+    /** The target position while dragging, null once the finger lifts or the drag is cancelled. */
+    private val onPreview: (Long?) -> Unit,
+    private val onSeek: (Long) -> Unit
+) : SeekBar(context) {
+    private var durationMs = 0L
+    private var dragging = false
 
     init {
-        isClickable = false
-        isFocusable = false
-        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+        max = MeloNowPlayingPolicy.SEEK_BAR_MAX
+        val radius = trackPx / 2f
+        val track = GradientDrawable().apply { setColor(trackColor); cornerRadius = radius }
+        val fill = ClipDrawable(GradientDrawable().apply { setColor(fillColor); cornerRadius = radius }, Gravity.START, ClipDrawable.HORIZONTAL)
+        // SeekBar stretches the track to its style height (~16 dp); fixed layer height + gravity keeps it trackPx thick and centred.
+        progressDrawable = LayerDrawable(arrayOf(track, fill)).apply {
+            setId(0, android.R.id.background)
+            setId(1, android.R.id.progress)
+            for (i in 0..1) {
+                setLayerHeight(i, trackPx)
+                setLayerGravity(i, Gravity.CENTER_VERTICAL or Gravity.FILL_HORIZONTAL)
+            }
+        }
+        // The dot has the same colour as the played part, so a thin ring in the track colour keeps it visible on top of it.
+        val ringPx = maxOf(1, thumbPx / 8)
+        thumb = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(thumbColor)
+            setStroke(ringPx, trackColor)
+            setSize(thumbPx, thumbPx)
+        }
+        splitTrack = false
+        minimumHeight = touchPx
+        setPadding(thumbPx / 2, 0, thumbPx / 2, 0)
+        contentDescription = "Thanh tua bài hát"
+        isEnabled = false
+        setOnSeekBarChangeListener(object : OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (!fromUser) return
+                val target = MeloNowPlayingPolicy.seekBarTarget(progress, durationMs)
+                if (dragging) onPreview(target) else target?.let(onSeek)
+            }
+
+            override fun onStartTrackingTouch(bar: SeekBar?) {
+                dragging = true
+                onPreview(MeloNowPlayingPolicy.seekBarTarget(progress, durationMs))
+            }
+
+            override fun onStopTrackingTouch(bar: SeekBar?) {
+                // Read the target first: onPreview(null) re-renders and set() puts the dot back at the play position.
+                val target = MeloNowPlayingPolicy.seekBarTarget(progress, durationMs)
+                dragging = false
+                onPreview(null)
+                target?.let(onSeek)
+            }
+        })
     }
 
-    /** [positionMs] over [durationMs]; unknown or zero duration draws an empty line. */
+    /** [positionMs] over [durationMs]; an unknown duration locks the line at 0. Ignored for the dot while dragging. */
     fun set(positionMs: Long, durationMs: Long) {
-        val next = if (durationMs > 0L) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
-        if (next == fraction) return
-        fraction = next
-        invalidate()
+        this.durationMs = durationMs
+        val enabled = MeloNowPlayingPolicy.seekBarEnabled(durationMs)
+        if (isEnabled != enabled) isEnabled = enabled
+        if (dragging) return
+        val next = MeloNowPlayingPolicy.seekBarProgress(positionMs, durationMs)
+        if (progress != next) progress = next
     }
 
-    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        setMeasuredDimension(getDefaultSize(suggestedMinimumWidth, widthMeasureSpec), thumbPx)
-    }
-
-    override fun onDraw(canvas: Canvas) {
-        val w = width.toFloat()
-        val cy = height / 2f
-        val half = thumbPx / 2f
-        val left = half
-        val right = w - half
-        val r = trackPx / 2f
-        paint.style = Paint.Style.FILL
-        paint.color = trackColor
-        rect.set(left, cy - r, right, cy + r)
-        canvas.drawRoundRect(rect, r, r, paint)
-        val x = left + (right - left) * fraction
-        paint.color = fillColor
-        rect.set(left, cy - r, x, cy + r)
-        canvas.drawRoundRect(rect, r, r, paint)
-        paint.color = thumbColor
-        canvas.drawCircle(x, cy, half * 0.8f, paint)
+    override fun onDetachedFromWindow() {
+        if (dragging) {
+            dragging = false
+            onPreview(null)
+        }
+        super.onDetachedFromWindow()
     }
 }
 

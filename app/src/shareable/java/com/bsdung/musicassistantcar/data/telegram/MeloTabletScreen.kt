@@ -59,9 +59,11 @@ internal class MeloTabletScreen(
     private val quality = c.text("", s.secondaryText, p.accent, maxLines = 1)
     private val time = c.text("", s.secondaryText, p.textSecondary)
     private lateinit var play: TextView
-    // Teal theme only: the display-only progress line, its two times and the vector play button.
+    // E103: the draggable seek line + time(s) block, both colour styles. Teal also has two times and the vector play button.
     private lateinit var timeBlock: View
-    private lateinit var thumbProgress: MeloThumbProgress
+    private lateinit var seekLine: MeloSeekLine
+    /** The drag target shown in the time line while the finger is on the seek line; null otherwise. */
+    private var previewMs: Long? = null
     private val timeLeft = c.text("", s.secondaryText, p.textSecondary)
     private val timeRight = c.text("", s.secondaryText, p.textSecondary).apply { gravity = Gravity.END }
     private var playIcon: ImageView? = null
@@ -199,7 +201,13 @@ internal class MeloTabletScreen(
         column.addView(title, matchWrap().apply { topMargin = s.gap * 2 })
         column.addView(source, matchWrap().apply { topMargin = s.gap / 2 })
         column.addView(quality, matchWrap().apply { topMargin = s.gap / 2 })
-        column.addView(time.apply { gravity = Gravity.END }, matchWrap().apply { topMargin = s.gap * 2 })
+        seekLine = newSeekLine(p.accent)
+        timeBlock = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(seekLine, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, s.minTouch))
+            addView(time.apply { gravity = Gravity.END }, matchWrap())
+        }
+        column.addView(timeBlock, matchWrap().apply { topMargin = s.gap * 2 })
 
         val transport = transportRow.apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         transport.addView(c.iconButton("⏮", "Bài trước") { host.previous() }.apply {
@@ -267,9 +275,9 @@ internal class MeloTabletScreen(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = s.gap })
 
-        thumbProgress = MeloThumbProgress(context, p.border, p.accent, p.text, s.progressHeight, s.progressThumb)
+        seekLine = newSeekLine(p.text)
         val progressBlock = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        progressBlock.addView(thumbProgress, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, s.progressThumb))
+        progressBlock.addView(seekLine, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, s.minTouch))
         progressBlock.addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             addView(timeLeft, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
@@ -404,7 +412,7 @@ internal class MeloTabletScreen(
         title.maxLines = if (tight) 1 else 2
         quality.visibility = qualityVisibility(tight)
         val top = if (tight) s.gap else s.gap * 2
-        listOf<View>(title, if (teal) timeBlock else time, transportRow, extrasBox).forEach { v ->
+        listOf<View>(title, timeBlock, transportRow, extrasBox).forEach { v ->
             (v.layoutParams as LinearLayout.LayoutParams).topMargin = top
             v.requestLayout()
         }
@@ -622,6 +630,24 @@ internal class MeloTabletScreen(
         pane.onLibraryChanged()
     }
 
+    private fun newSeekLine(thumbColor: Int) = MeloSeekLine(
+        context, p.border, p.accent, thumbColor, s.progressHeight, s.progressThumb, s.minTouch,
+        onPreview = { previewMs = it; renderTimes(host.nowPlaying()) },
+        onSeek = { host.seekTo(it); onPlaybackChanged() }
+    )
+
+    /** Seek line plus the time text(s); while the line is being dragged the shown time is the drag target. */
+    private fun renderTimes(now: NowPlaying?) {
+        seekLine.set(now?.positionMs ?: 0L, now?.durationMs ?: 0L)
+        val shownMs = if (now == null) 0L else previewMs ?: now.positionMs
+        if (teal) {
+            timeLeft.show(if (now == null) "" else TelegramSongDisplayPolicy.formatDuration((shownMs / 1000).toInt().coerceAtLeast(0)) ?: "00:00")
+            timeRight.show(if (now == null) "" else TelegramSongDisplayPolicy.formatDuration((now.durationMs / 1000).toInt()).orEmpty())
+        } else {
+            time.show(if (now == null) "" else MeloComponentPolicy.progressText((shownMs / 1000).toInt(), (now.durationMs / 1000).toInt()))
+        }
+    }
+
     fun onPlaybackChanged() {
         val now: NowPlaying? = host.nowPlaying()
         var relayout: Boolean
@@ -629,14 +655,11 @@ internal class MeloTabletScreen(
             relayout = title.show("Chọn một bài để phát")
             relayout = source.show("") or relayout
             quality.show("")
+            renderTimes(null)
             if (teal) {
-                timeLeft.show("")
-                timeRight.show("")
-                thumbProgress.set(0L, 0L)
                 renderPlay(false)
                 relayout = syncQualityVisibility() or relayout
             } else {
-                time.show("")
                 play.show("▶")
             }
             showArt(null, null, "♪")
@@ -647,9 +670,7 @@ internal class MeloTabletScreen(
             val save = MeloSavePolicy.buttonState(now.saveAvailability, now.favorite, now.saveBusy)
             if (teal) {
                 quality.show(MeloNowPlayingPolicy.qualityPillText(qualityParts))
-                timeLeft.show(TelegramSongDisplayPolicy.formatDuration((now.positionMs / 1000).toInt().coerceAtLeast(0)) ?: "00:00")
-                timeRight.show(TelegramSongDisplayPolicy.formatDuration((now.durationMs / 1000).toInt()).orEmpty())
-                thumbProgress.set(now.positionMs, now.durationMs)
+                renderTimes(now)
                 renderPlay(now.playing)
                 relayout = syncQualityVisibility() or relayout
                 relayout = toggleStyle(shuffle, now.shuffle, MeloNowPlayingPolicy.themedShuffleLabel(now.shuffle), R.drawable.ic_shuffle) or relayout
@@ -659,7 +680,7 @@ internal class MeloTabletScreen(
                     if (save.saved) R.drawable.ic_heart_filled else R.drawable.ic_heart_outline) or relayout
             } else {
                 quality.show(qualityParts.joinToString(" · "))
-                time.show(MeloComponentPolicy.progressText((now.positionMs / 1000).toInt(), (now.durationMs / 1000).toInt()))
+                renderTimes(now)
                 play.show(if (now.playing) "❚❚" else "▶")
                 play.contentDescription = if (now.playing) "Dừng" else "Phát"
                 relayout = toggleStyle(shuffle, now.shuffle, "⇄ Đảo") or relayout
