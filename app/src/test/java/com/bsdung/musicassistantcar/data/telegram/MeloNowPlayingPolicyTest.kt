@@ -223,4 +223,61 @@ class MeloNowPlayingPolicyTest {
         assertEquals("", MeloNowPlayingPolicy.qualityPillText(listOf(null, "")))
         assertEquals("", MeloNowPlayingPolicy.qualityPillText(emptyList()))
     }
+
+    @Test
+    fun seekBarEnabledNeedsAKnownDuration() {
+        assertFalse(MeloNowPlayingPolicy.seekBarEnabled(0L))
+        assertFalse(MeloNowPlayingPolicy.seekBarEnabled(-1L))
+        // C.TIME_UNSET
+        assertFalse(MeloNowPlayingPolicy.seekBarEnabled(Long.MIN_VALUE + 1))
+        assertTrue(MeloNowPlayingPolicy.seekBarEnabled(1L))
+    }
+
+    @Test
+    fun seekBarProgressMapsPositionToThousandths() {
+        val max = MeloNowPlayingPolicy.SEEK_BAR_MAX
+        assertEquals(0, MeloNowPlayingPolicy.seekBarProgress(50_000, 0))
+        assertEquals(0, MeloNowPlayingPolicy.seekBarProgress(50_000, Long.MIN_VALUE + 1))
+        assertEquals(0, MeloNowPlayingPolicy.seekBarProgress(-5_000, 200_000))
+        assertEquals(500, MeloNowPlayingPolicy.seekBarProgress(100_000, 200_000))
+        assertEquals(max, MeloNowPlayingPolicy.seekBarProgress(250_000, 200_000))
+        assertEquals(max, MeloNowPlayingPolicy.seekBarProgress(200_000, 200_000))
+        // A 10 hour song times 1000 stays inside Long.
+        val tenHours = 36_000_000L
+        assertEquals(250, MeloNowPlayingPolicy.seekBarProgress(tenHours / 4, tenHours))
+    }
+
+    @Test
+    fun seekBarTargetIsNullWithoutDurationAndClampsInput() {
+        assertNull(MeloNowPlayingPolicy.seekBarTarget(500, 0))
+        assertNull(MeloNowPlayingPolicy.seekBarTarget(500, -1))
+        assertNull(MeloNowPlayingPolicy.seekBarTarget(500, Long.MIN_VALUE + 1))
+        assertEquals(0L, MeloNowPlayingPolicy.seekBarTarget(0, 200_000))
+        assertEquals(100_000L, MeloNowPlayingPolicy.seekBarTarget(500, 200_000))
+        // Out of range progress is clamped, never a negative or past-the-end position.
+        assertEquals(0L, MeloNowPlayingPolicy.seekBarTarget(-5, 200_000))
+        assertEquals(199_000L, MeloNowPlayingPolicy.seekBarTarget(1200, 200_000))
+    }
+
+    @Test
+    fun seekBarTargetStopsOneSecondBeforeTheEnd() {
+        val max = MeloNowPlayingPolicy.SEEK_BAR_MAX
+        assertEquals(199_000L, MeloNowPlayingPolicy.seekBarTarget(max, 200_000))
+        // A track shorter than the guard can only seek to its start.
+        assertEquals(0L, MeloNowPlayingPolicy.seekBarTarget(max, 600))
+        assertEquals(0L, MeloNowPlayingPolicy.seekBarTarget(500, 600))
+        assertEquals(0L, MeloNowPlayingPolicy.seekBarTarget(max, 1_000))
+    }
+
+    @Test
+    fun seekBarRoundTripStaysWithinOneThousandth() {
+        val duration = 240_000L
+        val tolerance = duration / MeloNowPlayingPolicy.SEEK_BAR_MAX
+        var pos = 0L
+        while (pos <= duration - MeloNowPlayingPolicy.SEEK_BAR_END_GUARD_MS) {
+            val back = MeloNowPlayingPolicy.seekBarTarget(MeloNowPlayingPolicy.seekBarProgress(pos, duration), duration)!!
+            assertTrue("pos=$pos back=$back", kotlin.math.abs(back - pos) <= tolerance)
+            pos += 7_919L
+        }
+    }
 }

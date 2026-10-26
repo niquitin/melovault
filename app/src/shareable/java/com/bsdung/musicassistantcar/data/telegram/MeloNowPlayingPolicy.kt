@@ -66,6 +66,31 @@ internal object MeloNowPlayingPolicy {
     fun seekTarget(positionMs: Long, durationMs: Long, deltaMs: Long): Long =
         MeloCarPolicy.seekTarget(positionMs, durationMs, deltaMs)
 
+    /** E103: the draggable seek line counts in thousandths of the song. */
+    const val SEEK_BAR_MAX = 1000
+
+    /** E103: letting go at the right edge must not skip to the next song at once. */
+    const val SEEK_BAR_END_GUARD_MS = 1_000L
+
+    /** An unknown duration (0, negative or C.TIME_UNSET) locks the line. */
+    fun seekBarEnabled(durationMs: Long): Boolean = durationMs > 0L
+
+    /** 0..[SEEK_BAR_MAX]; unknown duration or a negative position is 0, past the end is the maximum. */
+    fun seekBarProgress(positionMs: Long, durationMs: Long): Int {
+        if (!seekBarEnabled(durationMs)) return 0
+        return (positionMs.coerceIn(0L, durationMs) * SEEK_BAR_MAX / durationMs).toInt()
+    }
+
+    /**
+     * Where a drag to [progress] lands: null when the duration is unknown; [progress] is clamped
+     * to 0..[SEEK_BAR_MAX] and the result stays within 0..(duration - [SEEK_BAR_END_GUARD_MS]).
+     */
+    fun seekBarTarget(progress: Int, durationMs: Long): Long? {
+        if (!seekBarEnabled(durationMs)) return null
+        val raw = progress.coerceIn(0, SEEK_BAR_MAX).toLong() * durationMs / SEEK_BAR_MAX
+        return raw.coerceAtMost((durationMs - SEEK_BAR_END_GUARD_MS).coerceAtLeast(0L))
+    }
+
     /**
      * The line under the song title on the Now Playing screens (E95 F08). A Telegram song says
      * "Kênh: …" - the channel is a source, never passed off as an artist; a local song says
