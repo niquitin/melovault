@@ -7,7 +7,8 @@
 | 1 | 25/10 ~16:30 | BLOCKED — CHỜ CHỦ DỰ ÁN (kỹ thuật đạt; Janky lạnh cần chủ dự án cảm nhận; chờ duyệt ảnh/cài vc114) |
 | 1 — phản hồi chủ dự án | 25/10 | "ĐẠT" + "Gọn luôn hiện ảnh bìa, luôn có ảnh" (trả lời câu hỏi §3.2 kế hoạch) |
 | REWORK-01 — chỉ thị | 25/10 ~21:56 | **REWORK** — chỉ đổi điều kiện bật ảnh ở Gọn (mục 12); phần còn lại chủ dự án đã chấp nhận |
-| **REWORK-01 — nghiệm thu (hiện tại)** | 25/10 ~22:30–22:45 | **BLOCKED — CHỜ CHỦ DỰ ÁN** (kỹ thuật đạt hết, mục 13; chờ chủ dự án duyệt ảnh/vc115) |
+| REWORK-01 — nghiệm thu | 25/10 ~22:30–22:45 | BLOCKED — CHỜ CHỦ DỰ ÁN (kỹ thuật đạt hết, mục 13; chờ chủ dự án duyệt ảnh/vc115) |
+| **Chủ dự án duyệt — hiện tại** | 26/10 | **PASS** — chủ dự án "Yêu cầu là đã ĐẠT" cho vc115; merge vào nhánh tích hợp — mục 14 |
 
 ## 1. Git
 
@@ -144,3 +145,11 @@ Sony (nếu Tiny ADB sẵn sàng và không ai đang dùng): Điện thoại d�
 **Giới hạn:** Janky không đo lại (REWORK-01 không đổi bộ nạp/kích thước; cùng điều kiện ở Kiểu màu Hiện tại nay Gọn cũng tải ảnh như Teal — chủ dự án đã chấp nhận độ mượt vc114). Tablet/Hai khung, Y700/S25/FYT/Car Mode chưa kiểm; Gọn lúc đang quét offline chưa kiểm. **CHƯA XÁC NHẬN ÂM THANH THỰC.**
 
 **Kết luận REWORK-01: BLOCKED — CHỜ CHỦ DỰ ÁN.** Kỹ thuật đạt toàn bộ tiêu chí mục 12. Chủ dự án xem ảnh / dùng vc115 (Kiểu màu Hiện tại → Gọn vẫn có ảnh bìa) rồi nói **ĐẠT** hoặc báo lỗi. Khi ĐẠT: đổi thành PASS, xin xác nhận rồi `git merge --no-ff dot/E99-GON-ANH-BIA` vào `feature/e93-03d-y700-offline-cockpit`, cập nhật đầu HANDOFF.md.
+
+## 14. Kết luận cuối: PASS (26/10/2026)
+
+Chủ dự án trả lời **"Yêu cầu là đã ĐẠT"** (kèm ảnh điện thoại của chủ dự án, Điện thoại dọc Teal có ảnh bìa dòng) và xác nhận lại "Gọn luôn có ảnh" — đúng hành vi vc115. **E99-GON-ANH-BIA: PASS** cho phạm vi đã kiểm: ảnh bìa dòng trong Gọn với **mọi** Kiểu màu (tắt bằng công tắc "Tải ảnh bìa từ Telegram"), màu và kích thước Gọn giữ nguyên (8 dòng / 52 dp / ảnh 40 dp / thanh đáy 102 dp), Điện thoại/Tablet giữ hợp đồng E98, Car Mode không đổi. APK được nghiệm thu: vc115 / `0.6.90.1-beta` @ `6fb4e65`, SHA-256 `341200C7DC2D00B82FB780193997C5661B70164699D5144C7E80FAD995C636E6`; bỏ nhãn QA CANDIDATE cho bản này (không phải Stable, không phát hành công khai).
+
+Giới hạn vẫn giữ (không nằm trong PASS): Janky không đo lại ở REWORK-01; Tablet dọc / Hai khung, Y700, S25, FYT/Car Mode trên máy; Gọn lúc đang quét offline; **âm thanh thật chưa xác nhận**. Việc dọn nhỏ để sau: `MeloThemePolicy.rowArtActive` không còn dùng ở mã sản phẩm.
+
+Yêu cầu mới của chủ dự án cùng lúc (thanh đáy khi chưa có bài không để trống) **không thuộc E99** — chủ dự án chốt làm nhiệm vụ riêng `E100-THANH-DAY-CHUA-PHAT` (xem HANDOFF.md). Merge `--no-ff` vào `feature/e93-03d-y700-offline-cockpit` sau commit này (chủ dự án chọn "Merge ngay").

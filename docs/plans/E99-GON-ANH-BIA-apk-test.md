@@ -2,7 +2,7 @@
 
 ## Bản mới nhất: vc115 — REWORK-01 (25/10/2026)
 
-**Trạng thái:** **QA CANDIDATE — CHƯA NGHIỆM THU** (chờ chủ dự án duyệt REWORK-01: Gọn luôn có ảnh bìa với mọi Kiểu màu). Bản test nội bộ; giới hạn: Janky không đo lại, Tablet/Hai khung/Y700/S25/FYT/Car chưa kiểm, âm thanh thật chưa xác nhận.
+**Trạng thái:** **ĐÃ NGHIỆM THU — PASS** (chủ dự án "ĐẠT" 26/10/2026, xem `E99-GON-ANH-BIA-nghiem-thu.md` mục 14; Gọn luôn có ảnh bìa với mọi Kiểu màu). Bản test nội bộ; giới hạn: Janky không đo lại, Tablet/Hai khung/Y700/S25/FYT/Car chưa kiểm, âm thanh thật chưa xác nhận.
 
 - [MỞ APK TEST E99 REWORK-01 (vc115) TRÊN GOOGLE DRIVE](https://drive.google.com/file/d/1b9qo6iH44PFqBy8PPWskFO48wLWgDxml/view)
 - [THƯ MỤC APK + ẢNH QA vc115](https://drive.google.com/drive/folders/1SyCcytPbZoScnszCkdPV_ErwOqMHr8nB)
@@ -28,7 +28,7 @@
 
 ## Bản trước: vc114 (25/10/2026)
 
-**Trạng thái:** **QA CANDIDATE — CHƯA NGHIỆM THU** (chờ chủ dự án duyệt, xem `E99-GON-ANH-BIA-nghiem-thu.md`). Bản test nội bộ, không phải Stable, không phát hành công khai; giới hạn: Teal Phone trên Sony chưa kiểm lại, Y700/S25/FYT chưa kiểm, âm thanh thật chưa xác nhận.
+**Trạng thái:** đã thay bằng vc115 (giữ nguyên trên Drive, không ghi đè). Bản test nội bộ, không phải Stable, không phát hành công khai; giới hạn: Teal Phone trên Sony chưa kiểm lại, Y700/S25/FYT chưa kiểm, âm thanh thật chưa xác nhận.
 
 - [MỞ APK TEST E99 (vc114) TRÊN GOOGLE DRIVE](https://drive.google.com/file/d/1SyRp6sJlRHwy-n3iIomaQj0yPT_2yZ5c/view)
 - [THƯ MỤC APK + ẢNH QA vc114](https://drive.google.com/drive/folders/1ET_ggpbQVFEu-DmMkbshI8QfehljTgXY)
