@@ -261,8 +261,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var player: MediaController? = null
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var controllerReleased = false
-    private data class PendingPlayback(val items: List<MediaItem>, val startIndex: Int)
+    private data class PendingPlayback(val items: List<MediaItem>, val startIndex: Int, val positionMs: Long = 0L)
     private var pendingPlayback: PendingPlayback? = null
+
+    // E100: the Telegram song this account listened to last ("Nghe tiếp"); numbers in melovault_resume, never names or paths.
+    private var resumeSong: Song? = null
+    private var resumePositionMs = 0L
+    private var resumeLoadedFor = 0L
+    /** Where the last started playback began, so its first transition records that position and not 0. */
+    private var lastStartPositionMs = 0L
     private val cachedSongPaths = java.util.concurrent.ConcurrentHashMap<Long, String>()
     private val mainHandler = Handler(Looper.getMainLooper())
     private var libraryDb: TelegramLibraryDao? = null
@@ -917,6 +924,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     override fun onPause() {
         if (downloadedCountScheduled) android.util.Log.w("MeloVaultCount", "stage=pause_cancels_pending")
         uiForeground = false
+        player?.let { rememberResume(it.currentMediaItem?.mediaId, it.currentPosition) }
         downloadedCountGeneration.incrementAndGet()
         mainHandler.removeCallbacks(downloadedCountStart)
         downloadedCountScheduled = false
@@ -955,6 +963,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             if (isPlaying) downloadedCountGeneration.incrementAndGet()
+            else player?.let { rememberResume(it.currentMediaItem?.mediaId, it.currentPosition) }
             if (::playPause.isInitialized) playPause.text = if (isPlaying) "Ⅱ" else "▶"
             updateCockpitPlayer()
             if (::mainRoot.isInitialized) {
@@ -964,6 +973,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
             notifyMeloPlayback()
         }
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            rememberResume(
+                mediaItem?.mediaId,
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) lastStartPositionMs else 0L
+            )
             val titleText = mediaItem?.mediaMetadata?.title ?: "Chọn một bài hát để bắt đầu"
             nowPlayingTitle.text = titleText
             if (::nowPlayingSubtitle.isInitialized) {
@@ -1020,7 +1033,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 updateCockpitPlayer()
                 pendingPlayback?.let { pending ->
                     pendingPlayback = null
-                    startPlayback(controller, pending.items, pending.startIndex)
+                    startPlayback(controller, pending.items, pending.startIndex, pending.positionMs)
                 }
             }
 
@@ -1042,7 +1055,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         enqueueItems(listOf(mediaItem(uri, title, "picked:audio")), 0)
     }
 
-    private fun enqueueTelegramPlayback(song: Song, target: File) {
+    private fun enqueueTelegramPlayback(song: Song, target: File, startPositionMs: Long = 0L) {
         cachedSongPaths[song.messageId] = target.canonicalPath
         // Playback queue follows only the selected source (and visible title
         // filter), never silently jumps into a different Telegram channel.
@@ -1067,7 +1080,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val selected = queueSongOrder.indexOfFirst { it.messageId == song.messageId }
         if (selected < 0) {
             enqueueItems(listOf(mediaItem(Uri.fromFile(target), song.title,
-                "telegram:${song.messageId}", song.sourceTitle ?: sourceNames[song.chatId])), 0)
+                "telegram:${song.messageId}", song.sourceTitle ?: sourceNames[song.chatId])), 0, startPositionMs)
             return
         }
         fun playableAt(index: Int): MediaItem? {
@@ -1093,7 +1106,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 "telegram:${song.messageId}", song.sourceTitle ?: sourceNames[song.chatId])
             else playableAt(index)
         }
-        enqueueItems(contiguous, indices.indexOf(selected).coerceAtLeast(0))
+        enqueueItems(contiguous, indices.indexOf(selected).coerceAtLeast(0), startPositionMs)
     }
 
     private fun enqueueProgressivePlayback(song: Song) {
@@ -1127,17 +1140,18 @@ class TelegramPreviewActivity : AppCompatActivity() {
         enqueueItems(listOf(progressive), 0)
     }
 
-    private fun enqueueItems(items: List<MediaItem>, startIndex: Int) {
+    private fun enqueueItems(items: List<MediaItem>, startIndex: Int, startPositionMs: Long = 0L) {
         if (items.isEmpty()) return
         nowPlayingTitle.text = items[startIndex].mediaMetadata.title ?: ""
         val controller = player
-        if (controller != null) startPlayback(controller, items, startIndex)
-        else pendingPlayback = PendingPlayback(items, startIndex)
+        if (controller != null) startPlayback(controller, items, startIndex, startPositionMs)
+        else pendingPlayback = PendingPlayback(items, startIndex, startPositionMs)
     }
 
     private fun startPlayback(controller: MediaController, items: List<MediaItem>,
-                              startIndex: Int) {
-        controller.setMediaItems(items, startIndex, C.TIME_UNSET)
+                              startIndex: Int, positionMs: Long = 0L) {
+        lastStartPositionMs = positionMs.coerceAtLeast(0L)
+        controller.setMediaItems(items, startIndex, if (positionMs > 0L) positionMs else C.TIME_UNSET)
         controller.prepare()
         controller.play()
     }
@@ -4099,6 +4113,78 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
     }
 
+    // ---- E100: "Nghe tiếp" -----------------------------------------------------------------------
+
+    private fun resumePrefs() = getSharedPreferences(MeloResumePolicy.PREFS_NAME, Context.MODE_PRIVATE)
+
+    /**
+     * Main thread. Remembers the Telegram song loaded in the player for this account (key, position, time:
+     * numbers only). Local music, other accounts and a logged-out state never write ([MeloResumePolicy.shouldWrite]).
+     */
+    private fun rememberResume(mediaId: String?, positionMs: Long) {
+        val account = library.authorizedUser()?.value ?: 0L
+        if (!MeloResumePolicy.shouldWrite(auth.isReady(), account, mediaId)) return
+        val record = MeloResumePolicy.record(
+            account, MeloResumePolicy.songKeyOf(mediaId), positionMs, System.currentTimeMillis()
+        ) ?: return
+        runCatching {
+            resumePrefs().edit()
+                .putLong(MeloResumePolicy.songKey(account), record.songKey)
+                .putLong(MeloResumePolicy.posKey(account), record.positionMs)
+                .putLong(MeloResumePolicy.atKey(account), record.savedAtMs)
+                .apply()
+        }
+        resumePositionMs = record.positionMs
+        if (resumeSong?.messageId != record.songKey) {
+            resumeSong = shownSongs.firstOrNull { it.messageId == record.songKey }
+                ?: queueSongOrder.firstOrNull { it.messageId == record.songKey }
+                ?: songs.firstOrNull { it.messageId == record.songKey }
+        }
+    }
+
+    /** Main thread. Logout / account switch: forget the remembered song (RAM and prefs). */
+    private fun clearResume() {
+        resumeSong = null
+        resumePositionMs = 0L
+        resumeLoadedFor = 0L
+        runCatching { resumePrefs().edit().clear().apply() }
+    }
+
+    /**
+     * Main thread, once the library is loaded: reads this account's remembered song and looks it up in the
+     * index (names come from the database, never from prefs), then redraws the idle bottom card.
+     */
+    private fun startResumeFlow(userId: Long) {
+        if (userId <= 0L || isDestroyed || resumeLoadedFor == userId) return
+        resumeLoadedFor = userId
+        val prefs = resumePrefs()
+        executeOnDb {
+            val record = if (prefs.contains(MeloResumePolicy.songKey(userId))) {
+                MeloResumePolicy.record(
+                    userId, prefs.getLong(MeloResumePolicy.songKey(userId), 0L),
+                    prefs.getLong(MeloResumePolicy.posKey(userId), 0L), prefs.getLong(MeloResumePolicy.atKey(userId), 0L)
+                )
+            } else null
+            val row = record?.let { getOrInitDatabase(userId).getSongByKey(userId, it.songKey) }
+            if (record != null && (row == null || row.isDeleted)) {
+                // The song is gone from the index: forget it rather than offering a card that cannot play.
+                prefs.edit()
+                    .remove(MeloResumePolicy.songKey(userId)).remove(MeloResumePolicy.posKey(userId))
+                    .remove(MeloResumePolicy.atKey(userId)).apply()
+            }
+            runOnUiThread {
+                if (isDestroyed || !auth.isReady() || library.authorizedUser()?.value != userId) return@runOnUiThread
+                // A song played since is newer than what was read from disk.
+                if (record != null && row != null && !row.isDeleted && resumeSong == null) {
+                    resumeSong = indexedToSong(row)
+                    resumePositionMs = record.positionMs
+                }
+                android.util.Log.w("MeloResume", "stage=loaded hasRecord=${resumeSong != null} pos=${resumePositionMs / 1000}")
+                notifyMeloPlayback()
+            }
+        }
+    }
+
     /** Main thread. Remembers the whole-library count of this account (numbers only, no names or paths). */
     private fun storeDownloadedCount(account: Long, count: Int) {
         val now = System.currentTimeMillis()
@@ -5403,6 +5489,34 @@ class TelegramPreviewActivity : AppCompatActivity() {
             playShownSong(0)
         }
 
+        override fun resumeCard(): MeloScreenHost.Resume? {
+            val song = resumeSong ?: return null
+            val account = library.authorizedUser()?.value ?: return null
+            // Only what is already in memory: no new cover request here, so the list's own queue is not disturbed.
+            return MeloScreenHost.Resume(
+                songKey = song.messageId,
+                title = TelegramSongDisplayPolicy.label(song.title, song.filename),
+                sourceTitle = song.sourceTitle ?: sourceNames[song.chatId],
+                art = thumbnailCache.get(song.messageId)
+                    ?: peekRowArt(MeloRowArtPolicy.telegramKey(account, song.chatId, song.genuineMessageId))
+            )
+        }
+
+        override fun canPlayAll(): Boolean {
+            if (!auth.isReady()) return false
+            if (localMode) return localMusic.shown().isNotEmpty()
+            // The source list (Telegram tab) has no songs to play.
+            if (allChatsMode && browseSources && !playlistMode) return false
+            return shownSongs.firstOrNull()?.placeholder == false
+        }
+
+        override fun playResume() {
+            val remembered = resumeSong ?: return
+            val key = remembered.messageId
+            val song = shownSongs.firstOrNull { it.messageId == key } ?: songs.firstOrNull { it.messageId == key } ?: remembered
+            downloadAndPlay(song, resumePositionMs)
+        }
+
         override fun openNowPlaying() = showFullPlayer()
 
         override fun syncSubtitle(): String? =
@@ -6303,6 +6417,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     telegramLibraryTotal = null
                     resetLocalMusic()
                     clearDownloadedCount()
+                    clearResume()
                     requestedSourceNames.clear()
                     sourcesAdapter.clear()
                     tracks.adapter = adapter
@@ -6585,6 +6700,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 telegramLibraryTotal = count
                 scheduleMeloLibraryRefresh()
                 startDownloadedCountFlow(userId)
+                startResumeFlow(userId)
                 upgradeLegacyPlaylistKeys(TelegramUserId(userId))
                 refreshLocalCount()
                 if (count > 0) {
@@ -7021,7 +7137,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
     }
 
-    private fun downloadAndPlay(song: Song) {
+    /** [resumeFromMs] only counts when the file is fully downloaded; a growing (progressive) file always starts at 0. */
+    private fun downloadAndPlay(song: Song, resumeFromMs: Long = 0L) {
         if (song.placeholder) {
             // A saved song this device's library does not list (yet) has no message to open.
             toast("Bài này chưa có trong thư viện máy. Hãy chờ đồng bộ thư viện xong rồi thử lại.")
@@ -7099,7 +7216,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         currentDownloadingSong = null
                         cachedSongPaths[song.messageId] = localFile.canonicalPath
                         nowPlayingTitle.text = song.title
-                        enqueueTelegramPlayback(resolvedSong, localFile)
+                        enqueueTelegramPlayback(
+                            resolvedSong, localFile,
+                            MeloResumePolicy.startPositionMs(resumeFromMs, resolvedSong.durationSeconds, fileComplete = true)
+                        )
                         showMessage("Đang phát: ${song.title}")
                         setPlayFeedback(null, song.messageId)
                     } else {
@@ -7213,6 +7333,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         telegramLibraryTotal = null
         resetLocalMusic()
         clearDownloadedCount()
+        clearResume()
         requestedSourceNames.clear()
         openDocument.isEnabled = false
         logout.isEnabled = false
