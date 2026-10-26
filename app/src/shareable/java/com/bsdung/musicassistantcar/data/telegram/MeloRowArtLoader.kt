@@ -19,7 +19,7 @@ import java.util.concurrent.Executors
 /**
  * E98: the small cover on every song row of the teal theme. Order for one row: cache, the picture
  * embedded in a downloaded file, the device thumbnail (local songs), the real cover Telegram sent
- * with the audio message (a ~40px blur first, then the thumbnail file), the channel's photo, and
+ * with the audio message (the thumbnail file; a ~40px blur only when it is slow, E101), the channel's photo, and
  * otherwise nothing (the row keeps its letter tile). Every rule that can be tested without Android
  * lives in [MeloRowArtPolicy].
  *
@@ -61,6 +61,7 @@ internal class MeloRowArtLoader(
     private val provisional = HashSet<String>()
     private val decoding = HashSet<String>()
     private val watchdogs = HashMap<String, Runnable>()
+    private val blurTimers = HashMap<String, Runnable>()
     private var generation = 0L
     private var targetPx = 96
     private var listener: (() -> Unit)? = null
@@ -90,6 +91,7 @@ internal class MeloRowArtLoader(
         if (acct <= 0L) return
         targetPx = MeloRowArtPolicy.targetPx(rowArtPx)
         val wanted = HashSet<String>()
+        val messageJobs = ArrayList<Job>()
         for (item in items) {
             val key = item.key
             if (cache.get(key) != null && key !in provisional) { hits++; continue }
@@ -98,9 +100,11 @@ internal class MeloRowArtLoader(
             when {
                 item.localFile != null -> decodeEmbedded(item, acct)
                 item.mediaStoreId > 0L -> decodeDeviceThumb(item)
-                item.chatId != 0L && item.rawMessageId > 0L -> enqueue(Job(key, Kind.MESSAGE, item.chatId, item.rawMessageId, acct, generation))
+                item.chatId != 0L && item.rawMessageId > 0L -> messageJobs.add(Job(key, Kind.MESSAGE, item.chatId, item.rawMessageId, acct, generation))
             }
         }
+        // The scheduler sends the newest request first, so the top row is asked last.
+        MeloRowArtPolicy.sendOrder(messageJobs).forEach(::enqueue)
         val keep = HashSet(wanted)
         chatWaiters.forEach { (chatKey, rows) -> if (rows.any { it in wanted }) keep.add(chatKey) }
         scheduler.retain(keep)
@@ -130,6 +134,8 @@ internal class MeloRowArtLoader(
         miss.clear()
         watchdogs.values.forEach(main::removeCallbacks)
         watchdogs.clear()
+        blurTimers.values.forEach(main::removeCallbacks)
+        blurTimers.clear()
         hasFileWaiters = false
         cache.evictAll()
     }
@@ -276,7 +282,13 @@ internal class MeloRowArtLoader(
         val path = thumb.localPath
         val fileId = thumb.fileId
         val mini = thumb.mini
-        if (mini != null && cache.get(key) == null) decodeBytes(key, mini, final = path == null && fileId == null)
+        if (mini != null && cache.get(key) == null) {
+            when (MeloRowArtPolicy.blurPlan(hasMini = true, sharpOnDisk = path != null, sharpToDownload = fileId != null)) {
+                MeloRowArtPolicy.Blur.NOW -> decodeBytes(key, mini, final = true)
+                MeloRowArtPolicy.Blur.LATER -> scheduleBlur(key, mini)
+                MeloRowArtPolicy.Blur.NONE -> Unit
+            }
+        }
         when {
             path != null -> decodeFile(key, path)
             fileId != null -> {
@@ -300,6 +312,22 @@ internal class MeloRowArtLoader(
         }
     }
 
+    /** Shows the blur only if the real cover has not arrived within [MeloRowArtPolicy.BLUR_DELAY_MS]. */
+    private fun scheduleBlur(key: String, mini: ByteArray) {
+        if (key in blurTimers) return
+        val g = generation
+        val timer = Runnable {
+            blurTimers.remove(key)
+            if (MeloRowArtPolicy.isCurrent(g, generation) && alive() && cache.get(key) == null) decodeBytes(key, mini, final = false)
+        }
+        blurTimers[key] = timer
+        main.postDelayed(timer, MeloRowArtPolicy.BLUR_DELAY_MS)
+    }
+
+    private fun cancelBlur(key: String) {
+        blurTimers.remove(key)?.let(main::removeCallbacks)
+    }
+
     private fun onFile(file: JSONObject) {
         val id = file.optInt("id", 0)
         if (id <= 0) return
@@ -314,6 +342,8 @@ internal class MeloRowArtLoader(
     }
 
     private fun fail(key: String) {
+        // The real cover will not come: a waiting blur is shown now instead of being dropped.
+        blurTimers.remove(key)?.let { main.removeCallbacks(it); it.run() }
         failed++
         miss.add(key)
         chatWaiters.remove(key)?.forEach { row -> if (cache.get(row) == null) miss.add(row) }
@@ -423,6 +453,7 @@ internal class MeloRowArtLoader(
         cache.put(key, bmp)
         if (final) provisional.remove(key) else provisional.add(key)
         if (final) {
+            cancelBlur(key)
             chatWaiters.remove(key)?.forEach { row ->
                 if (cache.get(row) == null || row in provisional) {
                     cache.put(row, bmp)
