@@ -29,8 +29,8 @@ internal class TelegramApiSetupPanel(
     private fun field(label: String, type: Int) = EditText(context).apply {
         hint = label
         contentDescription = label
-        inputType = type
         setSingleLine(true)
+        inputType = type
         setTextColor(colors.text)
         setHintTextColor(colors.subtle)
         background = rounded()
