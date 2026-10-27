@@ -2,7 +2,7 @@
 
 ## Bản hiện tại: vc120 `bf174c5` — REWORK vòng 1 (27/10/2026)
 
-**Trạng thái: QA CANDIDATE — CHƯA NGHIỆM THU — KHÔNG ĐĂNG CÔNG KHAI.** Ký bằng khóa debug Tiny; không đưa lên web/GitHub/Telegram. Đang chờ chủ dự án thử theo mục 9 kế hoạch.
+**Trạng thái: ĐÃ NGHIỆM THU — PASS** (chủ dự án "đã ĐẠT" 27/10/2026, `E104-APK-CONG-KHAI-nghiem-thu.md` mục 16). **KHÔNG ĐĂNG CÔNG KHAI** (khóa debug). Ký bằng khóa debug Tiny; không đưa lên web/GitHub/Telegram.
 
 - [THƯ MỤC APK + ẢNH QA E104 vc120 bf174c5](https://drive.google.com/drive/folders/1lLeIK5m6l76OUb2yYs108k-3xLECD5Zi)
 - [APK OPEN Debug — app.melovault.player.open 0.6.95-open (cài thử bản tự nhập mã)](https://drive.google.com/file/d/1WgBT7usftQ0-hIJfAsymQrFOJalrZEyr/view)

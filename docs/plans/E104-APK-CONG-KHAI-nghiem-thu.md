@@ -140,3 +140,11 @@ HEAD `be7c5fc`, cây sạch, `git diff --check` sạch. Mã: `bf174c5` chỉ đ�
 Đã upload Drive Ni N owner-only: thư mục `MeloVault_QA/E104-APK-CONG-KHAI-20261027-vc120-bf174c5` (3 APK + 10 PNG + `SHA256.txt`), SHA khớp khi chép, connector xác nhận chỉ owner cho thư mục và 3 APK. Link: `E104-APK-CONG-KHAI-apk-test.md`, ảnh: `E104-APK-CONG-KHAI-hinh-nghiem-thu.md`. Nhãn: **QA CANDIDATE — CHƯA NGHIỆM THU — KHÔNG ĐĂNG CÔNG KHAI** (khóa debug).
 
 Chưa kiểm: đăng nhập/API thật, `API_ID_INVALID` trên máy, âm thanh thật, Release UI, Y700/S25/FYT/Sony.
+
+## 16. Kết luận cuối — **PASS** (27/10/2026)
+
+Chủ dự án trả lời trong phiên Opus nghiệm thu, 27/10/2026, sau khi nhận ảnh tổng hợp `00_tong_hop_rework1.png`, link Drive owner-only 3 APK `bf174c5` và câu hỏi "ĐẠT (kèm đồng ý merge vào nhánh tích hợp) hay báo lỗi": **"đã ĐẠT"**. P7 đạt → **E104-APK-CONG-KHAI: PASS** theo phạm vi đã kiểm.
+
+- APK đã duyệt: vc120 `0.6.95-open` (`app.melovault.player.open`) và `0.6.95-beta` (`app.melovault.player`) @ `bf174c5`, ký khóa debug Tiny → **vẫn KHÔNG đăng công khai** (kế hoạch mục 3: khóa phát hành và website là nhiệm vụ sau).
+- Giới hạn còn mở: âm thanh thật chưa xác nhận độc lập; Release UI, `API_ID_INVALID` trên máy, Y700/S25/FYT/Sony chưa kiểm; nhập lại mã dùng phương án "đóng hẳn app rồi mở lại".
+- Merge `--no-ff` vào `feature/e93-03d-y700-offline-cockpit` theo xác nhận trên; không push.
