@@ -59,6 +59,7 @@ class SyncSettingsControllerTest {
         for (c in listOf(ca, cb)) {
             assertEquals(ActionResult.Done, c.enable(true))
             assertEquals(ActionResult.Done, c.setAllowTransmit(true))
+            assertEquals(ActionResult.Done, c.discover())
         }
         a.device.toggle(acct.value, songId(1))
         a.device.toggle(acct.value, songId(2))
@@ -154,6 +155,7 @@ class SyncSettingsControllerTest {
     @Test fun e105_acceptingAgainRevokesAnInMemorySendGrant() {
         val c = controller()
         c.optIn(transmit = true)
+        c.verifyChannel()
         assertEquals(ActionResult.Done, c.grantSend(3, true))
         assertEquals(ActionResult.Done, c.enable(true))
         assertEquals(0, c.sendGrant())
@@ -168,6 +170,11 @@ class SyncSettingsControllerTest {
         assertEquals(ActionResult.Done, enable(true))
         if (create) assertEquals(ActionResult.Done, setAllowCreate(true))
         if (transmit) assertEquals(ActionResult.Done, setAllowTransmit(true))
+    }
+
+    private fun SyncSettingsController.verifyChannel() {
+        actions.discovery = Gated.Done(ChannelDiscovery.Found(-77L))
+        assertEquals(ActionResult.Done, discover())
     }
 
     // ---- the shipped P4 build: nothing can be turned on ------------------------------------------------------------
@@ -367,14 +374,17 @@ class SyncSettingsControllerTest {
         assertEquals(ActionResult.Refused(ActionResult.Reason.NO_CHANNEL), c.syncNow())
         assertTrue(actions.calls.isEmpty())
         factsNow = factsNow!!.copy(channelBound = true)
+        assertEquals(ActionResult.Refused(ActionResult.Reason.NEEDS_DISCOVERY), c.syncNow())
+        c.verifyChannel()
         assertEquals(ActionResult.Done, c.syncNow())
-        assertEquals(listOf("run"), actions.calls)
+        assertEquals(listOf("discover", "run"), actions.calls)
         assertEquals(listOf(SyncMode.INCREMENTAL), actions.modes)
     }
 
     @Test fun k16_retryCannotSkipTheServicesBackoffItIsShownAsWaitNotAsSynced() {
         val c = controller()
         c.optIn(transmit = true)
+        c.verifyChannel()
         actions.report = Gated.Done(SyncReport(SyncStatus.BACKOFF_ACTIVE, retryAfterMs = 20_000L))
         assertEquals(ActionResult.Done, c.syncNow())
         val line = PlaylistSyncStatusPolicy.evaluate(1001L, factsNow, c.syncContext())
@@ -390,6 +400,7 @@ class SyncSettingsControllerTest {
         c.optIn()
         assertEquals(ActionResult.Refused(ActionResult.Reason.NOT_CONFIRMED), c.fullReplay(false))
         assertTrue(actions.calls.isEmpty())
+        c.verifyChannel()
         assertEquals(ActionResult.Done, c.fullReplay(true))
         assertEquals(listOf(SyncMode.FULL_REPLAY), actions.modes)
         // Recovery is a read; it removes nothing from the stored playlist.
@@ -399,6 +410,7 @@ class SyncSettingsControllerTest {
     @Test fun k18_aSecondActionWhileOneIsRunningIsRefusedAsBusy() {
         val c = controller()
         c.optIn()
+        c.verifyChannel()
         val inside = CountDownLatch(1)
         val release = CountDownLatch(1)
         actions.onRun = { inside.countDown(); release.await(5, TimeUnit.SECONDS) }

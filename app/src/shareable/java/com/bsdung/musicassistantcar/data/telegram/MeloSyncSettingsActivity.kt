@@ -33,6 +33,9 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
     private lateinit var controller: SyncSettingsController
     private var account: TelegramUserId? = null
     @Volatile private var lastFacts: PlaylistStatusFacts? = null
+    // UI-thread gate: do not queue taps behind a discovery on the single worker.
+    private var actionPending = false
+    private val actionViews = ArrayList<View>()
 
     /** Blocking controller calls (P5 will put TDLib behind them) never run on the UI thread nor on the playlist thread. */
     private val worker: ExecutorService = Executors.newSingleThreadExecutor { task ->
@@ -127,6 +130,7 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
         val s = c.sizes
         val p = c.palette
         content.removeAllViews()
+        actionViews.clear()
         content.addView(LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -207,20 +211,31 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
     // ---- actions -----------------------------------------------------------------------------------------
 
     private fun act(call: () -> ActionResult) {
+        if (actionPending || isDestroyed) return
+        actionPending = true
+        actionViews.forEach { it.isEnabled = false; it.isClickable = false; it.alpha = 0.45f }
         try {
             worker.execute {
-                val result = call()
-                // Only a closed list of names is logged (Sony hides Log.i, hence warn): never an id, a text or a song.
-                account?.let { SyncRuntime.runLog.last(it.value) }?.takeIf { it.stage != SyncStage.NONE }?.let {
-                    Log.w("MeloSync", "stage=${it.stage.name} status=${it.status?.name}")
-                }
-                runOnUiThread {
-                    if (isDestroyed) return@runOnUiThread
-                    resultText(result)?.let { Toast.makeText(this, it, Toast.LENGTH_LONG).show() }
-                    refresh()
+                try {
+                    val result = call()
+                    // Only a closed list of names is logged (Sony hides Log.i, hence warn): never an id, a text or a song.
+                    account?.let { SyncRuntime.runLog.last(it.value) }?.takeIf { it.stage != SyncStage.NONE }?.let {
+                        Log.w("MeloSync", "stage=${it.stage.name} status=${it.status?.name}")
+                    }
+                    runOnUiThread {
+                        if (isDestroyed) return@runOnUiThread
+                        resultText(result)?.let { Toast.makeText(this, it, Toast.LENGTH_LONG).show() }
+                    }
+                } finally {
+                    runOnUiThread {
+                        actionPending = false
+                        if (!isDestroyed) refresh()
+                    }
                 }
             }
         } catch (_: RejectedExecutionException) {
+            actionPending = false
+            if (!isDestroyed) refresh()
         }
     }
 
@@ -331,7 +346,7 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
     private fun button(label: String, state: ControlState, onClick: () -> Unit): TextView {
         val s = components.sizes
         val p = components.palette
-        val usable = state == ControlState.AVAILABLE
+        val usable = !actionPending && state == ControlState.AVAILABLE
         return TextView(this).apply {
             text = label
             gravity = Gravity.CENTER
@@ -347,14 +362,14 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
             isFocusable = usable
             contentDescription = if (state == ControlState.BUILD_OFF) "$label, chưa khả dụng trong bản thử nghiệm" else label
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, s.minTouch).apply { topMargin = s.gap / 2 }
-            if (usable) setOnClickListener { onClick() }
-        }
+            if (usable) setOnClickListener { if (!actionPending) onClick() }
+        }.also { actionViews.add(it) }
     }
 
     private fun consentRow(label: String, state: ControlState, onClick: () -> Unit): View {
         val s = components.sizes
         val p = components.palette
-        val usable = state == ControlState.AVAILABLE || state == ControlState.ACTIVE
+        val usable = !actionPending && (state == ControlState.AVAILABLE || state == ControlState.ACTIVE)
         val on = state == ControlState.ACTIVE
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -380,7 +395,7 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
             addView(components.text(label, s.titleText, p.text, maxLines = 3).apply {
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             })
-            if (usable) setOnClickListener { onClick() }
-        }
+            if (usable) setOnClickListener { if (!actionPending) onClick() }
+        }.also { actionViews.add(it) }
     }
 }

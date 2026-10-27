@@ -117,6 +117,10 @@ internal object PlaylistSyncStatusPolicy {
     const val METADATA_ONLY = "Chỉ đồng bộ danh sách bài đã lưu (thông tin bài hát), không tải hay phát nhạc sang máy khác."
 
     fun evaluate(currentAccount: Long, facts: PlaylistStatusFacts?, sync: SyncContext): Line {
+        if (currentAccount <= 0L) {
+            return Line(Kind.NEEDS_LOGIN, "Cần đăng nhập Telegram",
+                "Hãy đăng nhập Telegram trước khi đồng bộ Playlist.", Severity.WARN)
+        }
         // Another account's numbers are never shown, not even a count.
         if (facts == null || facts.accountId != currentAccount) {
             return Line(Kind.LOADING, "Đang đọc Playlist…", "", Severity.INFO)

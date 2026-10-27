@@ -145,7 +145,7 @@ internal sealed class ActionResult {
  *  - the three consents are separate; none implies another; turning sync off clears all three and deletes nothing;
  *  - a channel is created only after a discovery that PROVED absence ([ChannelView.NotFound]), with consent (b), and
  *    only for a call that carries a fresh `confirmed = true` - never on opening the screen;
- *  - "Đồng bộ ngay" needs consent (a) and a bound channel and cannot skip the service's own backoff and gates.
+ *  - "Đồng bộ ngay" needs consent (a), a bound channel verified in this screen, and the service's own gates.
  */
 internal class SyncSettingsController(
     private val store: SyncConsentStore,
@@ -163,6 +163,9 @@ internal class SyncSettingsController(
     private var viewAccount: Long = 0L
     private var viewEpoch: Long = epoch()
     private var channel: ChannelView = ChannelView.Unchecked
+    // A saved binding is not evidence that this screen has verified the channel.
+    private var channelVerified = false
+    private var generation = 0L
     private val lastRun: LastSyncRun? get() = runLog.last(viewAccount)
     private var running = false
     /**
@@ -173,22 +176,28 @@ internal class SyncSettingsController(
     private var sendGrant = 0
 
     /** Screen closed: release the TDLib binding of the sync and stop unfinished work. Deletes and sends nothing. */
-    fun close() = actions.close()
+    fun close() {
+        synchronized(this) { invalidate() }
+        actions.close()
+    }
+
+    private fun invalidate() {
+        generation++
+        channelVerified = false
+        channel = ChannelView.Unchecked
+        running = false
+        sendGrant = 0
+    }
 
     /** Forget everything learned about another account's channel or runs. Called before each use. */
     @Synchronized
     private fun scope(current: TelegramUserId?) {
         val id = current?.value ?: 0L
         val liveEpoch = epoch()
-        if (liveEpoch != viewEpoch) {
+        if (liveEpoch != viewEpoch || id != viewAccount) {
             viewEpoch = liveEpoch
-            sendGrant = 0
-        }
-        if (id != viewAccount) {
             viewAccount = id
-            channel = ChannelView.Unchecked
-            running = false
-            sendGrant = 0
+            invalidate()
         }
     }
 
@@ -232,12 +241,13 @@ internal class SyncSettingsController(
             createNow = if (!channelCreationUnlocked && buildEnabled) ControlState.LOCKED
             else gated(opted && c.mayCreateChannel && channel == ChannelView.NotFound && !bound && !running),
             bindNow = gated(opted && channel is ChannelView.Found && !bound && !running),
-            syncNow = gated(opted && bound && !running),
-            fullReplay = gated(opted && bound && !running),
-            channel = if (bound) ChannelView.Bound else channel,
+            syncNow = gated(opted && bound && channelVerified && !running),
+            fullReplay = gated(opted && bound && channelVerified && !running),
+            channel = if (bound && channelVerified) ChannelView.Bound else channel,
             busy = running,
             sendGrant = if (opted && c.mayTransmitInitial) sendGrant else 0,
-            grantSend = gated(opted && c.mayTransmitInitial && bound && !running, active = opted && c.mayTransmitInitial && sendGrant > 0),
+            grantSend = gated(opted && c.mayTransmitInitial && bound && channelVerified && !running,
+                active = opted && c.mayTransmitInitial && bound && channelVerified && !running && sendGrant > 0),
         )
     }
 
@@ -291,9 +301,8 @@ internal class SyncSettingsController(
     /** Turns everything off. Deletes no playlist, outbox or cloud message. */
     fun turnOff(): ActionResult = guarded { who ->
         // The grant goes first and unconditionally: even if the consent file cannot be written, nothing more is sent.
-        synchronized(this) { sendGrant = 0 }
+        synchronized(this) { invalidate() }
         val ok = store.save(who, SyncConsent())
-        if (ok) synchronized(this) { channel = ChannelView.Unchecked }
         saved(ok)
     }
 
@@ -313,7 +322,12 @@ internal class SyncSettingsController(
         if (!store.load(who).mayTransmitInitial) return@guarded ActionResult.Refused(ActionResult.Reason.TRANSMIT_NOT_ALLOWED)
         val snapshot = facts()?.takeIf { it.accountId == who.value }
         if (snapshot?.channelBound != true) return@guarded ActionResult.Refused(ActionResult.Reason.NO_CHANNEL)
-        synchronized(this) { sendGrant = operations }
+        synchronized(this) {
+            scope(account())
+            if (running) return@guarded ActionResult.Refused(ActionResult.Reason.BUSY)
+            if (viewAccount != who.value || !channelVerified) return@guarded ActionResult.Refused(ActionResult.Reason.NEEDS_DISCOVERY)
+            sendGrant = operations
+        }
         ActionResult.Done
     }
 
@@ -325,11 +339,16 @@ internal class SyncSettingsController(
 
     // ---- channel ---------------------------------------------------------------------------------------
 
-    private fun begin(): Boolean = synchronized(this) {
-        if (running) false else { running = true; true }
+    private fun begin(): Long? = synchronized(this) {
+        if (running) null else { running = true; ++generation }
     }
 
-    private fun end() = synchronized(this) { running = false }
+    private fun isCurrent(who: TelegramUserId, token: Long): Boolean {
+        scope(account())
+        return viewAccount == who.value && generation == token
+    }
+
+    private fun end(token: Long) = synchronized(this) { if (generation == token) running = false }
 
     private fun optedIn(who: TelegramUserId): ActionResult? {
         val c = store.load(who)
@@ -339,17 +358,27 @@ internal class SyncSettingsController(
     /** Read-only look at the account's chats. Creates nothing. */
     fun discover(): ActionResult = guarded { who ->
         optedIn(who)?.let { return@guarded it }
-        if (!begin()) return@guarded ActionResult.Refused(ActionResult.Reason.BUSY)
+        val token = synchronized(this) {
+            val started = begin() ?: return@guarded ActionResult.Refused(ActionResult.Reason.BUSY)
+            channelVerified = false
+            channel = ChannelView.Unchecked
+            started
+        }
         try {
             when (val answer = actions.discover(who)) {
                 is Gated.Denied -> ActionResult.Denied(answer.reason)
                 is Gated.Done -> {
-                    synchronized(this) { if (viewAccount == who.value) channel = viewOf(answer.value) }
+                    synchronized(this) {
+                        if (isCurrent(who, token)) {
+                            channel = viewOf(answer.value)
+                            channelVerified = answer.value is ChannelDiscovery.Found
+                        }
+                    }
                     ActionResult.Done
                 }
             }
         } finally {
-            end()
+            end(token)
         }
     }
 
@@ -361,10 +390,10 @@ internal class SyncSettingsController(
         if (!confirmed) return@guarded ActionResult.Refused(ActionResult.Reason.NOT_CONFIRMED)
         if (!store.load(who).mayCreateChannel) return@guarded ActionResult.Denied(SyncDenied.CREATE_NOT_ALLOWED)
         if (synchronized(this) { channel } != ChannelView.NotFound) return@guarded ActionResult.Refused(ActionResult.Reason.NEEDS_DISCOVERY)
-        if (!begin()) return@guarded ActionResult.Refused(ActionResult.Reason.BUSY)
+        val token = begin() ?: return@guarded ActionResult.Refused(ActionResult.Reason.BUSY)
         try {
             // Whatever happens next, this confirmation is spent: another create needs a new discovery and a new tap.
-            synchronized(this) { channel = ChannelView.Unchecked }
+            synchronized(this) { channel = ChannelView.Unchecked; channelVerified = false }
             when (val answer = actions.create(who)) {
                 is Gated.Denied -> ActionResult.Denied(answer.reason)
                 is Gated.Done -> {
@@ -377,12 +406,12 @@ internal class SyncSettingsController(
                         is CreateOutcome.AlreadyBound -> ChannelView.Bound
                         is CreateOutcome.Failed -> ChannelView.Failed(outcome.kind)
                     }
-                    synchronized(this) { if (viewAccount == who.value) channel = view }
+                    synchronized(this) { if (isCurrent(who, token)) channel = view }
                     ActionResult.Done
                 }
             }
         } finally {
-            end()
+            end(token)
         }
     }
 
@@ -392,19 +421,22 @@ internal class SyncSettingsController(
         if (!confirmed) return@guarded ActionResult.Refused(ActionResult.Reason.NOT_CONFIRMED)
         val found = synchronized(this) { channel } as? ChannelView.Found
             ?: return@guarded ActionResult.Refused(ActionResult.Reason.NEEDS_DISCOVERY)
-        if (!begin()) return@guarded ActionResult.Refused(ActionResult.Reason.BUSY)
+        val token = begin() ?: return@guarded ActionResult.Refused(ActionResult.Reason.BUSY)
         try {
             when (val answer = actions.bind(who, found.chatId)) {
                 is Gated.Denied -> ActionResult.Denied(answer.reason)
                 is Gated.Done -> {
                     synchronized(this) {
-                        if (viewAccount == who.value) channel = if (answer.value == BindResult.Bound) ChannelView.Bound else ChannelView.Unchecked
+                        if (isCurrent(who, token)) {
+                            channelVerified = answer.value == BindResult.Bound
+                            channel = if (channelVerified) ChannelView.Bound else ChannelView.Unchecked
+                        }
                     }
                     if (answer.value == BindResult.Bound) ActionResult.Done else ActionResult.NotSaved
                 }
             }
         } finally {
-            end()
+            end(token)
         }
     }
 
@@ -430,7 +462,12 @@ internal class SyncSettingsController(
         if (!confirmed) return@guarded ActionResult.Refused(ActionResult.Reason.NOT_CONFIRMED)
         val snapshot = facts()?.takeIf { it.accountId == who.value }
         if (snapshot?.channelBound != true) return@guarded ActionResult.Refused(ActionResult.Reason.NO_CHANNEL)
-        if (!begin()) return@guarded ActionResult.Refused(ActionResult.Reason.BUSY)
+        val token = synchronized(this) {
+            scope(account())
+            if (running) return@guarded ActionResult.Refused(ActionResult.Reason.BUSY)
+            if (viewAccount != who.value || !channelVerified) return@guarded ActionResult.Refused(ActionResult.Reason.NEEDS_DISCOVERY)
+            begin()!!
+        }
         try {
             // The whole grant is taken out BEFORE the call and only what was not dispatched is put back afterwards: if the
             // call dies half way nothing comes back, so an unexpected failure can never leave a grant to be used again.
@@ -439,20 +476,22 @@ internal class SyncSettingsController(
             val answer = actions.run(who, mode, granted)
             // What is left is put back only if the very same sign-in epoch is still live: A -> B -> A during the call (a new
             // epoch of the same account) must not bring a grant back to life.
-            if (viewAccount == who.value && epoch() == startEpoch && store.load(who).mayTransmitInitial) {
-                val spent = when (answer) {
-                    is Gated.Denied -> 0 // refused at the gate: nothing was handed to Telegram
-                    is Gated.Done -> answer.value.opsDispatched
+            synchronized(this) {
+                if (isCurrent(who, token) && epoch() == startEpoch && store.load(who).mayTransmitInitial) {
+                    val spent = when (answer) {
+                        is Gated.Denied -> 0 // refused at the gate: nothing was handed to Telegram
+                        is Gated.Done -> answer.value.opsDispatched
+                    }
+                    sendGrant = (granted - spent).coerceAtLeast(0)
                 }
-                synchronized(this) { if (viewAccount == who.value) sendGrant = (granted - spent).coerceAtLeast(0) }
             }
             val opCounterNow = facts()?.takeIf { it.accountId == who.value }?.opCounter ?: snapshot.opCounter
             synchronized(this) {
-                if (viewAccount == who.value) runLog.record(LastSyncRun.of(who.value, answer, opCounterNow))
+                if (isCurrent(who, token)) runLog.record(LastSyncRun.of(who.value, answer, opCounterNow))
             }
             if (answer is Gated.Denied) ActionResult.Denied(answer.reason) else ActionResult.Done
         } finally {
-            end()
+            end(token)
         }
     }
 }

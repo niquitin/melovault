@@ -176,3 +176,62 @@ Tập nền trước: “Trôi Kem (Vmix China) 2026” và “Đặt 1h30 (TD T
 - Crash buffer cuối Shanling không có dòng AndroidRuntime phù hợp; Sony có hai FATAL của `com.facebook.appmanager` lúc 00:24/16:39, không phải MeloVault. Không thấy crash MeloVault trong buffer còn lưu; không coi là kiểm ANR/toàn bộ lịch sử đầy đủ. MediaSession cuối Shanling state=2/0, không chứng minh âm thanh.
 - `SHANLING_SCREEN_END=OFF` lúc 22:38:34: Android 10 trả `mGlobalDisplayState=OFF` và `mScreenState=OFF` (không có chuỗi đúng dạng `Display State=`). `SONY_SCREEN_END=OFF` lúc 22:38:06: `Display State=OFF`. Cleanup dùng keyevent 223 trong finally, không đổi timeout/brightness/AOD/network.
 - Rollback chỉ bằng APK cùng package/cert, vc không giảm; không cài lại vc119/120 sau vc121. Không merge/push/upload; không sửa plan/workflow/nghiệm thu. Chỉ commit phần bổ sung báo cáo, giữ nguyên phiên 1 và toàn bộ artifacts.
+
+## Vòng REWORK 1
+Thực thi: Codex gpt-6-astra medium, phiên REWORK 1 (27/10/2026, +07)
+
+- Phạm vi được duyệt: R1/R2 mục 4 biên bản; chỉ code/test/build Ni/báo cáo. Không QA thiết bị/Tiny, cài APK, ghi cloud, upload, push hoặc merge.
+- Đầu phiên: đúng `dot/E105-DONG-BO-PLAYLIST`, HEAD `4c7b2a631d4d0071bd0ed5ad30c87902b79463c4`; baseline/plan như phiên 1. Diff check sạch; chỉ `.codex-remote-attachments/` untracked đã biết, giữ nguyên. Commit cuối lúc 23:02, kiểm lúc khoảng 23:09; nguồn bàn giao xác nhận phiên kiểm toán đã dừng sửa. Gradle daemon cũ idle (build cuối kết thúc 22:59:53); không có build khác.
+- R1 (`PlaylistSyncStatusPolicy.kt`): account không hợp lệ trả NEEDS_LOGIN / “Cần đăng nhập Telegram” và hướng dẫn đăng nhập trước; account hợp lệ thiếu facts vẫn LOADING, không lộ facts tài khoản khác.
+- R2 (`SyncSettingsController.kt`): liên kết đã lưu không tự mở đồng bộ. Phiên màn hình mới/đóng màn/đổi account hoặc epoch/tắt sync xóa xác minh; chỉ Tìm kênh chủ động và kết quả Found mới xác minh. Tìm lại khóa ngay; Unsafe/Failed/Incomplete/Ambiguous/NotFound hiển thị thay Bound, tiếp tục khóa cấp lượt/sync/replay cả UI và gọi trực tiếp.
+- `MeloSyncSettingsActivity.kt`: khóa nút ngay khi nhận thao tác và chặn nhận thêm lần bấm tới khi xong; tránh xếp hàng grant/sync/replay phía sau discovery trên worker một luồng. Đây là phần UI của R2; chưa QA trên thiết bị.
+- Generation + account/epoch loại kết quả discovery cũ; kết quả cũ không tắt busy của tác vụ mới. Từ chối không gọi actions.run và không tiêu grant. Tìm thành công không tự gửi hoặc cấp lại grant/quyền; tắt/đổi scope/đóng màn thu hồi grant. Giữ cổng service/transport và versionCode 121; không đổi API công khai/schema/giao thức/package/signer.
+- Thêm 9 test (2 status, 7 verification), bao gồm kênh đã gắn, lỗi tìm lại, denial/exception, account sai, busy, late result, close/reopen, turnOff/epoch, login và giữ grant. Cập nhật fixture các test controller/grant/P5/Rework02 để chủ động tìm kênh; giữ hồi quy consent, budget 1–3, chống gửi trùng, backoff và không tự gửi. Không thêm skip.
+- Chủ dự án xác nhận **bài thứ ba trên Shanling do mình chủ động thêm**. Ghi nhận bổ sung cho lịch sử phiên 2; không quy kết tự phát sinh. Giữ nguyên bài/quyền/pending; không coi đây là bài thử mặc định. Chưa có chỉ dẫn xử lý pending/bài thử: **QA cloud vẫn BLOCKED**.
+
+Artifact vòng này (R): `D:\Bots\MeloVault-E91-Shareable\docs\plans\artifacts\E105-DONG-BO-PLAYLIST\rework1-20261027-2315` (tên thư mục định danh, không phải mốc bắt đầu build).
+APK/XML có sẵn được sao lưu tại `R/preexisting-outputs/`; log/XML/APK mới lưu riêng từng ma trận, không commit artifacts.
+
+### Kiểm chứng REWORK trên Ni
+
+Lệnh tuần tự (một Gradle owner), log dưới R:
+1. `./gradlew.bat :app:testShareableDebugUnitTest :app:testShareableReleaseUnitTest --console=plain` — `private-tests-01/02/03.log`, XML riêng từng lượt.
+2. `./gradlew.bat :app:assembleShareableDebug :app:assembleShareableRelease :app:reportTelegramConfig --console=plain` — `private-build.log`.
+3. `./gradlew.bat :app:testShareableDebugUnitTest :app:testShareableReleaseUnitTest -PmeloOpen=true --console=plain` — `open-tests.log`.
+4. `./gradlew.bat :app:assembleShareableDebug :app:assembleShareableRelease :app:reportTelegramConfig -PmeloOpen=true --console=plain` — `open-build.log`.
+
+Lượt thường 01: Debug 2.144 tổng / 2.122 thành công / 21 bỏ qua / 1 lỗi `Rework02SourceGuardTest` do yêu cầu kiểm epoch tường minh; đã giữ lại phép kiểm đó cùng generation, không sửa/nới test. Release chưa chạy lượt 01 (XML Release đi kèm là cũ, không tính).
+Lượt thường 02: cả Debug/Release 2.144 tổng / 2.123 thành công / 21 bỏ qua / 0 lỗi. Lượt 03 chạy lại sau bổ sung khóa nhận thao tác UI và giữ fixture NotFound của test cấm tạo kênh; đây là lượt thường cuối.
+
+| Ma trận cuối | Tổng | Thành công | Bỏ qua | Lỗi | Build |
+|---|---:|---:|---:|---:|---|
+| Thường Debug | 2144 | 2123 | 21 | 0 | Thành công |
+| Thường Release | 2144 | 2123 | 21 | 0 | Thành công |
+| Open Debug | 2144 | 2123 | 21 | 0 | Thành công |
+| Open Release | 2144 | 2123 | 21 | 0 | Thành công |
+
+Thống kê XML: `R/test-summary.json`; 9 test mới đều không skip/lỗi. Build thường/open mỗi lượt 1m25s; `reportTelegramConfig=false` cả hai. `git diff --check` sạch. Không đổi mã/test sau ma trận cuối ngoài chỉnh thụt dòng UI (không đổi hành vi); build dùng file cuối khớp `R/source-sha256.json` (9 file).
+
+### APK REWORK nội bộ — chưa đủ điều kiện bàn giao QA
+
+Nguồn: HEAD build `4c7b2a631d4d0071bd0ed5ad30c87902b79463c4` + diff REWORK của chính commit chứa mục này; SHA-256 từng source/test tại `R/source-sha256.json`, SHA commit cuối ghi tại `R/source-commit.txt` sau commit và đối chiếu lại. Không dùng APK phiên trước làm kết quả REWORK.
+Cả bốn vc121; thường `app.melovault.player / 0.6.96-beta`, open `app.melovault.player.open / 0.6.96-open`; config nhúng=false. `aapt` xác minh package/version và `apksigner verify --print-certs` thành công cả bốn.
+Cert SHA-256 Ni: `a9b8cb6b5b0bc0400955b24dbc85801f5e8855356287caca2dcf3bb4e13db280`; khác cert Tiny phiên 2, không cài thay APK thiết bị. Không thay signing config.
+
+| APK dưới R | Bytes | SHA-256 |
+|---|---:|---|
+| `E105-rework1-private-debug.apk` | 33462212 | 9F00100A4823FC27903ED9F3BDD879A34140C50398DB42716E1D64BD1D715B37 |
+| `E105-rework1-private-release.apk` | 30703982 | 1946EF707B17B30558E8831532DD97DE5837D15EA69DD38F1A813CFBAB32DA0D |
+| `E105-rework1-open-debug.apk` | 33462216 | 80837888C4C6533E80D8589A253CCD37BFF6AE2A68060D47198A5628AEA6CE80 |
+| `E105-rework1-open-release.apk` | 30703990 | D313F7CBF333BBA395E9D5CA37F96C638930894410CB09D213296540A5558CFB |
+
+Chi tiết đường dẫn tuyệt đối: `R/private-apk-metadata.json`, `R/open-apk-metadata.json`. **BLOCKED — CHƯA BÀN GIAO**: không dùng APK Ni để QA Telegram; chưa build Tiny/cài/QA REWORK, không upload/công bố.
+
+### Chưa kiểm chứng / điểm dừng REWORK
+
+- QA R1 open chưa đăng nhập và R2 tìm lại kênh trên UI thật chưa thực hiện; không có ảnh mới, giữ `00_tong_hop.png`/ảnh cũ. Test JVM và build không chứng minh Telegram/TDLib/ADD/REMOVE hai chiều hoặc âm thanh thật.
+- `SHANLING_SCREEN_END=NOT_RECHECKED`; `SONY_SCREEN_END=NOT_RECHECKED`: vòng này không ADB, không bật/tắt hay thao tác thiết bị; không lấy log OFF phiên 2 làm trạng thái hiện tại.
+- Các gate dữ liệu/pending, tài khoản/kênh, đồng bộ thật, open/Release, thiết bị và chủ dự án trong biên bản vẫn nguyên. Việc xác nhận chủ dự án thêm bài chỉ làm rõ nguồn bài thứ ba, không cho phép gửi pending/ADD/REMOVE/read replay.
+- Rollback giữ dữ liệu, không tự đảo cloud; APK phải cùng package/cert và vc không giảm. Không sửa biên bản/quy trình, không PASS/merge/push/upload, không tự mở nhiệm vụ tiếp. Commit code/test/báo cáo rồi dừng chờ Claude Opus nghiệm thu.
+
+- Tiếp tục ngày 28/10/2026 theo yêu cầu chủ dự án sau gián đoạn hạn mức: HEAD/nhánh và 10 file đã stage giữ nguyên; không Java/build khác. Đối chiếu lại 9 source/test với manifest và index, 4 APK với hash/bytes, 4 exit test/build cuối đều 0. Không cần chạy lại vì không đổi code/test; chỉ bổ sung ghi nhận này rồi commit. Ảnh mới trong `.codex-remote-attachments/` giữ nguyên, không add.
