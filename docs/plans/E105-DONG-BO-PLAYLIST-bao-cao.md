@@ -107,3 +107,72 @@ Phiên 2 nhận source bằng Git bundle đối chiếu SHA-256 hai đầu, clon
 - Không sửa file quy trình/nghiệm thu, không merge/push, không upload, không mở nhiệm vụ khác.
 - Phiên bị ngắt do hạn mức rồi tiếp tục theo yêu cầu chủ dự án; kiểm lại Git đúng `a199fe6`, chỉ còn test package và báo cáo do chính phiên này tạo. Không có Java/Gradle khác khi tiếp tục.
 - `git diff --check` sạch; 9 file production đúng S1–S3, 10 file test liên quan và báo cáo. Commit báo cáo là điểm dừng phiên 1; không sang phiên 2 trong hội thoại này.
+
+## Phiên 2
+Thực thi: Codex gpt-6-astra medium, phiên 2
+
+| Nội dung | Kết quả 27/10/2026 (+07), chưa phải nghiệm thu |
+|---|---|
+| Git | `dot/E105-DONG-BO-PLAYLIST`, đầu phiên `31f127a3bbe98f464bac9504f03cf3c9e53bf6c7`; baseline `9adeeba`, plan `72c1e1e`, production `a199fe6`, test `1a4c0b4` |
+| Kiểm đầu phiên | Cây sạch, diff check sạch; Gradle Ni idle từ 17:26:44, Tiny không build khác. Không sửa production/test |
+| Sau gián đoạn hạn mức | Tiếp tục lúc 22:32 theo yêu cầu chủ dự án; HEAD không đổi. Chỉ có `.codex-remote-attachments/` chứa đúng ảnh chủ dự án vừa gửi, để nguyên và không commit |
+| Build | Đủ thường/open × Debug/Release vc121 trên clone Tiny mới; tất cả build exit=0 |
+| Cài | Thường Debug: Shanling 120→121, Sony 119→121; open Debug: Shanling 120→121. Cả 3 lần `install -r` báo Success |
+| Điểm dừng | **BLOCKED đồng bộ thật**: Sony mất ADB thoáng qua khi tiếp tục; sau đó phát hiện Shanling có thay đổi ngoài bộ thử trong khoảng gián đoạn |
+| Phạm vi hoàn tất | Build, kiểm 4 APK, cảnh báo/consent mới hai máy, open chưa đăng nhập bị khóa, ảnh và báo cáo |
+
+### Bundle, config và build Tiny
+
+- Bundle Ni: `D:\Bots\_transfer\E105-31f127a-20261027-1736\E105-31f127a.bundle`; Tiny: `C:\Bots\_qa_temp\E105-31f127a-20261027-1736.bundle`.
+- SHA-256 hai đầu: `50CAD9CD3AC72B3D9F5024E07ED2C1387192D2C7E687936D96B980E90A90B2D0`. Bundle đủ lịch sử; verify thành công trong repo. Lượt verify đầu ngoài repo báo “need a repository”; đã verify lại trong clone, không sửa bundle.
+- Clone mới: `C:\Bots\MeloVault-E105-IsolatedQA-20261027-1736`, đúng HEAD/nhánh. Tiny thao tác qua Desktop Commander; HTTP tạm chỉ phục vụ thư mục bundle đã dừng sau chuyển. `T:` chỉ dùng đọc/sao chép artifact về Ni.
+- Config: đúng một `Copy-Item` nguồn `C:\Bots\MeloVault-E99-IsolatedQA\local.properties` sang clone mới theo ngoại lệ đã duyệt. Không mở/in/hash nội dung, không lấy từ repo gốc, không mang về Ni. `git check-ignore local.properties` đúng; Git clone sạch.
+- `:app:reportTelegramConfig` không cờ open: **true**, exit=0. Build open kèm report: **false** đúng thiết kế. Không dùng giá trị secret làm chứng cứ.
+- Chạy Gradle nền bằng `Start-Process -WindowStyle Hidden`; script/log/exit dưới `C:\Bots\_qa_temp\`. Thường: `:app:assembleShareableDebug :app:assembleShareableRelease --console=plain`, BUILD SUCCESSFUL 5m48s. Open: cùng task + `:app:reportTelegramConfig -PmeloOpen=true`, BUILD SUCCESSFUL 1m49s.
+- `:app:verifyOpenApkHasNoTelegramHash -PopenApk=<APK>`: open Debug/Release đều `found=false`, exit=0; thường Debug/Release đối chứng đều `found=true`, exit=1 đúng kỳ vọng. `overall.exit=0`.
+- Không chạy lại unit test vì không đổi mã/test; bằng chứng phiên 1: mỗi biến thể 2.135 tổng, 2.114 thành công, 21 bỏ qua, 0 lỗi ở lượt cuối. Không tính build Tiny là test thiết bị thành công.
+
+### APK QA cần Opus nghiệm thu bàn giao
+
+Artifact Ni (A): `D:\Bots\MeloVault-E91-Shareable\docs\plans\artifacts\E105-DONG-BO-PLAYLIST\session2-20261027-1736`.
+Artifact Tiny (T): `C:\Bots\_qa_temp\E105-31f127a-20261027-1736`. Bốn APK dưới đây đều tồn tại ở A và T; SHA-256 đối chiếu khớp.
+HEAD build `31f127a3bbe98f464bac9504f03cf3c9e53bf6c7`; production `a199fe6`; test `1a4c0b4`. ABI cả bốn `arm64-v8a`.
+Cert SHA-256 cả bốn: `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8`; apksigner verify thành công.
+
+| Tên file tại A/T | Package / vc / versionName | Bytes | SHA-256 | Config nhúng |
+|---|---|---:|---|---|
+| `E105-31f127a-vc121-private-debug.apk` | app.melovault.player / 121 / 0.6.96-beta | 33462212 | 66506738EBFDD50C7FA24BD9A65D83AEABA228D989BEFF8FA29313534BCC1B8A | true |
+| `E105-31f127a-vc121-private-release.apk` | app.melovault.player / 121 / 0.6.96-beta | 30703982 | 5124B7F4261FF59E32FCBA9E5785C92970C4B1CA3A029C32AE7272F9A77DE8EC | true |
+| `E105-31f127a-vc121-open-debug.apk` | app.melovault.player.open / 121 / 0.6.96-open | 33462216 | 19DF0328BC889EE1EF44563AC74031AEADB34864ED62D43863CA304B1EBE52EF | false |
+| `E105-31f127a-vc121-open-release.apk` | app.melovault.player.open / 121 / 0.6.96-open | 30703990 | B85B765CFF89DF9FFA4E508B08EC799A71C6A31C39889A02F6039C8286158722 | false |
+
+Metadata đầy đủ: `A/apk-metadata.json`; log Gradle/exit: `A/tiny-logs/`. APK cũ giữ riêng `A/preexisting-shanling-*-vc120.apk`, `T/preexisting-sony-private-vc119.apk`; không dùng để downgrade.
+Trạng thái: **QA CANDIDATE — CHƯA NGHIỆM THU; CHƯA BÀN GIAO**. Codex không upload/công bố. Opus phải kiểm toán độc lập và bàn giao owner-only theo quy trình. Release chưa cài/QA UI; open chưa có cấu hình runtime/đăng nhập.
+
+### QA thiết bị và chứng cứ
+
+Ni: `30313860180939`, Shanling M3 Ultra/Shanling; Tiny: `QV725WEQ54`, XQ-AS52/Sony; cả hai arm64. Đã kiểm lại ADB/model mỗi đợt, package/vc/cert trước cài. MediaSession trước cài thường không có state=3 (Shanling state=0; Sony state=2/0 và một session lỗi Bluetooth cũ), không phát nhạc trong QA.
+Cả hai màn Cài đặt trước cài ghi “Đã đăng nhập”; `melovault_library_counts.xml` chỉ chứa số đếm/thời điểm, mỗi máy có đúng một khóa tài khoản và khớp nhau (đối chiếu riêng tư). Đây là chứng cứ tương quan tài khoản đang dùng với bộ đếm, **không phải phép so sánh trực tiếp hai kết quả getMe trong RAM**. Không đọc dữ liệu TDLib/session/noBackup.
+
+| Bước | Thực tế / trạng thái | Ảnh tại A |
+|---|---|---|
+| 1. Nền, cảnh báo mới | Trước gián đoạn cả hai đúng 2 bài nền; nhận warning mới trên vc121, quyền gửi vẫn tắt, không nút tạo | `07`, `08`, `16`, `17`, `19`–`22` |
+| 2. Kênh, budget 0 | Đã bấm Tìm kênh chỉ đọc; UI vẫn “Đã gắn kênh đồng bộ”, chưa xác minh độc lập kênh hợp lệ/không mơ hồ. Grant=0, chưa bấm Đồng bộ ngay | `23`–`27` |
+| 3. ADD Shanling→Sony | **BLOCKED**, chưa chọn/thêm bài thử, chưa cấp lượt, chưa gửi ADD | `37`, `40`, `41` là hiện trạng ngoài bộ thử |
+| 4. REMOVE Sony→Shanling | **BLOCKED**, không bỏ bài nào, không gửi REMOVE; không xóa outbox | `39-sony-playlist-final.png` |
+| 5. Tắt/mở sync | Chưa thực hiện chuỗi tắt/bật sau sync do blocker; không nhận kết quả gián đoạn là test tự gửi | `38`, `41` ghi quyền/lượt cuối |
+| 6. Open Debug | Cài open vc121; panel API trống, không nhập API/số điện thoại/OTP. Vào Cài đặt→Đồng bộ: nút bật/gửi/tìm/gắn bị khóa, grant=0 | `31`, `34`–`36` |
+
+Tên ảnh đầy đủ mang tiền tố số trong A; `00_tong_hop.png` ở thư mục cha A ghép 8 ảnh, 1600×1480; ảnh private không commit/upload.
+Tập nền trước: “Trôi Kem (Vmix China) 2026” và “Đặt 1h30 (TD Team) - Nothingg Mix (Trần Anh Vũ) #2.mp3”. Sony cuối vẫn đúng 2 bài; Shanling cuối có hai bài nền **và thêm “Mixtape Chillout Viet Trung - Duc Kenzo”**, tổng 3. Không mất hai bài nền; không thể ghi toàn bộ tập không đổi.
+
+### BLOCKED và giới hạn cần nghiệm thu xem
+
+- Phiên bị hết hạn mức sau ảnh 26/27 (~17:48), tiếp tục 22:32. Agent chưa từng cấp quyền gửi/cấp lượt, chưa bấm Đồng bộ ngay/đọc lại lịch sử, chưa ADD/REMOVE. Sau gián đoạn Shanling đổi bài đang chọn và Playlist; không có chứng cứ xác định người/tiến trình gây đổi, không quy kết nguyên nhân.
+- 22:33 Sony mất ADB giữa lần wake/chụp/finally: `device not found`, `29-sony-resume.png` rỗng, kết quả đầu vẫn ON. Giữ file lỗi, không dùng làm ảnh chứng cứ. Chỉ cleanup khi ADB trở lại đúng serial/model; xác minh OFF. Dừng đồng bộ hai máy; ảnh cuối chỉ đọc hiện trạng.
+- Shanling 22:37: **1 thay đổi chờ gửi ngoài bộ thử** (`40`); quyền metadata đã bật khác ảnh `21`, nhưng grant vẫn 0 (`41`). Giữ nguyên quyền/hàng đợi/bài, không tự xử lý. Sony cuối consent bật, quyền metadata tắt, grant=0 (`38`). Đây là blocker độc lập với ADB.
+- Bản riêng vẫn đăng nhập và hiển thị hai bài nền sau cài open; giới hạn trên khiến chưa thể kết luận “mọi dữ liệu riêng không đổi”. Không suy ra lỗi do open từ việc bài thêm đã xuất hiện sau gián đoạn.
+- Open không đăng nhập: status hiện “Đang đọc Playlist…” dù các nút đã khóa (`35`); ghi nhận UI cần Opus xem, không tự sửa mã. Chưa kiểm đồng bộ thật open, Release UI, mạng lỗi/unknown delivery, âm thanh thật.
+- Crash buffer cuối Shanling không có dòng AndroidRuntime phù hợp; Sony có hai FATAL của `com.facebook.appmanager` lúc 00:24/16:39, không phải MeloVault. Không thấy crash MeloVault trong buffer còn lưu; không coi là kiểm ANR/toàn bộ lịch sử đầy đủ. MediaSession cuối Shanling state=2/0, không chứng minh âm thanh.
+- `SHANLING_SCREEN_END=OFF` lúc 22:38:34: Android 10 trả `mGlobalDisplayState=OFF` và `mScreenState=OFF` (không có chuỗi đúng dạng `Display State=`). `SONY_SCREEN_END=OFF` lúc 22:38:06: `Display State=OFF`. Cleanup dùng keyevent 223 trong finally, không đổi timeout/brightness/AOD/network.
+- Rollback chỉ bằng APK cùng package/cert, vc không giảm; không cài lại vc119/120 sau vc121. Không merge/push/upload; không sửa plan/workflow/nghiệm thu. Chỉ commit phần bổ sung báo cáo, giữ nguyên phiên 1 và toàn bộ artifacts.
