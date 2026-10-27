@@ -103,3 +103,40 @@ Sửa tối thiểu (chỉ file này): sau `setSingleLine(true)` đặt lại `t
 ### 11. APK
 
 Không upload. Các APK `4f8b575` không phải candidate vì ô hash hiện rõ. Shanling hiện giữ vc120 (thường + open Debug); REWORK cài đè cùng vc120 bằng `install -r` (không downgrade). Âm thanh thật, Release UI, API thật, Y700/S25/FYT/Sony: chưa kiểm.
+
+## Vòng 3 (sau REWORK 1) — 27/10/2026 ~12:30 (+07)
+
+**Trạng thái: BLOCKED — CHỜ CHỦ DỰ ÁN (P7). Phần kỹ thuật P1–P6 ĐẠT.**
+
+### 12. Git và sửa đổi
+
+HEAD `be7c5fc`, cây sạch, `git diff --check` sạch. Mã: `bf174c5` chỉ đổi thứ tự 2 dòng trong `TelegramApiSetupPanel.kt` (`setSingleLine(true)` trước `inputType = type`), đúng mục 9. `setInputType` với biến thể password đặt `PasswordTransformationMethod` và vẫn giữ một dòng, nên đúng cách sửa. Báo cáo: Codex thêm mục "Vòng REWORK 1" nhưng cũng gộp dòng của các mục cũ (nội dung giữ nguyên) và đổi dòng đầu "phiên 2" thành "phiên GỘP — Vòng REWORK 1" — chỉ là trình bày, ghi lại để biết.
+
+### 13. Opus kiểm
+
+| Mục | Kết quả |
+|---|---|
+| Test Ni (Codex 09:32–09:33, XML) | Debug + Release: 2.128 / 21 skipped / 0 fail / 0 error; `TelegramApiCredentialPolicyTest` 34. Không chạy lại vì diff chỉ đổi thứ tự 2 dòng UI và XML trùng thời điểm sau commit `bf174c5` (09:34 commit, test cùng phiên) |
+| SHA-256 3 APK Ni | Khớp báo cáo (`ED65DF38…7ADD`, `29F918E9…D8A2`, `DAF93D97…D0FB`) |
+| Log Tiny | cert cả 3 `eecd3df7…3fce8`; `config.log` valid=true; open valid=false; hash: open Debug/Release found=false, thường found=true |
+| Ảnh `00_tong_hop_rework1.png` | Q2: `12345` → 5 dấu chấm; Q3: 32 dấu chấm; Q3 sang số điện thoại; Q4 nhớ mã, câu dự phòng, panel trống sau khởi động lại; Q5 bản thường vào thẳng thư viện |
+| Q6 | 8.080 dòng: 0 hash giả, 0 `api_hash`, 0 FATAL, 0 ANR |
+| Màn hình | `SHANLING_SCREEN_END=OFF` 09:49:27 |
+
+### 14. Chấm tiêu chí
+
+| Tiêu chí | Kết quả |
+|---|---|
+| P1 | ĐẠT |
+| P2 | ĐẠT |
+| P3 | ĐẠT |
+| P4 | ĐẠT — Q1–Q6 có ảnh; Q5 phát nhạc PLAYING ở vòng trước (vòng này chỉ kiểm nhanh vào thư viện, đúng prompt REWORK) |
+| P5 | ĐẠT — REWORK chỉ đụng `TelegramApiSetupPanel.kt` |
+| P6 | ĐẠT |
+| P7 | **CHỜ** — chủ dự án làm mục 9 kế hoạch (bước 2–3 cần mã API thật + đăng nhập) hoặc duyệt ảnh từ xa |
+
+### 15. APK
+
+Đã upload Drive Ni N owner-only: thư mục `MeloVault_QA/E104-APK-CONG-KHAI-20261027-vc120-bf174c5` (3 APK + 10 PNG + `SHA256.txt`), SHA khớp khi chép, connector xác nhận chỉ owner cho thư mục và 3 APK. Link: `E104-APK-CONG-KHAI-apk-test.md`, ảnh: `E104-APK-CONG-KHAI-hinh-nghiem-thu.md`. Nhãn: **QA CANDIDATE — CHƯA NGHIỆM THU — KHÔNG ĐĂNG CÔNG KHAI** (khóa debug).
+
+Chưa kiểm: đăng nhập/API thật, `API_ID_INVALID` trên máy, âm thanh thật, Release UI, Y700/S25/FYT/Sony.
