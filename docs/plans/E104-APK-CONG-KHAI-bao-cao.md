@@ -1,4 +1,4 @@
-Thực thi: Codex gpt-6-astra medium, phiên 2
+Thực thi: Codex gpt-6-astra medium, phiên GỘP — Vòng REWORK 1
 Thực thi: Codex gpt-6-astra medium, phiên 1
 
 | Nội dung | Kết quả phiên 1 trên Ni |
@@ -17,9 +17,7 @@ Thực thi: Codex gpt-6-astra medium, phiên 1
 
 ## Phiên 1 — mã và phạm vi
 
-S1: đã đọc CLAUDE.md (mục 0 trước), AGENTS.md, đầu HANDOFF, quy trình ba vai trò, PROMPT_SONNET, PROMPT_CODEX, vòng đời màn hình và kế hoạch E104.
-Đã kiểm `git status --short`, branch, HEAD, `git log -5 --oneline`, `git diff --check` và tiến trình đầu phiên: đúng nhánh/plan commit, cây sạch, không phát hiện sửa mã đồng thời trong repo.
-Không tạo/đổi nhánh. Baseline test chạy một lần trước S2; số liệu lấy từ XML, không coi task up-to-date là chạy lại mọi test.
+S1: đã đọc CLAUDE.md (mục 0 trước), AGENTS.md, đầu HANDOFF, quy trình ba vai trò, PROMPT_SONNET, PROMPT_CODEX, vòng đời màn hình và kế hoạch E104. Đã kiểm `git status --short`, branch, HEAD, `git log -5 --oneline`, `git diff --check` và tiến trình đầu phiên: đúng nhánh/plan commit, cây sạch, không phát hiện sửa mã đồng thời trong repo. Không tạo/đổi nhánh. Baseline test chạy một lần trước S2; số liệu lấy từ XML, không coi task up-to-date là chạy lại mọi test.
 
 | Bước / commit | File thay đổi | Nội dung |
 |---|---|---|
@@ -31,20 +29,11 @@ Không tạo/đổi nhánh. Baseline test chạy một lần trước S2; số l
 | Sửa biên dịch `0b54a6a` | `TelegramApiSetupPanel.kt` | Chỉ rõ receiver của trường panel để tránh trùng thuộc tính Android View |
 | Hoàn thiện `03e9dc9` | `TelegramPreviewActivity.kt` | Tuần tự hóa I/O qua các lần tạo Activity; bỏ qua callback sau yêu cầu khởi động lại |
 
-Các file Kotlin production ở `app/src/shareable/java/com/bsdung/musicassistantcar/data/telegram/`.
-File test mới ở `app/src/test/java/com/bsdung/musicassistantcar/data/telegram/`.
-Ngoài sáu file mục 6 của kế hoạch, chỉ thêm báo cáo này. Các commit dùng Git identity theo lệnh, không đổi cấu hình Git toàn máy.
-
-`tdlibDatabaseKey()` đã đối chiếu với plan commit, nội dung giữ nguyên. Không sửa Owner, TDLib directories, personal flavor, DB/schema, songKey, backend, Media3/queue hoặc workflow.
-Không đọc/in/copy local.properties, secrets, keystore hay dữ liệu phiên Telegram qua công cụ; Gradle dùng cơ chế cấu hình sẵn có khi build.
+Các file Kotlin production ở `app/src/shareable/java/com/bsdung/musicassistantcar/data/telegram/`. File test mới ở `app/src/test/java/com/bsdung/musicassistantcar/data/telegram/`. Ngoài sáu file mục 6 của kế hoạch, chỉ thêm báo cáo này. Các commit dùng Git identity theo lệnh, không đổi cấu hình Git toàn máy. `tdlibDatabaseKey()` đã đối chiếu với plan commit, nội dung giữ nguyên. Không sửa Owner, TDLib directories, personal flavor, DB/schema, songKey, backend, Media3/queue hoặc workflow. Không đọc/in/copy local.properties, secrets, keystore hay dữ liệu phiên Telegram qua công cụ; Gradle dùng cơ chế cấu hình sẵn có khi build.
 
 ### Quyết định 6.5-7: dùng phương án dự phòng
 
-Đã dùng **“đóng hẳn ứng dụng rồi mở lại”** sau khi xóa mã API đã lưu, không khởi tạo lại client trong cùng process.
-Lý do: `detachUi` không bảo đảm client đã đóng khi playback service còn giữ owner; API singleton hiện có không cung cấp xác nhận đóng client riêng cho UI để chờ an toàn.
-Chỉ khi chưa đăng nhập, nút nhập lại mới khả dụng; có kiểm tra trạng thái chờ getMe và account của Owner.
-Xóa đúng file credential mới và `.part`, tách callback UI, rồi hiện câu dự phòng theo kế hoạch. Cờ ở mức process ngăn Activity recreation tái sử dụng client cũ với mã mới.
-Không gọi logOut, không xóa khóa DB, thư mục TDLib, cache hay dữ liệu thư viện. Không sửa Owner/service để mở rộng kiến trúc.
+Đã dùng **“đóng hẳn ứng dụng rồi mở lại”** sau khi xóa mã API đã lưu, không khởi tạo lại client trong cùng process. Lý do: `detachUi` không bảo đảm client đã đóng khi playback service còn giữ owner; API singleton hiện có không cung cấp xác nhận đóng client riêng cho UI để chờ an toàn. Chỉ khi chưa đăng nhập, nút nhập lại mới khả dụng; có kiểm tra trạng thái chờ getMe và account của Owner. Xóa đúng file credential mới và `.part`, tách callback UI, rồi hiện câu dự phòng theo kế hoạch. Cờ ở mức process ngăn Activity recreation tái sử dụng client cũ với mã mới. Không gọi logOut, không xóa khóa DB, thư mục TDLib, cache hay dữ liệu thư viện. Không sửa Owner/service để mở rộng kiến trúc.
 
 ## Kiểm thử và build Ni
 
@@ -56,8 +45,7 @@ Không gọi logOut, không xóa khóa DB, thư mục TDLib, cache hay dữ li�
 | Cuối phiên Debug | 2.128 | 2.107 | 21 | 0 | 0 |
 | Cuối phiên Release | 2.128 | 2.107 | 21 | 0 | 0 |
 
-So baseline: thêm 34 test mỗi biến thể; skipped không tăng. Có test riêng cho scrub chuỗi rỗng và blank, tràn Int, hash sai độ dài/hex, ưu tiên nguồn, mask và ba mã lỗi API.
-Số liệu cuối lấy từ `app/build/test-results/testShareable{Debug,Release}UnitTest/TEST-*.xml`, lưu bản tổng hợp private tại `05-final-test-counts.json`.
+So baseline: thêm 34 test mỗi biến thể; skipped không tăng. Có test riêng cho scrub chuỗi rỗng và blank, tràn Int, hash sai độ dài/hex, ưu tiên nguồn, mask và ba mã lỗi API. Số liệu cuối lấy từ `app/build/test-results/testShareable{Debug,Release}UnitTest/TEST-*.xml`, lưu bản tổng hợp private tại `05-final-test-counts.json`.
 
 | Lệnh Gradle (đều `--console=plain`, redirect toàn bộ ra file) | Tổng kết / log |
 |---|---|
@@ -73,20 +61,11 @@ Số liệu cuối lấy từ `app/build/test-results/testShareable{Debug,Releas
 | `-PmeloOpen=true -PopenApk=<open Debug> :app:verifyOpenApkHasNoTelegramHash` | BUILD SUCCESSFUL, 1s; `SKIPPED_NO_LOCAL_HASH`; `10-hash-debug.log` |
 | Tương tự với `<open Release>` | BUILD SUCCESSFUL, 1s; `SKIPPED_NO_LOCAL_HASH`; `10-hash-release.log` |
 
-Đã dùng `aapt2 dump badging` và `apksigner verify --print-certs` từ Android build-tools 36.0.0 cho cả bốn APK; xác minh chữ ký thành công, không đọc keystore.
-Lượt test tích hợp đầu có lỗi biên dịch đã sửa, không phải lỗi test. Có lỗi cú pháp lọc log PowerShell khi kiểm cờ xung đột; đã đọc lại đúng dòng kết quả của cùng log, không chạy lại hay che lỗi Gradle.
-Personal Debug chỉ là smoke build, không sửa flavor và không đề nghị cài/bàn giao bản Stable. File giữ riêng tại `personal/app-personal-debug.apk` trong artifact root.
-Task kiểm hash chỉ ghi trạng thái, không in ID/hash/tên entry. Trạng thái SKIPPED không được hiểu là đã quét và không thấy hash; phiên 2 phải có đối chứng P3 trên Tiny.
+Đã dùng `aapt2 dump badging` và `apksigner verify --print-certs` từ Android build-tools 36.0.0 cho cả bốn APK; xác minh chữ ký thành công, không đọc keystore. Lượt test tích hợp đầu có lỗi biên dịch đã sửa, không phải lỗi test. Có lỗi cú pháp lọc log PowerShell khi kiểm cờ xung đột; đã đọc lại đúng dòng kết quả của cùng log, không chạy lại hay che lỗi Gradle. Personal Debug chỉ là smoke build, không sửa flavor và không đề nghị cài/bàn giao bản Stable. File giữ riêng tại `personal/app-personal-debug.apk` trong artifact root. Task kiểm hash chỉ ghi trạng thái, không in ID/hash/tên entry. Trạng thái SKIPPED không được hiểu là đã quét và không thấy hash; phiên 2 phải có đối chứng P3 trên Tiny.
 
 ## APK QA cần Opus nghiệm thu bàn giao
 
-**QA CANDIDATE — CHƯA NGHIỆM THU — KHÔNG ĐĂNG CÔNG KHAI.**
-APK Ni phục vụ kiểm tra build; chưa dùng thay APK Tiny có signer/config đúng để cài lên thiết bị.
-Các APK cũ trước build đã lưu riêng ở `preexisting-apks/`; không đưa vào danh sách candidate E104.
-
-Commit nguồn của cả bốn APK: `03e9dc9eb8f11d83ee10d4d3254f9f5b41601a14`.
-Cert SHA-256 Ni (cả bốn): `a9b8cb6b5b0bc0400955b24dbc85801f5e8855356287caca2dcf3bb4e13db280`.
-Đây là signer Ni, chưa đối chiếu chứng chỉ app đang cài trên thiết bị; không dùng APK Ni để cài thay Beta Tiny.
+**QA CANDIDATE — CHƯA NGHIỆM THU — KHÔNG ĐĂNG CÔNG KHAI.** APK Ni phục vụ kiểm tra build; chưa dùng thay APK Tiny có signer/config đúng để cài lên thiết bị. Các APK cũ trước build đã lưu riêng ở `preexisting-apks/`; không đưa vào danh sách candidate E104. Commit nguồn của cả bốn APK: `03e9dc9eb8f11d83ee10d4d3254f9f5b41601a14`. Cert SHA-256 Ni (cả bốn): `a9b8cb6b5b0bc0400955b24dbc85801f5e8855356287caca2dcf3bb4e13db280`. Đây là signer Ni, chưa đối chiếu chứng chỉ app đang cài trên thiết bị; không dùng APK Ni để cài thay Beta Tiny.
 
 | APK | Package | vc / versionName | Bytes | Telegram config embedded hợp lệ |
 |---|---|---|---:|---|
@@ -124,13 +103,7 @@ Bản thường Ni thiếu config nên chưa dùng kiểm đăng nhập. Bản o
 | `SHANLING_SCREEN_END` | `UNKNOWN` — không dùng ADB, không wake/sleep, không đọc display |
 | `SONY_SCREEN_END` | `UNKNOWN` — không truy cập Tiny hay dùng ADB |
 
-Rủi ro cần QA: Keystore trên thiết bị thật, bàn phím/scroll ở panel, vòng đời process khi nhập lại, hai sandbox cài song song và hồi quy đăng nhập bản riêng. JVM/build thành công không chứng minh các hành vi này.
-APK vẫn dùng debug signer theo kế hoạch, chưa đủ điều kiện phát hành công khai.
-Phiên 2 nhận đúng commit trên nhánh này bằng Git bundle, đối chiếu SHA-256 hai đầu; Tiny chỉ qua Desktop Commander trong clone cô lập mới. Chưa tạo/chuyển bundle hoặc sửa bất kỳ repo Tiny nào trong phiên 1.
-Phiên 2 thực hiện S10–S16, kiểm signer/package/version/config trước cài và vòng đời màn hình theo workflow. Chờ Opus nghiệm thu; chưa merge, push, upload hoặc công bố APK.
-
-Artifact private của phiên: `D:\Bots\MeloVault-E91-Shareable\docs\plans\artifacts\E104-APK-CONG-KHAI\` (Git ignored).
-S9: đã rà diff đúng phạm vi, `git diff 1d278c3 --check` không lỗi; báo cáo được commit riêng sau các commit mã. Không ghi kết luận nghiệm thu thay Opus.
+Rủi ro cần QA: Keystore trên thiết bị thật, bàn phím/scroll ở panel, vòng đời process khi nhập lại, hai sandbox cài song song và hồi quy đăng nhập bản riêng. JVM/build thành công không chứng minh các hành vi này. APK vẫn dùng debug signer theo kế hoạch, chưa đủ điều kiện phát hành công khai. Phiên 2 nhận đúng commit trên nhánh này bằng Git bundle, đối chiếu SHA-256 hai đầu; Tiny chỉ qua Desktop Commander trong clone cô lập mới. Chưa tạo/chuyển bundle hoặc sửa bất kỳ repo Tiny nào trong phiên 1. Phiên 2 thực hiện S10–S16, kiểm signer/package/version/config trước cài và vòng đời màn hình theo workflow. Chờ Opus nghiệm thu; chưa merge, push, upload hoặc công bố APK. Artifact private của phiên: `D:\Bots\MeloVault-E91-Shareable\docs\plans\artifacts\E104-APK-CONG-KHAI\` (Git ignored). S9: đã rà diff đúng phạm vi, `git diff 1d278c3 --check` không lỗi; báo cáo được commit riêng sau các commit mã. Không ghi kết luận nghiệm thu thay Opus.
 
 ## Phiên 2 — BLOCKED trước S10–S14 (26/10/2026)
 
@@ -150,14 +123,7 @@ S9: đã rà diff đúng phạm vi, `git diff 1d278c3 --check` không lỗi; bá
 
 ### Điểm dừng: thiếu phương thức cấp cấu hình trong clone mới
 
-`app/build.gradle` dòng 6–9, 24–25 chỉ nạp Telegram config từ `local.properties` ở gốc project.
-Đã đọc script lịch sử `C:\Bots\_qa_temp\e103c_build.ps1` qua Desktop Commander để xác định cách build cũ; không chạy script.
-Script cũ lấy `local.properties` từ repo gốc Tiny và `Copy-Item` vào clone cô lập.
-Chỉ dẫn phiên này cấm đọc/copy `local.properties` và cấm chạm repo gốc Tiny; không áp dụng lại thao tác cũ.
-S11 yêu cầu config thật trong clone MỚI, nhưng kế hoạch chưa chỉ rõ cách cấp config tuân các giới hạn trên.
-Đây là thiếu hướng dẫn chuẩn bị môi trường, **không phải kết luận Tiny thiếu config hay lỗi code**.
-Theo yêu cầu “Plan sai/thiếu → DỪNG”, không tự sửa build config, tạo liên kết tới secret, sao chép secret hoặc dùng APK Ni thay thế.
-Cần chủ dự án/Opus làm rõ phương thức cấp config được phép cho clone mới trước khi tiếp tục; không yêu cầu gửi giá trị bí mật vào hội thoại.
+`app/build.gradle` dòng 6–9, 24–25 chỉ nạp Telegram config từ `local.properties` ở gốc project. Đã đọc script lịch sử `C:\Bots\_qa_temp\e103c_build.ps1` qua Desktop Commander để xác định cách build cũ; không chạy script. Script cũ lấy `local.properties` từ repo gốc Tiny và `Copy-Item` vào clone cô lập. Chỉ dẫn phiên này cấm đọc/copy `local.properties` và cấm chạm repo gốc Tiny; không áp dụng lại thao tác cũ. S11 yêu cầu config thật trong clone MỚI, nhưng kế hoạch chưa chỉ rõ cách cấp config tuân các giới hạn trên. Đây là thiếu hướng dẫn chuẩn bị môi trường, **không phải kết luận Tiny thiếu config hay lỗi code**. Theo yêu cầu “Plan sai/thiếu → DỪNG”, không tự sửa build config, tạo liên kết tới secret, sao chép secret hoặc dùng APK Ni thay thế. Cần chủ dự án/Opus làm rõ phương thức cấp config được phép cho clone mới trước khi tiếp tục; không yêu cầu gửi giá trị bí mật vào hội thoại.
 Chưa đọc/in/copy file bí mật, chưa ghi lên Tiny, chưa đụng các repo cấm.
 
 ### QA và màn hình
@@ -240,3 +206,45 @@ Mỗi tên bên dưới tồn tại tại cả `T\<tên APK>` và `A\<tên APK>`
 
 Chưa kiểm: đăng nhập/API thật, lỗi API_ID_INVALID trên máy, âm thanh thực, Release UI, Y700/S25/FYT và Sony; chờ chủ dự án duyệt và Opus nghiệm thu. Không rollback vc119 vì downgrade bị cấm; giữ vc120 và dữ liệu hiện có. Open đã trở về panel trống bằng nút Nhập lại mã + khởi động lại; không xóa TDLib/session/cache.
 S15–S16: giữ nguyên phần cũ, chỉ bổ sung mục này; diff check trước commit không lỗi; chỉ commit báo cáo trên dot/E104-APK-CONG-KHAI. Không merge/push/upload/công bố APK, không viết file nghiệm thu; dừng chờ Claude Opus.
+
+
+## Vòng REWORK 1 — 27/10/2026 (GỘP)
+
+| Mục | Kết quả thực thi, chờ Opus nghiệm thu |
+|---|---|
+| Git đầu phiên | Cây sạch, đúng `dot/E104-APK-CONG-KHAI`, HEAD `b110818`; chủ dự án xác nhận Opus đã kết thúc; kiểm lại vẫn sạch/đúng HEAD rồi tiếp tục |
+| Sửa tối thiểu | Commit `bf174c550f49edc90da3e0c3f10ae96c4768bb8d`: chỉ `TelegramApiSetupPanel.kt`, đưa `setSingleLine(true)` trước `inputType = type`; không đổi production khác |
+| Ni test | `:app:testShareableDebugUnitTest :app:testShareableReleaseUnitTest --console=plain`: BUILD SUCCESSFUL 2m40s; **mỗi biến thể 2.128 defined / 2.107 thành công / 21 skipped / 0 failures / 0 errors**; XML tổng hợp `A\ni-test-counts.json` |
+| Ni build | `:app:assembleShareableDebug :app:assembleShareableRelease --console=plain`: BUILD SUCCESSFUL 1m29s; `A\ni-build.log`; APK Ni chỉ kiểm build, không cài |
+| S10 bundle | `D:\Bots\_transfer\E104-rework1-20261027-0940\E104-rework1.bundle`, 12.879.169 bytes; SHA-256 hai đầu `06B878192BAD613E8DB7A56D30E05CF407B27F3E88253F79CE4F22B6A585BC90`; bundle verify OK, clone đúng `bf174c5` |
+| Tiny clone mới | `C:\Bots\MeloVault-E104-IsolatedQA-rework1-20261027-0940`; Desktop Commander xác minh DESKTOP-HNP4GVR; không đè clone cũ |
+| S11 | Copy-Item nguồn `C:\Bots\MeloVault-E99-IsolatedQA\local.properties` đúng ngoại lệ đã duyệt; không đọc/in/hash nội dung; check-ignore đúng, Git sạch; thường config=true; open config=false có chủ đích |
+| Build Tiny | Thường Debug BUILD SUCCESSFUL 2m49s; open Debug+Release BUILD SUCCESSFUL 5m21s; log/metadata tại T, bản sao `A\tiny-logs`; build.exit=0 |
+| S12–S13 | Open Debug/Release found=false, exit=0; thường Debug found=true, exit=1 đúng đối chứng; ba APK đúng package/vc/vname/cert, SHA-256 và bytes bản Ni khớp Tiny |
+
+A = `D:\Bots\MeloVault-E91-Shareable\docs\plans\artifacts\E104-APK-CONG-KHAI\rework1-20261027-0940`; T = `C:\Bots\_qa_temp\E104-rework1-20261027-0940\retry`.
+Giữ toàn bộ chứng cứ cũ. Hai lỗi script hỗ trợ Tiny: lệnh PowerShell lồng làm mất biến (dừng tiến trình, chưa tạo clone); rồi Select-String thiếu tên tham số đường dẫn (config đã true, dừng trước build APK). Đã sửa riêng script dưới `_qa_temp`, giữ log lỗi ở `A\tiny-setup-logs`, chạy tiếp với output `retry`; không sửa repo/build config. HTTP tạm chỉ phục vụ thư mục bundle đã dừng sau chuyển.
+
+| QA Shanling `30313860180939`, model Shanling M3 Ultra | Thực tế / bằng chứng mới trong A |
+|---|---|
+| Gate / cài | ADB device, manufacturer Shanling; hai bản đang có vc120 và cert khớp Tiny; MediaSession không phát. `install -r` open Debug rồi thường Debug đều Success; `install-open.log`, `install-normal.log` |
+| Q1 | Panel đã trống từ vòng trước; sau cài hiện đúng tiêu đề, hai ô, Lưu; không ô điện thoại: `01-Q1-empty.png` |
+| Q2 | Để ID trống, nhập hash giả 12345; hash thành **5 dấu chấm** trước/sau Lưu, lỗi dưới cả hai ô: `02-Q2-masked-before.png`, `03-Q2-validation.png` |
+| Q3 | ID 1 + hash 32 số 0 được **che toàn bộ**, lưu sang bước số điện thoại; không nhập số/OTP/API thật: `04-Q3-masked-fake.png`, `05-Q3-phone.png` |
+| Q4 | Force-stop/mở lại vào thẳng số điện thoại; Nhập lại mã → câu dự phòng; force-stop/mở lại → panel trống: `06-Q4-persist.png`, `07-Q4-reenter.png`, `08-Q4-empty-after-restart.png` |
+| Q5 nhanh theo prompt REWORK | Cài thường vc120, vào thẳng thư viện không hỏi API: `09-Q5-library.png`; ảnh lúc mới nạp hiện 200 bài, không kết luận mất dữ liệu; không thử phát lại trong vòng này |
+| Q6 | 09:49:27 +07, 8.080 dòng buffer logcat hiện có (không xóa buffer): 0 hash giả, 0 api_hash, 0 FATAL block của hai package, 0 ANR; chỉ lưu số đếm `Q6-summary.json`, không lưu raw logcat |
+
+Ảnh tổng hợp mới `A\00_tong_hop_rework1.png` (8 ô, 1280×1140), đã mở kiểm ảnh gốc và ảnh ghép; PNG có metadata thư viện giữ private, không commit/upload. Các nhóm thao tác đều finally `keyevent 223` và kiểm OFF; `A\screen-lifecycle.log`. **SHANLING_SCREEN_END=OFF**, 09:49:27 +07 (`mGlobalDisplayState=OFF`, nhãn thực của Android này). **SONY_SCREEN_END=UNKNOWN**: không dùng ADB/wake/QA Sony, không bắt buộc E104.
+
+### APK QA cần Opus nghiệm thu bàn giao — REWORK 1
+
+**QA CANDIDATE — CHƯA NGHIỆM THU — KHÔNG ĐĂNG CÔNG KHAI.** Ba APK cùng source/build HEAD `bf174c5`, vc120; cert SHA-256 chung `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8`, đã kiểm chữ ký cả ba và đối chiếu với hai APK đang cài. Tên dưới đây tồn tại tại cả `A\<tên>` và `T\<tên>`.
+
+| Tên APK | Package / versionName | Bytes | SHA-256 | Config nhúng / hash check / QA |
+|---|---|---:|---|---|
+| `E104-bf174c5-normal-debug-vc120.apk` | `app.melovault.player` / `0.6.95-beta` | 33462212 | `ED65DF389FC70D3FC1D49672F29190C0C2E236206BE8874EC0944B5C880B7ADD` | true / found=true đối chứng / Q5 nhanh |
+| `E104-bf174c5-open-debug-vc120.apk` | `app.melovault.player.open` / `0.6.95-open` | 33462216 | `29F918E9E2E2EE37EBEE79FD7BA8B29D937FCBF0742A0FBD2543039EFF49D8A2` | false có chủ đích / found=false / Q1–Q4 |
+| `E104-bf174c5-open-release-vc120.apk` | `app.melovault.player.open` / `0.6.95-open` | 30703990 | `DAF93D97B68EBBB1D345AF74EF39A7936A628F1020B5E20EDA222487F480D0FB` | false có chủ đích / found=false / chưa cài Release |
+
+Chưa kiểm: API/đăng nhập thật, lỗi API_ID_INVALID trên máy, âm thanh thực, Release UI, Y700/S25/FYT/Sony; chờ chủ dự án duyệt và Opus nghiệm thu. Giữ vc120 và dữ liệu hiện có, không downgrade/uninstall/pm clear/logout/xóa TDLib; open về panel trống bằng Nhập lại mã + khởi động lại. Không merge/push/upload/công bố APK, không sửa hồ sơ nghiệm thu. Báo cáo giữ nội dung các vòng trước; diff check trước commit không lỗi.
