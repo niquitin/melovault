@@ -18,8 +18,21 @@ class SyncBuildGateReworkTest {
 
     private fun source(name: String) = File(sync, name).readText().replace("\r\n", "\n")
 
-    @Test fun t21_aStandardBuildHasBothSwitchesOff() {
-        assertFalse(TelegramPlaylistFlags.SYNC_ENABLED)
+    @Test fun e105_productFlagIsFlavorScopedAndQaStillRequiresDebug() {
+        val personal = gradle.substringAfter("        personal {").substringBefore("        shareable {")
+        val shareable = gradle.substringAfter("        shareable {").substringBefore("    buildTypes {")
+        assertTrue(personal.contains("'MELO_PLAYLIST_SYNC_ENABLED', 'false'"))
+        assertTrue(shareable.contains("'MELO_PLAYLIST_SYNC_ENABLED', 'true'"))
+        assertTrue(com.bsdung.musicassistantcar.BuildConfig.MELO_PLAYLIST_SYNC_ENABLED)
+        val flags = source("TelegramPlaylistV2Session.kt")
+        assertTrue(flags.contains("val SYNC_QA_ENABLED: Boolean get() = com.bsdung.musicassistantcar.BuildConfig.DEBUG && com.bsdung.musicassistantcar.BuildConfig.MELO_SYNC_QA_BUILD"))
+        assertTrue(gradle.contains("if (meloOpen && meloSyncQa)"))
+        assertTrue(gradle.contains("meloOpen cannot be combined with meloSyncQa"))
+    }
+
+    @Test fun t21_productSyncIsOnButQaAndCreationStayOff() {
+        assertTrue(TelegramPlaylistFlags.SYNC_ENABLED)
+        assertFalse(TelegramPlaylistFlags.SYNC_QA_ENABLED)
         assertFalse(TelegramPlaylistFlags.SYNC_CREATE_ALLOWED)
         assertFalse(com.bsdung.musicassistantcar.BuildConfig.MELO_SYNC_QA_ALLOW_CREATE)
     }
@@ -39,7 +52,7 @@ class SyncBuildGateReworkTest {
 
     @Test fun theCreateSwitchNeedsTheSyncSwitchAndTheFlagsAreNotConstants() {
         val flags = File(sync, "TelegramPlaylistV2Session.kt").readText()
-        assertTrue(flags.contains("val SYNC_CREATE_ALLOWED: Boolean get() = SYNC_ENABLED && "))
+        assertTrue(flags.contains("val SYNC_CREATE_ALLOWED: Boolean get() = SYNC_ENABLED && SYNC_QA_ENABLED && "))
         assertFalse(flags.contains("const val SYNC_ENABLED") || flags.contains("const val SYNC_CREATE_ALLOWED"))
     }
 

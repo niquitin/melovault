@@ -250,7 +250,7 @@ class TdlibRework01Test {
             assertEquals("create '$bad'", SyncConsent(), load("mvconsent v1\nenabled 1\ncreate $bad\ntransmit 1\nwarning 1\n"))
             assertEquals("transmit '$bad'", SyncConsent(), load("mvconsent v1\nenabled 1\ncreate 1\ntransmit $bad\nwarning 1\n"))
         }
-        for (bad in listOf("", "-1", "x", "2", "99", "01", "9999999999999999999", "1.0")) {
+        for (bad in listOf("", "-1", "x", (SyncConsent.WARNING_VERSION + 1).toString(), "99", "01", "9999999999999999999", "1.0")) {
             assertEquals("warning '$bad'", SyncConsent(), load("mvconsent v1\nenabled 1\ncreate 1\ntransmit 1\nwarning $bad\n"))
         }
     }

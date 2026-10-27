@@ -118,7 +118,7 @@ class PlaylistQaFixtureTest {
     @Test fun f7_theActivityRunsItOnlyInASyncQaBuild_consumesTheMarker_andRecordsTheStepBeforeTheWrite() {
         val activity = text("TelegramPreviewActivity.kt")
         val fn = activity.substringAfter("private fun runQaFixtureIfRequested(").substringBefore("/** Local only: asks the playlist thread")
-        assertTrue(fn.contains("if (!TelegramPlaylistFlags.SYNC_ENABLED) return"))
+        assertTrue(fn.indexOf("if (!TelegramPlaylistFlags.SYNC_QA_ENABLED) return") in 0 until fn.indexOf("val addMarker"))
         assertTrue(fn.indexOf("addMarker.delete()") in 0 until fn.indexOf("playlistSession.toggle("))
         assertTrue("the step is recorded before the change", fn.indexOf("usedFile.writeText") in 0 until fn.indexOf("playlistSession.toggle("))
         assertEquals("one toggle only", 1, Regex("playlistSession\\.toggle\\(").findAll(fn).count())

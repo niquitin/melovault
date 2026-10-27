@@ -154,23 +154,26 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
         content.addView(c.sectionTitle("Dữ liệu được lưu ở đâu"))
         content.addView(card { SyncPrivacyText.WARNING_LINES.forEach { addView(note(it)) } })
 
-        content.addView(c.sectionTitle("Ba quyền riêng biệt"))
+        content.addView(c.sectionTitle("Quyền đồng bộ"))
         content.addView(consentRow(SyncPrivacyText.CONSENT_ENABLE, screen.enable) {
             if (screen.enable == ControlState.ACTIVE) confirmTurnOff() else confirmEnable()
         })
-        content.addView(consentRow(SyncPrivacyText.CONSENT_CREATE, screen.allowCreate) {
-            act { controller.setAllowCreate(screen.allowCreate != ControlState.ACTIVE) }
-        })
+        if (TelegramPlaylistFlags.SYNC_CREATE_ALLOWED) {
+            content.addView(consentRow(SyncPrivacyText.CONSENT_CREATE, screen.allowCreate) {
+                act { controller.setAllowCreate(screen.allowCreate != ControlState.ACTIVE) }
+            })
+        }
         content.addView(consentRow(SyncPrivacyText.CONSENT_TRANSMIT, screen.allowTransmit) {
             act { controller.setAllowTransmit(screen.allowTransmit != ControlState.ACTIVE) }
         })
         content.addView(note(SyncPrivacyText.OFF_NOTE))
 
         content.addView(c.sectionTitle("Kênh đồng bộ"))
-        content.addView(card { addView(note(screen.channel.text())) })
+        content.addView(card { addView(note(screen.channel.text(TelegramPlaylistFlags.SYNC_CREATE_ALLOWED))) })
         content.addView(button("Tìm kênh (chỉ đọc)", screen.discover) { act { controller.discover() } })
-        content.addView(button("Tạo kênh riêng", screen.createNow) { confirmCreate() })
-        if (screen.createNow == ControlState.LOCKED && !TelegramPlaylistFlags.SYNC_CREATE_ALLOWED) {
+        if (TelegramPlaylistFlags.SYNC_CREATE_ALLOWED) {
+            content.addView(button("Tạo kênh riêng", screen.createNow) { confirmCreate() })
+        } else {
             content.addView(note("Bản này không tạo kênh mới: chỉ tìm và gắn kênh Telegram đã có."))
         }
         content.addView(button("Dùng kênh này", screen.bindNow) { confirmBind() })

@@ -44,6 +44,123 @@ class SyncSettingsControllerTest {
     private val store = InMemorySyncConsentStore()
     private val actions = FakeActions()
 
+    @Test fun e105_productTwoDevicesExchangeOneAddAndRemoveAndPreserveBaseline() {
+        val world = FakeTdlibWorld()
+        val channelId = world.createSyncChannel(acct.value).id
+        fun device(name: String, seed: Int) = SyncRig(name, folder.newFolder(), world, acct, channelId, seed,
+            buildEnabled = TelegramPlaylistFlags.SYNC_ENABLED, consent = false,
+            sendBudgetCap = SyncSendBudget.PRODUCTION_MAX, createUnlocked = false).also { rigs.add(it) }
+        val a = device("product-a", 31)
+        val b = device("product-b", 32)
+        fun ui(r: SyncRig) = SyncSettingsController(r.consentStore, TelegramPlaylistFlags.SYNC_ENABLED,
+            TdlibSyncActions(r.service), { acct }, { r.device.session.statusFacts(acct) })
+        val ca = ui(a)
+        val cb = ui(b)
+        for (c in listOf(ca, cb)) {
+            assertEquals(ActionResult.Done, c.enable(true))
+            assertEquals(ActionResult.Done, c.setAllowTransmit(true))
+        }
+        a.device.toggle(acct.value, songId(1))
+        a.device.toggle(acct.value, songId(2))
+        repeat(3) { ca.screen(); cb.screen() }
+        assertEquals(0, a.tdlib.gateway.count("sendMessage"))
+        assertEquals(ActionResult.Done, ca.grantSend(2, true))
+        assertEquals(ActionResult.Done, ca.syncNow())
+        assertEquals(ActionResult.Done, cb.syncNow())
+        val baseline = a.device.session.snapshot().toSet()
+        assertEquals(2, baseline.size)
+        assertEquals(baseline, b.device.session.snapshot().toSet())
+        a.device.toggle(acct.value, songId(3))
+        val sends = a.tdlib.gateway.count("sendMessage")
+        assertEquals(ActionResult.Done, ca.syncNow()) // budget zero, pending stays pending
+        assertEquals(sends, a.tdlib.gateway.count("sendMessage"))
+        assertFalse(PlaylistSyncStatusPolicy.evaluate(acct.value, a.device.session.statusFacts(acct), ca.syncContext()).kind == PlaylistSyncStatusPolicy.Kind.SYNCED)
+        assertEquals(ActionResult.Done, ca.grantSend(1, true))
+        assertEquals(ActionResult.Done, ca.syncNow())
+        assertEquals(ActionResult.Done, cb.syncNow())
+        assertEquals(baseline + songId(3), b.device.session.snapshot().toSet())
+        b.device.toggle(acct.value, songId(3))
+        assertEquals(ActionResult.Done, cb.grantSend(1, true))
+        assertEquals(ActionResult.Done, cb.syncNow())
+        assertEquals(ActionResult.Done, ca.syncNow())
+        assertEquals(baseline, a.device.session.snapshot().toSet())
+        assertEquals(baseline, b.device.session.snapshot().toSet())
+        val stored = a.device.session.view(acct)!!.state
+        assertEquals(ActionResult.Done, ca.turnOff())
+        assertEquals(stored, a.device.session.view(acct)!!.state)
+        assertEquals(0, a.tdlib.gateway.count("createNewSupergroupChat"))
+        assertEquals(0, b.tdlib.gateway.count("createNewSupergroupChat"))
+    }
+
+    @Test fun e105_oldWarningCannotRunOrShowActivePermissionsAndAcceptanceClearsOldGrants() {
+        val old = SyncConsent(true, true, true, 1)
+        store.save(acct, old)
+        val c = controller()
+        val before = factsNow
+        assertFalse(store.load(acct).warningAccepted)
+        assertEquals(ControlState.LOCKED, c.screen().allowTransmit)
+        assertEquals(ControlState.LOCKED, c.screen().allowCreate)
+        assertEquals(ActionResult.Refused(ActionResult.Reason.NOT_ENABLED), c.syncNow())
+        assertEquals(ActionResult.Refused(ActionResult.Reason.WARNING_NOT_ACCEPTED), c.enable(false))
+        assertEquals(old, store.load(acct))
+        assertEquals(ActionResult.Done, c.enable(true))
+        assertEquals(SyncConsent(true, false, false, 2), store.load(acct))
+        assertEquals(0, c.sendGrant())
+        assertEquals(before, factsNow)
+        assertTrue(actions.calls.isEmpty())
+    }
+
+    @Test fun e105_productCreationIsLockedEvenForOldPermissionAndDirectCalls() {
+        store.save(acct, SyncConsent(true, true, true, SyncConsent.WARNING_VERSION))
+        val c = SyncSettingsController(store, true, actions, { acct }, { factsNow })
+        assertEquals(ControlState.LOCKED, c.screen().allowCreate)
+        assertEquals(ControlState.LOCKED, c.screen().createNow)
+        assertEquals(ActionResult.Denied(SyncDenied.CREATE_LOCKED), c.setAllowCreate(true))
+        assertEquals(ActionResult.Denied(SyncDenied.CREATE_LOCKED), c.createChannel(true))
+        assertTrue(actions.calls.isEmpty())
+        assertFalse(ChannelView.NotFound.text().contains("Có thể tạo"))
+        assertTrue(ChannelView.NotFound.text(true).contains("Có thể tạo"))
+    }
+
+    @Test fun e105_acceptanceFailureDoesNotUpgradeOldWarningOrClaimSuccess() {
+        val old = SyncConsent(true, true, true, 1)
+        val failing = object : SyncConsentStore {
+            override fun load(account: TelegramUserId) = old
+            override fun save(account: TelegramUserId, consent: SyncConsent) = false
+        }
+        val c = controller(s = failing)
+        assertEquals(ActionResult.NotSaved, c.enable(true))
+        assertEquals(old, c.consent())
+        assertEquals(ControlState.LOCKED, c.screen().allowTransmit)
+        assertFalse(SyncConsentActions(failing).enable(acct, true))
+        assertTrue(actions.calls.isEmpty())
+    }
+
+    @Test fun e105_lowLevelAcceptanceClearsOldPermissionsWithoutChangingFileFormat() {
+        val root = folder.newFolder()
+        val fileStore = FileSyncConsentStore(root, TestPlainFileIo)
+        val old = SyncConsent(true, true, true, 1)
+        assertTrue(fileStore.save(acct, old))
+        val file = root.walkTopDown().single { it.isFile }
+        val bytes = file.readBytes()
+        assertEquals(SyncDenied.WARNING_NOT_ACCEPTED, SyncGate(true, fileStore).mayRun(acct))
+        assertFalse(SyncConsentActions(fileStore).enable(acct, false))
+        assertTrue(bytes.contentEquals(file.readBytes()))
+        assertTrue(SyncConsentActions(fileStore).enable(acct, true))
+        assertEquals(SyncConsent(true, false, false, 2), fileStore.load(acct))
+        assertTrue(file.readText().startsWith("mvconsent v1\n"))
+    }
+
+    @Test fun e105_acceptingAgainRevokesAnInMemorySendGrant() {
+        val c = controller()
+        c.optIn(transmit = true)
+        assertEquals(ActionResult.Done, c.grantSend(3, true))
+        assertEquals(ActionResult.Done, c.enable(true))
+        assertEquals(0, c.sendGrant())
+        assertEquals(ActionResult.Done, c.syncNow())
+        assertEquals(listOf(0), actions.budgets)
+    }
+
     private fun controller(build: Boolean = true, port: SyncActionsPort = actions, s: SyncConsentStore = store) =
         SyncSettingsController(s, build, port, { current }, { factsNow }, channelCreationUnlocked = true)
 

@@ -347,8 +347,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
             onResult = { count, changed -> android.util.Log.w("MeloPlaylist", "resume-refresh count=$count changed=$changed") },
             // Sync-QA debug builds only: an optional marker file in the cache dir adds one unknown song to what is READ (never written).
             transform = { ids ->
-                PlaylistQaSimulation.apply(
-                    ids, TelegramPlaylistFlags.SYNC_ENABLED, java.io.File(cacheDir, PlaylistQaSimulation.MARKER_FILE).exists(),
+                if (!TelegramPlaylistFlags.SYNC_QA_ENABLED) ids else PlaylistQaSimulation.apply(
+                    ids, TelegramPlaylistFlags.SYNC_QA_ENABLED, java.io.File(cacheDir, PlaylistQaSimulation.MARKER_FILE).exists(),
                 )
             },
         )
@@ -4787,7 +4787,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
      * nothing is sent here (consent (c) and a send grant in Settings decide that). The marker is always consumed.
      */
     private fun runQaFixtureIfRequested(account: TelegramUserId) {
-        if (!TelegramPlaylistFlags.SYNC_ENABLED) return
+        if (!TelegramPlaylistFlags.SYNC_QA_ENABLED) return
         val addMarker = java.io.File(cacheDir, PlaylistQaFixture.ADD_MARKER)
         val removeMarker = java.io.File(cacheDir, PlaylistQaFixture.REMOVE_MARKER)
         if (!addMarker.exists() && !removeMarker.exists()) return

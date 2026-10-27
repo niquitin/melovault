@@ -31,12 +31,14 @@ internal object SyncPrivacyText {
         "Chỉ có thông tin bài đã lưu (mã nhóm/tin nhắn Telegram và nhật ký thêm/bỏ). Không có âm thanh, không có nhạc trên máy, " +
             "không có mã đăng nhập hay khóa, không có tệp hay đường dẫn tải về.",
         "Dùng cùng tài khoản Telegram trên các máy để thấy cùng danh sách. Dữ liệu nằm trên đám mây Telegram cho tới khi bạn tự xóa kênh hoặc tin nhắn.",
+        "Chỉ đồng bộ thủ công khi bạn bấm, qua kênh Telegram đã có. Bản sản phẩm không tạo kênh mới.",
+        "Thao tác bỏ bài (REMOVE) trên máy khác cũng được áp dụng vào Playlist trên máy này khi bạn đồng bộ.",
         "Chỉ đồng bộ danh sách. Nhạc không tự tải hay phát sang máy khác.",
     )
 
     const val CONSENT_ENABLE = "Tôi đã đọc và đồng ý. Bật đồng bộ Playlist"
     const val CONSENT_CREATE = "Cho phép tạo kênh Telegram riêng (khi chưa có)"
-    const val CONSENT_TRANSMIT = "Cho phép gửi danh sách lên kênh lần đầu"
+    const val CONSENT_TRANSMIT = "Cho phép gửi metadata Playlist lên kênh"
     const val GRANT_NOTE = "Mỗi lần chỉ gửi tối đa ${SyncSendBudget.PRODUCTION_MAX} thay đổi, do bạn cho phép từng lần. Không có gửi tự động. " +
         "Nếu một thay đổi đã gửi mà chưa biết có tới nơi hay chưa, ứng dụng KHÔNG gửi lại."
     const val OFF_NOTE = "Tắt đồng bộ chỉ dừng việc gửi/nhận mới. Playlist, hàng đợi và kênh trên Telegram được giữ nguyên."
@@ -65,10 +67,11 @@ internal sealed class ChannelView {
     /** A create request went out and was not confirmed, or two devices created one: a person looks, nothing repeats. */
     object NeedsPerson : ChannelView()
 
-    fun text(): String = when (this) {
+    fun text(channelCreationUnlocked: Boolean = false): String = when (this) {
         Unchecked -> "Chưa kiểm tra kênh. Bấm \"Tìm kênh\" (chỉ đọc, không tạo gì)."
         is Found -> "Đã tìm thấy kênh riêng của bạn và xác minh an toàn. Bấm \"Dùng kênh này\" để gắn."
-        NotFound -> "Đã quét hết và xác nhận chưa có kênh. Có thể tạo kênh nếu bạn cho phép."
+        NotFound -> if (channelCreationUnlocked) "Đã quét hết và xác nhận chưa có kênh. Có thể tạo kênh nếu bạn cho phép."
+            else "Đã quét hết và chưa tìm thấy kênh hợp lệ. Bản này chỉ dùng kênh có sẵn; chưa thể đồng bộ."
         is Incomplete -> "Chưa quét xong nên chưa chắc kênh có tồn tại hay không. Sẽ KHÔNG tạo kênh mới. Thử tìm lại sau."
         is Ambiguous -> "Có ${count} kênh giống nhau. Ứng dụng không tự chọn hay tạo thêm; cần bạn xử lý."
         is Unsafe -> "Có kênh mang dấu hiệu nhưng không an toàn (${unsafeText(reason)}). Ứng dụng không dùng kênh này."
@@ -222,7 +225,7 @@ internal class SyncSettingsController(
             buildNotice = if (buildEnabled) null else PlaylistSyncStatusPolicy.BUILD_OFF_NOTICE,
             consent = c,
             enable = gated(current != null, active = opted),
-            allowCreate = gated(opted, active = opted && c.mayCreateChannel),
+            allowCreate = gated(opted && channelCreationUnlocked, active = opted && channelCreationUnlocked && c.mayCreateChannel),
             allowTransmit = gated(opted, active = opted && c.mayTransmitInitial),
             discover = gated(opted && !running),
             // Locked for good unless the build unlocks it: a channel already exists (REWORK-01) and no other is ever made.
@@ -253,7 +256,10 @@ internal class SyncSettingsController(
     /** (a). [warningShownAndAccepted] must be true: the screen shows the warning and the person ticks it in the same action. */
     fun enable(warningShownAndAccepted: Boolean): ActionResult = guarded { who ->
         if (!warningShownAndAccepted) ActionResult.Refused(ActionResult.Reason.WARNING_NOT_ACCEPTED)
-        else saved(store.save(who, store.load(who).copy(enabled = true, acceptedWarningVersion = SyncConsent.WARNING_VERSION)))
+        else {
+            synchronized(this) { sendGrant = 0 }
+            saved(store.save(who, SyncConsent(enabled = true, acceptedWarningVersion = SyncConsent.WARNING_VERSION)))
+        }
     }
 
     private fun optedIn(c: SyncConsent) = c.enabled && c.warningAccepted
@@ -263,6 +269,7 @@ internal class SyncSettingsController(
         val c = store.load(who)
         when {
             !allowed -> saved(store.save(who, c.copy(mayCreateChannel = false)))
+            !channelCreationUnlocked -> ActionResult.Denied(SyncDenied.CREATE_LOCKED)
             !optedIn(c) -> ActionResult.Refused(ActionResult.Reason.NOT_ENABLED)
             else -> saved(store.save(who, c.copy(mayCreateChannel = true)))
         }

@@ -4,7 +4,7 @@ package com.bsdung.musicassistantcar.data.telegram
  * E96 P5B3 FINAL LIVE QA: the ONE synthetic Playlist item used to prove a real two-device sync, so that no song of the person's
  * library is named in the cloud log.
  *
- * It exists only in a Sync-QA debug build ([TelegramPlaylistFlags.SYNC_ENABLED]); a standard build and Release ignore it. A step
+ * It exists only in a Sync-QA debug build ([TelegramPlaylistFlags.SYNC_QA_ENABLED]); a standard build and Release ignore it. A step
  * is requested by an empty marker file in the app's CACHE directory (put there with `run-as` for a debuggable build). The marker
  * is consumed on the next resume, so one marker is at most one Playlist change, and each step ([Step.ADD], [Step.REMOVE]) can run
  * once per install ([used]); a request for a step that has already run is refused, which is the per-device send budget.

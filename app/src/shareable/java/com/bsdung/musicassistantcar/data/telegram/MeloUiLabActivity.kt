@@ -311,7 +311,7 @@ class MeloUiLabActivity : AppCompatActivity() {
         content.addView(groupTitle("THƯ VIỆN & ĐỒNG BỘ"))
         content.addView(settingRow(
             "Đồng bộ Playlist giữa các máy",
-            subtitle = "Playlist luôn lưu trên máy. Đồng bộ đám mây chưa bật.",
+            subtitle = "Đồng bộ thủ công qua kênh Telegram có sẵn",
             badge = "Thử nghiệm"
         ) { startActivity(Intent(this, MeloSyncSettingsActivity::class.java)) })
 

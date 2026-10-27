@@ -260,7 +260,12 @@ class SyncSendGrantTest {
         assertEquals(Gated.Denied(SyncDenied.CREATE_LOCKED), gate)
         assertEquals(0, r.tdlib.gateway.count("createNewSupergroupChat"))
         // the controller says the same, before it even asks the service
-        val c = controller(unlocked = false).also { it.optIn(create = true) }
+        val c = controller(unlocked = false).also {
+            it.optIn()
+            // Simulate a previously persisted QA create permission; product gates must still reject it.
+            store.save(acct, store.load(acct).copy(mayCreateChannel = true))
+            assertEquals(ActionResult.Denied(SyncDenied.CREATE_LOCKED), it.setAllowCreate(true))
+        }
         c.discover()
         assertEquals(ControlState.LOCKED, c.screen().createNow)
         assertEquals(ActionResult.Denied(SyncDenied.CREATE_LOCKED), c.createChannel(true))
@@ -293,7 +298,12 @@ class SyncSendGrantTest {
         assertEquals(Gated.Denied(SyncDenied.CREATE_LOCKED), two.service.createChannel(acct))
         assertEquals(0, two.tdlib.gateway.count("createNewSupergroupChat"))
         // the controller only ever offers "find and bind" for what it found
-        assertFalse(ControlState.AVAILABLE == controller(unlocked = false).also { it.optIn(create = true) }.screen().createNow)
+        assertFalse(ControlState.AVAILABLE == controller(unlocked = false).also {
+            it.optIn()
+            // Simulate a previously persisted QA create permission; product gates must still reject it.
+            store.save(acct, store.load(acct).copy(mayCreateChannel = true))
+            assertEquals(ActionResult.Denied(SyncDenied.CREATE_LOCKED), it.setAllowCreate(true))
+        }.screen().createNow)
     }
 
     @Test fun anExistingBoundChannelIsNeverReplacedEvenWhenCreationIsUnlocked() {

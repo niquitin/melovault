@@ -81,9 +81,10 @@ class P5ReadinessInertnessTest {
         assertEquals("two adds and a remove: one song left", 1, r.device.session.statusFacts(acct)!!.savedCount)
     }
 
-    @Test fun a04_theDefaultProductionHolderIsDisabledAndDoesNotTouchTheTdlibOwner() {
-        assertFalse(TelegramPlaylistFlags.SYNC_ENABLED)
-        val provider = SyncRuntime.provider(folder.newFolder())
+    @Test fun a04_disabledProviderStillDoesNotTouchTheTdlibOwner() {
+        assertTrue(TelegramPlaylistFlags.SYNC_ENABLED)
+        val provider = SyncServiceProvider(false, { error("owner must not be read") },
+            { error("host must not be read") }, InMemorySyncConsentStore())
         assertSame(DisabledSyncActions, provider.actions())
         assertFalse(provider.created())
     }

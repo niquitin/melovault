@@ -4,7 +4,7 @@ package com.bsdung.musicassistantcar.data.telegram
  * E96 P5B3 REWORK-04: a DISPLAY-ONLY way to see, on a real device, what the screen does when the committed saved list changes
  * behind it - without a Telegram write and without touching the person's playlist.
  *
- * It exists only in a Sync-QA debug build ([TelegramPlaylistFlags.SYNC_ENABLED]); a standard build and Release ignore it. It is
+ * It exists only in a Sync-QA debug build ([TelegramPlaylistFlags.SYNC_QA_ENABLED]); a standard build and Release ignore it. It is
  * switched on by an empty marker file in the app's CACHE directory (put there with `run-as` for a debuggable build and removed
  * again afterwards). While the marker exists, [apply] adds ONE extra, unknown song key to the list that the live refresh reads,
  * exactly as if another device had saved a song this device's library does not know yet. Nothing is written anywhere: not the V2
