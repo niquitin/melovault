@@ -60,3 +60,46 @@ Không bàn giao APK nào. APK Ni phiên 1 thiếu Telegram config và ký signe
 ### 6. Việc tiếp theo
 
 Mở **phiên Codex mới `gpt-6-astra` medium**, PHIÊN 2 (S10–S16), baseline HEAD `5808eb6`. Sau khi Codex báo xong, mở phiên Opus nghiệm thu mới.
+
+## Vòng 2 — 27/10/2026 ~09:30 (+07)
+
+**Trạng thái: REWORK — ô "API hash" hiện rõ ký tự (vi phạm 6.4). Mọi phần khác của phiên 2 đạt.**
+
+### 7. Git
+
+HEAD `5875e4c` (Codex phiên 2 lần 2, chỉ thêm 53 dòng báo cáo), cây sạch, `git diff --check` sạch, không có Gradle đang chạy. Mã nguồn vẫn `03e9dc9`; số liệu test Opus vòng 1 (2.128/21/0/0 mỗi biến thể) còn hiệu lực.
+
+### 8. Opus tự kiểm bằng chứng
+
+| Mục | Kết quả Opus kiểm |
+|---|---|
+| SHA-256 3 APK Tiny (bản trên Ni) | Khớp báo cáo: thường Debug `1092EE34…563A`, open Debug `406BCFB4…D535`, open Release `082C14FB…70DE` |
+| Signer | Cả 3 `eecd3df7…3fce8` (log `apksigner` Tiny) |
+| Config | `config.log` (bản thường, không cờ open): `telegram.config.valid=true`; `open-build.log`: `melo.open=true`, `valid=false` (đúng thiết kế) |
+| P3 | Log hash: open Debug và Release `found=false`; thường Debug `found=true` → BUILD FAILED đối chứng. **ĐẠT** |
+| Q6 | `Q6-summary.json`: 0 dòng hash giả, 0 `api_hash`, 0 FATAL, 0 ANR (7.543 dòng buffer) |
+| Ảnh | Đã xem `00_tong_hop.png` (8 ô) |
+
+### 9. Lỗi buộc REWORK
+
+Ảnh ô 2 (`04-Q2-validation.png`) thấy rõ `12345` trong ô "API hash"; Codex ghi ảnh 05 thấy cả chuỗi mã giả. Kế hoạch 6.4 yêu cầu ô hash dạng password. Mã người dùng thật sẽ lộ trên màn hình/ảnh chụp.
+
+Nguyên nhân (đọc mã `TelegramApiSetupPanel.kt` hàm `field`): đặt `inputType` có `TYPE_TEXT_VARIATION_PASSWORD` **rồi mới** gọi `setSingleLine(true)`. `setSingleLine` thay `TransformationMethod` thành `SingleLineTransformationMethod`, đè mất `PasswordTransformationMethod`. Font chữ gợi ý "API hash" là monospace (dấu hiệu inputType password vẫn được áp) nên khớp với giải thích này.
+
+Sửa tối thiểu (chỉ file này): sau `setSingleLine(true)` đặt lại `transformationMethod = PasswordTransformationMethod.getInstance()` cho ô hash (hoặc gọi `setSingleLine` trước `inputType`). Không đổi gì khác.
+
+### 10. Chấm tiêu chí
+
+| Tiêu chí | Kết quả |
+|---|---|
+| P1 | ĐẠT (vòng 1) |
+| P2 | ĐẠT — 3 APK Tiny đúng package/vc/vname/cert; Ni đã chứng minh chặn `meloOpen+meloSyncQa` |
+| P3 | ĐẠT |
+| P4 | **CHƯA ĐẠT** — Q1, Q3, Q4 (phương án dự phòng), Q5 (MediaSession state=3, vị trí tăng), Q6 khớp; Q2/Q3 lộ hash, trái 6.4 |
+| P5 | ĐẠT |
+| P6 | ĐẠT phần log/commit; lỗi hiển thị thuộc P4/6.4 |
+| P7 | Chưa — chờ bản sửa |
+
+### 11. APK
+
+Không upload. Các APK `4f8b575` không phải candidate vì ô hash hiện rõ. Shanling hiện giữ vc120 (thường + open Debug); REWORK cài đè cùng vc120 bằng `install -r` (không downgrade). Âm thanh thật, Release UI, API thật, Y700/S25/FYT/Sony: chưa kiểm.
