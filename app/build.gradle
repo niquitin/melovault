@@ -28,9 +28,10 @@ if (!(telegramApiId ==~ /[0-9]{1,10}/) || !(telegramApiHash ==~ /[a-fA-F0-9]{32}
 }
 // E96 P5-A: lets a build machine answer "is the Telegram developer config usable?" without ever showing it.
 // Prints only true/false; the ID and hash are never written to the console, a log or an artifact.
+def meloOpen = (project.findProperty('meloOpen') ?: 'false').toString().trim() == 'true'
 tasks.register('reportTelegramConfig') {
     description = 'Prints telegram.config.valid=true|false (never the values).'
-    def valid = (telegramApiId != '0' && telegramApiHash != '')
+    def valid = (!meloOpen && telegramApiId != '0' && telegramApiHash != '')
     doLast { println 'telegram.config.valid=' + valid }
 }
 
@@ -39,6 +40,9 @@ tasks.register('reportTelegramConfig') {
 // Release always has it off: asking for both is an error, never a silent downgrade. It is not read from local.properties,
 // so a secret file can never switch it on, and it holds no key or id.
 def meloSyncQa = (project.findProperty('meloSyncQa') ?: 'false').toString().trim() == 'true'
+if (meloOpen && meloSyncQa) {
+    throw new GradleException('meloOpen cannot be combined with meloSyncQa')
+}
 if (meloSyncQa && gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }) {
     throw new GradleException('meloSyncQa=true is only allowed for Debug builds; Release always ships with cloud sync OFF.')
 }
@@ -55,6 +59,50 @@ tasks.register('reportSyncQaFlag') {
     doLast {
         println 'melo.sync.qa=' + meloSyncQa
         println 'melo.sync.qa.allowcreate=' + meloSyncQaAllowCreate
+    }
+}
+
+tasks.register('reportOpenBuild') {
+    doLast { println 'melo.open=' + meloOpen }
+}
+
+tasks.register('verifyOpenApkHasNoTelegramHash') {
+    description = 'Checks APK contents without printing credentials or entry names.'
+    doLast {
+        if (!(telegramApiHash ==~ /[a-fA-F0-9]{32}/)) {
+            println 'open.apk.telegram.hash.check=SKIPPED_NO_LOCAL_HASH'
+            return
+        }
+        boolean found = false
+        try {
+            def path = project.findProperty('openApk')
+            if (path == null) throw new IllegalArgumentException()
+            def lower = telegramApiHash.toLowerCase(java.util.Locale.ROOT)
+            def upper = telegramApiHash.toUpperCase(java.util.Locale.ROOT)
+            new java.util.zip.ZipFile(project.file(path)).withCloseable { zip ->
+                def entries = zip.entries()
+                byte[] buffer = new byte[65536]
+                while (entries.hasMoreElements() && !found) {
+                    def entry = entries.nextElement()
+                    if (entry.isDirectory()) continue
+                    zip.getInputStream(entry).withCloseable { stream ->
+                        String tail = ''
+                        int count
+                        while (!found && (count = stream.read(buffer)) != -1) {
+                            // ISO-8859-1 maps each byte directly, preserving ASCII matches across chunks.
+                            String chunk = tail + new String(buffer, 0, count, java.nio.charset.StandardCharsets.ISO_8859_1)
+                            found = chunk.contains(lower) || chunk.contains(upper)
+                            tail = chunk.substring(Math.max(0, chunk.length() - 31))
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // Never attach the underlying exception: it can contain an entry name.
+            throw new GradleException('Unable to verify APK Telegram hash contents.')
+        }
+        println 'open.apk.telegram.hash.found=' + found
+        if (found) throw new GradleException('APK contains the local Telegram hash.')
     }
 }
 
@@ -85,19 +133,20 @@ android {
         }
         shareable {
             dimension 'distribution'
-            applicationId 'app.melovault.player'
+            applicationId meloOpen ? 'app.melovault.player.open' : 'app.melovault.player'
             // Owner Beta only: preserve the existing on-device signing identity.
             // Replace with a managed release key before any public distribution.
             signingConfig signingConfigs.debug
             // Beta-only bump; never alter the existing Personal Stable artifact.
-            versionCode 119
-            versionName '0.6.94'
-            versionNameSuffix '-beta'
+            versionCode 120
+            versionName '0.6.95'
+            versionNameSuffix meloOpen ? '-open' : '-beta'
             buildConfigField 'boolean', 'PERSONAL_BACKEND_ENABLED', 'false'
             buildConfigField 'String', 'CAR_API_PRIMARY', '""'
             buildConfigField 'String', 'CAR_API_SECONDARY', '""'
-            buildConfigField 'int', 'TELEGRAM_APP_API_ID', telegramApiId
-            buildConfigField 'String', 'TELEGRAM_APP_API_HASH', '"' + telegramApiHash + '"'
+            buildConfigField 'int', 'TELEGRAM_APP_API_ID', meloOpen ? '0' : telegramApiId
+            buildConfigField 'String', 'TELEGRAM_APP_API_HASH', meloOpen ? '""' : ('"' + telegramApiHash + '"')
+            buildConfigField 'boolean', 'MELO_OPEN_BUILD', meloOpen ? 'true' : 'false'
         }
     }
 
