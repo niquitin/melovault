@@ -187,3 +187,56 @@ APK Ni và số liệu test phiên 1 ở trên giữ nguyên; không phải APK 
 Không chạy lại test/build Ni vì chưa thay code, nhiệm vụ phiên 2 dừng ở chuẩn bị môi trường.
 Chưa xác nhận đăng nhập thật, Keystore/UI/TDLib trên máy, hồi quy bản riêng hoặc âm thanh thật.
 Không upload, công bố APK, merge, push hoặc viết file nghiệm thu. Dừng chờ Opus xử lý điểm thiếu của kế hoạch.
+
+## Phiên 2 — lần 2 (27/10/2026, S10–S16)
+
+| Nội dung | Kết quả thực thi, chưa phải kết luận nghiệm thu |
+|---|---|
+| Git | Đầu phiên và sau gián đoạn: đúng nhánh, HEAD `4f8b575995c38c6b99e466f13777cf64780641b2`, cây sạch; nguồn `03e9dc9`; baseline/plan đúng yêu cầu |
+| Phạm vi | Chỉ build/QA/báo cáo; không sửa production, plan, workflow hoặc hồ sơ nghiệm thu |
+| S10 | Bundle `D:\Bots\_transfer\E104-4f8b575-20261027-0125.bundle`, 12.873.045 bytes; SHA-256 hai đầu `15E67435AC29632558150B7872264E3126890217292C047F3FD24A7DA7B0A529`; bundle verify thành công |
+| Tiny | Desktop Commander, clone mới `C:\Bots\MeloVault-E104-IsolatedQA-20261027-0125`, đúng HEAD; bundle tại `C:\Bots\_qa_temp\E104-4f8b575-20261027-0125.bundle` |
+| S11 config | Chỉ Copy-Item từ `C:\Bots\MeloVault-E99-IsolatedQA\local.properties` sang clone mới; không mở/in/hash nội dung; check-ignore đúng, Git sạch; reportTelegramConfig không cờ open: true |
+| S11 build | Thường Debug thành công (21s lượt xác minh); open Debug+Release thành công (5m35s); open=true, embedded config=false đúng thiết kế |
+| S12 | Open Debug found=false/exit 0; open Release found=false/exit 0; thường Debug found=true/exit 1 (BUILD FAILED đúng kỳ vọng đối chứng) |
+| Test Ni | Không chạy lại vì mã không đổi; phiên 1: mỗi biến thể 2.107 thành công, 21 bỏ qua, 0 thất bại/lỗi; 34 test mới thành công |
+| S13–S14 | Ba APK đúng package/vc/vname/cert; SHA-256 bản Ni khớp Tiny; cài open Debug mới và cập nhật thường Debug bằng install -r đều Success |
+
+Artifact phiên này (A): `D:\Bots\MeloVault-E91-Shareable\docs\plans\artifacts\E104-APK-CONG-KHAI\session2-run2-20261027`.
+Artifact Tiny (T): `C:\Bots\_qa_temp\E104-20261027-0125`; bản sao log/metadata/exit tại `A\tiny-logs`.
+Build lần đầu bị wrapper PowerShell coi cảnh báo SDK XML là lỗi; giữ `normal-build.log`, error log và `T\unverified-first-normal-debug.apk`, không dùng làm candidate. Script tiếp tục dùng chuyển hướng stderr ra log, mã thoát cuối 0; không sửa Gradle/source. Không ghi đè artifact cũ.
+Bundle được Tiny tải từ máy Ni qua HTTP tạm chỉ phục vụ thư mục bundle; server đã dừng sau chuyển. Không chuyển cấu hình/secret ra khỏi Tiny, không ghi repo Tiny qua T:.
+
+### QA Shanling và lỗi phát hiện
+
+Thiết bị `30313860180939`, model `Shanling M3 Ultra`, manufacturer `Shanling`; ADB device. Trước cài open, danh sách package open rỗng; bản thường vc119, cert khớp Tiny, MediaSession state=0. Sau gián đoạn hạn mức, kiểm lại Git/ADB/version/playback trước Q5. Không nhập số điện thoại, OTP hoặc mã API thật.
+Tên ảnh trong bảng đều tương đối với A; ảnh/log có metadata Telegram giữ private, không commit/upload.
+
+| Bước | Hành động / thực tế | Kết quả / bằng chứng |
+|---|---|---|
+| Q1 | Mở open mới cài: có tiêu đề, hai ô và Lưu; chưa có ô điện thoại | Khớp; `02-Q1-open-installed.png` |
+| Q2 | ID không nhận abc nên để trống; hash 12345; Lưu báo lỗi dưới cả hai ô | Validation khớp; `03-Q2-before.png`, `04-Q2-validation.png`; có lỗi che hash bên dưới |
+| Q3 | ID 1 + hash 32 số 0, Lưu → bước số điện thoại; không gửi số | Khớp; `05-Q3-fake-before.png`, `06-Q3-phone.png` |
+| Q4 | Force-stop/mở lại → thẳng bước điện thoại; Nhập lại mã → câu dự phòng; đóng hẳn/mở lại → panel trống | Khớp phương án dự phòng 6.5-7; `07-Q4-persist.png`, `08-Q4-reenter.png`, `09-Q4-empty-after-restart.png` |
+| Q5 | Cập nhật thường vc120, vào thư viện không hỏi API; bấm phát Nghe tiếp; MediaSession state=3, speed=1; position 3.703.855 → 3.712.838 ms | Khớp luồng đã quan sát; `10-Q5-library.png`, `11-Q5-playing.png`, `media-session-1-private.log`, `media-session-2-private.log` |
+| Q6 | logcat -d sau Q1–Q5: 7.543 dòng, mốc đầu 26/10 14:53:49; 0 dòng hash giả, 0 api_hash, 0 FATAL của hai package, 0 ANR in package | `Q6-summary.json`; chỉ lưu số đếm, không lưu/in raw credentials; đây là phạm vi buffer hiện có |
+
+**Lỗi UI cần Opus xem xét (FAIL yêu cầu 6.4): ô API hash hiển thị rõ ký tự, không che dạng password.** Ảnh 03/04 thấy `12345`, ảnh 05 thấy chuỗi mã giả sau khi nhập; không phải chỉ ký tự cuối hiện tạm. Chưa sửa code, chưa kết luận nghiệm thu. Không có mã thật trong các ảnh này.
+Ảnh `01-Q1-open.png` chụp khi lệnh install còn đang chờ hoàn tất, còn màn bản thường vc119; loại khỏi bằng chứng Q1. Chỉ dùng ảnh 02 sau khi install báo Success.
+Q5 ban đầu hiện 200 bài khi vừa nạp, sau đó 29.857 bài; không coi số đếm khởi động là mất dữ liệu. Sau kiểm phát đã bấm tạm dừng (state=2, position=3.716.421); ảnh `12-Q5-paused.png`. Điểm Nghe tiếp đã thay đổi do QA.
+Ảnh tổng hợp 8 ô: `docs/plans/artifacts/E104-APK-CONG-KHAI/00_tong_hop.png`, 1280×1140, ghép từ ảnh thật. Các lần wake đều cleanup finally keyevent 223, ghi `screen-lifecycle.log`.
+`SHANLING_SCREEN_END=OFF` xác minh 27/10/2026 09:12:15 +07: `mGlobalDisplayState=OFF` (nhãn thực của Android này). `SONY_SCREEN_END=UNKNOWN`: không dùng ADB/wake/QA Sony, không bắt buộc E104.
+
+### APK QA cần Opus nghiệm thu bàn giao — lần 2
+
+**QA CANDIDATE — CHƯA NGHIỆM THU — KHÔNG ĐĂNG CÔNG KHAI.** Cả ba build tại HEAD `4f8b575`, nguồn `03e9dc9`, vc120; signer SHA-256 `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8` khớp bản vc119 Shanling. Không dùng APK Ni signer a9b8… để cài.
+Mỗi tên bên dưới tồn tại tại cả `T\<tên APK>` và `A\<tên APK>` đã xác minh SHA-256/bytes; T/A là đường dẫn đầy đủ nêu trên.
+
+| Tên APK | Package / versionName | Bytes | SHA-256 | Config nhúng / kiểm hash / QA |
+|---|---|---:|---|---|
+| `E104-4f8b575-normal-debug-vc120.apk` | `app.melovault.player` / `0.6.95-beta` | 33462212 | `1092EE34DAEDD19D3DEC3BA1041EE8B58B87CDAB9725410EBBDF36B1D76F563A` | true / found=true đối chứng / Q5 |
+| `E104-4f8b575-open-debug-vc120.apk` | `app.melovault.player.open` / `0.6.95-open` | 33462216 | `406BCFB46D3717A353E17C3BD65D0569A3EBCDA43AA5C5236489997500ECD535` | false có chủ đích / found=false / Q1–Q4, lỗi che hash |
+| `E104-4f8b575-open-release-vc120.apk` | `app.melovault.player.open` / `0.6.95-open` | 30703990 | `082C14FBDD89B52D5AADB2D788A691176F07332AFE0F2735CC98EE1B7FD970DE` | false có chủ đích / found=false / chưa cài Release |
+
+Chưa kiểm: đăng nhập/API thật, lỗi API_ID_INVALID trên máy, âm thanh thực, Release UI, Y700/S25/FYT và Sony; chờ chủ dự án duyệt và Opus nghiệm thu. Không rollback vc119 vì downgrade bị cấm; giữ vc120 và dữ liệu hiện có. Open đã trở về panel trống bằng nút Nhập lại mã + khởi động lại; không xóa TDLib/session/cache.
+S15–S16: giữ nguyên phần cũ, chỉ bổ sung mục này; diff check trước commit không lỗi; chỉ commit báo cáo trên dot/E104-APK-CONG-KHAI. Không merge/push/upload/công bố APK, không viết file nghiệm thu; dừng chờ Claude Opus.
