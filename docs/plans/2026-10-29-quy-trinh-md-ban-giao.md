@@ -1,0 +1,36 @@
+# Quy trình kế hoạch, thực thi, nghiệm thu sơ bộ và bàn giao Markdown
+
+- Ngày: 29/10/2026. TASK_ID: `2026-10-29-quy-trinh-md-ban-giao`.
+- Yêu cầu trực tiếp: Codex hoặc Claude lập kế hoạch chi tiết bằng `.md`; chủ dự án mở phiên mới với model tiết kiệm hơn để code/build APK; phiên mới kiểm tra sơ bộ nhanh; chủ dự án nghiệm thu chính thức, chi tiết. Cho phép chủ động dùng Sony trong cả ba vai agent. Lưu tiến độ để đổi Codex ↔ Claude Code mà vẫn tiếp tục cùng công việc.
+- Baseline: `7f3cca874e525956a10f94f8caf577c6cc80f815`.
+- Nhánh: `dot/2026-10-29-quy-trinh-md-ban-giao`.
+- Worktree: `C:\Users\ntdun\.codex\worktrees\workflow-md-handoff\MeloVault-E91-Shareable`.
+- Repo chính có tài liệu UI/UX chưa commit của phiên khác. Áp dụng ngoại lệ tài liệu ở CLAUDE.md mục 1; không sửa cây làm việc đó.
+
+## Phạm vi và cách sửa
+
+Chỉ sửa tài liệu quy trình theo yêu cầu; không sửa ứng dụng, build/cài APK hay thao tác điện thoại trong phiên này. Các lệnh cấm Git/ADB, bí mật, chữ ký, dữ liệu, vòng đời màn hình và quyền nghiệm thu cuối giữ nguyên.
+
+| Bước | File | Nội dung và điều kiện hoàn tất |
+|---|---|---|
+| S1 | `CLAUDE.md`, `AGENTS.md` | Ghi quyết định mới ở luật ưu tiên; bỏ khóa cứng người/model theo nhỏ/lớn; tách ba vai agent qua phiên mới; chủ dự án quyết định model và nghiệm thu cuối. |
+| S2 | `docs/workflow/QUY_TRINH_3_VAI_TRO.md` | Quy định bộ hồ sơ `.md`, checkpoint tiến độ, cách nhận bàn giao khi đổi công cụ/hết quota; không chạy hai agent cùng lúc. |
+| S3 | `PROMPT_CODEX.md`, `PROMPT_OPUS.md`, `PROMPT_SONNET.md` trong `docs/workflow/` | Mẫu lập kế hoạch/thực thi/REWORK cùng nguồn quy trình; không còn làn nhanh tự gộp lập kế hoạch và code. |
+| S4 | `PROMPT_NGHIEM_THU_SO_BO.md`, `PROMPT_CHU_DU_AN_NGHIEM_THU.md`, `PROMPT_OPUS_NGHIEM_THU.md` trong `docs/workflow/` | Mẫu kiểm tra nhanh theo đúng source/APK ở phiên mới; kết quả sơ bộ tách khỏi PASS chính thức và không sửa code trong vai kiểm tra. |
+| S5 | Báo cáo, bàn giao cùng TASK_ID và chỉ mục đầu `HANDOFF.md` | Ghi thay đổi, kiểm tra, giới hạn, nhánh/worktree và bước tiếp; commit tài liệu rồi dừng. |
+
+## Kiểm tra
+
+1. Đối chiếu yêu cầu với luật gốc và mọi mẫu đang dùng: người lập kế hoạch, model thực thi do chủ dự án chọn, phiên kiểm sơ bộ riêng, nghiệm thu chính thức của chủ dự án, Sony cả ba vai, Markdown chi tiết và chuyển tiếp Codex/Claude.
+2. Kiểm liên kết Markdown nội bộ, tìm quy định model/vai cũ còn mâu thuẫn, đọc lại toàn bộ diff.
+3. `git diff --check`; xác nhận thay đổi chỉ là `.md` trong phạm vi và không có bí mật/artifact.
+4. Kiểm repo chính vẫn đúng HEAD/nhánh và không bị phiên này sửa; không merge/push.
+
+## Rủi ro, điểm dừng và khôi phục
+
+- Tài liệu chỉ có trên nhánh/worktree này cho tới khi được đưa vào nhánh khác bằng chỉ thị riêng; phiên tiếp cần mở đúng worktree hoặc đối chiếu commit này.
+- Mất quota đột ngột có thể làm thiếu checkpoint cuối: phiên nhận phải kiểm Git/file/log thực, không đoán trạng thái hay chạy lại thao tác thiết bị.
+- Sony chỉ cung cấp bằng chứng Sony; không thay cho Shanling. Quyền dùng Sony không bỏ gate cài APK hoặc bảo vệ dữ liệu.
+- Nếu thay đổi ngoài phạm vi xuất hiện trong worktree, dừng. Không khôi phục bằng reset/clean/stash/ghi đè; nếu cần sửa quy tắc, dùng một commit tài liệu tiếp theo được chủ dự án giao.
+
+Đây là phiên chỉ sửa quy trình theo yêu cầu trực tiếp, không phải phiên lập kế hoạch hay thực thi tính năng và không cần nghiệm thu APK.

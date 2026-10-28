@@ -1,35 +1,38 @@
 # CLAUDE.md — MeloVault / chủ dự án nghiệm thu
 
-**Hiệu lực: 28/10/2026. Chủ dự án trực tiếp NGHIỆM THU.** Quyết định mới: "giờ tôi là người nghiệm thu, hãy thay đổi quy tắc". Codex được chủ dự án giao cập nhật quy trình trong phiên này. Trả lời bằng tiếng Việt, dễ hiểu; không tạo dự án mới. Chỉ thay đổi quy trình khi chủ dự án yêu cầu; agent không tự đổi quy tắc.
+**Hiệu lực: 29/10/2026. Kế hoạch và thực thi chi tiết bằng Markdown; kiểm tra sơ bộ ở phiên mới; chủ dự án nghiệm thu chính thức.** Codex được chủ dự án giao cập nhật quy trình. Trả lời bằng tiếng Việt, dễ hiểu; không tạo dự án mới. Chỉ thay đổi quy trình khi chủ dự án yêu cầu; agent không tự đổi quy tắc.
 
-Đọc: CLAUDE.md → HANDOFF.md (**chỉ mục cập nhật đầu tiên**, phần dưới khi cần) → docs/plans/BACKLOG.md → docs/workflow/QUY_TRINH_3_VAI_TRO.md → kế hoạch đúng TASK_ID. Git/source và kết quả test mới hơn luôn có ưu tiên so với handoff cũ.
+Đọc: CLAUDE.md → HANDOFF.md (**chỉ mục cập nhật đầu tiên**, phần dưới khi cần) → docs/plans/BACKLOG.md → docs/workflow/QUY_TRINH_3_VAI_TRO.md → `docs/plans/<TASK_ID>-ban-giao.md` → kế hoạch/báo cáo đúng TASK_ID. Git/source và kết quả test mới hơn luôn có ưu tiên so với handoff cũ.
 
-## 0. Phân vai và nghiệm thu — 28/10/2026 (ưu tiên hơn mọi mục bên dưới và mẫu cũ)
+## 0. Quyết định 29/10/2026 — ưu tiên hơn mọi mục bên dưới và mẫu cũ
+
+**Luồng mặc định: lập kế hoạch → phiên mới thực thi/build APK bằng model tiết kiệm hơn → phiên mới nghiệm thu sơ bộ nhanh → chủ dự án nghiệm thu chính thức, chi tiết.**
+
+| Giai đoạn | Người làm và đầu ra bắt buộc |
+|---|---|
+| Lập kế hoạch | Codex hoặc Claude do chủ dự án giao; viết chi tiết `docs/plans/<TASK_ID>.md` và khởi tạo `*-ban-giao.md`. Không tự chuyển sang code. |
+| Thực thi | Chủ dự án mở phiên mới, chọn model có mức hao phí token/quota thấp hơn phù hợp kế hoạch, có thể là Codex hoặc Claude Code; code/test/build APK, cập nhật chi tiết `*-bao-cao.md`, `*-ban-giao.md`, hồ sơ APK và ảnh. |
+| Nghiệm thu sơ bộ | Chủ dự án mở phiên mới, giao Codex hoặc Claude kiểm nhanh theo `PROMPT_NGHIEM_THU_SO_BO.md`, ghi `*-nghiem-thu-so-bo.md`; không thay nghiệm thu chính thức. |
+| Nghiệm thu chính thức | Chủ dự án dùng thử/đánh giá chi tiết và quyết định ĐẠT hoặc yêu cầu sửa; agent ghi đúng quyết định vào `*-nghiem-thu.md`. |
+
+- **Không khóa cứng model hoặc người lập kế hoạch theo nhỏ/lớn.** Chủ dự án chọn công cụ/model/effort cho từng phiên; agent không tự đổi vai, nâng model hoặc xếp loại. Quy định cũ bắt buộc Codex chỉ lập kế hoạch nhỏ, Opus lập kế hoạch lớn, Astra/Sol theo loại và Sonnet chỉ là dự phòng đã được thay thế. Không tự gộp kế hoạch với thực thi, kể cả làn nhanh; số phiên thực thi theo các chặng đã ghi trong kế hoạch.
+- **File `.md` là nguồn bàn giao chính, không chỉ trả lời trong chat.** Kế hoạch phải đủ chi tiết cho model thực thi làm từng bước; báo cáo phải ghi việc đã làm, bằng chứng và phần dở dang. `*-ban-giao.md` cập nhật sau mỗi mốc nhỏ, trước khi kết thúc phiên/đổi model và ngay khi thấy sắp hết quota. Nội dung tối thiểu và mẫu tiếp tục ở `docs/workflow/QUY_TRINH_3_VAI_TRO.md`.
+- **Codex ↔ Claude Code được tiếp tục cùng TASK_ID/nhánh/worktree khi chủ dự án giao**, kể cả hết quota giữa chặng. Không bắt đầu lại từ đầu, không phụ thuộc lịch sử chat. Phiên nhận đọc file bàn giao, kế hoạch và báo cáo, kiểm Git/source/log thực rồi tiếp tục bước chưa xong. Chỉ MỘT agent sửa code mỗi lúc; phiên cũ phải dừng trước khi phiên mới sửa. Nếu dừng đột ngột, khôi phục hiểu biết từ checkpoint cuối và bằng chứng thực, ghi rõ khoảng chưa xác minh; không tự coi công việc đã xong.
+- **Cho phép chủ động dùng Sony đang kết nối trong cả lập kế hoạch, thực thi và nghiệm thu sơ bộ**, không cần hỏi lại cho thao tác an toàn phục vụ nhiệm vụ đã giao. Có thể khảo sát UI, tái hiện lỗi, kiểm chứng giả định, chụp bằng chứng và thử APK đã qua gate. Lập kế hoạch/kiểm sơ bộ không tự sửa code hoặc build mới; nếu cần bản mới thì ghi bước cho phiên thực thi. Vẫn kiểm máy/serial/model, dùng Tiny đúng quy định, không tranh thiết bị đang được sử dụng; giữ nguyên mọi luật cài APK, dữ liệu/bí mật và tắt màn trong `finally`. Không dùng Sony thay chứng cứ Shanling.
+- **Sơ bộ phải nhanh và có giới hạn:** kiểm báo cáo, diff/file rủi ro, nguồn APK và vài luồng chính; chỉ chạy lại test/QA khi có lý do cụ thể. Cần sửa code/build APK mới thì ghi việc cho phiên thực thi. Ghi `SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN`, `SƠ BỘ: CẦN SỬA` hoặc `SƠ BỘ: BLOCKED` kèm phạm vi; không ghi PASS chính thức. Có lỗi thì liệt kê để chủ dự án giao REWORK ở phiên thực thi mới.
 
 - **Chủ dự án là người duy nhất quyết định nghiệm thu cuối:** ĐẠT hoặc yêu cầu sửa. Không bắt buộc phiên Claude Opus nghiệm thu và không yêu cầu chủ dự án chuyển sang Opus để bàn giao APK.
-- **Codex thực thi và chuẩn bị hồ sơ:** code/test/build/QA trong phạm vi đã giao, kiểm tra kỹ thuật, gửi APK thử nghiệm hợp lệ, ảnh/video và giới hạn để chủ dự án trực tiếp dùng thử hoặc duyệt từ xa. Kiểm tra kỹ thuật không thay quyết định nghiệm thu của chủ dự án.
+- **Agent thực thi chuẩn bị hồ sơ:** code/test/build/QA trong phạm vi đã giao, gửi APK thử nghiệm hợp lệ, ảnh/video và giới hạn cho phiên sơ bộ và chủ dự án. Kiểm tra kỹ thuật không thay quyết định nghiệm thu của chủ dự án.
 - Codex được tạo/cập nhật `*-apk-test.md`, `*-hinh-nghiem-thu.md` và `*-nghiem-thu.md` để lưu bằng chứng, điểm chặn và quyết định của chủ dự án. Chỉ ghi PASS sau khi chủ dự án xác nhận ĐẠT cho đúng TASK_ID, commit/APK và phạm vi; ghi ngày, nguồn xác nhận và giới hạn còn lại. Yêu cầu sửa ghi REWORK; chưa duyệt ghi **CHỜ CHỦ DỰ ÁN NGHIỆM THU**, thiếu điều kiện kỹ thuật ghi BLOCKED. Không tự suy lời yêu cầu build/cài/tiếp tục thành ĐẠT.
 - Codex được chuẩn bị và upload APK/ảnh QA vào Google Drive Ni N **owner-only** sau các gate ở mục 8–9, gửi link đã kiểm; bản chưa được duyệt ghi **QA CANDIDATE — CHƯA NGHIỆM THU**. Nếu Drive chặn tải, báo đúng lỗi và vị trí nội bộ; không coi link đó là tải được, không né cảnh báo hay tự public.
 - Chủ dự án nghiệm thu không tự động cho phép merge, push hoặc phát hành công khai. Merge chỉ sau ĐẠT và chỉ thị merge riêng; push/public cần chỉ thị riêng. Không tự chọn/mở nhiệm vụ kế.
 - Không sửa lại kết luận lịch sử hoặc coi yêu cầu đổi quy tắc này là nghiệm thu E105. Các mốc nghiệm thu cũ giữ nguyên; quy trình mới áp dụng từ quyết định này.
-- **Cách đọc tài liệu/prompt cũ:** các yêu cầu "Opus duy nhất nghiệm thu/bàn giao/ghi hồ sơ", "Codex không upload/không viết hồ sơ" và "chờ Opus nghiệm thu" hết hiệu lực. Công việc kiểm tra/bàn giao/ghi nhận do agent thực thi thực hiện; quyết định ĐẠT do chủ dự án. Các cấm sửa quy trình không ngăn yêu cầu sửa quy trình trực tiếp của chủ dự án. Giữ nguyên các luật an toàn Git/ADB/bí mật/dữ liệu/chữ ký, thiết bị, chất lượng bằng chứng và phạm vi kế hoạch.
-- Kết thúc phiên thực thi cuối: **"Đã dừng, chờ chủ dự án nghiệm thu."** Kèm cách phản hồi `ĐẠT <TASK_ID> — <commit/APK>` hoặc `Yêu cầu sửa <TASK_ID>: <lỗi>`. Khi chỉ đổi quy trình, báo thay đổi/commit, không yêu cầu nghiệm thu APK không thuộc công việc đó.
+- **Cách đọc tài liệu/prompt cũ:** yêu cầu "Opus duy nhất nghiệm thu/bàn giao/ghi hồ sơ", "Codex không upload/không viết hồ sơ", cấm dùng Sony khi lập kế hoạch và gộp kế hoạch/code trong làn nhanh hết hiệu lực. "Sonnet" trong chỉ dẫn kỹ thuật cũ đọc là agent thực thi được giao (Codex hoặc Claude Code). Giữ luật an toàn Git/ADB/bí mật/dữ liệu/chữ ký, thiết bị, chất lượng bằng chứng và phạm vi kế hoạch. Các cấm sửa quy trình không ngăn yêu cầu sửa quy trình trực tiếp của chủ dự án.
+- Kết thúc thực thi: bàn giao prompt cho **phiên nghiệm thu sơ bộ mới**, không tự chạy vai đó trong cùng phiên. Kết thúc sơ bộ: **"Đã dừng, chờ chủ dự án nghiệm thu."** Kèm cách phản hồi `ĐẠT <TASK_ID> — <commit/APK>` hoặc `Yêu cầu sửa <TASK_ID>: <lỗi>`. Chỉ đổi quy trình thì báo thay đổi/commit, không yêu cầu nghiệm thu APK ngoài phạm vi.
 
-Chi tiết bàn giao và ghi nhận: `docs/workflow/PROMPT_CHU_DU_AN_NGHIEM_THU.md`. Phân công lập kế hoạch/model dưới đây giữ nguyên trừ khi chủ dự án chỉ định khác.
+Chi tiết và bộ file: `docs/workflow/QUY_TRINH_3_VAI_TRO.md`. Mẫu Codex: `PROMPT_CODEX.md`; Claude lập kế hoạch: `PROMPT_OPUS.md`; Claude thực thi/tiếp tục: `PROMPT_SONNET.md` (giữ tên để tương thích, model do chủ dự án chọn); kiểm nhanh: `PROMPT_NGHIEM_THU_SO_BO.md`; nghiệm thu chính thức: `PROMPT_CHU_DU_AN_NGHIEM_THU.md`.
 
-**Phân công kế thừa từ 26/10/2026:** Codex nhận vai THỰC THI thay Claude Sonnet và LẬP KẾ HOẠCH nhiệm vụ nhỏ; Claude Opus lập kế hoạch nhiệm vụ lớn khi được giao. "Sonnet" trong hướng dẫn thực thi cũ đọc là "Codex thực thi". Codex đọc luật qua `AGENTS.md` (trỏ về file này).
-
-| Loại nhiệm vụ | Lập kế hoạch | Thực thi (code + test + build + QA) | Nghiệm thu |
-|---|---|---|---|
-| **Nhỏ** | Codex `gpt-6-astra`, effort **medium** (phiên Codex mới) | Codex `gpt-6.1-sol`, effort **xhigh** (phiên Codex mới, GỘP 1 phiên) | Chủ dự án |
-| **Lớn** | Claude Opus (phiên mới) | Codex `gpt-6-astra`, effort **medium** (phiên 1 = code + test Ni; phiên 2 = build Tiny + QA) | Chủ dự án |
-
-- **Nhỏ** = đạt **đồng thời** mọi điều kiện của Làn nhanh (mục 2): 1 màn hình, ≤ 2 file production, ≤ 80 dòng production, không DB/schema/Telegram/TDLib/account/cache/Media3/queue/kiến trúc/security/permission/signing/build config, không di trú dữ liệu. Sai một điều kiện = **Lớn**. Agent có thể đề xuất loại, chủ dự án CHỐT; Codex không tự xếp loại hay tự nâng/hạ loại.
-- Codex chạy trong **phiên/hội thoại Codex mới** cho mỗi vai (Codex app, hoặc `codex exec -m <model> -c model_reasoning_effort="<effort>" -C D:\Bots\MeloVault-E91-Shareable`), prompt điền từ `docs/workflow/PROMPT_CODEX.md`. Không Resume phiên Codex cũ cho vai khác. REWORK: phiên Codex MỚI, cùng model thực thi của nhiệm vụ, trên chính dot/<TASK_ID>.
-- Codex được chủ dự án cấp ADB và Desktop Commander (Ni + Tiny DESKTOP-HNP4GVR). Cấu hình Codex không chặn lệnh, nên **danh sách cấm trong AGENTS.md và các mục 1, 3, 4, 7 là ranh giới bắt buộc**; vi phạm = REWORK/BLOCKED dù kết quả đúng.
-- Codex chỉ sửa CLAUDE.md, AGENTS.md, docs/workflow/* khi chủ dự án yêu cầu. Hồ sơ/bàn giao APK và ghi nhận nghiệm thu tuân mục 0 mới; không tự nghiệm thu, merge, public hay chọn nhiệm vụ kế.
-- **Dự phòng:** Codex hết hạn mức/lỗi công cụ → dừng, giữ nguyên nhánh; chủ dự án có thể giao Claude Sonnet tiếp theo PROMPT_SONNET.md. Báo cáo ghi rõ phần nào do Codex, phần nào do Sonnet.
-- Vẫn **chỉ MỘT agent sửa code** mỗi lúc (Codex hoặc Claude), kể cả khi Claude đang chờ hồi quota.
+Codex được cấp ADB và Desktop Commander (Ni + Tiny DESKTOP-HNP4GVR); cấu hình công cụ không thay luật repo. **Danh sách cấm trong AGENTS.md và các mục 1, 3, 4, 7 vẫn bắt buộc.**
 
 ## 1. Repo duy nhất và khóa phiên
 
@@ -37,19 +40,20 @@ Chi tiết bàn giao và ghi nhận: `docs/workflow/PROMPT_CHU_DU_AN_NGHIEM_THU.
 - Tiny PC (DESKTOP-HNP4GVR) chỉ là nơi build/QA Sony trong clone cô lập. Chuyển code qua Git bundle đã kiểm SHA256, KHÔNG chép đè repo Tiny hoặc chỉnh qua ổ T:.
 - CẤM tác động: Private Stable C:\Bots\MusicAssistantCar, backend C:\Bots\MusicAssistant, TelegramSecretary C:\Bots\TelegramSecretary, Preview Beta85 gốc C:\Bots\MeloVault-E91-Shareable trên Tiny, session/cache TDLib.
 - Bắt đầu MỌI phiên: chạy git status --short; git branch --show-current; git rev-parse HEAD; git log -5 --oneline; git diff --check; kiểm tra agent/build đang hoạt động (commit mới trong vài phút gần đây trên nhánh = có agent đang chạy). Cây bẩn không thuộc phiên, HEAD lạ, branch lạ, agent khác đang code → DỪNG, không reset/clean/stash/checkout đè. Việc chỉ sửa tài liệu quy trình khi có agent khác đang chạy thì làm trong git worktree riêng.
-- REWORK sửa chính nhánh dot/<TASK_ID> nhưng qua một hội thoại Sonnet MỚI; KHÔNG restart dự án.
+- Tiếp nhận cùng nhiệm vụ: chỉ tiếp tục phần chưa commit khi chủ dự án đã giao tiếp, agent cũ đã dừng và toàn bộ thay đổi khớp danh sách/bằng chứng trong `*-ban-giao.md`. Đây là phần việc được bàn giao, không phải cây bẩn không rõ nguồn. Có file/HEAD/branch lạ hoặc chưa rõ quyền sở hữu → DỪNG và báo, không tự nhận/commit phần việc của phiên khác.
+- REWORK sửa chính nhánh dot/<TASK_ID> qua một hội thoại thực thi MỚI, công cụ/model do chủ dự án chọn; KHÔNG restart dự án.
 
-## 2. Lập kế hoạch, thực thi và chủ dự án nghiệm thu
+## 2. Hồ sơ cho từng vai
 
-**A. Claude Opus / LẬP KẾ HOẠCH** (hội thoại mới): chỉ được đọc mã và tạo docs/plans/<TASK_ID>.md trên nhánh dot/<TASK_ID>, chỉ commit tài liệu kế hoạch. Plan cần mục tiêu, Git baseline, phương án và lý do, file/sửa đổi chính xác, rủi ro và rollback, từng bước nhỏ cho Sonnet (ghi rõ chia **phiên Sonnet 1 = code + test Ni**, **phiên Sonnet 2 = build Tiny + QA thiết bị + báo cáo** khi nhiệm vụ lớn), test, QA thiết bị, tiêu chí PASS/FAIL và phần **"Bác sĩ tự kiểm tra" gồm 3–6 thao tác** ghi thiết bị, màn hình, nhấn gì, phải thấy gì. Không sửa code/build/cài. Cuối phiên đưa **prompt Sonnet** điền từ docs/workflow/PROMPT_SONNET.md (chỉ thay TASK_ID, baseline, phiên 1/2 và ≤ 8 dòng lưu ý riêng), rồi dòng **"Giờ mở phiên mới, chọn Sonnet."**
+**A. LẬP KẾ HOẠCH — Codex hoặc Claude:** viết `docs/plans/<TASK_ID>.md` chi tiết và `*-ban-giao.md`: mục tiêu, baseline, phương án/lý do, file/hàm, từng bước nhỏ và phụ thuộc, test, build APK, QA thiết bị, tiêu chí, rủi ro/rollback, trường hợp phải dừng. Ghi 3–6 thao tác để chủ dự án thử (thiết bị, màn hình, nhấn gì, kỳ vọng). Được khảo sát Sony theo mục 0; không code/build mới. Commit tài liệu và bàn giao phiên thực thi mới với model tiết kiệm hơn do chủ dự án chọn.
 
-**B. Claude Sonnet / THỰC THI** (hội thoại mới, không Resume phiên Opus): đọc kế hoạch đã duyệt, xác thực nhánh dot/<TASK_ID> và Git baseline, sửa code nhỏ đúng phạm vi, viết tests, chạy Debug/Release và build; nếu có QA UI, tự kiểm Shanling qua ADB an toàn; báo cáo canonical docs/plans/<TASK_ID>-bao-cao.md, ảnh local docs/plans/artifacts/<TASK_ID>/ (không commit ảnh nhạy cảm). Chuẩn bị hồ sơ/APK theo mục 0, commit rồi DỪNG chờ chủ dự án nghiệm thu. Chỉ sửa quy trình khi chủ dự án yêu cầu; không tự mở nhiệm vụ khác.
+**B. THỰC THI — model được chủ dự án chọn ở phiên mới:** đọc kế hoạch đã chốt và bàn giao, xác thực nhánh/baseline, code/test/build Debug và Release, QA an toàn đúng phạm vi. Cập nhật `*-bao-cao.md` chi tiết theo bước và `*-ban-giao.md` ngay trong quá trình làm; không đợi cuối phiên. Bàn giao APK/ảnh theo mục 8–9, commit rồi dừng và đưa prompt cho phiên sơ bộ mới. Thiếu kế hoạch hoặc cần đổi phạm vi/kiến trúc → ghi BLOCKED, không tự đoán.
 
-**C. CHỦ DỰ ÁN / NGHIỆM THU:** chủ dự án dùng APK hoặc duyệt bằng chứng theo `docs/workflow/PROMPT_CHU_DU_AN_NGHIEM_THU.md`. Agent ghi hồ sơ kỹ thuật và giới hạn; chưa duyệt ghi CHỜ CHỦ DỰ ÁN NGHIỆM THU, thiếu điều kiện kỹ thuật ghi BLOCKED. Chỉ ghi PASS khi chủ dự án xác nhận ĐẠT đúng TASK_ID/commit/APK/phạm vi; yêu cầu sửa ghi REWORK. Không đổi tiêu chí để đạt. Merge --no-ff chỉ sau ĐẠT và chỉ thị merge riêng; không tự push hoặc chọn việc tiếp.
+**C. NGHIỆM THU SƠ BỘ — Codex hoặc Claude ở phiên mới:** kiểm nhanh theo `PROMPT_NGHIEM_THU_SO_BO.md`; đọc kế hoạch/báo cáo, kiểm diff và APK đúng nguồn, dùng Sony nếu hữu ích. Ghi phạm vi, kết quả, lỗi có vị trí/bước tái hiện và giới hạn vào `*-nghiem-thu-so-bo.md`; cập nhật bàn giao. Không sửa code, không kiểm toàn diện lại khi không có lý do, không tự ghi PASS chính thức.
 
-**Ba file canonical đứng cạnh nhau:** docs/plans/<TASK_ID>.md (kế hoạch đã chốt), docs/plans/<TASK_ID>-bao-cao.md (thực thi), docs/plans/<TASK_ID>-nghiem-thu.md (agent lưu bằng chứng và quyết định chủ dự án). D:\Bots\_handoff chỉ là bản sao. Mẫu bàn giao: PROMPT_CHU_DU_AN_NGHIEM_THU.md; mẫu lập kế hoạch/thực thi: PROMPT_OPUS.md, PROMPT_CODEX.md và PROMPT_SONNET.md dự phòng. Agent chỉ sửa mẫu/quy trình khi chủ dự án yêu cầu.
+**D. CHỦ DỰ ÁN NGHIỆM THU CHÍNH THỨC, CHI TIẾT:** dùng APK hoặc duyệt bằng chứng theo `PROMPT_CHU_DU_AN_NGHIEM_THU.md`. Agent ghi quyết định vào `*-nghiem-thu.md`: chưa duyệt = CHỜ CHỦ DỰ ÁN NGHIỆM THU; thiếu điều kiện kỹ thuật = BLOCKED; chỉ PASS khi chủ dự án xác nhận ĐẠT đúng TASK_ID/commit/APK/phạm vi; yêu cầu sửa = REWORK. Không đổi tiêu chí/kết luận lịch sử. Merge chỉ sau ĐẠT và chỉ thị riêng; không tự push/public/chọn việc tiếp.
 
-**Làn nhanh:** Chỉ khi agent đề xuất (hoặc chủ dự án chỉ định) và chủ dự án chốt. Điều kiện đồng thời: 1 màn hình, tối đa 2 file production và tối đa 80 dòng code production thay đổi (không kể test), không đổi DB/schema/Telegram/TDLib/account/cache/Media3/queue/kiến trúc/security/permission/signing/build config, không di trú dữ liệu. Sonnet trực tiếp tạo kế hoạch ngắn docs/plans/<TASK_ID>.md và thực thi trên dot/<TASK_ID>, vẫn báo cáo/QA/chủ dự án nghiệm thu. Nhiệm vụ sai một điều kiện thì dùng Opus lập kế hoạch trước.
+**Hồ sơ canonical cùng TASK_ID:** kế hoạch, báo cáo thực thi, bàn giao, kiểm sơ bộ, nghiệm thu chính thức, cùng `*-apk-test.md` / `*-hinh-nghiem-thu.md` khi có APK/ảnh. `D:\Bots\_handoff` chỉ là bản sao. Nội dung đủ để agent khác tiếp tục mà không cần lịch sử chat; không đưa bí mật/PII vào Markdown. Tác vụ chỉ sửa tài liệu không cần build/cài/nghiệm thu APK; vẫn có kế hoạch, báo cáo và bàn giao.
 
 ## 3. Thiết bị thử nghiệm & an toàn ADB
 
@@ -59,7 +63,7 @@ Chi tiết bàn giao và ghi nhận: `docs/workflow/PROMPT_CHU_DU_AN_NGHIEM_THU.
 - **Sonnet tự cài DEBUG APK lên Shanling** nếu đã verify package, versionCode không downgrade, chữ ký khớp app đang có, và APK có Telegram config hợp lệ nếu thử Telegram. **Chỉ** lệnh adb -s <serial> install -r "<APK_VALIDATED>". Ni build thiếu Telegram ID/hash hợp lệ có thể PASS Gradle nhưng không dùng được: **KHÔNG CÀI** để test đăng nhập/phát Telegram; dùng APK có config xây dựng an toàn tại Tiny, không sao chép secret sang Ni.
 - **Signature mismatch, downgrade, sai package, APK thiếu config, ADB unauthorized:** DỪNG, báo chủ dự án. Tuyệt đối cấm adb uninstall, adb shell pm clear, xoá dữ liệu app, logout Telegram, xoá cache/TDLib, dùng -d để ép cài.
 - Sau khi chạy được: mở đúng các màn hình kế hoạch, thao tác, chụp PNG bằng adb -s <serial> exec-out screencap -p (Windows dùng cmd /c với redirect nhị phân). Lưu ảnh dưới docs/plans/artifacts/<TASK_ID>/, tham chiếu file trong báo cáo và gửi bằng chứng cho chủ dự án nghiệm thu. Không commit/upload ảnh lộ nội dung riêng tư; nếu ảnh không thu được ghi BLOCKED.
-- QA Sony qua Tiny là tầng bổ sung khi kế hoạch yêu cầu; không dùng Sony thay cho chứng cứ đã kiểm Shanling. Y700/S25/FYT vẫn phải phân biệt kiểm thử chủ dự án với test Sony. Không tự cài FYT.
+- Sony qua Tiny được chủ động dùng trong lập kế hoạch, thực thi và sơ bộ theo mục 0; ghi phạm vi thao tác vào hồ sơ. Không dùng Sony thay chứng cứ Shanling. Y700/S25/FYT vẫn phân biệt kiểm thử chủ dự án với test Sony. Không tự cài FYT.
 
 ## 4. Quy tắc code/bảo mật đang áp dụng
 
@@ -71,20 +75,21 @@ Chi tiết bàn giao và ghi nhận: `docs/workflow/PROMPT_CHU_DU_AN_NGHIEM_THU.
     .\gradlew.bat :app:assembleShareableDebug :app:assembleShareableRelease --console=plain
     git diff --check
   Phân biệt tests pass và skipped. JVM tests và Gradle BUILD SUCCESSFUL không chứng minh ADB/TDLib/UI thật.
-- Chuỗi gate: Ni code/test/commit → bundle SHA256 → Tiny clone cô lập build với Telegram config bí mật chỉ ở Tiny + verify package/version/cert → QA Sony nếu yêu cầu → candidate APK owner-only Drive khi đã kiểm toán kỹ thuật để chủ dự án thử → chủ dự án xác nhận ĐẠT → agent ghi PASS đúng phạm vi → có chỉ thị merge riêng mới merge nhánh dot. Không publish hoặc tự cài FYT. Private upload đã được cho phép với APK đạt kiểm toán thích hợp, không cho phép phát hành artifact thiếu config.
+- Chuỗi gate: kế hoạch `.md` → phiên mới Ni code/test/commit → bundle SHA256 → Tiny clone cô lập build với Telegram config bí mật chỉ ở Tiny + verify package/version/cert → QA thiết bị → candidate APK owner-only Drive sau kiểm kỹ thuật → phiên mới sơ bộ nhanh → chủ dự án nghiệm thu chi tiết, xác nhận ĐẠT → agent ghi PASS đúng phạm vi → có chỉ thị merge riêng mới merge nhánh dot. Không publish hoặc tự cài FYT. Private upload chỉ cho APK đạt gate phù hợp, không cho phát hành artifact thiếu config.
 
 ## 5. Lời kết và bàn giao
 
 Mọi phiên agent nói tiếng Việt thường, gồm 3 phần ngắn: **Đã làm** (kèm bằng chứng/commit), **Chưa kiểm chứng**, **Rủi ro hoặc điểm dừng**.
-- Opus lập kế hoạch (nhiệm vụ lớn, mục 0): thêm prompt Codex thực thi phiên 1 điền từ docs/workflow/PROMPT_CODEX.md và đúng dòng **"Giờ mở phiên Codex mới, chọn gpt-6-astra medium."** (Chỉ khi chủ dự án chọn dự phòng Sonnet mới dùng prompt Sonnet và dòng "Giờ mở phiên mới, chọn Sonnet.")
-- Codex lập kế hoạch/thực thi: lời kết theo PROMPT_CODEX.md. Phiên thực thi cuối kết bằng **"Đã dừng, chờ chủ dự án nghiệm thu."**, kèm cách phản hồi `ĐẠT <TASK_ID> — <commit/APK>` hoặc `Yêu cầu sửa <TASK_ID>: <lỗi>`.
-- Sonnet dự phòng phiên 1: thêm **"Đã dừng. Mở phiên Sonnet mới cho phiên 2 (build + QA)."** Phiên cuối: **"Đã dừng, chờ chủ dự án nghiệm thu."** và cách phản hồi ĐẠT/yêu cầu sửa đúng bản.
+- Lập kế hoạch: dẫn file kế hoạch/bàn giao và prompt thực thi; ghi **"Đã dừng. Mở phiên mới, chọn model thực thi tiết kiệm hơn theo lựa chọn của chủ dự án."**
+- Thực thi chưa hết chặng: dẫn checkpoint và bước tiếp, ghi **"Đã dừng, bàn giao phiên thực thi tiếp theo."** Hết chặng cuối: đưa prompt sơ bộ và ghi **"Đã dừng. Mở phiên mới để nghiệm thu sơ bộ nhanh."**
+- Sơ bộ: dẫn `*-nghiem-thu-so-bo.md`, APK/ảnh và giới hạn; ghi **"Đã dừng, chờ chủ dự án nghiệm thu."**, kèm `ĐẠT <TASK_ID> — <commit/APK>` hoặc `Yêu cầu sửa <TASK_ID>: <lỗi>`.
+- Đổi công cụ/hết quota: luôn dẫn `*-ban-giao.md`, TASK_ID, worktree/nhánh, HEAD và bước chưa xong; chủ dự án có thể giao Claude Code tiếp ngay khi phiên cũ dừng. Không tự mở phiên hoặc nhắn agent khác.
 - Agent bàn giao: gửi ảnh/APK/bằng chứng đã kiểm, kết quả kỹ thuật và giới hạn; chủ dự án quyết định ĐẠT/yêu cầu sửa. REWORK ghi đúng lỗi được giao, dùng PROMPT_CODEX.md mục C. Phiên chỉ đổi quy trình báo thay đổi/commit, không yêu cầu nghiệm thu APK.
 - Ngoài các prompt trên, **KHÔNG** tự chọn hoặc triển khai nhiệm vụ mới.
 
 ## 6. QUY TẮC MỚI 19/10/2026 — Agent tự kiểm thử, chủ dự án nghiệm thu từ xa
 
-**Ưu tiên hơn yêu cầu bác sĩ trực tiếp thao tác trong các plan cũ.** Chủ dự án thường điều khiển Ni/Tiny từ xa. Opus chỉ viết 3–6 bước kiểm thử rõ ràng; SONNET PHẢI TỰ THỰC HIỆN các bước qua ADB trên thiết bị thật nếu an toàn; AGENT THỰC THI kiểm tra kỹ thuật và GỬI CÁC ẢNH/VIDEO chứng cứ ngay trong hội thoại (SendUserFile) để bác sĩ duyệt từ xa. Không buộc bác sĩ đến tận nơi cầm Shanling/Sony.
+**Ưu tiên hơn yêu cầu bác sĩ trực tiếp thao tác trong các plan cũ; áp dụng cùng mục 0 mới.** Chủ dự án thường điều khiển Ni/Tiny từ xa. Agent lập kế hoạch viết 3–6 bước rõ ràng và được khảo sát Sony; agent thực thi PHẢI TỰ THỰC HIỆN các bước ADB trên thiết bị thật nếu an toàn, kiểm tra kỹ thuật và GỬI ẢNH/VIDEO chứng cứ trong hội thoại bằng công cụ sẵn có để chủ dự án duyệt từ xa. Phiên sơ bộ kiểm nhanh có chọn lọc. Không buộc chủ dự án đến tận nơi cầm Shanling/Sony.
 - **Thiết bị ADB đã xác minh 19/10:** Ni → Shanling M3 Ultra Android 10, serial 30313860180939; Tiny → Sony Xperia 5 II XQ-AS52 Android 12, serial QV725WEQ54. Kiểm lại adb devices -l và getprop mỗi phiên. Không dùng kiểm thử Sony thay cho Shanling.
 - Trình tự Sonnet: xác nhận model/serial, APK package/versionCode/cert/Telegram config, MediaSession không đang phát nếu sắp cài → CHỈ adb install -r khi mọi gate hợp lệ → mở app và thao tác 3–6 bước qua adb shell input tap/swipe/keyevent (tọa độ dựa trên ảnh màn hình thực) → chụp PNG trước/sau từng thao tác quan trọng → lấy chứng cứ Media3/queue/timeline/logcat. Không tap tùy tiện, không reset, uninstall, pm clear, xóa data/cache/TDLib, đổi account, force downgrade, cài FYT hoặc bật airplane/tắt mạng khi plan cấm.
 - Ảnh private tại docs/plans/artifacts/<TASK_ID>/; tên thứ tự kèm thiết bị và mốc thời gian. Dùng adb -s SERIAL exec-out screencap -p và ghi PNG nhị phân bằng cmd.exe /c trên Windows, kiểm header PNG và xem được hình. Khi ảnh tĩnh không đủ chứng minh thao tác, có thể quay MP4 qua adb screenrecord rồi pull nếu an toàn. Không ghi đè chứng cứ cũ, không commit/đăng công khai ảnh/video/log chứa Telegram PII.
@@ -121,9 +126,9 @@ Mọi phiên agent nói tiếng Việt thường, gồm 3 phần ngắn: **Đã 
 
 ## 10. Tiết kiệm token quota — 25/10/2026
 
-- **Nhiệm vụ lớn chia 2 phiên Sonnet:** phiên 1 code + test Ni + commit theo giai đoạn; phiên 2 build Tiny + QA thiết bị + báo cáo. Phiên QA không mang theo ngữ cảnh code. Nhiệm vụ nhỏ/làn nhanh: 1 phiên.
+- **Tách phiên theo vai và các chặng trong kế hoạch:** thực thi có thể chia code + test Ni / build Tiny + QA để tiết kiệm ngữ cảnh; model do chủ dự án chọn. Luôn có phiên sơ bộ riêng sau khi thực thi xong. Không gộp kế hoạch và code để tiết kiệm quota.
 - **Ảnh tổng hợp:** Sonnet ghép 6–8 ảnh QA chính thành **1 file** `docs/plans/artifacts/<TASK_ID>/00_tong_hop.png` (lưới, cạnh dài ≤ 1600 px, ghi số bước trên từng ô). Agent kiểm và gửi chủ dự án ảnh này trước, chỉ mở ảnh gốc khi nghi ngờ.
-- **Báo cáo gọn:** báo cáo Sonnet ≤ ~250 dòng, bảng trước, không dán log dài; log đầy đủ để ở artifacts, chỉ trích dòng then chốt.
+- **Chi tiết nhưng tránh lặp:** báo cáo thực thi ≤ ~250 dòng, bảng trước, đủ từng bước/kết quả/lỗi/việc còn lại; nếu cần dài hơn, tách phụ lục `.md` có liên kết. Log đầy đủ ở artifacts, chỉ trích dòng then chốt. Không rút kế hoạch hoặc checkpoint thành vài dòng thiếu thông tin để model khác tiếp tục.
 - **Kiểm tra kỹ thuật có chọn lọc:** đọc báo cáo + `git log --oneline <base>..HEAD` + `git diff --stat`, rồi chỉ đọc kỹ file rủi ro mà kế hoạch nêu (TDLib/Media3/DB/cancel/account) và test mới.
 - **Gradle chạy một lần, xuất ra file**, chỉ đọc dòng tổng kết (BUILD SUCCESSFUL/FAILED, số tests/skipped/failed từ XML `build/test-results`). Không in log Gradle đầy đủ vào hội thoại.
 - **Không dùng review nhiều agent** (/code-review ultra, workflow nhiều agent) cho bàn giao thường lệ; agent thực thi chuẩn bị để chủ dự án nghiệm thu. Chỉ dùng khi chủ dự án yêu cầu.
