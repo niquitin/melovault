@@ -34,3 +34,11 @@ Chỉ sửa tài liệu quy trình theo yêu cầu; không sửa ứng dụng, b
 - Nếu thay đổi ngoài phạm vi xuất hiện trong worktree, dừng. Không khôi phục bằng reset/clean/stash/ghi đè; nếu cần sửa quy tắc, dùng một commit tài liệu tiếp theo được chủ dự án giao.
 
 Đây là phiên chỉ sửa quy trình theo yêu cầu trực tiếp, không phải phiên lập kế hoạch hay thực thi tính năng và không cần nghiệm thu APK.
+
+## Bổ sung theo yêu cầu chủ dự án — Codex và Claude Code ngang quyền
+
+- Baseline bổ sung: `1a3ef477ac33c78487fea51aedf1b419da063f0e`, cùng TASK_ID/nhánh/worktree; đầu phiên cây sạch, commit gần nhất do chính phiên trước tạo.
+- Yêu cầu: Codex và Claude Code có vai trò, quyền và trách nhiệm ngang nhau; đều sử dụng repo và công cụ phát triển bình thường trong phạm vi đã giao.
+- S6: thêm nguyên tắc ở CLAUDE.md mục 0, AGENTS.md và quy trình chung; nêu quyền đọc/sửa mã và tài liệu, dùng repo/worktree, Git, test/build/QA/bàn giao theo vai. Đồng bộ các dòng quyền đang chỉ ghi tên Codex thành cả hai agent; không cần agent còn lại phê duyệt hoặc xin lại quyền chỉ vì đổi công cụ.
+- S7: cập nhật chỉ mục HANDOFF.md, báo cáo và checkpoint; kiểm diff chỉ gồm 7 file Markdown, danh sách cấm không đổi, chạy `git diff --check`, commit bổ sung rồi dừng.
+- Quyền ngang nhau không đổi vai được giao, giới hạn bảo vệ dữ liệu, một agent sửa code mỗi lúc, quyền nghiệm thu cuối của chủ dự án hoặc điều kiện merge/push/public. Không tự tích hợp nhánh quy trình vào repo chính, không dùng thiết bị/build APK trong lần bổ sung này.
