@@ -1,87 +1,83 @@
-# MELOVAULT — Quy trình 3 vai trò, hội thoại độc lập
+# MeloVault — ba vai agent và chủ dự án nghiệm thu chính thức
 
-## CẬP NHẬT 26/10/2026 — Codex thực thi, Claude nghiệm thu (ưu tiên hơn mọi mục bên dưới)
+**Hiệu lực 29/10/2026. CLAUDE.md mục 0 là luật gốc.** Giữ tên file để không hỏng tham chiếu; lịch sử quy trình nằm trong Git. Quyết định này không sửa kết luận nghiệm thu đã có.
 
-Chủ dự án quyết định ngày 26/10/2026 (chi tiết CLAUDE.md mục 0): **Codex thay Sonnet ở vai thực thi**; ở mọi mục bên dưới "Sonnet" đọc là **"Codex thực thi"**. Claude Opus vẫn nghiệm thu.
+## 1. Trình tự các phiên
 
-- **Nhiệm vụ nhỏ** (đạt đủ điều kiện làn nhanh): chủ dự án CHỐT → **Codex `gpt-6-astra` medium** (phiên mới) viết `docs/plans/<TASK_ID>.md` và chỉ commit plan → **Codex `gpt-6.1-sol` xhigh** (phiên mới, GỘP) code + test + build + QA + báo cáo → **Claude Opus nghiệm thu**.
-- **Nhiệm vụ lớn**: chủ dự án CHỐT → **Claude Opus lập kế hoạch** (phiên mới) → **Codex `gpt-6-astra` medium** phiên 1 (code + test Ni) và phiên 2 (build Tiny + QA + báo cáo), mỗi phiên là phiên Codex mới → **Claude Opus nghiệm thu** (phiên mới, khác phiên lập kế hoạch).
-- REWORK: phiên Codex MỚI, cùng model thực thi, trên chính nhánh. Codex lỗi/hết hạn mức: dừng, chủ dự án có thể chuyển dự phòng Sonnet.
-- Prompt mẫu Codex: `docs/workflow/PROMPT_CODEX.md`. Codex đọc luật qua `AGENTS.md` ở gốc repo. Codex không sửa tài liệu quy trình/nghiệm thu, không upload APK, không merge.
-- Tính độc lập: nghiệm thu luôn là phiên Claude mới; với nhiệm vụ lớn, phiên nghiệm thu không phải phiên đã lập kế hoạch và chấm đúng tiêu chí PASS/FAIL đã ghi, không nới.
+**Codex và Claude Code có quyền, vai trò và trách nhiệm ngang nhau.** Chủ dự án giao vai cho bên nào thì bên đó dùng repo/worktree và công cụ bình thường trong phạm vi ấy: đọc/sửa mã, tài liệu, Git/commit, test/build APK, QA và bàn giao. Không cần sự phê duyệt của agent còn lại hay xin lại quyền chỉ vì đổi công cụ. Repo, nhánh và hồ sơ dùng chung; agent tạo ra chúng không có quyền sở hữu riêng. Việc tiếp nhận vẫn kiểm Git/checkpoint, agent cũ dừng và giữ một agent sửa code mỗi lúc. Các luật an toàn và quyền nghiệm thu cuối/merge/push/public áp dụng như nhau cho cả hai.
 
-## CẬP NHẬT 25/10/2026 — Opus nghiệm thu thay ChatGPT (ưu tiên hơn mọi mục bên dưới)
+| Giai đoạn | Người thực hiện | Kết quả |
+|---|---|---|
+| 1. Lập kế hoạch | Codex hoặc Claude do chủ dự án giao | Kế hoạch `.md` chi tiết, checkpoint và prompt thực thi |
+| 2. Phiên mới thực thi | Model tiết kiệm token/quota hơn do chủ dự án chọn, Codex hoặc Claude Code | Code, test, APK, báo cáo chi tiết, bằng chứng và checkpoint |
+| 3. Phiên mới sơ bộ | Codex hoặc Claude được giao | Kiểm tra nhanh, biên bản sơ bộ và giới hạn |
+| 4. Nghiệm thu chính thức | Chủ dự án | Dùng thử/đánh giá chi tiết, quyết định ĐẠT hoặc yêu cầu sửa |
 
-Chủ dự án quyết định ngày 25/10/2026: **Claude Opus trong một hội thoại MỚI (không Resume phiên lập kế hoạch) làm vai NGHIỆM THU thay ChatGPT.** Ở mọi mục bên dưới, chữ "ChatGPT" ở vai đề xuất/kiểm toán/nghiệm thu/merge/chuẩn hóa ảnh/bàn giao link APK đọc là **"Opus nghiệm thu"**. Chỉ Opus (khi chủ dự án yêu cầu) biên tập SOP, prompt mẫu và tài liệu nghiệm thu; Sonnet không.
+Chủ dự án chọn công cụ/model/effort; không khóa cứng theo nhỏ/lớn. Agent không tự chuyển vai, đổi model, mở phiên hoặc giao cho agent khác. Kế hoạch và code không gộp cùng phiên kể cả việc nhỏ. Có thể chia thực thi thành các chặng nhỏ đã ghi trong kế hoạch. REWORK ở phiên thực thi mới trên cùng TASK_ID/nhánh.
 
-Mỗi vòng: Opus nghiệm thu đề xuất (hoặc chủ dự án tự nêu) → chủ dự án CHỐT → **Opus lập kế hoạch** (phiên mới, cuối phiên đưa prompt Sonnet điền từ mẫu) → **Sonnet phiên 1** code + test Ni → **Sonnet phiên 2** build Tiny + QA + báo cáo (nhiệm vụ nhỏ gộp 1 phiên) → **Opus nghiệm thu** (phiên mới, prompt `PROMPT_OPUS_NGHIEM_THU.md`) gửi ảnh + link APK → chủ dự án nói ĐẠT/báo lỗi → Opus nghiệm thu ghi PASS và merge sau khi chủ dự án xác nhận thao tác merge. REWORK: Opus nghiệm thu ghi lỗi và đưa prompt Sonnet REWORK; Sonnet MỚI sửa trên chính nhánh. BLOCKED: xác định nút thắt trước khi làm tiếp.
+## 2. Bộ hồ sơ Markdown bắt buộc
 
-Tính độc lập: phiên nghiệm thu chấm theo tiêu chí PASS/FAIL đã ghi trong kế hoạch, tự chạy lại test/build và xem ảnh thật; không dựa vào lời tóm tắt của Sonnet, không nới tiêu chí để đạt. Tiết kiệm token theo CLAUDE.md mục 10.
+Các file cùng nằm trong `docs/plans/`, dùng cùng TASK_ID. Chat chỉ tóm tắt và dẫn link; quyết định, tiến độ và bằng chứng cần thiết phải được ghi vào file.
 
----
+| File | Nội dung tối thiểu |
+|---|---|
+| `<TASK_ID>.md` | Yêu cầu/chốt của chủ dự án; baseline SHA, nhánh/worktree; mục tiêu và ngoài phạm vi; nguyên nhân/phương án/lý do; file/hàm cụ thể; bước nhỏ có thứ tự/phụ thuộc và tiêu chí hoàn tất; test Debug/Release, build APK, QA, bàn giao; 3–6 thao tác thử; rủi ro, rollback an toàn, trường hợp dừng và điều chưa rõ. |
+| `<TASK_ID>-bao-cao.md` | Agent/model/phiên (không biết thì ghi không xác định); từng bước và trạng thái; file thay đổi/commit; kết quả thực và lý do; lệnh test/build, log, passed/skipped/failed; APK/thiết bị/bằng chứng; lỗi, phần chưa xong, giới hạn và bước tiếp. Ghi rõ phần Codex/Claude đã làm. |
+| `<TASK_ID>-ban-giao.md` | Checkpoint hiện tại theo mục 3, đủ để một phiên Codex hoặc Claude Code mới tiếp tục mà không cần lịch sử chat. |
+| `<TASK_ID>-nghiem-thu-so-bo.md` | Agent/phiên mới, source commit/APK hash, phạm vi kiểm nhanh, bằng chứng được dùng/chạy lại, lỗi cần sửa có vị trí/bước tái hiện, phần chưa kiểm, kết luận sơ bộ. |
+| `<TASK_ID>-nghiem-thu.md` | Trạng thái chính thức, đúng bản/phạm vi, quyết định của chủ dự án, ngày/nguồn xác nhận, giới hạn còn lại; không sửa kết luận lịch sử. |
+| `<TASK_ID>-apk-test.md`, `<TASK_ID>-hinh-nghiem-thu.md` | Khi có APK/QA UI: metadata, đường dẫn thật, SHA-256/bytes, source commit, gate cài, URL Drive đã kiểm, ảnh/video và giới hạn theo CLAUDE.md mục 8–9. |
 
-*Bản gốc 18/10/2026 (đọc với ánh xạ ở trên):* Chủ sở hữu phê duyệt quy trình ngày 18/10/2026. ChatGPT duy nhất biên tập SOP, prompt mẫu và tài liệu nghiệm thu. Claude không tự chỉnh tài liệu quy trình, không lập prompt công việc tiếp theo. Mỗi vòng: ChatGPT đề xuất → chủ dự án CHỐT → Opus lập kế hoạch → Sonnet thi hành → ChatGPT QA độc lập → chủ dự án thử thao tác → ChatGPT PASS và merge → đề xuất vòng sau. Nếu REWORK mở Sonnet hội thoại MỚI trên chính nhánh; nếu BLOCKED xác định nút thắt trước khi thực thi tiếp.
+Tạo file khi tới giai đoạn tương ứng, không tạo kết quả giả cho giai đoạn chưa diễn ra. Báo cáo chính ≤ ~250 dòng; chi tiết dài chuyển sang phụ lục `.md` có liên kết. Không ép kế hoạch vào giới hạn dòng khiến thiếu chỉ dẫn thực thi. Không lưu secrets, thông tin đăng nhập hoặc Telegram PII trong hồ sơ.
 
-## A. Bắt đầu nhiệm vụ
-- Mỗi nhiệm vụ được chủ dự án duyệt có TASK_ID duy nhất: chữ thường, dấu gạch nối, ví dụ downloaded-count-startup. Mở nhánh **dot/<TASK_ID>** từ HEAD nhánh tích hợp đã được xác minh; không sửa mã trực tiếp trên nhánh tích hợp.
-- Ghi baseline commit đầy đủ vào kế hoạch. Nếu code/branch/working tree thay đổi bất ngờ, có agent khác làm, hoặc thiếu dữ liệu: dừng. Không reset, stash, clean, overwrite.
-- **Hội thoại Opus** riêng đọc CLAUDE.md và HANDOFF.md, source thực, backlog. Tạo docs/plans/<TASK_ID>.md và chỉ commit docs trên dot/<TASK_ID>. Trong plan phải có mục 3–6 thao tác **Bác sĩ tự kiểm tra** có thiết bị/màn hình/từng nút và kết quả quan sát được. Kết thúc nhắc mở Sonnet ở phiên mới. Không code/test APK.
-- **Hội thoại Sonnet** riêng đọc kế hoạch và commit của Opus; xác nhận nhánh/baseline. Thực thi đúng plan, unit test và build; ghi docs/plans/<TASK_ID>-bao-cao.md. Thử Shanling trên Ni khi ADB, phiên bản, chữ ký và Telegram config hợp lệ; lưu ảnh trong docs/plans/artifacts/<TASK_ID>/. Không claim test khi thiếu thiết bị; dừng nếu cách làm cần thay đổi kiến trúc hoặc dữ liệu.
-- **ChatGPT** đọc Git/diff và report, chủ động test+build lại trên Ni, xem PNG thực, đánh giá thông tin dữ liệu/rollback, ghi docs/plans/<TASK_ID>-nghiem-thu.md. Nếu cần QA Sony/Tiny thì chỉ QA trong môi trường cô lập và không tự đánh dấu thay cho Shanling/Y700.
+## 3. Checkpoint để đổi Codex ↔ Claude Code
 
-## B. Kết quả bắt buộc
-- **PASS:** các test và QA kỹ thuật cần thiết đạt, mọi ảnh/thiết bị đối chiếu, và **chủ dự án đã xác nhận** kết quả 3–6 thao tác qua ảnh/video QA từ xa hoặc tự thử trực tiếp. Sau đó ChatGPT mới merge dot/<TASK_ID> (không force) vào nhánh tích hợp được phê duyệt. Nếu code vốn đã nằm trên nhánh tích hợp do vòng cũ, không tự viết lại lịch sử; ghi ngoại lệ và chỉ áp dụng quy ước dot cho việc mới.
-- **REWORK:** diff/test/UI/logic không đúng kế hoạch. ChatGPT chỉ rõ file và bằng chứng trong nghiệm thu; chủ dự án duyệt sửa, Sonnet MỚI tiếp tục trên dot/<TASK_ID>, không tạo nhánh khác.
-- **BLOCKED:** thiếu thiết bị ADB, config, credential, quyền, dữ liệu hoặc chưa có xác nhận của chủ dự án. Test xanh nhưng thiếu owner duyệt bằng chứng QA trực tiếp/từ xa được gắn nhãn BLOCKED — CHỜ CHỦ DỰ ÁN, không merge. Nếu Sonnet đã commit, giữ nguyên branch.
-- Nếu chỉ có test JVM và ảnh Sony mô phỏng → không tuyên bố đã thử Shanling thật/Y700 thật. Số liệu screen/product thực phải có nguồn.
+Agent cập nhật `*-ban-giao.md` sau mỗi bước nhỏ/mốc commit/test/build/QA, trước khi kết thúc phiên, đổi vai/model hoặc thấy sắp hết quota. Không đợi gần hết quota mới ghi toàn bộ tiến độ. Đầu HANDOFF.md chỉ là chỉ mục tới nhiệm vụ/hồ sơ hiện tại, cập nhật khi an toàn; file bàn giao theo TASK_ID là nguồn chi tiết.
 
-## C. Luật cài máy và bảo vệ dữ liệu
-- Dùng adb devices -l trên **Ni** cho Shanling; adb devices -l trên **Tiny** cho Sony. Mỗi lần truy vấn model/manufacturer bằng adb -s SERIAL shell getprop.
-- Ni: **ADB xác minh thành công** Shanling M3 Ultra Android 10, serial **30313860180939**, trạng thái device (18/10/2026 23:30 +07). Thiết bị đang cài MeloVault vc107 khi kiểm; mã USB PnP không thay thế ADB serial. Trước mỗi phiên phải kiểm tra lại adb devices -l và getprop. Việc ADB sẵn sàng KHÔNG có nghĩa Beta109 đã được cài/QA hay chủ dự án đã nghiệm thu.
-- Tiny: Sony Xperia XQ-AS52, serial QV725WEQ54 được xác minh qua ADB (18/10/2026).
-- Sonnet cài DEBUG APK lên Shanling **chỉ khi hợp lệ**: đúng package, không downgrade versionCode, cert khớp, Telegram config khả dụng nếu test TDLib, thiết bị authorized. Lệnh duy nhất **adb -s SERIAL install -r PATH**. Cấm adb uninstall, pm clear, xoá app data, TDLib cache/session, đăng xuất Telegram. Signature mismatch → dừng báo chủ dự án, không tự gỡ cài lại. Ni APK thiếu Telegram API ID không phải bản để test Telegram.
-- Mở màn hình đúng plan, thao tác và dùng adb -s SERIAL exec-out screencap -p. Trên Windows khi xuất PNG nhị phân dùng cmd /c với dấu > trỏ vào docs/plans/artifacts/<TASK_ID>/; ghi đường dẫn ảnh vào report, đối chiếu PNG đọc được và đảm bảo không chứa bí mật/PII nếu muốn chia sẻ. Artifacts folder không commit.
-- Sony trên Tiny để smoke/đối chiếu khác tầng Shanling. Bản phát hành thử/Drive cá nhân chỉ sau kiểm toán kỹ thuật, owner QA vẫn bắt buộc để PASS. Không tự cài FYT.
+Mỗi checkpoint có:
 
-## D. Làn nhanh
-Sonnet làm thẳng, **không cần Opus**, chỉ khi **cả**: (a) một màn hình, (b) tối đa hai file production, (c) tối đa 80 dòng production đổi theo diff (không tính test/report), (d) không DB/schema/TDLib/auth/account/cache/Media3/queue/architecture/permission/security/signing/version change, (e) không migration/data-loss risk, (f) ChatGPT đề xuất và owner chốt là "làn nhanh". Sonnet vẫn tạo plan một trang, report, test, Shanling screenshot nếu UX và phải qua ChatGPT/owner PASS như thường.
+1. TASK_ID, thời gian, người/công cụ/model, vai và chặng; yêu cầu/quyết định của chủ dự án còn hiệu lực.
+2. Đường dẫn repo/worktree thực, nhánh, baseline source, commit kế hoạch, HEAD đã kiểm và commit source dùng build; xác định commit chứa checkpoint qua `git log -1 -- docs/plans/<TASK_ID>-ban-giao.md` để tránh tự tham chiếu SHA.
+3. Liên kết kế hoạch/báo cáo/sơ bộ/APK; bảng `Bước / Xong-Đang làm-Chưa làm-BLOCKED / Bằng chứng / Việc còn lại`.
+4. File đã sửa nhưng chưa commit, mục đích, phần đang dở và bằng chứng đối chiếu (diff/sha của file mã hoặc tài liệu an toàn). Không hash/đọc bí mật; file không rõ nguồn phải tách rõ, không nhận là của mình.
+5. Test/build đã chạy, source tương ứng, kết quả/log; tác vụ còn chạy có máy/clone/PID/log/file exit code nếu biết. Không tự chạy một build/cài thứ hai khi chưa xác định tác vụ trước đã kết thúc.
+6. APK hiện có và bản đã cài theo thiết bị, hash/package/version/cert, config chỉ boolean; QA đã làm, màn hình cuối, artifact/link, giới hạn chưa chứng minh. Không dùng APK cũ như bằng chứng source mới.
+7. Vấn đề/rủi ro/chỗ cần chủ dự án quyết định, lựa chọn đã loại và lý do ngắn; bước tiếp theo chính xác, điều kiện chạy và điều kiện dừng.
+8. Trạng thái bàn giao: agent cũ đã dừng hay còn tác vụ; prompt tiếp tục tự đủ nghĩa theo mẫu bên dưới. Không ghi thông tin chưa xác minh như sự thật.
 
-## E. Nơi lưu / quản trị
-- File canonical trong repo: docs/plans/<TASK_ID>.md (Opus), docs/plans/<TASK_ID>-bao-cao.md (Sonnet), docs/plans/<TASK_ID>-nghiem-thu.md (ChatGPT). BACKLOG vẫn là danh sách, HANDOFF là mốc phiên bản.
-- Ảnh/log riêng docs/plans/artifacts/<TASK_ID>/ bị Git ignore, không đưa audio/PII/OTP/khóa vào Git. Thư mục D:\Bots\_handoff chỉ bản sao.
-- Hai prompt chính thức nằm trong docs/workflow/PROMPT_OPUS.md và docs/workflow/PROMPT_SONNET.md. Chỉ ChatGPT thay đổi chúng.
-- Để tiết kiệm quota, Opus viết plan đủ chính xác một lần, Sonnet không tự phân tích lại kiến trúc; nếu plan sai/thiếu, Sonnet dừng và báo để ChatGPT quyết định REWORK/BLOCKED. Không resume lịch sử giữa phiên.
-- Đầu/cuối đều dùng tiếng Việt đời thường. Claude cuối phiên chỉ báo đã làm, chưa xác minh, rủi ro; **không tự đặt nhiệm vụ tiếp, không tự đưa prompt phiên sau**.
+Nếu quota cắt đột ngột trước checkpoint cuối, phiên nhận đọc checkpoint gần nhất rồi đối chiếu Git/file/log. Ghi rõ khoảng chưa xác minh; không đoán đã xong, không lặp cài APK/thao tác thiết bị chỉ vì thiếu chat. Việc bàn giao giữ liên tục bằng dữ liệu trên đĩa, không bảo đảm phục hồi phần suy nghĩ chưa được ghi.
 
-## F. Quy trình riêng khi Claude bị hết quota
-Không giả định hội thoại được chuyển giữa tài khoản. Agent mới dùng đúng repo Ni, CLAUDE.md, HEAD Git, ba file TASK_ID và HANDOFF để khôi phục. Nếu đầu việc dở và uncommitted files: không xóa, không reset; chỉ báo tiến độ/dirty diff để ChatGPT quyết định, không chạy hai agent song song.
+### Mẫu prompt tiếp tục dùng cho cả Codex và Claude Code
 
-## G. Quy trình nghiệm thu từ xa được duyệt 19/10/2026
+```text
+Tiếp tục TASK_ID <...>, vai <lập kế hoạch/thực thi/sơ bộ>, chặng <...>.
+Worktree <đường dẫn thực>; nhánh dot/<TASK_ID>; HEAD dự kiến <SHA>.
+Đọc CLAUDE.md mục 0 (Codex đọc thêm AGENTS.md), quy trình hiện hành,
+docs/plans/<TASK_ID>-ban-giao.md, kế hoạch và báo cáo được dẫn trong đó.
+Phiên trước đã dừng: <bằng chứng/trạng thái>; phần còn chạy: <không có/chi tiết>.
+Kiểm Git, đối chiếu checkpoint và phần chưa commit trước khi sửa.
+Tiếp tục bước <Sx, việc cụ thể>; không làm lại phần có bằng chứng còn hợp lệ.
+Giữ nguyên phạm vi, cập nhật hồ sơ .md sau mỗi mốc. Có nguồn gốc/HEAD
+không khớp hoặc agent cũ còn sửa code thì dừng và báo; không reset/clean/stash.
+```
 
-- Opus vẫn chỉ lập kế hoạch; Sonnet tự QA từ xa qua ADB trên thiết bị thật, ChatGPT kiểm toán lại và gửi hình/video nghiệm thu trực tiếp trong hội thoại, chủ dự án chỉ cần xem và chốt. Mục 3–6 bước bác sĩ tự kiểm trong plan được Agent thực hiện nếu an toàn, không đòi bác sĩ trực tiếp đến Shanling/Sony.
-- Ni/Shanling M3 Ultra: serial đã xác minh 30313860180939; Tiny/Sony Xperia 5 II: QV725WEQ54. Mỗi phiên xác nhận lại adb devices -l và getprop; dùng clone/build đã kiểm mã, version, chữ ký, Telegram config. Cài giữ dữ liệu chỉ adb install -r, nếu signature mismatch hoặc version downgrade thì dừng.
-- Sonnet phải thử click/chuyển màn/menu/player/Next tương ứng 3–6 bước, chụp trước/sau bằng adb exec-out screencap -p, có thể screenrecord nếu an toàn, lưu docs/plans/artifacts/<TASK_ID>/ (private, không commit), ghi timestamp, model/serial, kỳ vọng, thực tế, PASS/FAIL/BLOCKED, Media3 playback state/position và log crash/ANR.
-- ChatGPT truy cập ảnh thật trên Ni/Tiny, xác nhận code/diff/test/build, và đính kèm ảnh/video quan trọng vào chat cho owner; không chỉ gửi đường dẫn Windows mà owner phải tự vào tìm. Không phát tán Telegram PII hay thông tin tài khoản.
-- Trạng thái Media3/progress và ảnh không tự chứng minh âm thanh thực sự phát ra; nếu không có ghi âm/kiểm tra độc lập thì ghi CHƯA XÁC NHẬN ÂM THANH THỰC. Không tự bật airplane/tắt Wi-Fi, sửa account, xóa file hoặc session trái plan. Những bước không thể làm an toàn phải giữ CHƯA KIỂM CHỨNG.
-- Owner duyệt từ xa là phê duyệt nghiệm thu cho phần đủ bằng chứng; ChatGPT mới quyết PASS/REWORK/BLOCKED, ghi hạn chế chưa kiểm chứng và không merge trước owner duyệt. Không yêu cầu bác sĩ có mặt ở địa điểm thiết bị.
-- Kế hoạch offline-one-tap-play commit 29c54f9 ĐƯỢC CHỦ DỰ ÁN DUYỆT NGUYÊN VĂN, không Opus REWORK. Ý kiến phản biện trước đó giữ làm checklist QA, không còn là blocker lập kế hoạch.
+Chủ dự án mở phiên mới và giao tiếp; chỉ một agent sửa code tại một thời điểm. Phần chưa commit chỉ được tiếp nhận khi nguồn gốc khớp bàn giao và phiên cũ đã dừng. Không rõ nguồn thì báo chặn, không tự commit/gộp. Hết quota không phải lý do tạo nhánh/dự án mới hay tự đổi phạm vi.
 
-## H. Quy tắc bắt buộc bảo vệ màn hình thiết bị QA (19/10/2026)
+## 4. Quyền dùng Sony và phạm vi kiểm tra
 
-Áp dụng cho mọi phiên Opus/Sonnet và cả ChatGPT kiểm toán. **M3 Ultra (Ni) và Sony (Tiny) mặc định để màn hình tắt; chỉ bật lúc cần tap/chụp/quay UI**, xong bước hoặc kết thúc QA thì **tắt ngay và xác minh Display State=OFF**. Không tắt lúc đang có người/agent khác thao tác, không tắt nguồn hoặc sửa data. Không cần màn ON để build, test JVM, đọc log hoặc chờ chủ dự án nghiệm thu từ xa.
+- Chủ dự án cho phép dùng Sony đang kết nối ở cả ba vai agent: khảo sát UI/tái hiện khi lập kế hoạch, thử trong thực thi, kiểm luồng chính khi sơ bộ. Không cần xin lại quyền cho thao tác an toàn thuộc nhiệm vụ; ghi mục đích/kết quả vào hồ sơ đúng vai.
+- Kiểm đúng máy/ADB serial/model mỗi phiên. Sony `QV725WEQ54` trên Tiny, Shanling `30313860180939` trên Ni là thông tin tham chiếu, phải xác minh lại. Không dùng Sony thay chứng cứ Shanling/Y700/S25/FYT.
+- Lập kế hoạch và sơ bộ dùng app/bản APK sẵn có đã kiểm; không tự code/build mới. Cài chỉ `install -r` sau package/version/cert/config và trạng thái phát hợp lệ theo luật gốc; bị chặn thì ghi BLOCKED đúng phần. Không uninstall/clear/downgrade/logout/đổi tài khoản/xóa cache/TDLib hay cài FYT.
+- Tiny chỉ build/QA trong clone cô lập từ Git bundle đối chiếu SHA-256; không sửa repo Tiny gốc/qua T:, không chuyển bí mật về Ni. Không tranh thiết bị đang được người/agent khác dùng.
+- Màn chỉ bật trước bước UI; cleanup `finally` tắt và kiểm OFF theo [vòng đời màn hình](SCREEN_LIFECYCLE_QA.md). Không đổi timeout/brightness/AOD/bảo mật. Không bật điện thoại chỉ để sửa tài liệu.
+- Giữ artifact cũ, ảnh riêng tư, không public Telegram PII. Khi có QA UI, tạo `00_tong_hop.png`; Media3 PLAYING không chứng minh âm thanh thật.
 
-Chính sách và lệnh an toàn ở `docs/workflow/SCREEN_LIFECYCLE_QA.md`: KEYCODE_WAKEUP=224 bật khi cần, KEYCODE_SLEEP=223 tắt theo hướng idempotent (tránh KEYCODE_POWER=26 toggle), `dumpsys power` + `dumpsys display` kiểm tra; `Dozing` chỉ được coi tắt khi display thực sự OFF. Sonnet bảo đảm cleanup trong `finally` sau cả PASS/FAIL/BLOCKED và ghi trạng thái màn hình cuối từng máy. Nếu cần người dùng mở khóa hợp lệ hoặc screen cannot turn OFF, báo rõ, không tự phá security.
+## 5. Sơ bộ, chính thức và kết thúc
 
-## H. Bàn giao ảnh/video có liên kết bấm trực tiếp (19/10/2026)
+Thực thi bàn giao APK hợp lệ, báo cáo và prompt cho [phiên sơ bộ mới](PROMPT_NGHIEM_THU_SO_BO.md). Sơ bộ ưu tiên đọc bằng chứng đã có, diff và file rủi ro, kiểm source/APK, vài thao tác Sony nếu hữu ích; chạy lại khi có thay đổi/thiếu/mâu thuẫn, ghi lý do. Không mặc định chạy lại toàn bộ test/build hoặc review nhiều agent.
 
-- ChatGPT đưa bộ screenshot/video tiêu biểu lên thư mục Google Drive Ni N riêng tư sau khi QA; kiểm Drive owner-only, URL thực từ connector, không mở share public. Không upload có OTP/credentials; với Telegram metadata cá nhân chỉ lưu riêng tư.
-- ChatGPT tạo docs/plans/<TASK_ID>-hinh-nghiem-thu.md liệt kê từng thao tác và URL bấm trực tiếp, cùng folder QA. Claude Code có thể mở Markdown và Ctrl+Click; trong ChatGPT cung cấp link Drive tương ứng. Không cho link giả từ tên file Windows.
-- Sonnet chịu trách nhiệm thu ảnh/video, không tự thay permission Drive hoặc công bố file. Nếu chưa có ảnh hay chưa hoàn tất đồng bộ, phải nói rõ và không đánh dấu giao nộp xong.
+Kết luận sơ bộ chỉ dùng `SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN`, `SƠ BỘ: CẦN SỬA` hoặc `SƠ BỘ: BLOCKED`. Không có lỗi chặn trong phạm vi kiểm không có nghĩa đã nghiệm thu toàn bộ. Agent bàn giao kết quả cho chủ dự án [nghiệm thu chính thức](PROMPT_CHU_DU_AN_NGHIEM_THU.md); chính thức vẫn **CHỜ CHỦ DỰ ÁN NGHIỆM THU** (hoặc BLOCKED khi thiếu điều kiện).
 
-## I. Giao APK thử nghiệm mới từ xa (duyệt 19/10/2026)
+Chỉ ghi PASS sau xác nhận ĐẠT đúng bản/phạm vi; chủ dự án yêu cầu sửa thì REWORK ở phiên thực thi mới rồi sơ bộ lại phần ảnh hưởng. Kết luận sơ bộ không tự cho phép sửa code, merge hay phát hành. Commit tài liệu trên nhánh nhiệm vụ rồi dừng; merge cần ĐẠT và chỉ thị riêng, push/public cần chỉ thị riêng. Không tự chọn việc kế.
 
-- Mỗi APK test mới, phân biệt bằng TASK_ID + Git commit + SHA-256 file, đều phải được **bàn giao cho owner bằng link bấm trực tiếp** khi vượt qua cổng kiểm tra APK hợp lệ. Không đồng nhất APK mới với việc vừa chạy lại Gradle hoặc dùng lại file cũ.
-- Sonnet tạo APK và viết báo cáo gồm: đường dẫn Windows, bytes, SHA256, cert SHA256, package, vc/vname, đúng source commit, Debug/Release, Telegram config có/không, tests, trạng thái ADB cài Shanling/Sony và các lỗi QA. Sonnet **không tự đổi Drive permissions, public hoặc upload vào nơi không được chỉ định**, không xóa APK cũ.
-- ChatGPT tự xác minh file APK/bằng chứng, chỉ đưa bản có package/phiên bản/chữ ký/cấu hình phù hợp vào **Drive Ni N owner-only**, lưu từng TASK_ID/ngày/commit độc lập, xác minh metadata share và gửi **link APK** (không chỉ folder link) cùng SHA-256 trong chat. Dùng `docs/plans/<TASK_ID>-apk-test.md` làm index bấm mở từ Claude Code. Nếu upload chưa xác minh được, phải báo BLOCKED, không cung cấp link đoán.
-- APK có thể được đưa lên Drive **trước khi owner PASS tính năng** nếu đủ điều kiện an toàn để QA: đặt nhãn **QA CANDIDATE — CHƯA NGHIỆM THU**, nêu test còn thiếu; không gọi Stable hay production. PASS/merge vẫn cần kiểm toán độc lập và owner duyệt như quy trình cũ.
-- Không đưa secrets, local.properties, signing key, TDLib session, cache lên Drive. Không sửa file code để đạt việc upload, không tự tăng vc hoặc ép hạ version, không thay đổi chính sách screen lifecycle.
+Phiên chỉ sửa quy trình: vẫn ghi kế hoạch/báo cáo/bàn giao và commit, không build/cài hoặc yêu cầu nghiệm thu APK. Agent chỉ sửa CLAUDE.md, AGENTS.md và docs/workflow khi chủ dự án yêu cầu.

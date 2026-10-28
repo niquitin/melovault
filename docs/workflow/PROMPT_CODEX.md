@@ -1,65 +1,59 @@
-# PROMPT MẪU — CODEX LẬP KẾ HOẠCH (NHỎ) / THỰC THI / REWORK
+# PROMPT MẪU — CODEX LẬP KẾ HOẠCH / THỰC THI / SƠ BỘ / TIẾP TỤC
 
-Hiệu lực 26/10/2026 (CLAUDE.md mục 0). Mỗi vai là một **phiên Codex MỚI** mở tại `D:\Bots\MeloVault-E91-Shareable`. Codex đọc luật qua `AGENTS.md`. Chỉ Claude Opus sửa mẫu này khi chủ dự án yêu cầu.
+Hiệu lực 29/10/2026, theo CLAUDE.md mục 0 và [quy trình chung](QUY_TRINH_3_VAI_TRO.md). Chủ dự án chọn model/effort và mở phiên mới cho từng vai. Phiên thực thi dùng model tiết kiệm token/quota hơn phù hợp kế hoạch; không cố định model theo nhỏ/lớn. Codex và Claude Code dùng chung bộ hồ sơ `.md`.
 
-| Vai | Model | Effort | Mục |
-|---|---|---|---|
-| Lập kế hoạch nhiệm vụ nhỏ | `gpt-6-astra` | medium | A |
-| Thực thi nhiệm vụ nhỏ (GỘP 1 phiên) | `gpt-6.1-sol` | xhigh | B |
-| Thực thi nhiệm vụ lớn (phiên 1, phiên 2) | `gpt-6-astra` | medium | B |
-| REWORK | đúng model thực thi của nhiệm vụ | như trên | C |
+## A. Lập kế hoạch
 
-Chạy từ dòng lệnh (khi không dùng Codex app):
-`codex exec -m <model> -c model_reasoning_effort="<effort>" -C D:\Bots\MeloVault-E91-Shareable "<prompt>"`
+```text
+MELOVAULT — LẬP KẾ HOẠCH CHI TIẾT, KHÔNG CODE
+TASK_ID: <...>; nhánh dot/<TASK_ID>; repo/worktree: <đường dẫn thực>.
+Mục tiêu chủ dự án giao: <...>; baseline dự kiến: <SHA>.
+Model/effort: <chủ dự án chọn; không rõ thì ghi không xác định>.
+```
 
----
+1. Đọc AGENTS.md, CLAUDE.md mục 0, chỉ mục đầu HANDOFF.md, BACKLOG, quy trình chung, bàn giao nếu có và mã liên quan. Kiểm Git/agent theo luật đầu phiên; không nhận phần lạ. Nếu cần tạo nhánh nhiệm vụ, chỉ từ baseline đã xác minh, không sửa nhánh tích hợp.
+2. Phân tích nguyên nhân/phương án/rủi ro; có thể chủ động khảo sát Sony, tái hiện và chụp bằng chứng an toàn theo luật thiết bị/màn hình. Ghi rõ bản ứng dụng được khảo sát. Không tự code/build mới.
+3. Viết `docs/plans/<TASK_ID>.md` đủ chi tiết cho model thực thi: mục tiêu/phạm vi, baseline, file/hàm, thay đổi và lý do, bước nhỏ có phụ thuộc/điều kiện xong, test hồi quy, Debug/Release, build và bàn giao APK, QA thiết bị, tiêu chí đo được, rollback an toàn và trường hợp dừng. Chỗ chưa chắc ghi `[CẦN XÁC NHẬN]`.
+4. Ghi 3–6 thao tác kiểm thử: thiết bị/màn hình/nút/kỳ vọng, ảnh trước/sau, bước cần màn ON; tách âm thanh thật và các phần chưa thể chứng minh. Chia chặng thực thi khi cần; không tự phân công model theo loại việc.
+5. Tạo/cập nhật `*-ban-giao.md` theo quy trình chung sau mỗi mốc, ghi quyết định, tiến độ, bằng chứng và prompt tiếp tục. Không chỉ lưu trong chat.
+6. Commit tài liệu trên nhánh nhiệm vụ, dẫn kế hoạch/bàn giao và prompt B đã điền (hoặc PROMPT_SONNET.md nếu chủ dự án chọn Claude Code). Không tự bắt đầu code.
 
-## A. CODEX LẬP KẾ HOẠCH — NHIỆM VỤ NHỎ (gpt-6-astra, medium)
+Lời kết: Đã làm / Chưa kiểm chứng / Rủi ro. **“Đã dừng. Mở phiên mới, chọn model thực thi tiết kiệm hơn theo lựa chọn của chủ dự án.”**
 
-MELOVAULT — PHIÊN CODEX LẬP KẾ HOẠCH NHIỆM VỤ NHỎ, KHÔNG SỬA CODE
+## B. Thực thi ở phiên mới
 
-TASK_ID: <TASK_ID> — nhánh dot/<TASK_ID>
-Nhiệm vụ chủ dự án CHỐT là NHỎ: <MỤC_TIÊU_CỤ_THỂ>
+```text
+MELOVAULT — THỰC THI ĐÚNG KẾ HOẠCH
+TASK_ID: <...>; nhánh dot/<TASK_ID>; worktree: <đường dẫn thực>.
+Kế hoạch đã chốt: docs/plans/<TASK_ID>.md, commit <PLAN_SHA>.
+Bàn giao: docs/plans/<TASK_ID>-ban-giao.md.
+Baseline: <BASE_SHA>; HEAD dự kiến: <SHA>; chặng/bước: <...>.
+Model/effort: <chủ dự án chọn cho phiên thực thi>.
+Lưu ý riêng: <...>.
+```
 
-1. Đọc AGENTS.md, CLAUDE.md (mục 0 trước), mục đầu HANDOFF.md, docs/workflow/QUY_TRINH_3_VAI_TRO.md, BACKLOG và code liên quan. Kiểm tra đầu phiên theo AGENTS.md; sai → DỪNG. Nhánh dot/<TASK_ID> chưa có và repo sạch → tạo từ HEAD nhánh tích hợp hiện hành.
-2. Xác nhận nhiệm vụ đạt ĐỦ điều kiện "nhỏ" (CLAUDE.md mục 0). Nếu không đạt (cần > 2 file production, > 80 dòng, hoặc chạm DB/TDLib/Media3/queue/signing/build config…) → DỪNG, ghi lý do, đề nghị chủ dự án chuyển sang Claude Opus lập kế hoạch. Không tự thu hẹp yêu cầu để lọt điều kiện.
-3. Chỉ tạo `docs/plans/<TASK_ID>.md` (≤ ~120 dòng): baseline SHA, mục tiêu/phạm vi, nguyên nhân, file + hàm sửa chính xác, bước nhỏ, test hồi quy, Debug/Release, **3–6 bước QA từ xa** (thiết bị, màn hình, nút, kỳ vọng, ảnh trước/sau, bước nào cần màn ON), tiêu chí PASS/FAIL đo được, rủi ro + rollback, trường hợp phải STOP. Chỗ chưa chắc ghi [CẦN XÁC NHẬN].
-4. Không sửa code/gradle/manifest, không build, không cài APK. Chỉ commit file kế hoạch trên dot/<TASK_ID>.
+Làm các bước 1–6, quy định màn hình và bàn giao APK trong [mẫu thực thi](PROMPT_SONNET.md), áp dụng cho Codex. Dòng đầu báo cáo ghi `Thực thi: Codex <model> <effort nếu biết>, phiên <...>`; không tự đoán model/effort. Cập nhật báo cáo chi tiết và bàn giao ngay sau từng mốc; ghi đúng source/test/APK.
 
-Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro, rồi prompt mục B đã điền (PHIÊN = GỘP, model gpt-6.1-sol xhigh) và đúng câu:
-"Giờ mở phiên Codex mới, chọn gpt-6.1-sol xhigh."
+Thiếu/sai kế hoạch, cần đổi phạm vi/kiến trúc hoặc gặp gate an toàn không đạt: dừng phần bị chặn, ghi rõ vào `.md`, không tự đổi plan. Giữ nguyên mọi luật Git/ADB/bí mật/Tiny và quyền chủ dự án nghiệm thu cuối.
 
----
+Cuối chặng: commit, bàn giao bước chưa xong. Cuối thực thi: dẫn APK/báo cáo/bàn giao, đưa prompt [sơ bộ](PROMPT_NGHIEM_THU_SO_BO.md) đã điền và ghi **“Đã dừng. Mở phiên mới để nghiệm thu sơ bộ nhanh.”** Không tự chạy vai sơ bộ trong phiên code.
 
-## B. CODEX THỰC THI
+## C. REWORK
 
-MELOVAULT — PHIÊN CODEX THỰC THI ĐÚNG KẾ HOẠCH
+```text
+MELOVAULT — REWORK
+TASK_ID: <...>; nhánh dot/<TASK_ID>; worktree: <...>; HEAD: <SHA>.
+Model/effort: <chủ dự án chọn>.
+Lỗi chủ dự án giao sửa: <...>.
+Nguồn yêu cầu và hồ sơ liên quan: <file/mục>.
+```
 
-TASK_ID: <TASK_ID> — nhánh dot/<TASK_ID>
-Kế hoạch đã CHỐT: docs/plans/<TASK_ID>.md (lập bởi <Codex gpt-6-astra | Claude Opus>)
-Baseline: <BASE_SHA>, commit kế hoạch <PLAN_SHA>
-Model thực thi: <gpt-6.1-sol xhigh (nhỏ) | gpt-6-astra medium (lớn)>
-PHIÊN: <GỘP | 1 = code + test Ni (bước Sx–Sy) | 2 = build Tiny + QA + báo cáo (bước Sz)>
-[Lưu ý riêng: ≤ 8 dòng]
+Đọc bàn giao, báo cáo, sơ bộ và quyết định chủ dự án; kiểm Git. Chỉ sửa lỗi đã giao, cùng TASK_ID/nhánh, không tạo plan trùng hoặc mở rộng phạm vi. Cập nhật mục “Vòng REWORK <n>” giữ lịch sử; test/build/QA phần ảnh hưởng theo B, bàn giao candidate mới và phiên sơ bộ mới.
 
-Làm đúng docs/workflow/PROMPT_SONNET.md các bước 1–6 cùng hai mục bắt buộc về màn hình và bàn giao APK ở cuối file đó, với "Sonnet" đọc là "Codex", và thêm:
-- Đầu báo cáo `docs/plans/<TASK_ID>-bao-cao.md` ghi dòng: `Thực thi: Codex <model> <effort>, phiên <GỘP|1|2>`.
-- Mọi lệnh ADB/Git/Desktop Commander tuân danh sách cấm trong AGENTS.md. Tiny chỉ qua Desktop Commander trong clone cô lập, nhận code bằng Git bundle có SHA-256.
-- Plan sai/thiếu, cần đổi phạm vi hoặc kiến trúc → DỪNG và ghi vào báo cáo; không tự sửa plan, không đoán.
-- Không sửa CLAUDE.md, AGENTS.md, docs/workflow/*, file nghiệm thu/apk-test/hinh-nghiem-thu. Không merge, không upload/công bố APK.
+## D. Sơ bộ ở phiên mới
 
-Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Dòng cuối:
-- Phiên 1: "Đã dừng. Mở phiên Codex mới cho phiên 2 (build + QA), cùng model."
-- GỘP/phiên 2: "Đã dừng, chờ Claude Opus nghiệm thu." và dòng `Nghiệm thu <TASK_ID> theo docs/workflow/PROMPT_OPUS_NGHIEM_THU.md`
+Dùng [PROMPT_NGHIEM_THU_SO_BO.md](PROMPT_NGHIEM_THU_SO_BO.md). Chỉ kiểm nhanh và ghi biên bản; không code, không ghi PASS chính thức. Chủ dự án nghiệm thu chính thức, chi tiết.
 
----
+## E. Tiếp tục sau hết quota hoặc đổi công cụ
 
-## C. CODEX REWORK
-
-MELOVAULT — PHIÊN CODEX REWORK
-
-TASK_ID: <TASK_ID> — nhánh dot/<TASK_ID>, HEAD hiện tại <HEAD_SHA>
-Model: <đúng model thực thi ban đầu>
-Lỗi cần sửa: docs/plans/<TASK_ID>-nghiem-thu.md mục <số>
-
-Kiểm tra đầu phiên theo AGENTS.md. Chỉ sửa đúng các lỗi nêu trong nghiệm thu, không mở rộng phạm vi, không tạo nhánh/plan mới. Chạy lại test/build và các bước QA bị ảnh hưởng theo mục B, cập nhật báo cáo cũ với mục "Vòng REWORK <n>" (giữ dấu vết vòng trước). Lời kết như mục B (GỘP/phiên 2).
+Dùng mẫu tiếp tục tại [quy trình chung, mục 3](QUY_TRINH_3_VAI_TRO.md#3-checkpoint-để-đổi-codex--claude-code). Đọc `*-ban-giao.md`, kiểm trạng thái thực và tiếp tục đúng vai/bước được giao. Chủ dự án có thể giao Claude Code tiếp trong cùng worktree; không yêu cầu dùng lại Codex để khôi phục ngữ cảnh. Agent cũ phải dừng; phần chưa commit phải khớp bàn giao trước khi tiếp nhận.
