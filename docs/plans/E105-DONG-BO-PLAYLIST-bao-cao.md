@@ -1,6 +1,8 @@
-Thực thi: Codex (model/effort không được công cụ xác nhận), phiên code + test Ni, 28/10/2026 (+07).
+Thực thi: Codex (model/effort không được công cụ xác nhận), phiên code + test Ni và bổ sung phiên xuất APK, 28/10/2026 (+07).
 
 # E105 — Tự đồng bộ Playlist khi mở app
+
+**Cập nhật xuất APK 28/10 buổi tối: xem mục 6.** Đã có APK Tiny đúng source `356df1e`, config=true, chữ ký khớp Shanling. Drive đã nhận file riêng tư nhưng chặn tải; chưa QA tự đồng bộ trên hai thiết bị, chưa nghiệm thu.
 
 ## 1. Kết quả phiên code
 
@@ -90,3 +92,38 @@ Phiên QA sau build Tiny trong clone mới từ Git bundle SHA-256, cấu hình/
 - Không sửa tài liệu nghiệm thu/quy trình, không nghiệm thu, merge, push hoặc upload APK. Lỗi Drive cũ thuộc bàn giao riêng, không dùng làm kết luận đồng bộ đúng/sai.
 
 Đã dừng. Mở phiên Codex mới cho phiên 2 (build + QA), cùng model.
+
+## 6. Bổ sung phiên xuất APK theo yêu cầu chủ dự án — 28/10/2026 buổi tối
+
+Chủ dự án yêu cầu xuất APK tự đồng bộ danh sách yêu thích; cho phép bỏ qua `.codex-remote-attachments/`. Phiên này chỉ build/xác minh artifact/bàn giao, không sửa production/test/plan/quy trình, không cài hoặc bật đồng bộ trên thiết bị, không gửi metadata playlist.
+
+- Git đầu/cuối build: `dot/E105-DONG-BO-PLAYLIST`, source `356df1e58037ef4263227ae52aa63d16032b7a43`; tracked sạch, không build khác lúc bắt đầu. 18 tệp source khớp manifest scope-final; diff check sạch.
+- Ni chạy mới `:app:reportTelegramConfig` → `telegram.config.valid=false`. Dùng quyền E105 đã ghi trong báo cáo lịch sử để cấp config từ E99 cho clone Tiny mới; không đọc/in/hash file config, không mang về Ni.
+- Bundle `D:\Bots\_transfer\E105-auto-356df1e-20261028-2152\E105-auto-356df1e.bundle`, SHA-256 Ni=Tiny: `3EF53CB317ABB0A108993D79F451CC0F2AD5EA342D9155F5FED9FFB7BBDA4EE2`.
+- Clone Tiny `C:\Bots\MeloVault-E105-Auto-20261028-2152`, đúng source, cuối build `git status --short` rỗng. Chuyển qua HTTP tạm chỉ phục vụ bundle/script; đã dừng server. Không ghi qua T:, không chạm repo Tiny gốc.
+- Script đầu coi stderr thông báo clone là lỗi PowerShell; clone thực tế hoàn tất đúng HEAD, chưa build. Giữ nguyên log lỗi; script tiếp tục dùng clone đã xác minh, log mới ở thư mục `-r2`, không ghi đè artifact cũ.
+- Gradle Tiny chạy nền cửa sổ ẩn; `reportTelegramConfig=true`; `:app:assembleShareableDebug :app:assembleShareableRelease --console=plain` → BUILD SUCCESSFUL 5m30s, 95 tasks thực thi, build/overall exit=0.
+- Không chạy lại test vì không đổi mã; đã đối chiếu XML phiên code: mỗi biến thể riêng/open Debug/Release 2168 tổng, 2147 thành công, 21 bỏ qua, 0 failure/error. Không coi build này là QA thiết bị.
+
+**L** = `D:\Bots\MeloVault-E91-Shareable\docs\plans\artifacts\E105-DONG-BO-PLAYLIST\export-auto-20261028-2152` (ignored, private).
+**T** = `C:\Bots\_qa_temp\E105-auto-356df1e-20261028-2152-r2` trên Tiny.
+APK ở cả L và T, cùng tên dưới đây. Metadata/log/config boolean/exit được giữ trong L. Tệp APK đang cài trên Shanling được pull vào L/shanling-before-vc121.apk chỉ để đối chiếu signer.
+
+| APK mới | Bytes | SHA-256 |
+|---|---:|---|
+| MeloVault-E105-auto-356df1e-vc121-debug.apk | 33478596 | `0419AB67762290461A0049895B0843E7F6512F9AF1303C48999707BA91C70894` |
+| MeloVault-E105-auto-356df1e-vc121-release.apk | 30703982 | `42FFD19A36DA313B0FCE98C58566A587717E3F050EC3441675DC40E667219ABD` |
+
+- Cả hai: package `app.melovault.player`, vc121 / `0.6.96-beta`, arm64-v8a, config nhúng=true. Cert SHA-256 `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8`.
+- `aapt dump badging`, `apksigner verify --print-certs` chạy trên Tiny và kiểm độc lập trên Ni; bytes/SHA-256 Tiny=Ni. Giữ nguyên versionCode/signing config; không tạo khóa mới.
+- ADB Ni xác minh `30313860180939`, Shanling M3 Ultra/Shanling, bản đang cài vc121 / 0.6.96-beta, cert đúng như trên. Chưa cài APK mới; không suy thành kết quả install -r.
+- Không bật màn. `SHANLING_SCREEN_END=OFF` (dumpsys power Display Power state=OFF, dumpsys display mGlobalDisplayState=OFF); `SONY_SCREEN_END=NOT_RECHECKED` (không QA/chạm Sony).
+
+### Bàn giao và giới hạn
+
+- Release đã upload theo yêu cầu bàn giao của chủ dự án, dùng Google Drive Ni N; [thư mục mới](https://drive.google.com/drive/folders/1wwlyl2xXEX7wsgNBprnICiU60dcnJgHh), [tệp Release — Drive chặn tải](https://drive.google.com/file/d/13DUBUJk3RFZSHoTE2fM9JApSlIF6IUvY/view?usp=drivesdk). Metadata readback: 30703982 bytes, đúng folder, shared=false, chỉ permission owner; folder cũng owner-only. Không mở public.
+- Fetch nguyên tệp để kiểm tải trả HTTP403 `cannotDownloadAbusiveFile`: Google Drive đánh dấu malware/spam. Không bỏ qua cảnh báo, không đóng gói lại/đổi định dạng để né; không tuyên bố link tải dùng được hoặc hash bản tải lại đã khớp. Nguyên nhân đánh dấu chưa xác định. APK gốc còn nguyên tại L.
+- **QA CANDIDATE — CHƯA NGHIỆM THU; BLOCKED phần tải Drive và QA hai máy.** Chưa kiểm thời gian truyền thật, chuỗi thêm/bỏ/thêm lại, pending cũ, khôi phục bài thử, open runtime hay âm thanh. Không có ảnh QA mới, không dùng ảnh cũ thay chứng cứ mã mới.
+- Hành vi đã có trong source: bật một lần trên mỗi máy cùng tài khoản/kênh; lưu gom 500 ms, nhận kiểm mỗi 15 giây khi foreground. App đóng nhận khi mở lại; không tuyên bố realtime nền/tức thời hoặc bảo đảm ≤30 giây khi chưa QA thật.
+- Trước bật cần xem các thay đổi chờ gửi; hai pending cũ trên Shanling chưa được giải thích trong phiên này. Không tự gửi/xóa pending hoặc thay đổi playlist thật.
+- Không sửa tài liệu nghiệm thu/apk-test/hinh-nghiem-thu, không merge/push. Phiên này chỉ commit báo cáo; APK/log ignored giữ riêng.
