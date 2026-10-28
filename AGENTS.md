@@ -4,6 +4,7 @@ Hiệu lực 29/10/2026. **CLAUDE.md là luật gốc; đọc CLAUDE.md (mục 0
 
 ## Vai của Codex
 
+- **Codex và Claude Code ngang quyền, ngang trách nhiệm.** Cả hai được dùng chung repo/worktree, đọc/sửa mã và tài liệu, thao tác Git an toàn, commit, test/build/QA và bàn giao theo vai/phạm vi đã được chủ dự án giao. Không cần agent kia phê duyệt hoặc xin lại quyền chỉ vì đổi công cụ. Repo/nhánh/hồ sơ không thuộc riêng agent nào; cùng tuân luật an toàn, bàn giao Markdown và một agent sửa code mỗi lúc. Nghiệm thu chính thức và quyền merge/push/public vẫn thuộc chủ dự án theo luật gốc.
 - Codex hoặc Claude được chủ dự án giao **lập kế hoạch**, **thực thi** hoặc **nghiệm thu sơ bộ nhanh**; mỗi vai một phiên mới. Không tự đổi vai, model/effort hay xếp loại. Chủ dự án chọn model hao phí token/quota thấp hơn cho phiên thực thi; không khóa model theo nhỏ/lớn.
 - **Kế hoạch và thực thi bắt buộc ghi chi tiết bằng `.md`.** Dùng `docs/plans/<TASK_ID>.md`, `*-bao-cao.md`, `*-ban-giao.md` và `*-nghiem-thu-so-bo.md` theo `docs/workflow/QUY_TRINH_3_VAI_TRO.md`. Cập nhật checkpoint sau mỗi mốc, trước khi đổi phiên/model hoặc sắp hết quota; không chỉ lưu trong chat.
 - **Codex ↔ Claude Code tiếp tục cùng việc:** khi chủ dự án giao tiếp, đọc bàn giao/kế hoạch/báo cáo, kiểm Git thực và làm từ bước chưa xong; không làm lại từ đầu, không chạy hai agent sửa code cùng lúc. Chỉ nhận thay đổi chưa commit có nguồn gốc/bằng chứng khớp bàn giao; phần lạ thì dừng.

@@ -4,6 +4,8 @@
 
 ## 1. Trình tự các phiên
 
+**Codex và Claude Code có quyền, vai trò và trách nhiệm ngang nhau.** Chủ dự án giao vai cho bên nào thì bên đó dùng repo/worktree và công cụ bình thường trong phạm vi ấy: đọc/sửa mã, tài liệu, Git/commit, test/build APK, QA và bàn giao. Không cần sự phê duyệt của agent còn lại hay xin lại quyền chỉ vì đổi công cụ. Repo, nhánh và hồ sơ dùng chung; agent tạo ra chúng không có quyền sở hữu riêng. Việc tiếp nhận vẫn kiểm Git/checkpoint, agent cũ dừng và giữ một agent sửa code mỗi lúc. Các luật an toàn và quyền nghiệm thu cuối/merge/push/public áp dụng như nhau cho cả hai.
+
 | Giai đoạn | Người thực hiện | Kết quả |
 |---|---|---|
 | 1. Lập kế hoạch | Codex hoặc Claude do chủ dự án giao | Kế hoạch `.md` chi tiết, checkpoint và prompt thực thi |

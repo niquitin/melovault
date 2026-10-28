@@ -20,7 +20,7 @@ Thực thi: Codex (model/effort không được runtime cung cấp), phiên cậ
 | S4 | PROMPT_NGHIEM_THU_SO_BO.md, PROMPT_CHU_DU_AN_NGHIEM_THU.md, PROMPT_OPUS_NGHIEM_THU.md | Mẫu kiểm nhanh phiên mới; kết luận sơ bộ tách khỏi PASS chính thức; lỗi cần chủ dự án giao REWORK. |
 | S5 | HANDOFF.md và ba hồ sơ TASK_ID này | Chỉ mục, kế hoạch, báo cáo và bàn giao; giữ lịch sử, nêu rõ worktree riêng/chưa merge. |
 
-## Kiểm tra kỹ thuật
+## Kiểm tra kỹ thuật lần đầu — commit 1a3ef47
 
 - Đầu phiên đã chạy status/branch/HEAD/log/diff --check. Repo chính có 2 mục untracked của phiên khác, nhánh UI/UX; giữ nguyên. Tạo worktree riêng theo ngoại lệ tài liệu của CLAUDE.md mục 1, từ đúng HEAD `7f3cca8`, rồi tạo nhánh nhiệm vụ.
 - `git diff --check` sau sửa luật/mẫu: không lỗi khoảng trắng. Rà quy tắc cũ và sửa chỗ cho phép chạy lại build trong vai sơ bộ để thống nhất: cần APK mới thì giao phiên thực thi.
@@ -38,3 +38,11 @@ Thực thi: Codex (model/effort không được runtime cung cấp), phiên cậ
 - Khôi phục/sửa tiếp bằng commit tài liệu mới theo yêu cầu; không reset/rebase/ghi đè công việc khác.
 
 [Bàn giao và prompt tiếp tục](2026-10-29-quy-trinh-md-ban-giao-ban-giao.md) · [Kế hoạch](2026-10-29-quy-trinh-md-ban-giao.md)
+
+## Bổ sung 29/10/2026 — quyền ngang nhau
+
+- Chủ dự án yêu cầu thêm: Codex và Claude Code có vai trò ngang nhau, được sử dụng repo/công cụ bình thường. Thực hiện tiếp cùng TASK_ID/nhánh; đầu lượt HEAD `1a3ef477ac33c78487fea51aedf1b419da063f0e`, cây sạch. Commit gần nhất là công việc của chính phiên trước.
+- S6: bổ sung rõ tại CLAUDE.md mục 0, AGENTS.md và quy trình chung: cùng quyền đọc/sửa mã và tài liệu, Git/commit, test/build/QA/bàn giao theo vai; dùng chung repo/worktree/hồ sơ, không cần bên kia phê duyệt hay xin lại quyền chỉ vì đổi công cụ. Các dòng quyền viết hồ sơ/upload/dùng công cụ cũng ghi cả Codex và Claude Code.
+- S7: cập nhật chỉ mục HANDOFF.md, kế hoạch, báo cáo và bàn giao. Đã kiểm diff chỉ gồm 7 `.md`, `git diff --check` sạch và đối chiếu mục “Danh sách CẤM tuyệt đối” trong AGENTS.md không đổi; không có thay đổi mã ứng dụng/artifact.
+- Quyền ngang nhau vẫn cùng luật an toàn, một agent sửa code mỗi lúc, nghiệm thu chính thức của chủ dự án và chỉ thị merge/push/public. Khác biệt công cụ có kết nối hay không được báo là giới hạn kỹ thuật.
+- Không thay code/build/config, không chạy test/Gradle/ADB; chưa diễn tập phiên Claude Code. Không sửa repo chính, chưa merge/push. Commit bổ sung tra bằng `git log -1 -- docs/plans/2026-10-29-quy-trinh-md-ban-giao-bao-cao.md`.

@@ -2,6 +2,7 @@
 ## Cập nhật quy trình 29/10/2026 — bàn giao bằng Markdown
 
 - Quyết định chủ dự án: Codex hoặc Claude lập kế hoạch chi tiết → phiên mới với model tiết kiệm hơn thực thi/code/build APK → phiên mới kiểm sơ bộ nhanh → chủ dự án nghiệm thu chính thức, chi tiết. Được chủ động dùng Sony an toàn trong cả ba vai agent; các gate dữ liệu/cài APK/màn hình vẫn giữ.
+- Bổ sung cùng ngày: **Codex và Claude Code ngang quyền, ngang trách nhiệm**, đều dùng chung repo/worktree và công cụ phát triển theo vai đã giao; không cần agent kia phê duyệt, không xin lại quyền chỉ vì chuyển công cụ. Giữ bàn giao Markdown, một agent sửa code mỗi lúc và các luật an toàn/merge/push/public.
 - Luật tại [CLAUDE.md mục 0](CLAUDE.md), chi tiết và mẫu tiếp tục Codex ↔ Claude Code tại [quy trình chung](docs/workflow/QUY_TRINH_3_VAI_TRO.md). Mỗi nhiệm vụ cần kế hoạch, báo cáo chi tiết và checkpoint `*-ban-giao.md`; cập nhật sau mỗi mốc để tiếp tục khi đổi phiên hoặc hết quota.
 - Hồ sơ lần sửa quy trình: [kế hoạch](docs/plans/2026-10-29-quy-trinh-md-ban-giao.md), [báo cáo](docs/plans/2026-10-29-quy-trinh-md-ban-giao-bao-cao.md), [bàn giao](docs/plans/2026-10-29-quy-trinh-md-ban-giao-ban-giao.md).
 - Nhánh riêng `dot/2026-10-29-quy-trinh-md-ban-giao`, worktree `C:\Users\ntdun\.codex\worktrees\workflow-md-handoff\MeloVault-E91-Shareable`, baseline `7f3cca8`. Repo chính vẫn có kế hoạch UI/UX chưa commit của phiên khác; không sửa/chuyển nhánh repo chính, chưa merge/push thay đổi quy trình này. Không có APK mới, không thay đổi nghiệm thu lịch sử.

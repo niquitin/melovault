@@ -8,6 +8,10 @@
 
 **Luồng mặc định: lập kế hoạch → phiên mới thực thi/build APK bằng model tiết kiệm hơn → phiên mới nghiệm thu sơ bộ nhanh → chủ dự án nghiệm thu chính thức, chi tiết.**
 
+**Codex và Claude Code có vai trò, quyền và trách nhiệm ngang nhau trong dự án.** Cả hai được sử dụng cùng repo/worktree và công cụ phát triển bình thường theo nhiệm vụ, vai đã được chủ dự án giao: đọc/sửa mã và tài liệu, thao tác Git an toàn, tạo nhánh nhiệm vụ khi cần, commit, test/build APK, QA và bàn giao. Agent này không cần agent kia phê duyệt; không coi một bên là cấp trên hoặc chỉ là dự phòng của bên kia. Quyền đã được chủ dự án giao tiếp tục có hiệu lực khi đổi Codex ↔ Claude Code trong cùng phạm vi; không xin lại chỉ vì đổi công cụ.
+
+Repo, nhánh và hồ sơ là tài sản chung của dự án; việc một agent tạo chúng không dành quyền sử dụng riêng cho agent đó. Cả hai có thể tiếp nhận cùng công việc qua Markdown sau khi đối chiếu Git và agent cũ dừng. Nguyên tắc ngang quyền áp dụng cùng các giới hạn của vai, luật an toàn và chỉ một agent sửa code mỗi lúc; nghiệm thu chính thức, quyền merge/push/public vẫn theo quyết định của chủ dự án. Công cụ chưa kết nối/không khả dụng là giới hạn kỹ thuật cần báo đúng phần, không phải khác biệt quyền giữa hai agent.
+
 | Giai đoạn | Người làm và đầu ra bắt buộc |
 |---|---|
 | Lập kế hoạch | Codex hoặc Claude do chủ dự án giao; viết chi tiết `docs/plans/<TASK_ID>.md` và khởi tạo `*-ban-giao.md`. Không tự chuyển sang code. |
@@ -23,8 +27,8 @@
 
 - **Chủ dự án là người duy nhất quyết định nghiệm thu cuối:** ĐẠT hoặc yêu cầu sửa. Không bắt buộc phiên Claude Opus nghiệm thu và không yêu cầu chủ dự án chuyển sang Opus để bàn giao APK.
 - **Agent thực thi chuẩn bị hồ sơ:** code/test/build/QA trong phạm vi đã giao, gửi APK thử nghiệm hợp lệ, ảnh/video và giới hạn cho phiên sơ bộ và chủ dự án. Kiểm tra kỹ thuật không thay quyết định nghiệm thu của chủ dự án.
-- Codex được tạo/cập nhật `*-apk-test.md`, `*-hinh-nghiem-thu.md` và `*-nghiem-thu.md` để lưu bằng chứng, điểm chặn và quyết định của chủ dự án. Chỉ ghi PASS sau khi chủ dự án xác nhận ĐẠT cho đúng TASK_ID, commit/APK và phạm vi; ghi ngày, nguồn xác nhận và giới hạn còn lại. Yêu cầu sửa ghi REWORK; chưa duyệt ghi **CHỜ CHỦ DỰ ÁN NGHIỆM THU**, thiếu điều kiện kỹ thuật ghi BLOCKED. Không tự suy lời yêu cầu build/cài/tiếp tục thành ĐẠT.
-- Codex được chuẩn bị và upload APK/ảnh QA vào Google Drive Ni N **owner-only** sau các gate ở mục 8–9, gửi link đã kiểm; bản chưa được duyệt ghi **QA CANDIDATE — CHƯA NGHIỆM THU**. Nếu Drive chặn tải, báo đúng lỗi và vị trí nội bộ; không coi link đó là tải được, không né cảnh báo hay tự public.
+- Codex và Claude Code đều được tạo/cập nhật `*-apk-test.md`, `*-hinh-nghiem-thu.md` và `*-nghiem-thu.md` để lưu bằng chứng, điểm chặn và quyết định của chủ dự án. Chỉ ghi PASS sau khi chủ dự án xác nhận ĐẠT cho đúng TASK_ID, commit/APK và phạm vi; ghi ngày, nguồn xác nhận và giới hạn còn lại. Yêu cầu sửa ghi REWORK; chưa duyệt ghi **CHỜ CHỦ DỰ ÁN NGHIỆM THU**, thiếu điều kiện kỹ thuật ghi BLOCKED. Không tự suy lời yêu cầu build/cài/tiếp tục thành ĐẠT.
+- Codex và Claude Code đều được chuẩn bị và upload APK/ảnh QA vào Google Drive Ni N **owner-only** sau các gate ở mục 8–9, gửi link đã kiểm; bản chưa được duyệt ghi **QA CANDIDATE — CHƯA NGHIỆM THU**. Nếu Drive chặn tải, báo đúng lỗi và vị trí nội bộ; không coi link đó là tải được, không né cảnh báo hay tự public.
 - Chủ dự án nghiệm thu không tự động cho phép merge, push hoặc phát hành công khai. Merge chỉ sau ĐẠT và chỉ thị merge riêng; push/public cần chỉ thị riêng. Không tự chọn/mở nhiệm vụ kế.
 - Không sửa lại kết luận lịch sử hoặc coi yêu cầu đổi quy tắc này là nghiệm thu E105. Các mốc nghiệm thu cũ giữ nguyên; quy trình mới áp dụng từ quyết định này.
 - **Cách đọc tài liệu/prompt cũ:** yêu cầu "Opus duy nhất nghiệm thu/bàn giao/ghi hồ sơ", "Codex không upload/không viết hồ sơ", cấm dùng Sony khi lập kế hoạch và gộp kế hoạch/code trong làn nhanh hết hiệu lực. "Sonnet" trong chỉ dẫn kỹ thuật cũ đọc là agent thực thi được giao (Codex hoặc Claude Code). Giữ luật an toàn Git/ADB/bí mật/dữ liệu/chữ ký, thiết bị, chất lượng bằng chứng và phạm vi kế hoạch. Các cấm sửa quy trình không ngăn yêu cầu sửa quy trình trực tiếp của chủ dự án.
@@ -32,7 +36,7 @@
 
 Chi tiết và bộ file: `docs/workflow/QUY_TRINH_3_VAI_TRO.md`. Mẫu Codex: `PROMPT_CODEX.md`; Claude lập kế hoạch: `PROMPT_OPUS.md`; Claude thực thi/tiếp tục: `PROMPT_SONNET.md` (giữ tên để tương thích, model do chủ dự án chọn); kiểm nhanh: `PROMPT_NGHIEM_THU_SO_BO.md`; nghiệm thu chính thức: `PROMPT_CHU_DU_AN_NGHIEM_THU.md`.
 
-Codex được cấp ADB và Desktop Commander (Ni + Tiny DESKTOP-HNP4GVR); cấu hình công cụ không thay luật repo. **Danh sách cấm trong AGENTS.md và các mục 1, 3, 4, 7 vẫn bắt buộc.**
+Codex và Claude Code đều được phép dùng ADB, Desktop Commander và các công cụ sẵn có phục vụ nhiệm vụ (Ni + Tiny DESKTOP-HNP4GVR); cấu hình công cụ không thay luật repo. **Danh sách cấm trong AGENTS.md và các mục 1, 3, 4, 7 vẫn bắt buộc.**
 
 ## 1. Repo duy nhất và khóa phiên
 
