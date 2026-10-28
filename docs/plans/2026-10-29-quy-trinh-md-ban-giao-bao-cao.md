@@ -2,6 +2,8 @@ Thực thi: Codex (model/effort không được runtime cung cấp), phiên cậ
 
 # Báo cáo — quy trình Markdown và tiếp tục Codex/Claude Code
 
+**Trạng thái mới nhất 29/10/2026:** đã merge riêng tài liệu vào nhánh tích hợp cục bộ tại `93c2211`; push BLOCKED do chưa có remote/URL đích. Chi tiết ở mục tích hợp cuối file; các mục trước giữ dấu vết từng lượt.
+
 | Hạng mục | Kết quả |
 |---|---|
 | Yêu cầu | Lập kế hoạch chi tiết → phiên mới model tiết kiệm hơn code/build APK → phiên mới sơ bộ nhanh → chủ dự án nghiệm thu chính thức, chi tiết. |
@@ -46,3 +48,13 @@ Thực thi: Codex (model/effort không được runtime cung cấp), phiên cậ
 - S7: cập nhật chỉ mục HANDOFF.md, kế hoạch, báo cáo và bàn giao. Đã kiểm diff chỉ gồm 7 `.md`, `git diff --check` sạch và đối chiếu mục “Danh sách CẤM tuyệt đối” trong AGENTS.md không đổi; không có thay đổi mã ứng dụng/artifact.
 - Quyền ngang nhau vẫn cùng luật an toàn, một agent sửa code mỗi lúc, nghiệm thu chính thức của chủ dự án và chỉ thị merge/push/public. Khác biệt công cụ có kết nối hay không được báo là giới hạn kỹ thuật.
 - Không thay code/build/config, không chạy test/Gradle/ADB; chưa diễn tập phiên Claude Code. Không sửa repo chính, chưa merge/push. Commit bổ sung tra bằng `git log -1 -- docs/plans/2026-10-29-quy-trinh-md-ban-giao-bao-cao.md`.
+
+## Tích hợp theo chỉ thị chủ dự án — 29/10/2026
+
+- Chỉ thị trực tiếp: “Merge/push vào repo chính đi”, phạm vi quy trình vừa bàn giao. Đích tích hợp hiện hành: `feature/e93-03d-y700-offline-cockpit`, baseline `9adeeba6c367a05194c36d8d6df6cbfb8f16efe9`.
+- Nhánh gốc có tổ tiên E105 ngoài phạm vi. Đã tạo `dot/2026-10-29-quy-trinh-md-ban-giao-merge` từ baseline tích hợp và cherry-pick chỉ commit tài liệu: `7f3cca8 → 8409169`, `1a3ef47 → 954ef24`, `c1daa9c → 71948a7`, kế hoạch merge `1d9443c → 0ab4ac2`. Không có xung đột.
+- **Merge cục bộ thành công:** `93c22119e82011d54e7db64eecbd1c8f9e22dd3e`, hai parent `9adeeba` và `0ab4ac2`, dùng `merge --no-ff`. Nhánh nhiệm vụ được fast-forward tới merge để ghi hồ sơ này; commit hồ sơ sẽ được fast-forward vào tích hợp.
+- Kiểm trước/sau merge: diff so với `9adeeba` chỉ gồm **14 file Markdown**; `git diff --exit-code 9adeeba HEAD -- app` rỗng; `git diff 9adeeba HEAD --check` sạch, working tree sạch ngay sau merge. Không chạy test/Gradle/ADB vì không đổi ứng dụng.
+- **Push BLOCKED:** `git remote` và refs/remotes đều rỗng; không có remote/upstream để xác định đích. Đã hỏi chủ dự án URL. Chưa thêm remote đoán, chưa chạy push/force push hoặc tạo repo công khai. Quyền push đã được cấp trong chỉ thị này; chỉ còn thiếu địa chỉ đích và cần đối chiếu lịch sử remote trước khi gửi.
+- Thư mục chính trên D: vẫn ở nhánh UI/UX với phần chưa commit của phiên khác; thao tác merge cập nhật nhánh tích hợp dùng chung bằng worktree sạch, không chỉnh cây làm việc D:. Quy tắc mới có trên nhánh tích hợp, chưa hiện trong checkout UI/UX cho đến khi cập nhật nhánh đó an toàn.
+- Bước còn lại: nhận URL đích, kiểm remote/nhánh đích, push thông thường đúng nhánh được giao và xác minh SHA remote. Không kèm mã E105/nhánh khác hoặc APK; nếu lịch sử remote khác dự kiến thì báo rõ trước khi hợp nhất thêm.
