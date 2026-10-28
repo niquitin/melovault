@@ -80,7 +80,8 @@ class SyncBuildGateReworkTest {
             }
         }
         val byFile = calls.groupBy({ it.first }, { it.second })
-        assertEquals(calls.toString(), setOf("SyncSettingsController.kt", "TdlibPlaylistSyncService.kt", "SyncServiceProvider.kt"), byFile.keys)
+        assertEquals(calls.toString(), setOf("SyncSettingsController.kt", "TdlibPlaylistSyncService.kt", "SyncServiceProvider.kt", "AutomaticPlaylistSync.kt"), byFile.keys)
+        assertTrue(byFile.getValue("AutomaticPlaylistSync.kt").single().contains("SyncSendBudget.PRODUCTION_MAX"))
         // the controller passes the grant it took out; the service passes the clamped budget; the trigger bridge reads only
         assertTrue(byFile.getValue("SyncSettingsController.kt").single().contains("actions.run(who, mode, granted)"))
         assertTrue(byFile.getValue("SyncServiceProvider.kt").single().contains("service.runSync(account, mode, sendBudget)"))
@@ -94,7 +95,7 @@ class SyncBuildGateReworkTest {
         assertEquals(emptyList<String>(), users)
     }
 
-    @Test fun nothingStartsASyncByItself() {
+    @Test fun automaticSyncAddsNoBackgroundWorkOrServiceTimer() {
         val offenders = sync.walkTopDown().filter { it.isFile && it.extension == "kt" }
             .filter { f ->
                 val t = f.readText()

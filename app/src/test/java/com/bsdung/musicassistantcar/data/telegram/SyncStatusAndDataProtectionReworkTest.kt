@@ -46,7 +46,7 @@ class SyncStatusAndDataProtectionReworkTest {
         }
         assertTrue(doubt.fullDetail().contains("KHÔNG gửi lại"))
         assertTrue(doubt.fullDetail().contains("Mã chẩn đoán: SEND_ACK_TIMEOUT"))
-        assertTrue(limit.fullDetail().contains("không tự gửi thêm"))
+        assertTrue(limit.fullDetail().contains("tự gửi tiếp khi đang mở"))
         assertTrue(limit.detail.contains("2 thay đổi"))
     }
 

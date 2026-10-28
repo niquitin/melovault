@@ -105,7 +105,7 @@ class SyncSettingsControllerTest {
         assertEquals(ActionResult.Refused(ActionResult.Reason.WARNING_NOT_ACCEPTED), c.enable(false))
         assertEquals(old, store.load(acct))
         assertEquals(ActionResult.Done, c.enable(true))
-        assertEquals(SyncConsent(true, false, false, 2), store.load(acct))
+        assertEquals(SyncConsent(true, false, false, 3), store.load(acct))
         assertEquals(0, c.sendGrant())
         assertEquals(before, factsNow)
         assertTrue(actions.calls.isEmpty())
@@ -148,7 +148,7 @@ class SyncSettingsControllerTest {
         assertFalse(SyncConsentActions(fileStore).enable(acct, false))
         assertTrue(bytes.contentEquals(file.readBytes()))
         assertTrue(SyncConsentActions(fileStore).enable(acct, true))
-        assertEquals(SyncConsent(true, false, false, 2), fileStore.load(acct))
+        assertEquals(SyncConsent(true, false, false, 3), fileStore.load(acct))
         assertTrue(file.readText().startsWith("mvconsent v1\n"))
     }
 

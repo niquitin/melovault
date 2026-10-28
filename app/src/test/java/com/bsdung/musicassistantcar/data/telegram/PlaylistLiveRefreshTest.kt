@@ -229,12 +229,13 @@ class PlaylistLiveRefreshTest {
         }
     }
 
-    @Test fun r3_theActivityResumesTheListLocallyAndNeverStartsASync() {
+    @Test fun r3_theActivityRefreshesLocallyAndDelegatesNetworkWorkToTheForegroundCoordinator() {
         val sources = File(listOf(File("src"), File("app/src")).first { it.isDirectory }, "shareable/java/com/bsdung/musicassistantcar/data/telegram")
         val activity = File(sources, "TelegramPreviewActivity.kt").readText().replace("\r\n", "\n")
         val onResume = activity.substringAfter("override fun onResume() {").substringBefore("private val playbackListener")
         assertTrue("onResume reloads the saved list", onResume.contains("reloadSavedPlaylistLive"))
-        for (forbidden in listOf("runSync", "runOnce", "SyncRuntime", "actions()", "TdlibPlaylistSyncService", "grantSend")) {
+        assertTrue(onResume.contains("SyncRuntime.listen(this)"))
+        for (forbidden in listOf("runSync", "runOnce", "actions()", "TdlibPlaylistSyncService", "grantSend")) {
             assertFalse("onResume must not call $forbidden", onResume.contains(forbidden))
         }
         val reload = activity.substringAfter("private fun reloadSavedPlaylistLive").substringBefore("private fun refreshPlaylistStatus")

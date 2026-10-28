@@ -23,10 +23,12 @@ internal data class SyncConsent(
     val acceptedWarningVersion: Int = 0,
 ) {
     companion object {
-        const val WARNING_VERSION = 2
+        const val WARNING_VERSION = 3
     }
 
     val warningAccepted: Boolean get() = acceptedWarningVersion == WARNING_VERSION
+    /** V2 manual consent never silently authorizes foreground automation. */
+    val automatic: Boolean get() = enabled && warningAccepted && mayTransmitInitial
 }
 
 internal interface SyncConsentStore {

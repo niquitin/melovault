@@ -1,6 +1,8 @@
 package com.bsdung.musicassistantcar.data.telegram
 
 import java.io.File
+import java.util.concurrent.ScheduledThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 /**
  * E96 P5-A: the ONE production place where the P3 sync service is composed. It is inert unless the build switch
@@ -23,6 +25,7 @@ internal class SyncServiceProvider(
     private val discoveryLimits: DiscoveryLimits = DiscoveryLimits(),
     /** [TelegramPlaylistFlags.SYNC_CREATE_ALLOWED]. False unless a QA build was started with the extra create flag. */
     private val channelCreationUnlocked: Boolean = false,
+    private val isActive: () -> Boolean = { true },
 ) {
     private var cached: SyncActionsPort? = null
 
@@ -39,6 +42,7 @@ internal class SyncServiceProvider(
         val service = TdlibPlaylistSyncService(
             owner(), playlist, SyncGate(buildEnabled, store), clock, config, timeouts, historyLimits, discoveryLimits,
             channelCreationUnlocked = channelCreationUnlocked,
+            isActive = isActive,
         )
         return TdlibSyncActions(service).also { cached = it }
     }
@@ -77,6 +81,40 @@ internal class SyncRunLog {
 /** Process-wide holders. Reading a property never touches TDLib; only [SyncServiceProvider.actions] with the switch on does. */
 internal object SyncRuntime {
     val runLog = SyncRunLog()
+    @Volatile private var foreground = false
+    private var auto: AutomaticPlaylistSync? = null
+    private val listeners = LinkedHashMap<Any, () -> Unit>()
+
+    @Synchronized fun listen(owner: Any, callback: () -> Unit) { listeners[owner] = callback }
+    @Synchronized fun unlisten(owner: Any) { listeners.remove(owner) }
+    private fun notifyChanged() {
+        val callbacks = synchronized(this) { listeners.values.toList() }
+        callbacks.forEach { runCatching { it() } }
+    }
+
+    fun setForeground(visible: Boolean, root: File) {
+        foreground = visible
+        automatic(root).setForeground(visible)
+    }
+
+    @Synchronized fun automatic(root: File): AutomaticPlaylistSync {
+        auto?.let { return it }
+        val worker = ScheduledThreadPoolExecutor(1) { task ->
+            Thread(task, "MeloVault-AutoPlaylist").apply { isDaemon = true }
+        }
+        worker.removeOnCancelPolicy = true
+        val session = TelegramPlaylistRuntime.session(root) as PlaylistSyncHost
+        return AutomaticPlaylistSync(
+            TelegramPlaylistFlags.SYNC_ENABLED, provider(root).actions(), FileSyncConsentStore(root), session,
+            account = { ShareableTdlibOwner.authorizedAccount()?.let { TelegramUserId(it) } },
+            authEpoch = { ShareableTdlibOwner.authEpoch() },
+            schedule = { delay, task ->
+                val future = worker.schedule({ task() }, delay, TimeUnit.MILLISECONDS)
+                SyncScheduledTask { future.cancel(false) }
+            },
+            runLog = runLog, changed = ::notifyChanged,
+        ).also { auto = it }
+    }
 
     @Volatile private var provider: SyncServiceProvider? = null
 
@@ -87,5 +125,6 @@ internal object SyncRuntime {
         host = { TelegramPlaylistRuntime.session(noBackupDir) as? PlaylistSyncHost },
         store = FileSyncConsentStore(noBackupDir),
         channelCreationUnlocked = TelegramPlaylistFlags.SYNC_CREATE_ALLOWED,
+        isActive = { foreground },
     ).also { provider = it }
 }

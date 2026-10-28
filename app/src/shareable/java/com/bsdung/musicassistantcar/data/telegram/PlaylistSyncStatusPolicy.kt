@@ -42,7 +42,7 @@ internal data class PlaylistStatusFacts(
     }
 }
 
-/** What happened in the last manual sync run of THIS app session; null = none has run (nothing ever runs by itself). */
+/** What happened in the last sync run of this app session; null = none has completed. */
 internal data class LastSyncRun(
     val accountId: Long,
     val status: SyncStatus? = null,
@@ -156,19 +156,18 @@ internal object PlaylistSyncStatusPolicy {
             }
         }
         if (!facts.channelBound) {
-            val consentHint = if (sync.consent.mayCreateChannel) "" else " Cần bạn cho phép tạo kênh riêng."
-            return Line(Kind.NO_CHANNEL, "Đã lưu trên máy · Chưa có kênh đồng bộ", "Chưa có kênh Telegram riêng để đồng bộ.$consentHint", Severity.WARN, notes)
+            return Line(Kind.NO_CHANNEL, "Đã lưu trên máy · Chưa có kênh đồng bộ", "Chưa gắn được kênh Telegram hợp lệ. Hãy bật tự đồng bộ trong Cài đặt để kiểm tra kênh có sẵn.", Severity.WARN, notes)
         }
         run?.denied?.let { return denied(it, notes) }
         if (facts.pendingCount > 0 && !sync.consent.mayTransmitInitial) {
             return Line(
                 Kind.NEEDS_TRANSMIT_CONSENT, "Đã lưu trên máy · Chưa cho phép gửi",
-                "Có ${facts.pendingCount} thay đổi chờ gửi. Cần bạn cho phép gửi dữ liệu lần đầu trong Cài đặt.", Severity.WARN, notes,
+                "Có ${facts.pendingCount} thay đổi chờ gửi. Hãy xem danh sách và xác nhận bật tự đồng bộ trong Cài đặt.", Severity.WARN, notes,
             )
         }
         if (run == null) {
             return if (facts.pendingCount > 0) pending(facts, notes) else
-                Line(Kind.NEVER_SYNCED, "Đã lưu trên máy · Chưa kiểm tra đồng bộ trong phiên này", "Phiên này chưa chạy lần đồng bộ nào nên chưa biết Playlist có khớp kênh hay không (lần trước có thể đã đồng bộ). Bấm \"Đồng bộ ngay\" trong Cài đặt để kiểm tra.", Severity.INFO, notes)
+                Line(Kind.NEVER_SYNCED, "Đã lưu trên máy · Chờ kiểm tra đồng bộ", "Ứng dụng sẽ kiểm tra khi đang mở và đã bật tự đồng bộ. Chưa có kết quả xác nhận trong phiên này.", Severity.INFO, notes)
         }
         val attention = Line(Kind.ATTENTION, "Chưa đồng bộ được · Thử lại", "Lần đồng bộ vừa rồi không hoàn tất. Playlist trên máy vẫn nguyên vẹn.", Severity.WARN, notes)
         return when (run.status ?: return attention) {
@@ -184,8 +183,8 @@ internal object PlaylistSyncStatusPolicy {
             SyncStatus.OUTBOX_INCOMPLETE -> sending(maxOf(run.pendingLeft, facts.pendingCount), notes)
             SyncStatus.SEND_LIMIT_REACHED -> Line(
                 Kind.SEND_LIMIT, "Đã lưu trên máy · Chưa gửi hết",
-                "Còn ${maxOf(run.pendingLeft, facts.pendingCount)} thay đổi chờ gửi. Lượt gửi bạn cho phép đã dùng hết hoặc chưa được cấp; " +
-                    "ứng dụng không tự gửi thêm. Cho phép lượt mới trong Cài đặt nếu muốn gửi tiếp.", Severity.WARN, notes,
+                if (sync.consent.automatic) "Còn ${maxOf(run.pendingLeft, facts.pendingCount)} thay đổi. Ứng dụng sẽ tự gửi tiếp khi đang mở."
+                else "Còn ${maxOf(run.pendingLeft, facts.pendingCount)} thay đổi chờ gửi. Hãy bật tự đồng bộ trong Cài đặt.", Severity.INFO, notes,
             )
             SyncStatus.DELIVERY_UNCONFIRMED -> Line(
                 Kind.DELIVERY_UNCONFIRMED, "Đã lưu trên máy · Chưa xác nhận đã tới kênh",
@@ -248,7 +247,7 @@ internal object PlaylistSyncStatusPolicy {
         SyncDenied.CREATE_LOCKED ->
             Line(Kind.CREATE_LOCKED, "Đã lưu trên máy · Không tạo kênh mới", "Bản này không tạo kênh Telegram mới; chỉ tìm và gắn kênh đã có.", Severity.INFO, notes)
         SyncDenied.TRANSMIT_NOT_ALLOWED ->
-            Line(Kind.NEEDS_TRANSMIT_CONSENT, "Đã lưu trên máy · Chưa cho phép gửi", "Cần bạn cho phép gửi dữ liệu lần đầu trong Cài đặt.", Severity.WARN, notes)
+            Line(Kind.NEEDS_TRANSMIT_CONSENT, "Đã lưu trên máy · Chưa cho phép gửi", "Hãy xem thay đổi chờ gửi và xác nhận bật tự đồng bộ trong Cài đặt.", Severity.WARN, notes)
         SyncDenied.NOT_AUTHORIZED -> Line(Kind.NEEDS_LOGIN, "Cần đăng nhập Telegram để đồng bộ", "Playlist trên máy vẫn dùng bình thường.", Severity.WARN, notes)
         SyncDenied.NOT_OPEN, SyncDenied.SINK_BUSY, SyncDenied.BUSY ->
             Line(Kind.BUSY, "Đang bận · Thử lại sau", "Một tác vụ khác đang dùng Telegram. Thử lại sau giây lát.", Severity.INFO, notes)

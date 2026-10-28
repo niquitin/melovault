@@ -884,6 +884,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        PlaylistSyncForeground.install(application, noBackupFilesDir)
         setTheme(R.style.Theme_MeloVault_Shareable)
         val prefs = getSharedPreferences(UiThemePolicy.PREFS_NAME, Context.MODE_PRIVATE)
         currentThemePreset = UiThemePolicy.getSavedPreset(prefs)
@@ -1017,6 +1018,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        SyncRuntime.unlisten(this)
         overflowMenu.dismiss()
         if (downloadedCountScheduled) android.util.Log.w("MeloVaultCount", "stage=pause_cancels_pending")
         uiForeground = false
@@ -1030,6 +1032,17 @@ class TelegramPreviewActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         uiForeground = true
+        SyncRuntime.listen(this) {
+            runOnUiThread {
+                if (!uiForeground || isDestroyed) return@runOnUiThread
+                library.authorizedUser()?.let { who ->
+                    if (playlistLoaded) {
+                        reloadSavedPlaylistLive(who)
+                        refreshPlaylistStatus(who)
+                    }
+                }
+            }
+        }
         // Picks up a changed "Bố cục Gọn" setting when returning from Cài đặt giao diện.
         applyMeloLayer()
         // E102: Cài đặt writes the theme preset and the source display mode; apply a changed value here
@@ -4686,7 +4699,6 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var saveGuardAccount = 0L
     @Volatile private var playlistLoaded = false
     @Volatile private var playlistStatusLine: PlaylistSyncStatusPolicy.Line? = null
-    private val syncConsentStore by lazy { FileSyncConsentStore(noBackupFilesDir) }
 
     /**
      * The one Save/Unsave path (now-playing button and song menu). The write runs on the playlist
@@ -4722,6 +4734,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val next = guard.finish(written)
         onPlaylistToggled(account, outcome, title)
         refreshPlaylistStatus(account)
+        if (written) SyncRuntime.automatic(noBackupFilesDir).afterSave()
         // A guard replaced by an account change belongs to the previous account: its leftovers are not re-run.
         if (guard === saveGuard && next != null) startPlaylistWrite(guard, account, next, null)
         notifyMeloPlayback()
@@ -4847,10 +4860,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun refreshPlaylistStatus(account: TelegramUserId) {
         TelegramPlaylistRuntime.submit {
             val facts = playlistSession.statusFacts(account)
-            val consent = if (TelegramPlaylistFlags.SYNC_ENABLED) syncConsentStore.load(account) else SyncConsent()
             val line = PlaylistSyncStatusPolicy.evaluate(
                 account.value, facts,
-                SyncContext(TelegramPlaylistFlags.SYNC_ENABLED, consent, lastRun = SyncRuntime.runLog.last(account.value))
+                SyncRuntime.automatic(noBackupFilesDir).context(account)
             )
             runOnUiThread {
                 if (isDestroyed || library.authorizedUser() != account) return@runOnUiThread
@@ -4892,6 +4904,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         favoriteIds = opened.ids
                         playlistUnreadable = false
                         playlistLoaded = true
+                        SyncRuntime.automatic(noBackupFilesDir).requestNow()
                         updatePlaylistButtons()
                         if (playlistMode) refreshSongRows()
                         opened.warning?.let { showPlaylistImportDeferred(it) }
@@ -4920,8 +4933,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         saveGuard = SaveToggleGuard()
         saveGuardAccount = 0L
         // E96 P5-A: no sync report outlives its session, and an unfinished sync is stopped (inert while the build switch is off).
-        SyncRuntime.runLog.clear()
-        SyncRuntime.provider(noBackupFilesDir).actions().close()
+        SyncRuntime.automatic(noBackupFilesDir).invalidate()
         TelegramPlaylistRuntime.submit { playlistSession.close() }
     }
 
@@ -7505,6 +7517,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        SyncRuntime.unlisten(this)
         detachMeloLayer()
         if (::mainRoot.isInitialized) {
             mainRoot.removeCallbacks(miniPlayerProgressTick)

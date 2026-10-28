@@ -135,7 +135,8 @@ class PlaylistSyncStatusPolicyTest {
         val needsSend = eval(facts(pending = 2), ctx(consent = optedIn.copy(mayTransmitInitial = false)))
         assertEquals(Kind.NEEDS_TRANSMIT_CONSENT, needsSend.kind)
         val needsCreate = eval(facts(bound = false), ctx(consent = optedIn.copy(mayCreateChannel = false)))
-        assertTrue(needsCreate.detail.contains("cho phép tạo kênh"))
+        assertTrue(needsCreate.detail.contains("kiểm tra kênh có sẵn"))
+        assertFalse(needsCreate.detail.contains("cho phép tạo kênh"))
     }
 
     @Test fun s13_everyRecoveryReasonHasItsOwnPlainMessageAndNeverSuggestsDeletingAnything() {

@@ -1,4 +1,46 @@
-# E105 — Mở đồng bộ Playlist thủ công trên Beta riêng và open
+# E105 — Tự đồng bộ Playlist khi mở app
+
+## Kế hoạch chủ dự án chốt lại 28/10/2026 — ưu tiên hơn phần lịch sử bên dưới
+
+Chủ dự án chọn **tự đồng bộ khi mở app**, yêu cầu triển khai trực tiếp kế hoạch đã duyệt trong hội thoại.
+Baseline code: `6d427f4c55c6e191c448861778da05df4b8c9f7d`, nhánh `dot/E105-DONG-BO-PLAYLIST`.
+Giữ nguyên `.codex-remote-attachments/`. Phiên code/test/commit trên Ni; QA thiết bị ở phiên riêng.
+
+### Hành vi
+- Bật “Tự đồng bộ Playlist” một lần trên mỗi máy, cùng tài khoản/kênh Telegram có sẵn.
+- Thêm/bỏ trên máy đang mở tự truyền; máy đóng nhận khi mở lại. Không tự tải/phát nhạc, không chạy nền khi rời app.
+- Thay thao tác tìm/gắn/cấp lượt hằng lần bằng thiết lập tự kiểm kênh. Không tạo kênh mới, không chọn kênh mơ hồ.
+- Cảnh báo v2 → v3, không tự kế thừa quyền thủ công. Giữ định dạng lưu quyền. Chỉ bật gửi sau xác nhận và kiểm kênh thành công.
+- Hiện đầy đủ từng thay đổi chờ gửi (thêm/bỏ, bài, nguồn) trước khi bật; kiểm lại bản xem trước còn đúng tài khoản/phiên/danh sách.
+
+### Code và bảo vệ dữ liệu
+- Điều phối chung trong SyncRuntime: foreground + playlist sẵn sàng chạy ngay; sau lưu thành công gom 500 ms; kiểm từ xa mỗi 15 giây.
+- Mỗi lượt tối đa 3 thay đổi, còn việc và có tiến triển thì tiếp sau 1 giây. Một lượt chạy tại một thời điểm, kể cả nút Đồng bộ ngay.
+- Kiểm kênh trước mỗi lượt; giữ account/auth epoch. Rời app/tắt/mất đăng nhập hủy lịch và công việc an toàn; kết quả cũ không áp vào phiên mới.
+- Nhận thay đổi cập nhật Playlist trực tiếp; trạng thái phân biệt đang chạy/chờ mạng/cần xử lý/đã đồng bộ.
+- Giữ backoff/FLOOD_WAIT và đọc đối chiếu trước gửi; không gửi lại khi chưa rõ đã tới nơi.
+- Không đổi API công khai, schema playlist, songKey, package, signer hoặc versionCode 121. Không viết lại giao thức.
+- Điều tra bằng test chuỗi thêm → bỏ → thêm lại và bấm hai lần; hai pending trên Shanling chưa chứng minh lỗi phần mềm. Xem qua UI, không trích xuất TDLib/noBackup hoặc xóa hàng đợi.
+
+### Test và nghiệm thu 5 bước
+Unit test: quyền cũ không tự bật; gửi >3 thay đổi; thêm/bỏ/thêm lại hai máy; lỗi mạng; unknown delivery; đổi phiên; foreground; thao tác đồng thời; lỗi lưu quyền.
+Test/build riêng + open, Debug + Release trên Ni theo lệnh lịch sử. Build Tiny/QA theo luật cài và màn hình hiện hành.
+
+Agent QA thực hiện trên Shanling + Sony, xác minh cùng tài khoản/kênh và ghi tập bài ban đầu:
+1. Bật một lần; xem, xác định và xử lý có kiểm soát các mục chờ gửi cũ trước khi cho gửi.
+2. Shanling thêm bài thử đã duyệt; Sony tự hiện đúng một bài, không bấm đồng bộ.
+3. Sony bỏ bài → Shanling tự mất; Shanling thêm lại → Sony tự nhận đúng một bản.
+4. Sony ra nền; đổi Playlist trên Shanling; mở Sony lại phải tự cập nhật.
+5. Chờ thêm hai chu kỳ và mở lại app: hai danh sách khớp, không trùng/mất bài nền, không còn thay đổi chưa xác nhận. Tắt phải dừng gửi/nhận và giữ dữ liệu.
+
+Mỗi thay đổi đơn xuất hiện trong **30 giây** khi mạng bình thường, Telegram không giới hạn; có ảnh/video trước–sau hai máy.
+Open phải QA sau đăng nhập hợp lệ; không suy từ bản riêng. Biến thể/thiết bị chưa thử ghi riêng. Vấn đề tải Drive là bàn giao riêng.
+Rollback: tắt tự đồng bộ, giữ playlist/outbox; không xóa dữ liệu hoặc ép hạ phiên bản.
+Codex code/test/commit rồi dừng; không nghiệm thu, merge hoặc upload APK. Opus nghiệm thu theo chuỗi chức năng trên.
+
+---
+
+# Lịch sử kế hoạch 27/10/2026 — đồng bộ thủ công (được thay bằng phần trên)
 
 Lập kế hoạch: Codex, phiên 27/10/2026; chủ dự án giao nhiệm vụ LỚN và giao Codex lập kế hoạch thay Opus.
 Model/effort cho phiên thực thi mới: gpt-6-astra medium. Opus nghiệm thu độc lập.

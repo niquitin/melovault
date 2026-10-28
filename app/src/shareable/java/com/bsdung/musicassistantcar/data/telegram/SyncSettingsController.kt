@@ -31,8 +31,8 @@ internal object SyncPrivacyText {
         "Chỉ có thông tin bài đã lưu (mã nhóm/tin nhắn Telegram và nhật ký thêm/bỏ). Không có âm thanh, không có nhạc trên máy, " +
             "không có mã đăng nhập hay khóa, không có tệp hay đường dẫn tải về.",
         "Dùng cùng tài khoản Telegram trên các máy để thấy cùng danh sách. Dữ liệu nằm trên đám mây Telegram cho tới khi bạn tự xóa kênh hoặc tin nhắn.",
-        "Chỉ đồng bộ thủ công khi bạn bấm, qua kênh Telegram đã có. Bản sản phẩm không tạo kênh mới.",
-        "Thao tác bỏ bài (REMOVE) trên máy khác cũng được áp dụng vào Playlist trên máy này khi bạn đồng bộ.",
+        "Khi bật, ứng dụng tự gửi và nhận thay đổi lúc đang mở, qua kênh Telegram đã có. Máy đang đóng sẽ nhận khi mở lại. Không tạo kênh mới.",
+        "Bỏ bài trên một máy cũng tự bỏ bài đó khỏi Playlist trên các máy khác. Các thay đổi chờ gửi được hiển thị để bạn xem trước khi bật.",
         "Chỉ đồng bộ danh sách. Nhạc không tự tải hay phát sang máy khác.",
     )
 
