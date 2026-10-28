@@ -2,6 +2,8 @@
 
 Dành cho phiên Claude Code MỚI, chọn model **Opus cao nhất hiện có**, chế độ lập kế hoạch/duyệt thao tác. Không dùng Resume của phiên trước.
 
+Cập nhật 28/10/2026: chủ dự án trực tiếp nghiệm thu; agent thực thi chuẩn bị/bàn giao bằng chứng theo `PROMPT_CHU_DU_AN_NGHIEM_THU.md`. Opus chỉ lập kế hoạch khi được giao, không còn bước bắt buộc Opus nghiệm thu. CLAUDE.md mục 0 ưu tiên hơn các hướng dẫn cũ.
+
 ---
 
 MELOVAULT — PHIÊN OPUS LẬP KẾ HOẠCH, KHÔNG SỬA CODE
@@ -18,7 +20,7 @@ Nhánh dự kiến: dot/<TASK_ID>
 5. Plan ghi rõ những trường hợp Sonnet phải STOP và xin kiểm toán thay vì đoán, kể cả signature mismatch, ADB không nhận, missing Telegram API config hoặc layout không tái hiện.
 6. Không sửa .kt, .gradle, manifest, data, CLAUDE.md hay docs/workflow; không chạy build, cài APK, xóa dữ liệu, không tự chuyển sang task khác. Chỉ commit file kế hoạch trên dot/<TASK_ID> khi Git sạch, báo đường dẫn file, commit và điểm chặn.
 
-7. Nhiệm vụ lớn: chia rõ **Sonnet phiên 1** (code + test Ni, các bước nào) và **Sonnet phiên 2** (build Tiny + QA + báo cáo); nhiệm vụ nhỏ ghi GỘP. Tiêu chí PASS/FAIL phải đo được để phiên Opus nghiệm thu chấm thẳng.
+7. Nhiệm vụ lớn: chia rõ **Sonnet phiên 1** (code + test Ni, các bước nào) và **Sonnet phiên 2** (build Tiny + QA + báo cáo); nhiệm vụ nhỏ ghi GỘP. Tiêu chí phải đo được để agent báo kết quả kỹ thuật và chủ dự án quyết định ĐẠT/yêu cầu sửa.
 
 Kết thúc bằng ba đoạn dễ hiểu: Đã làm / Chưa kiểm chứng / Rủi ro, rồi **prompt Codex thực thi phiên 1** điền từ docs/workflow/PROMPT_CODEX.md mục B (model `gpt-6-astra`, effort medium; chỉ thay TASK_ID, baseline, PHIÊN và ≤ 8 dòng lưu ý riêng), và đúng câu:
 "Giờ mở phiên Codex mới, chọn gpt-6-astra medium."
@@ -27,8 +29,7 @@ Kết thúc bằng ba đoạn dễ hiểu: Đã làm / Chưa kiểm chứng / R�
 DỪNG. Không tự triển khai code.
 
 ---
-Khi phải sửa chính kế hoạch theo kết quả Opus nghiệm thu REWORK, mở phiên Opus MỚI trên cùng nhánh, không tạo nhánh/plan trùng.
-(Cập nhật 25/10/2026: "ChatGPT" ở các mục dưới đọc là "Opus nghiệm thu".)
+Khi chủ dự án yêu cầu sửa chính kế hoạch, mở phiên lập kế hoạch MỚI theo phân công trên cùng nhánh, không tạo nhánh/plan trùng. Các chỉ dẫn bàn giao/nghiệm thu cũ bên dưới áp dụng theo CLAUDE.md mục 0 mới: agent chuẩn bị, chủ dự án quyết định.
 
 ### QUY ĐỊNH MÀN HÌNH KHI LẬP KẾ HOẠCH (19/10/2026)
 
@@ -36,4 +37,4 @@ Khi lập 3–6 bước QA từ xa, xác định bước nào cần màn ON và 
 
 ### YÊU CẦU KẾ HOẠCH APK TEST (19/10/2026)
 
-Nếu nhiệm vụ sẽ tạo APK thử nghiệm, kế hoạch phải có bước **bàn giao APK QA**: Sonnet ghi package, vc/vname, signer, SHA256, bytes, source commit, vị trí artifact và tình trạng config/test; ChatGPT kiểm toán độc lập, upload Google Drive Ni N riêng tư, gửi link trực tiếp và tạo `docs/plans/<TASK_ID>-apk-test.md`. Link QA có thể gửi trước khi owner nghiệm thu nhưng phải ghi rõ **CHƯA PASS**. Không public, không đổi signer/version trái yêu cầu, không đưa secrets lên Drive.
+Nếu nhiệm vụ sẽ tạo APK thử nghiệm, kế hoạch phải có bước **bàn giao APK QA**: agent thực thi ghi và kiểm package, vc/vname, signer, SHA256, bytes, source commit, vị trí artifact và tình trạng config/test; sau các gate, upload Google Drive Ni N riêng tư, xác minh link và tạo `docs/plans/<TASK_ID>-apk-test.md`. Gửi APK/bằng chứng để chủ dự án trực tiếp nghiệm thu; bản chưa duyệt ghi **QA CANDIDATE — CHƯA NGHIỆM THU**. Không public, không đổi signer/version trái yêu cầu, không đưa secrets lên Drive.

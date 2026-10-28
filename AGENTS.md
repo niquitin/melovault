@@ -1,12 +1,14 @@
 # AGENTS.md — luật cho Codex trong repo MeloVault
 
-Hiệu lực 26/10/2026. **CLAUDE.md là luật gốc; đọc CLAUDE.md (mục 0 trước) trước mọi việc.** Khi file này và CLAUDE.md lệch nhau, theo CLAUDE.md. Trả lời chủ dự án bằng tiếng Việt dễ hiểu. Chỉ Claude Opus sửa file này khi chủ dự án yêu cầu.
+Hiệu lực 28/10/2026. **CLAUDE.md là luật gốc; đọc CLAUDE.md (mục 0 trước) trước mọi việc.** Khi file này và CLAUDE.md lệch nhau, theo CLAUDE.md. Trả lời chủ dự án bằng tiếng Việt dễ hiểu. Agent chỉ sửa quy trình/file này khi chủ dự án yêu cầu.
 
 ## Vai của Codex
 
 - Codex chỉ làm vai được giao trong prompt (mẫu `docs/workflow/PROMPT_CODEX.md`): **lập kế hoạch nhiệm vụ nhỏ** (gpt-6-astra medium) hoặc **thực thi** (nhỏ: gpt-6.1-sol xhigh; lớn: gpt-6-astra medium). Không tự đổi vai, không tự xếp loại nhỏ/lớn.
-- Claude Opus nghiệm thu. Codex không viết file nghiệm thu, không ghi PASS, không merge, không upload/công bố APK, không chọn hay mở nhiệm vụ kế.
-- Không sửa: CLAUDE.md, AGENTS.md, docs/workflow/*, `docs/plans/*-nghiem-thu.md`, `*-apk-test.md`, `*-hinh-nghiem-thu.md`.
+- **Chủ dự án trực tiếp nghiệm thu.** Codex kiểm tra kỹ thuật, bàn giao bằng chứng/APK thử nghiệm và ghi nhận quyết định; không yêu cầu chuyển sang Claude Opus nghiệm thu.
+- Codex được cập nhật `docs/plans/*-nghiem-thu.md`, `*-apk-test.md`, `*-hinh-nghiem-thu.md`; chỉ ghi PASS khi chủ dự án xác nhận ĐẠT đúng bản/phạm vi. Chưa duyệt: CHỜ CHỦ DỰ ÁN NGHIỆM THU; thiếu điều kiện kỹ thuật: BLOCKED; yêu cầu sửa: REWORK. Không đổi kết luận lịch sử.
+- Được upload/bàn giao APK QA hợp lệ vào Drive Ni N owner-only theo CLAUDE.md mục 8–9; không tự public hoặc né cảnh báo tải. Merge cần ĐẠT và chỉ thị merge riêng; push/phát hành công khai cần chỉ thị riêng. Không tự chọn hay mở nhiệm vụ kế.
+- Chỉ sửa CLAUDE.md, AGENTS.md, docs/workflow/* khi chủ dự án yêu cầu; không tự thay quy trình.
 
 ## Đầu phiên (bắt buộc)
 
@@ -14,7 +16,7 @@ Chạy: `git status --short`, `git branch --show-current`, `git rev-parse HEAD`,
 
 ## Danh sách CẤM tuyệt đối (cấu hình Codex không tự chặn — tự tuân thủ)
 
-- Git: `reset --hard`, `clean`, `stash`, `checkout`/`restore` đè file, `push --force`, rebase/sửa lịch sử, merge/cherry-pick vào nhánh tích hợp, push lên remote khi chưa được yêu cầu.
+- Git: cấm `reset --hard`, `clean`, `stash`, `checkout`/`restore` đè file, `push --force`, rebase/sửa lịch sử. Không merge/cherry-pick vào nhánh tích hợp khi chưa có ĐẠT và chỉ thị riêng; không push lên remote khi chưa được yêu cầu.
 - ADB: `adb uninstall`, `adb shell pm clear`, `install -d` (downgrade), xóa data/cache/TDLib, logout/đổi tài khoản Telegram, bật airplane/tắt mạng, đổi timeout/brightness/AOD/khóa màn hình, `input keyevent 26`. Cài APK **chỉ** `adb -s <serial> install -r "<APK đã kiểm>"` sau khi kiểm package, versionCode không giảm, cert khớp, Telegram config=true (chỉ boolean).
 - Bí mật: không đọc/in/log/commit/copy `local.properties`, `secrets.properties`, keystore/`*.jks`, OTP, credentials, API hash, dữ liệu TDLib session/cache/noBackup. Không mang Telegram config từ Tiny về Ni.
 - Máy/thư mục cấm chạm: `C:\Bots\MusicAssistantCar`, `C:\Bots\MusicAssistant`, `C:\Bots\TelegramSecretary`, repo gốc `C:\Bots\MeloVault-E91-Shareable` trên Tiny. Không chép đè hay sửa repo Tiny qua ổ `T:`. Không cài FYT.
@@ -35,5 +37,5 @@ Theo CLAUDE.md mục 7 và `docs/workflow/SCREEN_LIFECYCLE_QA.md`: màn mặc đ
 
 - Trên Ni: `.\gradlew.bat :app:testShareableDebugUnitTest :app:testShareableReleaseUnitTest --console=plain` và `.\gradlew.bat :app:assembleShareableDebug :app:assembleShareableRelease --console=plain`, xuất log ra file, chỉ ghi dòng tổng kết; tách tests pass/skipped/failed. Gradle xanh không chứng minh ADB/TDLib/UI thật; Media3 PLAYING không chứng minh có âm thanh thật.
 - Báo cáo `docs/plans/<TASK_ID>-bao-cao.md` (≤ ~250 dòng) theo PROMPT_SONNET.md, dòng đầu `Thực thi: Codex <model> <effort>, phiên <...>`. Ảnh private ở `docs/plans/artifacts/<TASK_ID>/` (không commit), có `00_tong_hop.png`.
-- Commit trên `dot/<TASK_ID>` rồi **DỪNG**. Lời kết: Đã làm / Chưa kiểm chứng / Rủi ro, và dòng cuối theo PROMPT_CODEX.md.
+- Commit trên `dot/<TASK_ID>` rồi **DỪNG**. Lời kết: Đã làm / Chưa kiểm chứng / Rủi ro; phiên thực thi cuối ghi "Đã dừng, chờ chủ dự án nghiệm thu." theo PROMPT_CODEX.md. Phiên chỉ đổi quy trình báo thay đổi/commit, không yêu cầu nghiệm thu APK.
 - Gặp tình huống không có trong kế hoạch, signature mismatch, downgrade, ADB unauthorized, APK thiếu config → **DỪNG, ghi BLOCKED**, không đoán, không phá luật để có kết quả.

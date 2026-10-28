@@ -1,6 +1,6 @@
 # PROMPT MẪU — CODEX LẬP KẾ HOẠCH (NHỎ) / THỰC THI / REWORK
 
-Hiệu lực 26/10/2026 (CLAUDE.md mục 0). Mỗi vai là một **phiên Codex MỚI** mở tại `D:\Bots\MeloVault-E91-Shareable`. Codex đọc luật qua `AGENTS.md`. Chỉ Claude Opus sửa mẫu này khi chủ dự án yêu cầu.
+Hiệu lực 28/10/2026 (CLAUDE.md mục 0). **Chủ dự án trực tiếp nghiệm thu**, Codex chuẩn bị và bàn giao hồ sơ theo `PROMPT_CHU_DU_AN_NGHIEM_THU.md`. Mỗi vai là một **phiên Codex MỚI** mở tại `D:\Bots\MeloVault-E91-Shareable`. Codex đọc luật qua `AGENTS.md`. Agent chỉ sửa mẫu/quy trình khi chủ dự án yêu cầu.
 
 | Vai | Model | Effort | Mục |
 |---|---|---|---|
@@ -46,11 +46,11 @@ Làm đúng docs/workflow/PROMPT_SONNET.md các bước 1–6 cùng hai mục b�
 - Đầu báo cáo `docs/plans/<TASK_ID>-bao-cao.md` ghi dòng: `Thực thi: Codex <model> <effort>, phiên <GỘP|1|2>`.
 - Mọi lệnh ADB/Git/Desktop Commander tuân danh sách cấm trong AGENTS.md. Tiny chỉ qua Desktop Commander trong clone cô lập, nhận code bằng Git bundle có SHA-256.
 - Plan sai/thiếu, cần đổi phạm vi hoặc kiến trúc → DỪNG và ghi vào báo cáo; không tự sửa plan, không đoán.
-- Không sửa CLAUDE.md, AGENTS.md, docs/workflow/*, file nghiệm thu/apk-test/hinh-nghiem-thu. Không merge, không upload/công bố APK.
+- Chỉ sửa CLAUDE.md, AGENTS.md, docs/workflow/* khi chủ dự án yêu cầu. Được ghi hồ sơ nghiệm thu/apk-test/hinh-nghiem-thu và bàn giao APK QA owner-only sau các gate; không tự ghi PASS, merge hoặc public. PASS cần chủ dự án xác nhận đúng bản; merge/push/public cần chỉ thị riêng.
 
 Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Dòng cuối:
 - Phiên 1: "Đã dừng. Mở phiên Codex mới cho phiên 2 (build + QA), cùng model."
-- GỘP/phiên 2: "Đã dừng, chờ Claude Opus nghiệm thu." và dòng `Nghiệm thu <TASK_ID> theo docs/workflow/PROMPT_OPUS_NGHIEM_THU.md`
+- GỘP/phiên 2: "Đã dừng, chờ chủ dự án nghiệm thu." và cách phản hồi `ĐẠT <TASK_ID> — <commit/APK>` hoặc `Yêu cầu sửa <TASK_ID>: <lỗi>`.
 
 ---
 
@@ -60,6 +60,6 @@ MELOVAULT — PHIÊN CODEX REWORK
 
 TASK_ID: <TASK_ID> — nhánh dot/<TASK_ID>, HEAD hiện tại <HEAD_SHA>
 Model: <đúng model thực thi ban đầu>
-Lỗi cần sửa: docs/plans/<TASK_ID>-nghiem-thu.md mục <số>
+Lỗi cần sửa: yêu cầu của chủ dự án, ghi nhận trong docs/plans/<TASK_ID>-nghiem-thu.md mục <số>
 
 Kiểm tra đầu phiên theo AGENTS.md. Chỉ sửa đúng các lỗi nêu trong nghiệm thu, không mở rộng phạm vi, không tạo nhánh/plan mới. Chạy lại test/build và các bước QA bị ảnh hưởng theo mục B, cập nhật báo cáo cũ với mục "Vòng REWORK <n>" (giữ dấu vết vòng trước). Lời kết như mục B (GỘP/phiên 2).
