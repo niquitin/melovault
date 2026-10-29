@@ -51,6 +51,7 @@ internal class MeloTabletScreen(
     private val navItems = mutableMapOf<NavItem, LinearLayout>()
     private val syncLine = c.text("", s.secondaryText, p.textSecondary, maxLines = 2)
     private val pane = MeloLibraryPane(context, c, host, NewLayer.TWO_PANE)
+    private val playFeedbackView = MeloPlayFeedbackView(context, c, host)
 
     // Player pane parts.
     private val artHost = FrameLayout(context)
@@ -146,6 +147,7 @@ internal class MeloTabletScreen(
     }
 
     fun detach() {
+        playFeedbackView.stop()
         backCallback.remove()
         pane.detach()
     }
@@ -205,6 +207,7 @@ internal class MeloTabletScreen(
         column.addView(title, matchWrap().apply { topMargin = s.gap * 2 })
         column.addView(source, matchWrap().apply { topMargin = s.gap / 2 })
         column.addView(quality, matchWrap().apply { topMargin = s.gap / 2 })
+        column.addView(playFeedbackView, matchWrap())
         seekLine = newSeekLine(p.accent)
         timeBlock = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -278,6 +281,8 @@ internal class MeloTabletScreen(
         column.addView(quality, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = s.gap })
+
+        column.addView(playFeedbackView, matchWrap())
 
         seekLine = newSeekLine(p.text)
         val progressBlock = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
@@ -597,6 +602,7 @@ internal class MeloTabletScreen(
     }
 
     fun onLibraryChanged() {
+        playFeedbackView.refresh()
         val snap = host.snapshot()
         snapshot = snap
         val playlistState = if (snap.mode == Mode.PLAYLIST && !snap.showingSources) host.playlistStatus() else null
@@ -653,6 +659,7 @@ internal class MeloTabletScreen(
     }
 
     fun onPlaybackChanged() {
+        playFeedbackView.refresh()
         val now: NowPlaying? = host.nowPlaying()
         var relayout: Boolean
         if (now == null) {

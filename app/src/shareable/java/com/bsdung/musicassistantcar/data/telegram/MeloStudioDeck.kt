@@ -53,6 +53,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
     private val dialog = Dialog(activity, android.R.style.Theme_Material_NoActionBar)
 
     private val c: MeloComponents
+    private lateinit var playFeedbackView: MeloPlayFeedbackView
     private val s get() = c.sizes
     private val p get() = c.palette
     private val layout: DeckLayout
@@ -115,6 +116,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         // One profile rule for the library, the settings screen and this deck (sw 560–599 stays consistent).
         val profile = MeloLibraryPolicy.profileFor(metrics.smallestWidthDp)
         c = MeloComponents(activity, MeloDesignTokens.sizes(profile, d.density, d.fontScale, d.physicalPpi))
+        playFeedbackView = MeloPlayFeedbackView(activity, c, host)
         transportPx = maxOf(c.sizes.minTouch, (MeloNowPlayingPolicy.transportHeightDp(metrics.windowHeightDp) * d.density).toInt())
         title = c.text("", s.playerTitleText, p.text, bold = true, maxLines = 2)
         source = c.text("", s.titleText, p.textSecondary, maxLines = 1)
@@ -172,6 +174,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
 
     private fun stop() {
         saveUiState()
+        playFeedbackView.stop()
         handler.removeCallbacksAndMessages(null)
         jobGeneration.incrementAndGet()
         worker.shutdownNow()
@@ -376,6 +379,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         column.addView(source, matchWrap().apply { topMargin = s.gap / 2 })
         column.addView(qualityChips, matchWrap().apply { topMargin = s.gap })
         column.addView(qualityNote, matchWrap().apply { topMargin = s.gap / 2 })
+        column.addView(playFeedbackView, matchWrap())
 
         shuffle = c.chip("⇄ Đảo", false) { host.toggleShuffle(); refresh() }
         repeat = c.chip("↻ Lặp", false) { host.cycleRepeat(); refresh() }
@@ -420,6 +424,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
     }
 
     private fun refresh() {
+        playFeedbackView.refresh()
         val now = host.nowPlaying()
         renderNow(now)
         val (deadline, endOfTrack) = host.sleepTimer()

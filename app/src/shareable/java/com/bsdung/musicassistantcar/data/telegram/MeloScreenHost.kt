@@ -31,6 +31,8 @@ internal interface MeloScreenHost {
 
     /** The song just tapped while it is still being opened ("Đang mở…"), null otherwise. */
     fun playStatus(): TelegramPlayFeedbackPolicy.PlayStatus?
+    fun playUiFeedback(): MeloPlayUiState.Presentation? = null
+    fun retryPlay(attempt: MeloPlayUiState.Attempt) = Unit
     fun openSongMenu(index: Int, anchor: View)
     fun nowPlaying(): NowPlaying?
     fun playPause()

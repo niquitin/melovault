@@ -16,7 +16,7 @@ class TelegramPlayFeedbackPolicyTest {
         assertEquals(prefix + "Telegram không tìm thấy tin nhắn (400)", TelegramPlayFeedbackPolicy.errorText("Message not found", 400))
         assertEquals(prefix + "Telegram không tìm thấy tin nhắn (404)", TelegramPlayFeedbackPolicy.errorText("Chat not found", 404))
         assertEquals(prefix + "tài khoản không được phép đọc tin nhắn này (403)", TelegramPlayFeedbackPolicy.errorText("x", 403))
-        assertEquals(prefix + "Telegram đang giới hạn tốc độ, thử lại sau (429)", TelegramPlayFeedbackPolicy.errorText("Too Many Requests: retry after 5", 429))
+        assertEquals(TelegramPlayFeedbackPolicy.RATE_LIMIT_MESSAGE, TelegramPlayFeedbackPolicy.errorText("Too Many Requests: retry after 5", 429))
         assertEquals(prefix + "Telegram báo lỗi (mã 500)", TelegramPlayFeedbackPolicy.errorText("Internal", 500))
     }
 

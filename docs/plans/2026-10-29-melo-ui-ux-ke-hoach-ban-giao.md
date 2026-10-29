@@ -4,6 +4,11 @@ TASK_ID: **2026-10-29-melo-ui-ux-ke-hoach**.
 
 ## Phiên đang thực thi S2–S6 — 29/10/2026
 
+- Checkpoint đang làm **S5a**, tiếp tục sau chỉ thị “tiến hành tiếp” 16:01 +07: HEAD vẫn `cfd0bd3160dcad183d3e12c2d9bc8acebeb264c2`; phần chưa commit trước nối tiếp chỉ policy feedback và state mới do chính phiên này viết, không có file lạ/worker nền. S2/S3/S4 đã commit, không làm lại.
+- **S5a xong code/test mục tiêu**, commit riêng chứa checkpoint này; bước tiếp **S5b** đã được chủ dự án giao. Mốc này thay các dòng bước tiếp S4/S5a lịch sử ở dưới. PlayAttempt owner/generation/key, gate FLOOD_WAIT deadline monotonic, inline retry; timeout12s/stall15s và writer/service/sync/cache algorithm giữ nguyên. Callback download mang owner/gen, không xóa song trước kiểm; chỉ hủy luồng cũ khi bài mới resolve/cache hợp lệ.
+- Test cuối S5a `S5a-checkpoint-20261029_161346` dưới artifacts TASK_ID: Debug/Release mỗi biến thể77 passed/0 skipped/0 failed/0 errors, 6 suites, exit0, source.json match, XML fresh; không còn test chạy. Lượt đầu `S5a-20261029_160943` giữ riêng, không thay source cuối. File commit: PlayUiState mới/test, PlayFeedbackPolicy/test, Host, Activity, LibraryPane (inline view), TabletScreen, StudioDeck và hai hồ sơ; không code dở/không artifact. Chưa APK/ADB/FLOOD thật/audio; màn hai máy chưa xác minh vì không thao tác.
+- Bước tiếp chính xác: đọc riêng phụ lục S5b, đối chiếu mọi nơi ghi cachedSongPaths với completed/verified scan + owner, dựng facts UI kiểm file ở nền. Thiếu facts phải ghi BLOCKED đúng phần, không đoán READY từ path/percent hoặc sửa cache/service để vượt kế hoạch.
+
 - Chủ dự án xác nhận S0–S1 đã làm xong và giao liên tục S2 → S3 → S4 → S5a → S5b → S6, mỗi chặng test/ghi hồ sơ/commit riêng; không cần xin lại trong phạm vi kế hoạch. Không phải xác nhận PASS chính thức.
 - Đầu phiên 11:19 +07: cây sạch, đúng nhánh/worktree bên dưới; HEAD `fb896d4c537d007c633d9008f3a95ee521d9784f`; log -5/diff-check khớp S1. Không có wrapper/worker hoặc process tham chiếu worktree; Gradle/Kotlin daemon thường trú PID 27832/27228 từ phiên trước.
 - Đã đối chiếu S1 và luật tại c9a1c09. **S2 e18979f; S3 12d5fd2554eafe1be848bb8c6892a1d8b9cf1e21; S4 xong code/test mục tiêu**, commit riêng chứa checkpoint này; bước tiếp **S5a** đã được chủ dự án giao. HEAD/source tiếp nhận tra commit chứa file bàn giao/Activity, không quay về S1.

@@ -7,6 +7,19 @@ Trạng thái chính thức: **CHỜ CHỦ DỰ ÁN NGHIỆM THU**. Đây là ch
 
 ## Phiên tiếp tục S2–S6
 
+- S5a xong code/test trên HEAD nền S4 `cfd0bd3160dcad183d3e12c2d9bc8acebeb264c2`. Tiếp tục 16:01 +07 sau chỉ thị chủ dự án; hai file policy/state chưa commit trước đó khớp phần do phiên này viết, không file lạ hoặc worker nền. S5b–S6 chưa làm.
+
+### S5a — feedback và retry theo attempt
+
+- Thêm `MeloPlayUiState.kt` / test (15 ca), sửa PlayFeedbackPolicy/test, Host, Activity và inline view dùng chung trong LibraryPane/Tablet/StudioDeck. Không thêm enum trạng thái global, service/sync/cache algorithm hoặc tăng timeout12s/stall15s.
+- PlayAttempt owner + generation + songKey; cùng bài đang resolve/buffer không tạo resolve thứ hai. Callback resolve/download/stall phải khớp attempt; tag download thêm owner/generation, capture identity trước cleanup. A→B→A cũ bị bỏ; completion không enqueue lại stream đã phát.
+- Chỉ chuyển/hủy download cũ sau khi bài mới resolve hợp lệ và bắt đầu cache được; lỗi resolve/cache B giữ luồng A cũ. Notify dựa isPlaying/playWhenReady/STATE_BUFFERING, không xóa opening chỉ vì current key đã trùng. Lỗi Media3/resolve/download có câu cố định, không đưa raw TDLib message vào UI.
+- FLOOD_WAIT matchEntire trước code420/429; kiểm Long overflow cả nhân/cộng, malformed/PII/thiếu/âm/tràn về generic. Deadline SystemClock.elapsedRealtime giữ qua rotate/đổi nguồn/local detour; 429 không N không bịa countdown. Gate ở downloadAndPlay cho dòng/menu/retry; hết hạn chỉ mở nút, không auto-retry.
+- Inline vài dòng + nút retry≥48dp, error gắn “Bài vừa chọn”, không giả lỗi danh sách mới. Timer chỉ ở view đang gắn/hiện/có focus; detach/ẩn cửa sổ hủy pending; Gọn/legacy giữ thông báo cũ. Lỗi permanent không có nút retry, timeout/network/server tạm thời có.
+- Test cuối `S5a-checkpoint-20261029_161346`: Debug **77 passed/0 skipped/0 failed/0 errors**, Release cùng kết quả, 6 suites/biến thể, exit0, BUILD SUCCESSFUL in 16s, XML fresh/source.json match. Nền `cfd0bd3` + manifest; log/result/XML dưới artifacts cùng tên. Lượt đầu `S5a-20261029_160943` cũng 77/biến thể, sau đó có chốt send-error cố định/visibility generation nên dùng lượt cuối cho source bàn giao.
+- Bộ mục tiêu hai task Debug/Release: MeloPlayUiStateTest, TelegramPlayFeedbackPolicyTest, TelegramAudioResolverPolicyTest, MeloNowPlayingPolicyTest, MeloComponentPolicyTest, TelegramSessionEpochTest; cùng `--tests`, `--console=plain`. `git diff --check` đạt.
+- Chưa tạo FLOOD thật, chưa QA UI/audio hoặc xác nhận A vẫn có tiếng khi B lỗi trên máy; fake clock/timer và code guard không thay bằng chứng này. S5a commit chứa mục này; bước tiếp S5b theo kế hoạch.
+
 - Chủ dự án xác nhận S0–S1 đã làm xong, giao liên tục S2–S6 trong cùng vai THỰC THI; không coi là nghiệm thu chính thức.
 - Đầu phiên 11:19 +07: HEAD S1 `fb896d4c537d007c633d9008f3a95ee521d9784f`, cây sạch, nhánh/worktree và diff-check đúng; không có build/test worker đang chạy, chỉ daemon thường trú.
 - S2 commit `e18979fa5dd37b2f889348991e8442d5f60f56fb`; S3 commit `12d5fd2554eafe1be848bb8c6892a1d8b9cf1e21`; S4 xong code/test mục tiêu; tiếp tục S5a–S6. S6 full unit + assemble. Không làm S7/P2/cài thiết bị hoặc sơ bộ.

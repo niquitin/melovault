@@ -65,6 +65,7 @@ internal class MeloLibraryPane(
     private var sourceRowVisible = false
     private val note = c.text("", s.secondaryText, p.textSecondary, maxLines = 2)
     private val scopeNote = c.text("", s.secondaryText, p.textSecondary, maxLines = 2)
+    private val playFeedbackView = MeloPlayFeedbackView(context, c, host)
     private val listContent = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     private val listStatus = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
@@ -174,6 +175,7 @@ internal class MeloLibraryPane(
         view.addView(scopeNote, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = s.gap / 2
         })
+        if (layer != NewLayer.TWO_PANE) view.addView(playFeedbackView)
         list.apply {
             itemsCanFocus = true
             adapter = this@MeloLibraryPane.adapter
@@ -252,6 +254,7 @@ internal class MeloLibraryPane(
     }
 
     fun detach() {
+        playFeedbackView.stop()
         flushAndSave()
         host.setBrowseCapture(null)
         if (c.teal) host.setRowArtListener(null)
@@ -305,6 +308,7 @@ internal class MeloLibraryPane(
     }
 
     fun onLibraryChanged() {
+        playFeedbackView.refresh()
         val snap = host.snapshot()
         snapshot = snap
         val pendingPlay = playAllWhenLoaded?.let { MeloLibraryPolicy.pendingBrowsePlay(it, snap) }
@@ -986,5 +990,48 @@ internal class MeloLibraryPane(
         addView(c.text(if (source.count > 0) "${MeloComponentPolicy.formatCount(source.count)} bài" else "Chưa có nhạc",
             s.secondaryText, p.textSecondary).apply { setPadding(0, s.gap / 2, 0, 0) })
         setOnClickListener { host.openSource(source.chatId) }
+    }
+}
+
+/** Inline, attempt-bound feedback. The timer only enables retry; it never invokes playback. */
+internal class MeloPlayFeedbackView(context: Context, c: MeloComponents, private val host: MeloScreenHost) : LinearLayout(context) {
+    private val handler = Handler(Looper.getMainLooper())
+    private val message = c.text("", c.sizes.secondaryText, c.palette.textSecondary, maxLines = 3)
+    private var bound: MeloPlayUiState.Attempt? = null
+    private val retry = c.chip("Thử lại", false) { bound?.let(host::retryPlay) }
+    private var attached = false
+    private val ticker = MeloPlayUiState.CountdownTicker({ job, delay -> handler.postDelayed(job, delay) }, handler::removeCallbacks, ::refresh)
+
+    init {
+        orientation = VERTICAL
+        visibility = View.GONE
+        addView(message, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        addView(retry, LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
+    fun refresh() {
+        ticker.stop()
+        val feedback = host.playUiFeedback()
+        visibility = if (feedback == null) View.GONE else View.VISIBLE
+        bound = feedback?.attempt
+        if (feedback == null) return
+        message.text = (if (feedback.phase == MeloPlayUiState.Phase.ERROR) "Bài vừa chọn: " else "") + feedback.text
+        retry.visibility = if (feedback.showRetry) View.VISIBLE else View.GONE
+        retry.isEnabled = feedback.retryEnabled
+        retry.alpha = if (feedback.retryEnabled) 1f else 0.45f
+        retry.contentDescription = if (feedback.retryEnabled) "Thử mở lại bài vừa chọn" else "Chờ Telegram cho phép thử lại"
+        ticker.update(attached, isShown && windowVisibility == View.VISIBLE, hasWindowFocus(), feedback.remainingSeconds ?: 0L)
+    }
+    fun stop() { attached = false; ticker.stop(); handler.removeCallbacksAndMessages(null) }
+    override fun onAttachedToWindow() { super.onAttachedToWindow(); attached = true; refresh() }
+    override fun onDetachedFromWindow() { stop(); super.onDetachedFromWindow() }
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        super.onWindowFocusChanged(hasWindowFocus)
+        if (!attached) return
+        if (hasWindowFocus) refresh() else ticker.stop()
+    }
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        if (!attached) return
+        if (visibility == View.VISIBLE) refresh() else ticker.stop()
     }
 }
