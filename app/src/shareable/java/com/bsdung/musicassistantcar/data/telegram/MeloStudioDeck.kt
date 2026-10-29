@@ -45,6 +45,7 @@ import java.util.concurrent.atomic.AtomicLong
  * while the queue scrolls. E103: a draggable seek line is back in that dock, above the time line.
  */
 internal class MeloStudioDeck(private val activity: Activity, private val host: MeloScreenHost) {
+    private val browseOwner = host.accountId()
 
     private val handler = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "melo-probe").apply { isDaemon = true } }
@@ -146,6 +147,12 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         if (dialog.isShowing) return
         dialog.show()
         reloadQueue()
+        val saved = host.deckState()
+        queueList?.post {
+            val index = queue.indexOfFirst { it.songKey == saved.songKey }
+            if (index >= 0) { queueList?.setSelectionFromTop(index, saved.offsetPx); scrolledFor = currentKey }
+        }
+        fitScroll?.post { fitScroll?.scrollTo(0, saved.bodyScrollY) }
         handler.removeCallbacks(update)
         handler.post(update)
     }
@@ -156,7 +163,15 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         if (dialog.isShowing) dialog.dismiss() else stop()
     }
 
+    fun saveUiState() {
+        if (browseOwner <= 0L || host.accountId() != browseOwner) return
+        val list = queueList
+        host.saveDeckState(MeloBrowseState.Deck(songKey = list?.firstVisiblePosition?.let { queue.getOrNull(it)?.songKey },
+            offsetPx = list?.getChildAt(0)?.top ?: 0, bodyScrollY = fitScroll?.scrollY ?: 0))
+    }
+
     private fun stop() {
+        saveUiState()
         handler.removeCallbacksAndMessages(null)
         jobGeneration.incrementAndGet()
         worker.shutdownNow()

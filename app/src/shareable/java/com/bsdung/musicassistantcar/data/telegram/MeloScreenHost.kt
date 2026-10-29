@@ -60,6 +60,11 @@ internal interface MeloScreenHost {
      */
     fun saveListAnchor(groupKey: String, songKey: Long?, offsetPx: Int)
     fun listAnchor(): ListAnchor?
+    fun setBrowseCapture(listener: (() -> Unit)?) = Unit
+    fun browseContext(): MeloBrowseState.Context? = null
+    fun saveBrowsePosition(generation: Long, songKey: Long?, offsetPx: Int, sourceScrollY: Int) = Unit
+    fun deckState(): MeloBrowseState.Deck = MeloBrowseState.Deck()
+    fun saveDeckState(state: MeloBrowseState.Deck) = Unit
 
     // ---- Library screens (Điện thoại / Tablet / Hai khung) ---------------------------------
 
@@ -204,7 +209,9 @@ internal interface MeloScreenHost {
         val browseScope: MeloBrowseUiPolicy.Scope = MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.LIBRARY),
         val browseLoadState: MeloBrowseUiPolicy.LoadState = MeloBrowseUiPolicy.LoadState.READY,
         val browseOwnerId: Long = 0L,
-        val browseGeneration: Long = 0L
+        val browseGeneration: Long = 0L,
+        /** True only when the current query has no further page. */
+        val browseComplete: Boolean = true
     )
 
     data class NowPlaying(

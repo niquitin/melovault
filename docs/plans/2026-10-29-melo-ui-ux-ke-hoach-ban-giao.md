@@ -2,6 +2,17 @@
 
 TASK_ID: **2026-10-29-melo-ui-ux-ke-hoach**.
 
+## Phiên đang thực thi S2–S6 — 29/10/2026
+
+- Chủ dự án xác nhận S0–S1 đã làm xong và giao liên tục S2 → S3 → S4 → S5a → S5b → S6, mỗi chặng test/ghi hồ sơ/commit riêng; không cần xin lại trong phạm vi kế hoạch. Không phải xác nhận PASS chính thức.
+- Đầu phiên 11:19 +07: cây sạch, đúng nhánh/worktree bên dưới; HEAD `fb896d4c537d007c633d9008f3a95ee521d9784f`; log -5/diff-check khớp S1. Không có wrapper/worker hoặc process tham chiếu worktree; Gradle/Kotlin daemon thường trú PID 27832/27228 từ phiên trước.
+- Đã đối chiếu S1 và luật tại c9a1c09. **S2 xong code/test mục tiêu**, commit riêng chứa checkpoint này; bước tiếp **S3** đã được chủ dự án giao, không cần xin lại. SHA source S2 tra `git log -1 --format=%H -- app/src/shareable/java/com/bsdung/musicassistantcar/data/telegram/MeloBrowseState.kt`; sau commit đối chiếu HEAD thực.
+- Giới hạn mới: không S7/P2, không ADB/cài thiết bị, không đổi vai/sơ bộ/merge/push/quy trình. S6 chạy full Debug/Release unit + assemble Ni; không xem build xanh là QA UI/audio.
+- Agent chính là người duy nhất sửa file; sub-agent chỉ đọc kiểm kê S2 đã xong. Không còn lệnh test chạy; daemon thường trú giữ nguyên.
+- S2 giao nộp: mới `MeloBrowseState.kt` / test; sửa Activity, LibraryPane, ScreenHost, StudioDeck và hai hồ sơ. Không còn code dở của S2; tất cả commit cùng checkpoint, artifact bị loại. Từ đây source có state owner+scope, LRU16, query/sort/anchor và cuộn nguồn riêng, restore Bundle owner-verified, debounce flush một lần.
+- Test cuối: `S2-checkpoint-20261029_113203` dưới artifacts TASK_ID; Debug/Release mỗi biến thể 126 passed/0 skipped/0 failed/0 errors, 7 suites; exit 0, XML fresh, source.json khớp từng file. Báo cáo có lệnh/phạm vi và các lượt trung gian.
+- Chưa QA xoay thật; deep anchor sau process recreation chờ trang người dùng nạp, không tự tìm vô hạn. SHANLING_SCREEN_END / SONY_SCREEN_END: không thao tác, chưa xác minh màn. Không APK mới ở S2. Tiếp theo đọc riêng phụ lục S3, giữ player trái và đưa nguồn vào vùng duyệt phải.
+
 ## Checkpoint hiện tại — S0–S1, 29/10/2026, sau test cuối 11:07:31 +07
 
 **S0–S1 đã xong code/test mục tiêu; chưa QA UI hoặc tạo candidate. Phiên thực thi dừng sau commit checkpoint này.** Không dùng prompt S0–S1 lịch sử bên dưới để làm lại; không coi checkpoint này là lệnh triển khai S2.

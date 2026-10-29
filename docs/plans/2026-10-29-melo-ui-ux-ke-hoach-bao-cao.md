@@ -1,9 +1,27 @@
-Thực thi: Codex model/effort không xác định từ metadata, phiên S0–S1 ngày 29/10/2026.
+Thực thi: Codex model/effort không xác định từ metadata, S0–S1 và phiên tiếp tục S2–S6 ngày 29/10/2026.
 
-# Báo cáo thực thi Melo UI/UX — S0–S1
+# Báo cáo thực thi Melo UI/UX
 
 TASK_ID: `2026-10-29-melo-ui-ux-ke-hoach`.
 Trạng thái chính thức: **CHỜ CHỦ DỰ ÁN NGHIỆM THU**. Đây là chặng code/test, chưa phải candidate APK.
+
+## Phiên tiếp tục S2–S6
+
+- Chủ dự án xác nhận S0–S1 đã làm xong, giao liên tục S2–S6 trong cùng vai THỰC THI; không coi là nghiệm thu chính thức.
+- Đầu phiên 11:19 +07: HEAD S1 `fb896d4c537d007c633d9008f3a95ee521d9784f`, cây sạch, nhánh/worktree và diff-check đúng; không có build/test worker đang chạy, chỉ daemon thường trú.
+- S2 xong code/test mục tiêu; tiếp tục S3–S6 theo chỉ thị liên tục. S6 full unit + assemble. Không làm S7/P2/cài thiết bị hoặc sơ bộ.
+
+### S2 — giữ ngữ cảnh duyệt
+
+- Thêm `MeloBrowseState.kt` và `MeloBrowseStateTest.kt`; sửa `MeloScreenHost.kt`, `TelegramPreviewActivity.kt`, `MeloLibraryPane.kt`, `MeloStudioDeck.kt`. Chỉ state/adapter UI; không gọi restore playback/seek/playWhenReady, không đổi schema/sync/cache.
+- Key owner + scope/ID; LRU 16, query/sort/letterFloor/anchor songKey + offset, cuộn nguồn riêng. Đổi query/sort hủy anchor; mở/đóng deck và dựng lại renderer giữ rows/paging hiện có; ngữ cảnh LOCAL tách riêng.
+- Bundle chỉ active/return contexts, query tối đa 512 ký tự và scalar UI/deck; decode sai fallback, chỉ apply sau verified owner khớp. Pending anchor không bị tiêu ở batch đầu; chỉ áp đúng query/owner/generation, không tự nạp vô hạn để tìm bài.
+- Debounce flush đúng một lần khi detach/rotate/save/open player; trả lại nguồn đã ghé khôi phục query (kể cả rỗng), source title không làm identity. Đường mode/sources cũ Gọn/Car vẫn tách khỏi điều hướng mới.
+- Test cuối `S2-checkpoint-20261029_113203`: Debug **126 passed/0 skipped/0 failed/0 errors**, Release cùng kết quả; 7 suites/biến thể, exit 0, BUILD SUCCESSFUL in 11s. Source nền `fb896d4` + manifest `source.json` trong thư mục log; SHA từng file sau test khớp, XML Fresh=true. Log/exit/counts/XML: `artifacts/2026-10-29-melo-ui-ux-ke-hoach/S2-checkpoint-20261029_113203/` (`gradle.log`, `result.json`). Hai lượt trung gian 125 tests/biến thể vẫn giữ; source sau đó có chỉnh guard scroll/query nên chỉ lượt 126 đại diện bàn giao.
+- Lệnh mục tiêu: hai task test Shareable Debug/Release, cùng `--tests` cho MeloBrowseStateTest, MeloBrowseUiPolicyTest, MeloLibraryPolicyTest, MeloLocalLibraryTest, MeloAlphabetPolicyTest, MeloScreenPolicyTest, TelegramSessionEpochTest; `--console=plain`.
+- Giới hạn: QA2 ba lần xoay chưa chạy trên máy vì phiên này cấm thiết bị; process recreation chỉ nạp trang chuẩn, anchor sâu chờ trang người dùng nạp hoặc bỏ khi dataset đã hết. Không coi test JVM là chứng minh UI thật. Commit S2 là commit chứa mục này; source SHA tra `git log -1 --format=%H -- app/src/shareable/java/com/bsdung/musicassistantcar/data/telegram/MeloBrowseState.kt`.
+
+## Hồ sơ S0–S1 đã commit tại fb896d4 (giữ lịch sử phạm vi/kết quả)
 
 | Bước | Trạng thái | Bằng chứng / phần còn lại |
 |---|---|---|

@@ -98,7 +98,10 @@ internal class MeloLibraryPane(
 
     private var snapshot: Snapshot? = null
     private var chipKey: String? = null
-    private var lastQuery = ""
+    private val queryDraft = MeloBrowseState.QueryDraft()
+    private var lastQuery: String
+        get() = queryDraft.committed
+        set(value) { queryDraft.sync(value) }
     private var pendingQuery: Runnable? = null
     private var collapsed = false
     private var lastScrollKey = 0
@@ -107,15 +110,16 @@ internal class MeloLibraryPane(
     private var emptyExpanded = false
     private var pendingTopReset = false
     /** Null until the first snapshot: the search box then starts from the host's query, not empty. */
-    private var lastLocal: Boolean? = null
-    /** Scroll position handed over by the screen this one replaced; used once, for the same group only. */
-    private var inheritedAnchor: MeloScreenHost.ListAnchor? = host.listAnchor()
-    private var restoringAnchor: MeloScreenHost.ListAnchor? = null
+    private var lastBrowseKey: MeloBrowseState.Key? = null
+    private var restoringAnchor: MeloBrowseState.Pending? = null
+    private var restoringSourceScroll = false
+    private var restoringSongScroll = false
     /** E98 row covers: the list's scroll state (nothing is requested while it is flung) and the first row asked for. */
     private var scrollState = AbsListView.OnScrollListener.SCROLL_STATE_IDLE
     private var lastArtFirst = -1
 
     init {
+        host.setBrowseCapture(::flushAndSave)
         if (c.teal) {
             host.setRowArtListener(::refreshVisibleArt)
             // The tab labels shorten on a narrow pane: render them again once the width is known or changes.
@@ -178,6 +182,12 @@ internal class MeloLibraryPane(
                 override fun onScroll(v: AbsListView?, first: Int, visible: Int, total: Int) {
                     val snap = snapshot ?: return
                     if (snap.showingSources) return
+                    if (snap.browseLoadState == MeloBrowseUiPolicy.LoadState.READY && restoringAnchor == null &&
+                        !restoringSongScroll && !pendingTopReset) {
+                        snap.rows.getOrNull(first)?.let { row ->
+                            host.saveBrowsePosition(snap.browseGeneration, row.songKey, getChildAt(0)?.top ?: 0, 0)
+                        }
+                    }
                     if (c.teal && first != lastArtFirst) requestVisibleArt()
                     if (MeloCompactPolicy.shouldLoadMore(first, visible, total)) host.loadMore()
                     if (bar.visibility == View.VISIBLE) {
@@ -195,6 +205,11 @@ internal class MeloLibraryPane(
             })
         }
         sourcesScroll.addView(sourcesBox, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        sourcesScroll.setOnScrollChangeListener { _, _, y, _, _ ->
+            snapshot?.takeIf { it.showingSources && !restoringSourceScroll && it.browseLoadState == MeloBrowseUiPolicy.LoadState.READY }?.let {
+                host.saveBrowsePosition(it.browseGeneration, null, 0, y)
+            }
+        }
         listFrame.addView(list, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         listFrame.addView(bar, FrameLayout.LayoutParams(bar.barWidthPx, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.END))
         val bubbleSize = (72 * context.resources.displayMetrics.density).toInt()
@@ -208,8 +223,9 @@ internal class MeloLibraryPane(
     }
 
     fun detach() {
+        flushAndSave()
+        host.setBrowseCapture(null)
         if (c.teal) host.setRowArtListener(null)
-        saveScrollAnchor()
         pendingJump?.let(handler::removeCallbacks)
         pendingQuery?.let(handler::removeCallbacks)
         handler.removeCallbacksAndMessages(null)
@@ -222,11 +238,27 @@ internal class MeloLibraryPane(
     private fun saveScrollAnchor() {
         val snap = snapshot ?: return
         val key = groupKey ?: return
-        if (snap.showingSources || snap.rows.isEmpty() || listFrame.visibility != View.VISIBLE) return
+        if (snap.browseLoadState != MeloBrowseUiPolicy.LoadState.READY) return
+        if (snap.showingSources) {
+            host.saveBrowsePosition(snap.browseGeneration, null, 0, sourcesScroll.scrollY)
+            return
+        }
+        if (restoringAnchor != null || restoringSongScroll || snap.rows.isEmpty() || listFrame.visibility != View.VISIBLE) return
         val first = list.firstVisiblePosition
         val row = snap.rows.getOrNull(first) ?: return
         host.saveListAnchor(key, row.songKey, list.getChildAt(0)?.top ?: 0)
+        host.saveBrowsePosition(snap.browseGeneration, row.songKey, list.getChildAt(0)?.top ?: 0, 0)
     }
+
+    private fun flushPendingQuery(): Boolean {
+        pendingQuery?.let(handler::removeCallbacks)
+        pendingQuery = null
+        val query = queryDraft.take() ?: return false
+        host.setQuery(query)
+        return true
+    }
+
+    private fun flushAndSave() { if (!flushPendingQuery()) saveScrollAnchor() }
 
     /** Back at the top with the owner's title row visible, e.g. after switching group or page. */
     private fun resetScroll() {
@@ -244,19 +276,22 @@ internal class MeloLibraryPane(
     fun onLibraryChanged() {
         val snap = host.snapshot()
         snapshot = snap
+        val browseKey = snap.browseOwnerId.takeIf { it > 0L }?.let { MeloBrowseState.Key(it, snap.browseScope) }
         val key = "${snap.browseOwnerId}|${snap.browseScope}|${snap.query}|${snap.sort}|${snap.letterFloor}"
-        if (key != groupKey) {
-            val inherited = inheritedAnchor?.takeIf { groupKey == null && it.groupKey == key }
-            inheritedAnchor = null
+        val contextChanged = key != groupKey
+        if (contextChanged) {
             groupKey = key
-            restoringAnchor = inherited
-            // The same group as the screen this one replaced: keep the owner's place in the list.
-            if (inherited == null) resetScroll()
+            val state = host.browseContext()
+            restoringAnchor = if (browseKey != null && state?.anchorSongKey != null) {
+                MeloBrowseState.Pending(browseKey, snap.browseGeneration, state)
+            } else null
+            if (restoringAnchor == null) resetScroll() else pendingTopReset = false
         }
-        if (snap.local != lastLocal) {
+        if (contextChanged || browseKey != lastBrowseKey || (pendingQuery == null && snap.query != lastQuery)) {
             // The search box belongs to one source: show that source's own query when switching.
-            lastLocal = snap.local
+            lastBrowseKey = browseKey
             pendingQuery?.let(handler::removeCallbacks)
+            pendingQuery = null
             lastQuery = snap.query
             if (searchField.text.toString() != snap.query) searchField.setText(snap.query)
         }
@@ -284,7 +319,15 @@ internal class MeloLibraryPane(
             note.visibility = View.GONE
             listContent.visibility = View.GONE
             sourcesScroll.visibility = View.VISIBLE
+            val sourceY = host.browseContext()?.sourceScrollY ?: 0
+            restoringSourceScroll = true
             renderSources(snap)
+            sourcesScroll.post {
+                if (groupKey == key && snapshot?.browseGeneration == snap.browseGeneration) {
+                    sourcesScroll.scrollTo(0, sourceY)
+                    restoringSourceScroll = false
+                }
+            }
         } else {
             groupTitle.text = MeloCompactPolicy.headerTitle(snap.mode, snap.sourceTitle, snap.total)
             playAll.visibility = View.VISIBLE
@@ -311,15 +354,33 @@ internal class MeloLibraryPane(
                 list.post { requestVisibleArt() }
             }
             val restore = restoringAnchor
-            if (restore != null && snap.rows.isNotEmpty()) {
-                restoringAnchor = null
-                val index = MeloLibraryPolicy.anchorIndex(snap.rows, restore.songKey)
-                list.post { list.setSelectionFromTop(index, restore.offsetPx) }
+            if (restore != null && browseKey != null) {
+                val current = restore.copy(generation = snap.browseGeneration)
+                restoringAnchor = current
+                when (val decision = MeloBrowseState.locate(current, browseKey, snap.browseGeneration,
+                    snap.query, snap.sort, snap.letterFloor, snap.rows.map { it.songKey }, snap.browseComplete)) {
+                    is MeloBrowseState.Anchor.Found -> {
+                        restoringAnchor = null
+                        restoringSongScroll = true
+                        list.post {
+                            if (groupKey == key && snapshot?.browseGeneration == snap.browseGeneration) {
+                                list.setSelectionFromTop(decision.index, decision.offsetPx)
+                            }
+                            restoringSongScroll = false
+                        }
+                    }
+                    MeloBrowseState.Anchor.Drop -> { restoringAnchor = null; pendingTopReset = true }
+                    MeloBrowseState.Anchor.Wait -> Unit
+                }
             }
             if (MeloLibraryPolicy.shouldResetTop(pendingTopReset, snap.showingSources, snap.rows.size)) {
                 // The rows of the new group just arrived; the list still remembers the old group's offset.
-                pendingTopReset = false
-                list.post { list.setSelectionFromTop(0, 0) }
+                list.post {
+                    if (groupKey == key && snapshot?.browseGeneration == snap.browseGeneration) {
+                        list.setSelectionFromTop(0, 0)
+                        pendingTopReset = false
+                    }
+                }
             }
             if (playAllWhenLoaded && snap.rows.isNotEmpty()) {
                 playAllWhenLoaded = false
@@ -382,12 +443,8 @@ internal class MeloLibraryPane(
 
     private fun queueQuery(query: String) {
         pendingQuery?.let(handler::removeCallbacks)
-        val task = Runnable {
-            if (query != lastQuery) {
-                lastQuery = query
-                host.setQuery(query)
-            }
-        }
+        queryDraft.edit(query)
+        val task = Runnable { flushPendingQuery() }
         pendingQuery = task
         handler.postDelayed(task, 250L)
     }
@@ -428,9 +485,9 @@ internal class MeloLibraryPane(
 
     private fun onThemeTab(kind: MeloLibraryPolicy.TabKind) {
         when (kind) {
-            MeloLibraryPolicy.TabKind.ALL -> { host.openSource(null); host.setMode(Mode.ALL); clearSearch() }
-            MeloLibraryPolicy.TabKind.DOWNLOADED -> { host.setMode(Mode.DOWNLOADED); clearSearch() }
-            MeloLibraryPolicy.TabKind.PLAYLIST -> { host.setMode(Mode.PLAYLIST); clearSearch() }
+            MeloLibraryPolicy.TabKind.ALL -> host.openSource(null)
+            MeloLibraryPolicy.TabKind.DOWNLOADED -> host.setMode(Mode.DOWNLOADED)
+            MeloLibraryPolicy.TabKind.PLAYLIST -> host.setMode(Mode.PLAYLIST)
             MeloLibraryPolicy.TabKind.SOURCES -> host.showSources()
         }
     }
@@ -570,7 +627,7 @@ internal class MeloLibraryPane(
 
     private fun onChip(chip: MeloLibraryPolicy.Chip) {
         val query = MeloLibraryPolicy.queryFor(chip)
-        if (chip.mode != null) host.setMode(chip.mode)
+        if (chip.mode != null) { host.setMode(chip.mode); return }
         lastQuery = query
         if (searchField.text.toString() != query) searchField.setText(query)
         host.setQuery(query)

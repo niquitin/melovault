@@ -309,7 +309,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     /** Only the Điện thoại / Tablet / Hai khung layers sort by name; every other screen keeps Mới nhất. */
     private fun activeSort(): SongSort =
-        if (phoneScreen != null || tabletScreen != null) librarySort() else SongSort.NEWEST
+        if (phoneScreen != null || tabletScreen != null) browseSortOverride ?: librarySort() else SongSort.NEWEST
 
     private fun executeOnDb(task: () -> Unit) {
         if (isDestroyed || isFinishing) return
@@ -369,6 +369,114 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var meloLayerKey: String? = null
     /** List place handed from a torn-down library screen to the next one (memory only, E95 F03d). */
     private var meloListAnchor: MeloScreenHost.ListAnchor? = null
+    private val meloBrowse = MeloBrowseState()
+    private var captureMeloBrowse: (() -> Unit)? = null
+    private var applyingMeloBrowse = false
+    private var browseSortOverride: SongSort? = null
+    private var pendingMeloBrowse: MeloBrowseState.Saved? = null
+
+    private fun browseKey(): MeloBrowseState.Key? {
+        val owner = library.authorizedUser()?.value?.takeIf { it > 0L } ?: return null
+        val scope = if (localMode) MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.LOCAL)
+            else MeloBrowseUiPolicy.scope(allChatsMode && browseSources && !playlistMode,
+                playlistMode, filterOnlyDownloaded, allChatsMode, selectedChatId)
+        return MeloBrowseState.Key(owner, scope)
+    }
+
+    private fun rememberBrowseContext() {
+        val key = browseKey() ?: return
+        val previous = meloBrowse.activate(key, librarySort())
+        val query = if (localMode) localMusic.query else songFilter.text?.toString().orEmpty()
+        meloBrowse.put(key, previous.copy(query = query, sort = activeSort(), letterFloor = if (localMode) null else letterFloor))
+    }
+
+    /** UI navigation only: this never restores or mutates the player's timeline. */
+    private fun navigateBrowse(scope: MeloBrowseUiPolicy.Scope) {
+        captureMeloBrowse?.invoke()
+        rememberBrowseContext()
+        val owner = library.authorizedUser()?.value?.takeIf { it > 0L } ?: return
+        if (scope.kind == MeloBrowseUiPolicy.Kind.SOURCES && meloBrowse.active?.scope?.kind != scope.kind) {
+            meloBrowse.sourcesReturn = meloBrowse.active
+        }
+        if (scope.kind == MeloBrowseUiPolicy.Kind.LOCAL && !localMode) meloBrowse.localReturn = meloBrowse.active
+        applyBrowseContext(MeloBrowseState.Key(owner, scope))
+    }
+
+    private fun applyBrowseContext(key: MeloBrowseState.Key) {
+        val state = meloBrowse.activate(key, librarySort())
+        browseSortOverride = state.sort
+        applyingMeloBrowse = true
+        try {
+            localMode = key.scope.kind == MeloBrowseUiPolicy.Kind.LOCAL
+            if (localMode) {
+                localMusic.setSort(state.sort) { scheduleMeloLibraryRefresh() }
+                localMusic.setQuery(state.query) { scheduleMeloLibraryRefresh() }
+            } else {
+                allChatsMode = key.scope.kind != MeloBrowseUiPolicy.Kind.SAVED_MESSAGES
+                browseSources = key.scope.kind == MeloBrowseUiPolicy.Kind.SOURCES
+                playlistMode = key.scope.kind == MeloBrowseUiPolicy.Kind.PLAYLIST
+                filterOnlyDownloaded = key.scope.kind == MeloBrowseUiPolicy.Kind.DOWNLOADED || key.scope.downloadedOnly
+                selectedChatId = key.scope.chatId
+                letterFloor = state.letterFloor
+                if (songFilter.text?.toString() != state.query) songFilter.setText(state.query)
+            }
+        } finally { applyingMeloBrowse = false }
+        updateFilterChipsUi()
+        updatePlaylistButtons()
+        if (localMode) scheduleMeloLibraryRefresh() else refreshSongRows()
+    }
+
+    private fun encodeBrowseState(saved: MeloBrowseState.Saved): Bundle {
+        fun key(key: MeloBrowseState.Key) = Bundle().apply {
+            putLong("owner", key.ownerId); putString("kind", key.scope.kind.name)
+            key.scope.chatId?.let { putLong("chat", it) }; putBoolean("downloaded", key.scope.downloadedOnly)
+        }
+        return Bundle().apply {
+            putBundle("active", key(saved.active))
+            saved.sourcesReturn?.let { putBundle("sourcesReturn", key(it)) }
+            saved.localReturn?.let { putBundle("localReturn", key(it)) }
+            putParcelableArrayList("contexts", ArrayList(saved.contexts.map { (id, state) ->
+                key(id).apply {
+                    putString("query", state.query); putString("sort", state.sort.name)
+                    putString("floor", state.letterFloor); state.anchorSongKey?.let { putLong("anchor", it) }
+                    putInt("offset", state.offsetPx); putInt("sourceY", state.sourceScrollY)
+                }
+            }))
+            saved.deck.songKey?.let { putLong("deckKey", it) }
+            putInt("deckOffset", saved.deck.offsetPx); putInt("deckY", saved.deck.bodyScrollY)
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun decodeBrowseState(bundle: Bundle): MeloBrowseState.Saved? = runCatching {
+        fun key(value: Bundle) = requireNotNull(MeloBrowseState.decodeKey(value.getLong("owner"), value.getString("kind"),
+            value.getLong("chat").takeIf { value.containsKey("chat") }, value.getBoolean("downloaded")))
+        MeloBrowseState.Saved(key(requireNotNull(bundle.getBundle("active"))),
+            bundle.getBundle("sourcesReturn")?.let(::key), bundle.getBundle("localReturn")?.let(::key),
+            bundle.getParcelableArrayList<Bundle>("contexts").orEmpty().take(4).map { item ->
+                key(item) to MeloBrowseState.Context(item.getString("query").orEmpty().take(512),
+                    SongSort.valueOf(requireNotNull(item.getString("sort"))), item.getString("floor")?.take(512),
+                    item.getLong("anchor").takeIf { item.containsKey("anchor") }, item.getInt("offset"), item.getInt("sourceY"))
+            }, MeloBrowseState.Deck(songKey = bundle.getLong("deckKey").takeIf { bundle.containsKey("deckKey") },
+                offsetPx = bundle.getInt("deckOffset"), bodyScrollY = bundle.getInt("deckY")))
+    }.getOrNull()
+
+    private fun restorePendingBrowse(owner: Long) {
+        val saved = pendingMeloBrowse ?: return
+        pendingMeloBrowse = null
+        if (!meloBrowse.restore(saved, owner)) return
+        var key = saved.active
+        if (key.scope.kind == MeloBrowseUiPolicy.Kind.LOCAL && !localPermissionGranted()) {
+            key = saved.localReturn ?: MeloBrowseState.Key(owner, MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.LIBRARY))
+        }
+        if (key.scope.kind == MeloBrowseUiPolicy.Kind.SAVED_MESSAGES) {
+            val context = meloBrowse.get(key)
+            loadSavedMessages()
+            if (context != null) meloBrowse.put(key, context)
+        }
+        applyBrowseContext(key)
+        if (localMode && localMusic.needsLoad()) localMusic.load(force = true) { scheduleMeloLibraryRefresh() }
+    }
     private var carPromptShown = false
     private var compactRefreshPosted = false
     private var authEpoch: Long = 0L
@@ -517,7 +625,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         if (!auth.isReady()) return
         localGranted = localPermissionGranted()
         if (!localGranted) return
-        localMode = true
+        navigateBrowse(MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.LOCAL))
         val library = localMusic
         library.setSort(activeSort())
         if (library.needsLoad()) library.load(force = true) { scheduleMeloLibraryRefresh() }
@@ -527,13 +635,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
     /** Back to the Telegram screen; local music that is already playing keeps playing. */
     private fun closeLocalMusic() {
         if (!localMode) return
-        localMode = false
-        localMusic.setQuery("")
-        scheduleMeloLibraryRefresh()
+        val previous = meloBrowse.localReturn
+        navigateBrowse(previous?.scope ?: MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.LIBRARY))
     }
 
     /** Logout / session closed: forget the list and the card so nothing outlives the account screen. */
     private fun resetLocalMusic() {
+        meloBrowse.clear()
+        pendingMeloBrowse = null
+        browseSortOverride = null
         localMode = false
         localGranted = false
         localRowsKey = -1L
@@ -654,7 +764,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
             browseScope = MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.LOCAL),
             browseLoadState = library.browseLoadState,
             browseOwnerId = this.library.authorizedUser()?.value ?: 0L,
-            browseGeneration = library.browseGeneration
+            browseGeneration = library.browseGeneration,
+            browseComplete = library.browseLoadState == MeloBrowseUiPolicy.LoadState.READY && localRows.size >= shown
         )
     }
 
@@ -847,6 +958,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
+        captureMeloBrowse?.invoke()
         val firstVisible = if (::tracks.isInitialized) tracks.firstVisiblePosition else 0
         val firstOffset = if (::tracks.isInitialized) tracks.getChildAt(0)?.top ?: 0 else 0
         super.onConfigurationChanged(newConfig)
@@ -870,6 +982,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        captureMeloBrowse?.invoke()
+        studioDeck?.saveUiState()
+        rememberBrowseContext()
+        meloBrowse.save()?.let { outState.putBundle("melo_browse_v1", encodeBrowseState(it)) }
         super.onSaveInstanceState(outState)
         outState.putBoolean("key_all_chats_mode", allChatsMode)
         outState.putBoolean("key_browse_sources", browseSources)
@@ -899,7 +1015,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         currentSourceDisplayMode = TelegramVaultBentoPolicy.getSavedSourceDisplayMode(prefs)
         hideZeroSources = TelegramVaultBentoPolicy.getSavedHideZeroSources(prefs)
         buildUi()
-        if (savedInstanceState != null) {
+        pendingMeloBrowse = savedInstanceState?.getBundle("melo_browse_v1")?.let(::decodeBrowseState)
+        if (savedInstanceState != null && !savedInstanceState.containsKey("melo_browse_v1")) {
             allChatsMode = savedInstanceState.getBoolean("key_all_chats_mode", allChatsMode)
             browseSources = savedInstanceState.getBoolean("key_browse_sources", browseSources)
             playlistMode = savedInstanceState.getBoolean("key_playlist_mode", playlistMode)
@@ -2921,7 +3038,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     s: CharSequence?, start: Int, count: Int, after: Int) = Unit
                 override fun onTextChanged(
                     s: CharSequence?, start: Int, before: Int, count: Int) {
-                    refreshSongRows()
+                    if (!applyingMeloBrowse) refreshSongRows()
                 }
                 override fun afterTextChanged(s: Editable?) = Unit
             })
@@ -4504,6 +4621,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun refreshSongRows() {
         if (!::sourcesAdapter.isInitialized || !::songFilter.isInitialized) return
+        rememberBrowseContext()
         val q = songFilter.text?.toString()?.trim().orEmpty()
         sourcesButton.isEnabled = auth.isReady() && allChatsMode
         sourcesButton.visibility = if (allChatsMode) View.VISIBLE else View.GONE
@@ -5422,7 +5540,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 browseScope = MeloBrowseUiPolicy.scope(showingSources, playlistMode, filterOnlyDownloaded, allChatsMode, selectedChatId),
                 browseLoadState = loadState,
                 browseOwnerId = browseRequest?.ownerId ?: 0L,
-                browseGeneration = browseRequest?.generation ?: 0L
+                browseGeneration = browseRequest?.generation ?: 0L,
+                browseComplete = loadState == MeloBrowseUiPolicy.LoadState.READY &&
+                    (showingSources || (total != null && rows.size >=
+                        if (letterFloor != null && !filterOnlyDownloaded && !playlistMode) floorCountForCurrentView else total))
             )
         }
 
@@ -5434,12 +5555,19 @@ class TelegramPreviewActivity : AppCompatActivity() {
         override fun sort(): SongSort = activeSort()
 
         override fun setSort(sort: SongSort) {
-            if (sort == librarySort()) return
+            captureMeloBrowse?.invoke()
+            if (sort == activeSort()) return
             librarySortCache = sort
+            browseSortOverride = sort
+            browseKey()?.let { meloBrowse.sort(it, sort) }
             getSharedPreferences(MeloScreenPolicy.PREFS_NAME, Context.MODE_PRIVATE)
                 .edit().putString(MeloAlphabetPolicy.PREF_SORT, sort.name).apply()
             // The Telegram list below is re-sorted too, so it is right when the owner goes back to it.
-            if (localMode) localMusic.setSort(sort) { scheduleMeloLibraryRefresh() }
+            if (localMode) {
+                localMusic.setSort(sort) { scheduleMeloLibraryRefresh() }
+                scheduleMeloLibraryRefresh()
+                return
+            }
             letterFloor = null
             offlineVisibleLimit = 200
             refreshSongRows()
@@ -5453,6 +5581,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             if (dbList) {
                 if (letterFloor == lowerBound) return null
                 letterFloor = lowerBound
+                browseKey()?.let { meloBrowse.sort(it, SongSort.NAME, lowerBound) }
                 refreshSongRows()
                 return null
             }
@@ -5507,6 +5636,30 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
         override fun setMode(mode: MeloCompactPolicy.Mode) {
             if (!auth.isReady()) return
+            if (phoneScreen == null && tabletScreen == null) { legacySetMode(mode); return }
+            val scope = when (mode) {
+                MeloCompactPolicy.Mode.ALL -> MeloBrowseUiPolicy.scope(false, false, false, allChatsMode, selectedChatId)
+                MeloCompactPolicy.Mode.DOWNLOADED -> MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.DOWNLOADED, selectedChatId.takeIf { allChatsMode })
+                MeloCompactPolicy.Mode.PLAYLIST -> MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.PLAYLIST, downloadedOnly = filterOnlyDownloaded)
+            }
+            navigateBrowse(scope)
+        }
+
+        /* Existing source APIs still feed the same query and playback paths. */
+        override fun showSources() {
+            if (!auth.isReady()) return
+            if (phoneScreen == null && tabletScreen == null) { legacyShowSources(); return }
+            navigateBrowse(MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.SOURCES))
+        }
+
+        override fun openSource(chatId: Long?) {
+            if (!auth.isReady()) return
+            if (phoneScreen == null && tabletScreen == null) { legacyOpenSource(chatId); return }
+            navigateBrowse(if (chatId == null) MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.LIBRARY)
+                else MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.CHANNEL, chatId))
+        }
+
+        private fun legacySetMode(mode: MeloCompactPolicy.Mode) {
             closeLocalMusic()
             letterFloor = null
             when (mode) {
@@ -5519,7 +5672,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             refreshSongRows()
         }
 
-        override fun showSources() {
+        private fun legacyShowSources() {
             if (!auth.isReady()) return
             closeLocalMusic()
             letterFloor = null
@@ -5531,7 +5684,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             refreshSongRows()
         }
 
-        override fun openSource(chatId: Long?) {
+        private fun legacyOpenSource(chatId: Long?) {
             if (!auth.isReady()) return
             closeLocalMusic()
             letterFloor = null
@@ -5544,6 +5697,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
 
         override fun setQuery(query: String) {
+            browseKey()?.let { meloBrowse.query(it, query) }
             if (localMode) {
                 // Its own search text: the Telegram filter box (and its database query) is left alone.
                 localMusic.setQuery(query) { scheduleMeloLibraryRefresh() }
@@ -5681,6 +5835,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
 
         override fun listAnchor(): MeloScreenHost.ListAnchor? = meloListAnchor
+        override fun setBrowseCapture(listener: (() -> Unit)?) { captureMeloBrowse = listener }
+        override fun browseContext(): MeloBrowseState.Context? = browseKey()?.let { meloBrowse.get(it) }
+        override fun saveBrowsePosition(generation: Long, songKey: Long?, offsetPx: Int, sourceScrollY: Int) {
+            val key = browseKey() ?: return
+            val current = if (localMode) localMusic.browseGeneration else uiQueryGeneration.get()
+            if (generation == current && meloBrowse.active == key) meloBrowse.position(key, songKey, offsetPx, sourceScrollY)
+        }
+        override fun deckState(): MeloBrowseState.Deck = meloBrowse.deck
+        override fun saveDeckState(state: MeloBrowseState.Deck) { meloBrowse.deck = state }
 
         override fun startVoiceSearch(onText: (String) -> Unit): Boolean {
             if (!voiceSearchAvailable()) return false
@@ -5731,7 +5894,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             downloadAndPlay(song, resumePositionMs)
         }
 
-        override fun openNowPlaying() = showFullPlayer()
+        override fun openNowPlaying() { captureMeloBrowse?.invoke(); showFullPlayer() }
 
         override fun syncSubtitle(): String? =
             if (localMode) "${MeloLocalSourcePolicy.SOURCE_TITLE} · chỉ đọc" else syncSubtitleText()
@@ -6431,6 +6594,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     }
                     loadDatabaseIndex(verified.value) {
                         scanAllTelegramAudio(browseAfter = false, incremental = true)
+                        restorePendingBrowse(verified.value)
                     }
                 }
             } catch (_: IllegalArgumentException) {
