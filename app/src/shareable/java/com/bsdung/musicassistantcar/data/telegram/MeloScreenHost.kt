@@ -130,7 +130,7 @@ internal interface MeloScreenHost {
 
     // ---- Studio Deck (Now Playing) --------------------------------------------------------
 
-    /** Current playback queue in play order (the service's authoritative order). */
+    /** Base queue snapshot. Shuffle transport order is not exposed by the existing service contract. */
     fun queue(): List<QueueItem>
     fun playQueueAt(index: Int)
     /** Same song menu as the library rows, for the queue song at [index]. */
@@ -224,7 +224,9 @@ internal interface MeloScreenHost {
         val browseOwnerId: Long = 0L,
         val browseGeneration: Long = 0L,
         /** True only when the current query has no further page. */
-        val browseComplete: Boolean = true
+        val browseComplete: Boolean = true,
+        val playing: Boolean = false,
+        val buffering: Boolean = false
     )
 
     data class NowPlaying(
@@ -250,6 +252,7 @@ internal interface MeloScreenHost {
         val saveAvailability: MeloSavePolicy.Availability = MeloSavePolicy.Availability.READY,
         /** A Save write for this song is running; [favorite] still shows what is committed. */
         val saveBusy: Boolean = false,
-        val download: MeloDownloadUiPolicy.Presentation? = null
+        val download: MeloDownloadUiPolicy.Presentation? = null,
+        val buffering: Boolean = false
     )
 }

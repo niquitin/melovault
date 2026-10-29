@@ -213,8 +213,12 @@ internal object MeloNowPlayingPolicy {
         )
     }
 
-    fun queueStatus(isCurrent: Boolean, downloaded: Boolean, downloadingPercent: Int?): Status =
-        MeloCompactPolicy.rowStatus(downloaded, downloadingPercent, isCurrent)
+    fun queueStatus(isCurrent: Boolean, downloaded: Boolean, downloadingPercent: Int?,
+        paused: Boolean = false, buffering: Boolean = false): Status = when {
+        isCurrent && paused -> Status.PAUSED
+        isCurrent && buffering -> Status.OPENING
+        else -> MeloCompactPolicy.rowStatus(downloaded, downloadingPercent, isCurrent)
+    }
 
     fun loadStyle(prefs: SharedPreferences): NowPlayingStyle = NowPlayingStyle.fromKey(prefs.getString(KEY_STYLE, null))
 

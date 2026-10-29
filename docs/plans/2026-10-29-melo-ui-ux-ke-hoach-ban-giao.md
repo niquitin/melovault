@@ -4,6 +4,39 @@ TASK_ID: **2026-10-29-melo-ui-ux-ke-hoach**.
 
 ## Phiên đang thực thi S2–S6 — 29/10/2026
 
+<!-- S6_CURRENT_START -->
+- **Checkpoint cuối phiên S2–S6: S2/S3/S4/S5a/S5b đã commit; S6 phần UI/test/build xong, BLOCKED riêng thứ tự khi Đảo bật. Chưa hoàn tất toàn bộ S6; chưa mở S7.** Source S6 là commit chứa checkpoint này, nền `a908151caeaa2a911b9a7a27646fa3ac389a6a64`; SHA cuối lấy `git log -1 --format=%H -- app/src/shareable/java/com/bsdung/musicassistantcar/data/telegram/MeloQueuePane.kt`, đối chiếu HEAD thực trước tiếp nhận. Các dòng bước tiếp S5a/S5b lịch sử bên dưới đã được thay bằng mốc này.
+- Source S5a `3615d643593d4650b36addfacc8d6b122d5328a0`; S5b `a908151caeaa2a911b9a7a27646fa3ac389a6a64`. Mốc S2/S3/S4 giữ bên dưới; không quay về HEAD kế hoạch/S1 để tiếp tục.
+- S6: MeloQueuePane/QueueUiPolicyTest mới; sửa NowPlayingPolicy/test, Host, Activity, StudioDeck, TabletScreen, PhoneScreen, LibraryPane, Components/DesignTokens; bổ sung Controller/test S5b coalesce pending force và root-first stat. Cùng renderer preview/full/tablet; refresh theo typed facts, giữ anchor cùng owner, pause không tự scroll. Tablet queue trong khung phải, Back/Thư viện giữ browse; Dock ngoài scroll phụ, IME/font/contrast opt-in. Full queue từ Deck: Thư viện đóng cả hai UI, không playback.
+- **BLOCKED phần thứ tự Đảo (Telegram/Local)**: `meloHost.queue` trả base queue, `toggleShuffle` chỉ đổi Media3 flag, `playAdjacent` Telegram index±1; service `currentTelegramQueue/setQueue` base order, `nextTrack` tuyến tính nhưng NextAwarePlayer.seekToNextMediaItem có thể dùng ExoPlayer shuffle khi cached next có sẵn. Media3 chỉ có cửa sổ cached/progressive, không phải logical queue đầy đủ; local snapshot cũng base index. Chưa có hợp đồng order chung; UI ghi Thứ tự gốc khi Đảo bật. Chỉ là đối chiếu source, chưa QA thiết bị. Không sửa service/thuật toán hoặc tự sort để che khác biệt.
+- **Bước cần tiếp chính xác:** bổ sung kế hoạch/quyết định về hợp đồng thứ tự khi Đảo bật trước khi gỡ BLOCKED S6. Nêu cùng một authority cho UI Next/transport/queue, mapping logical queue và Media3 window, hành vi local; xác định file/test và quyền sửa service nếu cần. Phiên này không tự chọn kiến trúc hoặc thực thi phần đó. Các phần độc lập S6 đã kiểm kỹ thuật/commit; chưa gọi S6 hoàn tất hay candidate sẵn sàng.
+- Full cuối `S6-source-final-20261029_165358`,16:53:58–16:56:03 +07: mỗi Debug/Release178 suites,2261 tests = **2240 passed/21 skipped/0 failed/0 errors**, exit0, XML fresh/source.json match. Skipped20 theo Personal backend disabled,1 simulated soak cần bật riêng. Lệnh đúng hai task test Debug/Release `--console=plain`; các lượt trung gian vẫn giữ, chỉ lượt này đại diện source cuối.
+- Assemble Ni `S6-assemble-20261029_165631`,16:56:31–16:58:29 +07: Debug/Release exit0, APK mới/Fresh=true; test/build/current-source manifest khớp. Log/result/source.json/evidence-check/apk-metadata/APK riêng dưới artifacts TASK_ID, không commit. Package `app.melovault.player`,versionCode121,versionName0.6.96-beta; SHA/bytes hai APK trong báo cáo và result.json. **Chưa kiểm cert/config/gates candidate, không dùng APK này như QA đã đạt.**
+- Sau commit: không code dở/artifact được stage, không wrapper/test worker còn chạy; daemon thường trú có thể còn. Cần kiểm git status/branch/HEAD/log/diff-check/process thực khi tiếp nhận. Không ADB/cài/Tiny/Drive/QA UI/audio/offline; font1–2 mới kiểm công thức/đọc layout, không ảnh. SHANLING_SCREEN_END/SONY_SCREEN_END không thao tác/chưa xác minh. Không sơ bộ/PASS/merge/push/S7/P2.
+<!-- S6_CURRENT_END -->
+
+### Prompt S7 có điều kiện — lưu để bàn giao, chưa được chạy trong phiên này
+
+Chỉ dùng sau khi BLOCKED S6 về order được giải quyết bằng kế hoạch/source được chủ dự án giao và xác định lại HEAD/test tương ứng; không lấy build xanh hiện tại để bỏ gate.
+
+~~~text
+MELOVAULT — THỰC THI S7, TASK_ID 2026-10-29-melo-ui-ux-ke-hoach.
+Dùng model/effort tôi chọn, giữ vai THỰC THI; không tự chuyển sơ bộ.
+Worktree C:\Users\ntdun\.codex\worktrees\melo-ui-ux-plan\MeloVault-E91-Shareable.
+Nhánh dot/2026-10-29-melo-ui-ux-ke-hoach; HEAD lấy từ bàn giao S6 và phần gỡ BLOCKED mới nhất.
+Đọc bàn giao/báo cáo mới nhất, mục S7 kế hoạch chính và phụ lục; luật29/10 tại c9a1c09 bằng git show nếu working files còn cũ, không merge integration.
+Kiểm status/branch/HEAD/log-5/diff-check/agent-build; thay đổi lạ thì dừng, không reset/clean/stash/restore đè.
+Xác nhận BLOCKED order đã có bằng chứng xử lý và source/test cuối tương ứng; chưa có thì dừng đúng phần, không tự sửa service hoặc bỏ tiêu chí.
+Thực thi S7 theo gate: source/test/build đúng commit; metadata APK/package/version/cert/config boolean; không đọc/log bí mật.
+Bundle và SHA256 hai đầu, clone Tiny cô lập, config chỉ ở Tiny; không chạm repo gốc/copy session/cache.
+Chỉ cài sau gates đúng máy/serial/model theo luật, không dùng Sony thay Shanling; QA1–6 với hai màu/font/layout và âm thanh/offline đúng bằng chứng.
+Giữ artifact cũ, log/ảnh private; màn OFF trong finally và xác minh cuối; 00_tong_hop.png và Drive Ni N owner-only sau khi đủ điều kiện.
+Thiếu Tiny/Drive/thiết bị/gate thì BLOCKED đúng phần; không dùng APK cũ thay source mới.
+Cập nhật báo cáo/bàn giao, commit trên nhánh nhiệm vụ rồi dừng; không PASS chính thức/merge/push/P2.
+Bàn giao prompt sơ bộ cho phiên mới; chủ dự án nghiệm thu chính thức.
+~~~
+
+
 - **S5b xong code/test mục tiêu**, nền `3615d643593d4650b36addfacc8d6b122d5328a0`; commit riêng chứa mốc này. Policy facts/checker owner+epoch+revision, worker stat, READY từ completion thật+owner+readable/nonempty/size; path-only queue UNKNOWN; không đổi cache/service/sync. Các trạng thái mới đồng nhất ở list/queue/now, offline chọn bản hợp lệ và giữ index.
 - Test cuối `S5b-final-20261029_163743`: Debug/Release mỗi biến thể58 passed/0 skipped/0 failed/0 errors, 6 suites, exit0, XML fresh/source.json match; log/result/XML artifacts cùng tên. Không code dở/test đang chạy, artifact không commit. File: DownloadUiPolicy mới/test, Activity, Host, Components, LibraryPane, StudioDeck và hai hồ sơ.
 - **Bước tiếp S6**: queue renderer tái dùng/typed refresh, paused/buffering, queue khung phải tablet/Back giữ browse, dock/font/contrast opt-in; đối chiếu queue order với service trước khi khẳng định. Full unit Debug/Release rồi assemble hai biến thể, log duy nhất; không làm S7/cài/QA/merge/push. Chưa kiểm chứng UI/audio/offline thật; màn hai máy không thao tác/chưa xác minh. Các dòng S5a/bước tiếp lịch sử dưới đây đã được thay bằng mốc này.

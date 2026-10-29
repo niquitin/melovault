@@ -71,7 +71,7 @@ internal object MeloDownloadUiPolicy {
         fun observe(evidence: Evidence, force: Boolean = false, onChecked: ((Presentation) -> Unit)? = null) {
             if (evidence.ownerId != ownerId || ownerId <= 0L) return
             val previous = entries[evidence.songKey]
-            val entry = if (previous?.evidence == evidence && !force) previous else Entry(evidence, ++revision).also {
+            val entry = if (previous?.evidence == evidence && (!force || pending[evidence.songKey] != null)) previous else Entry(evidence, ++revision).also {
                 entries[evidence.songKey] = it
                 results.remove(evidence.songKey)
             }

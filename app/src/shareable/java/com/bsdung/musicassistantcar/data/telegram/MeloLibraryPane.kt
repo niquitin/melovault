@@ -457,9 +457,9 @@ internal class MeloLibraryPane(
     }
 
     /** Playing-row highlight follows track changes. */
-    fun onPlaybackChanged(playingKey: Long?, paused: Boolean = false) {
+    fun onPlaybackChanged(playingKey: Long?, paused: Boolean = false, playing: Boolean = false, buffering: Boolean = false) {
         val shown = snapshot ?: return
-        if (MeloCompactPolicy.rowsStale(shown.playingKey, shown.paused, playingKey, paused)) onLibraryChanged()
+        if (MeloCompactPolicy.rowsStale(shown.playingKey, shown.paused, playingKey, paused) || shown.playing != playing || shown.buffering != buffering) onLibraryChanged()
     }
 
     private fun onBarLetter(letter: Char, final: Boolean) {
@@ -694,7 +694,7 @@ internal class MeloLibraryPane(
             val status = if (TelegramPlayFeedbackPolicy.opening(host.playStatus(), row.songKey, playing)) {
                 MeloComponentPolicy.Status.OPENING
             } else {
-                MeloCompactPolicy.rowStatus(row.downloaded, row.downloadingPercent, playing, snap.paused)
+                MeloNowPlayingPolicy.queueStatus(playing, row.downloaded, row.downloadingPercent, snap.paused, snap.buffering)
             }
             val quality = MeloComponentPolicy.qualityLabel(MeloComponentPolicy.formatOf(row.mimeType, row.filename), null, null, null)
             durationPaint.textSize = s.secondaryText
@@ -717,9 +717,9 @@ internal class MeloLibraryPane(
                     artKey = if (c.teal) row.artKey else null,
                     browseMetadata = MeloBrowseUiPolicy.rowMetadata(row.performer, row.sourceTitle,
                         snap.local || row.local, row.sourceIsFolder).orEmpty(),
-                    statusTextOverride = row.download?.let { MeloDownloadUiPolicy.rowText(it, playing,
-                        host.nowPlaying()?.playing == true, snap.paused,
-                        host.nowPlaying()?.let { now -> !now.playing && !now.paused } == true,
+                    statusTextOverride = (row.download ?: if (snap.local || row.local)
+                        MeloDownloadUiPolicy.Presentation(MeloDownloadUiPolicy.State.READY) else null)?.let { MeloDownloadUiPolicy.rowText(it, playing,
+                        snap.playing, snap.paused, snap.buffering,
                         opening = status == MeloComponentPolicy.Status.OPENING,
                         local = snap.local || row.local, quality = quality) },
                     rowSave = if (directSave) MeloSavePolicy.rowButtonState(row.title, row.saveAvailability, row.saved, row.saveBusy) else null

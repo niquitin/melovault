@@ -148,6 +148,6 @@ internal class MeloPhoneScreen(
     fun onPlaybackChanged() {
         val now = host.nowPlaying()
         bar.update(now)
-        pane.onPlaybackChanged(now?.songKey, now?.paused == true)
+        pane.onPlaybackChanged(now?.songKey, now?.paused == true, now?.playing == true, now?.buffering == true)
     }
 }

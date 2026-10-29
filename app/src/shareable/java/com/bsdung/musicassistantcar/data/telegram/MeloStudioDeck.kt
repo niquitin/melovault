@@ -75,21 +75,15 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
     private lateinit var repeat: TextView
     private lateinit var favorite: TextView
     private lateinit var sleep: TextView
-    private val queueTitle: TextView
     private val prefetchSwitch: Switch
-    private val queueRows = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-    private var queueList: ListView? = null
-    private val queueAdapter = QueueAdapter()
+    private lateinit var queuePane: MeloQueuePane
 
-    private var queue: List<QueueItem> = emptyList()
     private var currentKey: Long? = null
     private var probedKey: Long? = null
     private var probing = false
     private var fileBitDepth: Int? = null
     private var coverFromFile: Bitmap? = null
     private var artKey: Any? = null
-    private var tick = 0
-    private var scrolledFor: Long? = null
     private var fitScroll: ScrollView? = null
     private var fitColumn: LinearLayout? = null
     /** Horizontal room the scroll view's column loses to its own padding (portrait). */
@@ -121,14 +115,14 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         title = c.text("", s.playerTitleText, p.text, bold = true, maxLines = 2)
         source = c.text("", s.titleText, p.textSecondary, maxLines = 1)
         qualityChips = MeloQualityChipRow(activity, c, s.minTouch * 2 / 3).apply { visibility = View.GONE }
-        qualityNote = c.text("", s.secondaryText, p.accent, maxLines = 1).apply { visibility = View.GONE }
-        time = c.text("", s.secondaryText, p.textSecondary)
+        qualityNote = c.text("", s.secondaryText, p.textSecondary, maxLines = 3).apply { visibility = View.GONE }
+        time = c.text("", s.secondaryText, p.textSecondary, maxLines = 2)
         seekLine = MeloSeekLine(
             activity, p.border, p.accent, p.accent, s.progressHeight, s.progressThumb, s.minTouch,
             onPreview = { previewMs = it; renderTime(host.nowPlaying()) },
             onSeek = { host.seekTo(it); refresh() }
         )
-        queueTitle = c.text("Hàng đợi", s.titleText, p.text, bold = true)
+        queuePane = MeloQueuePane(activity, c, host, preview = layout == DeckLayout.PORTRAIT)
         prefetchSwitch = Switch(activity).apply {
             text = "Tải trước bài kế"
             setTextColor(p.text)
@@ -150,10 +144,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         dialog.show()
         reloadQueue()
         val saved = host.deckState()
-        queueList?.post {
-            val index = queue.indexOfFirst { it.songKey == saved.songKey }
-            if (index >= 0) { queueList?.setSelectionFromTop(index, saved.offsetPx); scrolledFor = currentKey }
-        }
+        queuePane.view.post { queuePane.restore(saved.songKey, saved.offsetPx) }
         fitScroll?.post { fitScroll?.scrollTo(0, saved.bodyScrollY) }
         handler.removeCallbacks(update)
         handler.post(update)
@@ -167,9 +158,9 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
 
     fun saveUiState() {
         if (browseOwner <= 0L || host.accountId() != browseOwner) return
-        val list = queueList
-        host.saveDeckState(MeloBrowseState.Deck(songKey = list?.firstVisiblePosition?.let { queue.getOrNull(it)?.songKey },
-            offsetPx = list?.getChildAt(0)?.top ?: 0, bodyScrollY = fitScroll?.scrollY ?: 0))
+        val anchor = queuePane.anchor()
+        host.saveDeckState(MeloBrowseState.Deck(songKey = anchor.first,
+            offsetPx = anchor.second, bodyScrollY = fitScroll?.scrollY ?: 0))
     }
 
     private fun stop() {
@@ -190,7 +181,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         root.addView(content, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            v.setPadding(bars.left, bars.top + MeloUiLabActivity.handleBandPx(v, insets), bars.right, bars.bottom)
+            v.setPadding(bars.left, bars.top + MeloUiLabActivity.handleBandPx(v, insets), bars.right, maxOf(bars.bottom, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom))
             insets
         }
         // The window's place on the screen is only known after the first layout: measure the band again then.
@@ -213,7 +204,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         column.addView(player, matchWrap())
         column.addView(c.spacer(s.gap * 3))
         column.addView(queueHeader(), matchWrap())
-        column.addView(queueRows, matchWrap())
+        column.addView(queuePane.view, matchWrap())
         column.addView(c.chip("Xem cả hàng đợi", false) { host.openQueue() }, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, s.minTouch).apply { topMargin = s.gap })
         scroll.addView(column)
@@ -246,16 +237,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         row.addView(left, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 45f).apply { marginEnd = s.screenMargin })
         val right = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         right.addView(queueHeader(), matchWrap().apply { topMargin = s.gap })
-        val list = ListView(activity).apply {
-            adapter = queueAdapter
-            divider = null
-            dividerHeight = s.gap / 2
-            setSelector(android.R.color.transparent)
-            setOnItemClickListener { _, _, position, _ -> host.playQueueAt(position) }
-            setOnItemLongClickListener { _, v, position, _ -> host.openQueueSongMenu(position, v); true }
-        }
-        queueList = list
-        right.addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        right.addView(queuePane.view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         row.addView(right, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 55f))
         fitScroll = scroll
         fitColumn = player
@@ -284,16 +266,40 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
                 setTextSize(TypedValue.COMPLEX_UNIT_PX, s.secondaryText)
                 layoutParams = LinearLayout.LayoutParams(0, transportPx, 1f).apply { marginEnd = s.gap / 2 }
             }
-        transport.addView(small("−30s", "Tua lùi 30 giây") { seekBy(MeloNowPlayingPolicy.SEEK_BACK_MS) })
-        transport.addView(small("⏮", "Bài trước") { host.previous() })
+        val backSeek = small("−30s", "Tua lùi 30 giây") { seekBy(MeloNowPlayingPolicy.SEEK_BACK_MS) }
+        val previous = small("⏮", "Bài trước") { host.previous() }
         play = c.iconButton("▶", "Phát", primary = true, width = s.playButtonWidth, height = s.playButtonHeight) { host.playPause() }
-            .apply { layoutParams = LinearLayout.LayoutParams(s.playButtonWidth, s.playButtonHeight).apply { marginEnd = s.gap / 2 } }
-        transport.addView(play)
-        transport.addView(small("⏭", "Bài kế") { host.next() })
-        transport.addView(small("+60s", "Tua tới 60 giây") { seekBy(MeloNowPlayingPolicy.SEEK_FORWARD_MS) }.apply {
-            (layoutParams as LinearLayout.LayoutParams).marginEnd = 0
-        })
+        val next = small("⏭", "Bài kế") { host.next() }
+        val forwardSeek = small("+60s", "Tua tới 60 giây") { seekBy(MeloNowPlayingPolicy.SEEK_FORWARD_MS) }
+        val seekExtras = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL; visibility = View.GONE }
+        var stacked: Boolean? = null
+        fun arrange(width: Int) {
+            val side = maxOf(s.minTouch, listOf(backSeek, previous, next, forwardSeek).maxOf {
+                kotlin.math.ceil(it.paint.measureText(it.text.toString()).toDouble()).toInt() + it.paddingLeft + it.paddingRight
+            })
+            val compact = MeloQueueUiPolicy.dockStacked(width, s.minTouch, s.playButtonWidth, s.gap, side)
+            if (stacked == compact) return
+            stacked = compact
+            transport.removeAllViews(); seekExtras.removeAllViews()
+            val main = if (compact) listOf(previous, play, next) else listOf(backSeek, previous, play, next, forwardSeek)
+            main.forEachIndexed { index, button ->
+                val playWidth = minOf(s.playButtonWidth, (width - s.minTouch * 2 - s.gap).coerceAtLeast(s.minTouch))
+                button.layoutParams = if (button === play) LinearLayout.LayoutParams(playWidth, s.playButtonHeight)
+                    else LinearLayout.LayoutParams(0, transportPx, 1f)
+                (button.layoutParams as LinearLayout.LayoutParams).marginEnd = if (index == main.lastIndex) 0 else s.gap / 2
+                transport.addView(button)
+            }
+            if (compact) listOf(backSeek, forwardSeek).forEach { button ->
+                seekExtras.addView(button, LinearLayout.LayoutParams(0, transportPx, 1f))
+            }
+            seekExtras.visibility = if (compact) View.VISIBLE else View.GONE
+        }
+        arrange(Int.MAX_VALUE / 8)
         dock.addView(transport, matchWrap().apply { topMargin = s.gap })
+        dock.addView(seekExtras, matchWrap().apply { topMargin = s.gap / 2 })
+        dock.addOnLayoutChangeListener { _, l, _, r, _, _, _, _, _ ->
+            arrange((r - l - dock.paddingLeft - dock.paddingRight).coerceAtLeast(0))
+        }
         return dock
     }
 
@@ -326,7 +332,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
             val row = if (stacked && i >= 2) extrasRow2 else extrasRow1
             val last = if (stacked) i % 2 == 1 || i == chips.lastIndex else i == chips.lastIndex
             // Equal cells across the whole width, label centred.
-            chip.layoutParams = LinearLayout.LayoutParams(0, s.minTouch, 1f).apply { marginEnd = if (last) 0 else s.gap }
+            chip.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = if (last) 0 else s.gap }
             row.addView(chip)
         }
         extrasRow2.visibility = if (stacked) View.VISIBLE else View.GONE
@@ -360,18 +366,28 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
     }
 
     private fun topBar(): View = LinearLayout(activity).apply {
-        orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
-        minimumHeight = s.minTouch
-        addView(c.iconButton("˅", "Đóng màn Đang phát") { dismiss() }.apply { background = null; setTextColor(p.text) })
-        addView(c.text("Đang phát", s.titleText, p.textSecondary).apply {
-            layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-        })
-        addView(c.chip("EQ", false) {
-            Toast.makeText(activity, "EQ sắp có trong bản sau", Toast.LENGTH_SHORT).show()
-        }.apply { contentDescription = "Bộ chỉnh âm, sắp có" })
-        sleep = c.chip("Hẹn giờ", false) { showSleepMenu(sleep) }.apply { contentDescription = "Hẹn giờ tắt nhạc" }
-        addView(sleep)
+        orientation = LinearLayout.VERTICAL
+        addView(LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = s.minTouch
+            addView(c.iconButton("˅", "Đóng màn Đang phát") { dismiss() }.apply { background = null; setTextColor(p.text) })
+            addView(c.text("Đang phát", s.titleText, p.textSecondary, maxLines = 2),
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }, matchWrap())
+        addView(LinearLayout(activity).apply {
+            orientation = if (activity.resources.configuration.fontScale > 1.3f) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            addView(c.chip("EQ", false) {
+                Toast.makeText(activity, "EQ sắp có trong bản sau", Toast.LENGTH_SHORT).show()
+            }.apply { contentDescription = "Bộ chỉnh âm, sắp có" }, matchWrap())
+            sleep = c.chip("Hẹn giờ", false) { showSleepMenu(sleep) }.apply {
+                contentDescription = "Hẹn giờ tắt nhạc"; maxLines = 2
+            }
+            // Equal-width horizontal cells or full-width stacked cells, each can grow with font size.
+            if (orientation == LinearLayout.HORIZONTAL) {
+                (getChildAt(0).layoutParams as LinearLayout.LayoutParams).apply { width = 0; weight = 1f }
+                addView(sleep, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            } else addView(sleep, matchWrap())
+        }, matchWrap())
     }
 
     private fun addPlayerBody(column: LinearLayout) {
@@ -397,7 +413,6 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
     private fun queueHeader(): View = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
-        addView(queueTitle, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         addView(prefetchSwitch)
     }
 
@@ -435,10 +450,8 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
             fileBitDepth = null
             coverFromFile = null
             reloadQueue()
-        } else if (now?.downloadNote?.startsWith("Đã tải") == false && ++tick % 5 == 0) {
-            // Only while the current song is still downloading does a queue row change by itself.
-            reloadQueue()
         }
+        queuePane.update(now)
         if (now != null && probedKey != now.songKey && !probing) startProbe(now)
     }
 
@@ -471,7 +484,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         }
         var relayout = title.show(now.title)
         source.show(MeloNowPlayingPolicy.sourceLine(now.sourceTitle, now.local, now.sourceIsFolder).orEmpty())
-        showQuality(host.qualityChips(fileBitDepth), now.downloadNote?.takeUnless { it.startsWith("Đã tải") }.orEmpty())
+        showQuality(host.qualityChips(fileBitDepth), now.downloadNote?.takeUnless { now.download?.state == MeloDownloadUiPolicy.State.READY }.orEmpty())
         renderTime(now)
         play.show(if (now.playing) "❚❚" else "▶")
         play.contentDescription = if (now.playing) "Dừng" else "Phát"
@@ -517,71 +530,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         })
     }
 
-    private fun reloadQueue() {
-        queue = host.queue()
-        val current = queue.indexOfFirst { it.songKey == currentKey }
-        queueTitle.text = "Hàng đợi · ${MeloComponentPolicy.formatCount(queue.size)} bài"
-        prefetchSwitch.isChecked = host.prefetchEnabled()
-        val list = queueList
-        if (list != null) {
-            queueAdapter.notifyDataSetChanged()
-            // Bring the current song into view once per track change, not on every refresh.
-            if (current >= 0 && scrolledFor != currentKey) {
-                scrolledFor = currentKey
-                list.setSelection((current - 2).coerceAtLeast(0))
-            }
-        } else {
-            // Portrait: a short window around the current song; the full list opens separately.
-            queueRows.removeAllViews()
-            val from = (current - 1).coerceAtLeast(0)
-            queue.drop(from).take(12).forEachIndexed { i, item ->
-                val index = from + i
-                queueRows.addView(queueRow(item, index).apply {
-                    setOnClickListener { host.playQueueAt(index) }
-                }, matchWrap().apply { topMargin = s.gap / 2 })
-            }
-            if (queue.isEmpty()) queueRows.addView(c.text("Hàng đợi trống. Chọn một bài trong thư viện.", s.secondaryText, p.textSecondary, maxLines = 2))
-        }
-    }
-
-    private fun queueRow(item: QueueItem, index: Int): View {
-        val status = MeloNowPlayingPolicy.queueStatus(item.songKey == currentKey, item.downloaded, item.downloadingPercent)
-        var row: View? = null
-        row = c.songRow(SongRowModel(
-            title = "${index + 1}. ${item.title}",
-            sourceTitle = item.sourceTitle,
-            durationSeconds = item.durationSeconds,
-            status = status,
-            progressPercent = item.downloadingPercent,
-            local = item.local,
-            statusTextOverride = item.download?.let { fact -> host.nowPlaying()?.let { now ->
-                MeloDownloadUiPolicy.rowText(fact, item.songKey == currentKey, now.playing, now.paused,
-                    !now.playing && !now.paused, local = item.local)
-            } ?: fact.text }
-        ), onMore = { row?.let { host.openQueueSongMenu(index, it) } })
-        return row
-    }
-
-    private inner class QueueAdapter : BaseAdapter() {
-        override fun getCount(): Int = queue.size
-        override fun getItem(position: Int): Any = queue[position]
-        override fun getItemId(position: Int): Long = queue[position].songKey
-        override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View =
-            queueRow(queue[position], position).also { unclickable(it, position) }
-    }
-
-    /** The ListView drives the row (tap = play, long press = menu); only the ⋮ stays clickable. */
-    private fun unclickable(v: View, position: Int) {
-        if (v.tag == MELO_SONG_ROW_MORE_TAG) {
-            v.setOnClickListener { host.openQueueSongMenu(position, v) }
-            v.isFocusable = false
-            return
-        }
-        v.isClickable = false
-        v.isLongClickable = false
-        v.isFocusable = false
-        if (v is ViewGroup) for (i in 0 until v.childCount) unclickable(v.getChildAt(i), position)
-    }
+    private fun reloadQueue() { queuePane.update() }
 
     private fun showSleepMenu(anchor: View) {
         PopupMenu(activity, anchor).apply {

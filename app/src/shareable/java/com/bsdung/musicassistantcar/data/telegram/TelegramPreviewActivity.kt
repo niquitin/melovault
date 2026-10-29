@@ -296,8 +296,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private val downloadUi = MeloDownloadUiPolicy.Controller(
         stat = { evidence ->
             val file = File(evidence.path.orEmpty())
-            MeloDownloadUiPolicy.FileFacts(file.exists(), file.isFile, file.canRead(), file.length(),
-                TelegramAccountStoragePolicy.isOwnedFile(File(evidence.rootPath), file))
+            val owned = TelegramAccountStoragePolicy.isOwnedFile(File(evidence.rootPath), file)
+            if (!owned) MeloDownloadUiPolicy.FileFacts(false, false, false, 0L, false)
+            else MeloDownloadUiPolicy.FileFacts(file.exists(), file.isFile, file.canRead(), file.length(), true)
         },
         execute = { if (!downloadUiExecutor.isShutdown) downloadUiExecutor.execute(it) },
         post = { mainHandler.post(it) }, changed = {
@@ -809,6 +810,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
             total = MeloBrowseUiPolicy.authoritativeCount(library.browseLoadState, shown),
             sourceTitle = MeloLocalSourcePolicy.SOURCE_TITLE,
             playingKey = currentSongKey(),
+            playing = player?.isPlaying == true,
+            buffering = player?.let { it.playWhenReady && it.playbackState == Player.STATE_BUFFERING } == true,
             paused = player?.let { it.currentMediaItem != null && !it.playWhenReady } == true,
             query = library.query,
             note = MeloLocalSourcePolicy.note(library.loading, library.loadedCount, shown, library.query),
@@ -848,6 +851,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 else -> "tắt"
             },
             downloadNote = null,
+            buffering = controller.playWhenReady && controller.playbackState == Player.STATE_BUFFERING,
             paused = !controller.playWhenReady,
             local = true,
             saveAvailability = MeloSavePolicy.Availability.LOCAL_ONLY
@@ -4066,6 +4070,38 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
     }
 
+    private fun showMeloQueue() {
+        queueDialog?.dismiss()
+        val measurements = MeloUiLabActivity.realMeasurements(this)
+        val d = measurements.display
+        val profile = MeloLibraryPolicy.profileFor(measurements.smallestWidthDp)
+        val components = MeloComponents(this, MeloDesignTokens.sizes(profile, d.density, d.fontScale, d.physicalPpi))
+        val dialog = Dialog(this, android.R.style.Theme_Material_NoActionBar)
+        val pane = MeloQueuePane(this, components, meloHost, onLibrary = {
+            dialog.dismiss()
+            studioDeck?.takeIf { it.isShowing() }?.dismiss()
+        })
+        pane.view.setBackgroundColor(components.palette.background)
+        dialog.setContentView(pane.view)
+        ViewCompat.setOnApplyWindowInsetsListener(pane.view) { view, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom))
+            insets
+        }
+        val tick = object : Runnable {
+            override fun run() {
+                if (!dialog.isShowing) return
+                pane.update()
+                mainHandler.postDelayed(this, 1000L)
+            }
+        }
+        dialog.setOnDismissListener { mainHandler.removeCallbacks(tick); if (queueDialog === dialog) queueDialog = null }
+        queueDialog = dialog
+        dialog.show()
+        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        mainHandler.post(tick)
+    }
+
     private fun showUpcomingQueue() {
         if (!auth.isReady()) return
         if (currentLocalId() != null) {
@@ -5623,6 +5659,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 total = total,
                 sourceTitle = sourceTitle,
                 playingKey = playingKey,
+                playing = player?.isPlaying == true,
+                buffering = player?.let { it.playWhenReady && it.playbackState == Player.STATE_BUFFERING } == true,
                 paused = player?.let { it.currentMediaItem != null && !it.playWhenReady } == true,
                 query = songFilter.text?.toString().orEmpty(),
                 note = offlineSummary.takeIf { filterOnlyDownloaded && !showingSources },
@@ -5890,6 +5928,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 },
                 downloadNote = key?.let { downloadPresentation(it).text },
                 download = key?.let { downloadPresentation(it) },
+                buffering = controller.playWhenReady && controller.playbackState == Player.STATE_BUFFERING,
                 paused = !controller.playWhenReady,
                 saveAvailability = MeloSavePolicy.availability(
                     playing = true, local = false, songKey = key, songKnown = song != null,
@@ -5961,7 +6000,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
         }
 
-        override fun openQueue() = showUpcomingQueue()
+        override fun openQueue() {
+            val tablet = tabletScreen
+            if (tablet != null && studioDeck?.isShowing() != true) tablet.openQueue()
+            else if (phoneScreen != null || studioDeck?.isShowing() == true) showMeloQueue()
+            else showUpcomingQueue()
+        }
 
         override fun openLegacyOverflow(anchor: View) = showLibraryOverflow(anchor)
 

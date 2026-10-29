@@ -102,6 +102,10 @@ internal class MeloComponents(
         val art: Bitmap? = null
     )
 
+    private fun accessibleRowPalette(model: SongRowModel, highlighted: Boolean): MeloDesignTokens.Palette =
+        if ((model.browseMetadata != null || model.statusTextOverride != null) && highlighted && !isCar && !isCompact)
+            MeloDesignTokens.libraryHighlightedPalette(palette) else palette
+
     private val isCar get() = sizes.profile == Profile.CAR
     private val isCompact get() = sizes.profile == Profile.COMPACT
 
@@ -251,6 +255,7 @@ internal class MeloComponents(
     ): View {
         if (teal && !isCompact && !isCar) return tealSongRow(model, onClick, onLongClick, onMore, onSave)
         val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local).let { it.copy(label = model.statusTextOverride ?: it.label) }
+        val palette = accessibleRowPalette(model, status.highlightRow)
         // E96 P5B3: lookalike/combining characters in channel names are drawn by a fallback font; show their plain form.
         val shownTitle = DisplayTextPolicy.clean(model.title)
         val shownSource = DisplayTextPolicy.cleanOrNull(model.sourceTitle)
@@ -320,9 +325,12 @@ internal class MeloComponents(
         row.addView(body)
 
         TelegramSongDisplayPolicy.formatDuration(model.durationSeconds)?.let { duration ->
-            row.addView(text(duration, sizes.secondaryText, palette.textSecondary).apply {
+            val below = (model.browseMetadata != null || model.statusTextOverride != null) &&
+                context.resources.configuration.fontScale > 1.3f && !isCompact && !isCar
+            val durationView = text(duration, sizes.secondaryText, palette.textSecondary).apply {
                 setPadding(0, 0, sizes.gap / 2, 0)
-            })
+            }
+            if (below) body.addView(durationView) else row.addView(durationView)
         }
         if (!isCar) {
             rowSaveButton(model, onSave)?.let(row::addView)
@@ -404,6 +412,7 @@ internal class MeloComponents(
             if (model == bound) return
             bound = model
             val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local).let { it.copy(label = model.statusTextOverride ?: it.label) }
+        val palette = accessibleRowPalette(model, status.highlightRow)
             view.background = roundedBackground(
                 if (status.highlightRow) palette.accentSoft else palette.surface,
                 stroke = if (status.highlightRow) palette.accent else null
@@ -535,6 +544,7 @@ internal class MeloComponents(
         onSave: (() -> Unit)?
     ): View {
         val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local).let { it.copy(label = model.statusTextOverride ?: it.label) }
+        val palette = accessibleRowPalette(model, status.highlightRow)
         val shownTitle = DisplayTextPolicy.clean(model.title)
         val shownSource = DisplayTextPolicy.cleanOrNull(model.sourceTitle)
         val metadata = model.browseMetadata?.let(DisplayTextPolicy::clean) ?: shownSource
@@ -547,7 +557,8 @@ internal class MeloComponents(
             setPadding(sizes.gap, sizes.gap / 2, sizes.gap / 2, sizes.gap / 2)
             background = if (playing) {
                 gradient(
-                    palette.accentSoft, MeloComponentPolicy.blend(palette.accentSoft, palette.accent, 0.35f), radius,
+                    palette.accentSoft, if (model.browseMetadata != null || model.statusTextOverride != null) palette.accentSoft
+                    else MeloComponentPolicy.blend(palette.accentSoft, palette.accent, 0.35f), radius,
                     GradientDrawable.Orientation.LEFT_RIGHT, stroke = palette.accent
                 )
             } else {
@@ -587,9 +598,12 @@ internal class MeloComponents(
             contentDescription = status.label
         })
         TelegramSongDisplayPolicy.formatDuration(model.durationSeconds)?.let { duration ->
-            row.addView(text(duration, sizes.secondaryText, palette.textSecondary).apply {
+            val below = (model.browseMetadata != null || model.statusTextOverride != null) &&
+                context.resources.configuration.fontScale > 1.3f && !isCompact && !isCar
+            val durationView = text(duration, sizes.secondaryText, palette.textSecondary).apply {
                 setPadding(0, 0, sizes.gap / 2, 0)
-            })
+            }
+            if (below) body.addView(durationView) else row.addView(durationView)
         }
         rowSaveButton(model, onSave)?.let(row::addView)
         row.addView(TextView(context).apply {

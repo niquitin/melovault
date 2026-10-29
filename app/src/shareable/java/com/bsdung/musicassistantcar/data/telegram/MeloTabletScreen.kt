@@ -50,6 +50,9 @@ internal class MeloTabletScreen(
     private val navColumn = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     private val navItems = mutableMapOf<NavItem, LinearLayout>()
     private val syncLine = c.text("", s.secondaryText, p.textSecondary, maxLines = 2)
+    private val rightSlot = FrameLayout(context)
+    private var showingQueue = false
+    private lateinit var queuePane: MeloQueuePane
     private val pane = MeloLibraryPane(context, c, host, NewLayer.TWO_PANE)
     private val playFeedbackView = MeloPlayFeedbackView(context, c, host)
 
@@ -110,7 +113,8 @@ internal class MeloTabletScreen(
     private val backCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
             val snap = snapshot
-            if (snap?.showingSources == true) host.closeSources()
+            if (showingQueue) closeQueue()
+            else if (snap?.showingSources == true) host.closeSources()
             else if (snap != null && snap.local) host.closeLocal()
             else if (snap != null && !snap.showingSources && snap.sourceTitle != null) host.showSources()
             else { isEnabled = false; backDispatcher.onBackPressed() }
@@ -136,8 +140,28 @@ internal class MeloTabletScreen(
         right.addView(heading, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = s.gap
         })
-        right.addView(pane.view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        queuePane = MeloQueuePane(context, c, host, onLibrary = { closeQueue() })
+        rightSlot.addView(pane.view)
+        right.addView(rightSlot, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         view.addView(right, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 60f))
+    }
+
+    fun openQueue() {
+        if (showingQueue) { queuePane.update(); return }
+        // The pane remains mounted, preserving pending query and list anchor from S2.
+        showingQueue = true
+        pane.view.visibility = View.GONE
+        rightSlot.addView(queuePane.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        backCallback.isEnabled = true
+        queuePane.update()
+    }
+
+    private fun closeQueue() {
+        if (!showingQueue) return
+        showingQueue = false
+        rightSlot.removeView(queuePane.view)
+        pane.view.visibility = View.VISIBLE
+        onLibraryChanged()
     }
 
     fun attach() {
@@ -245,7 +269,7 @@ internal class MeloTabletScreen(
         scroll.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or_, ob ->
             if (r - l != or_ - ol || b - t != ob - ot) requestArtFit()
         }
-        return scroll
+        return pinPlayerDock(scroll, column)
     }
 
     /**
@@ -288,9 +312,10 @@ internal class MeloTabletScreen(
         val progressBlock = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
         progressBlock.addView(seekLine, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, s.minTouch))
         progressBlock.addView(LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            addView(timeLeft, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            addView(timeRight, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            val stacked = context.resources.configuration.fontScale > 1.3f
+            orientation = if (stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            addView(timeLeft, if (stacked) matchWrap() else LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(timeRight, if (stacked) matchWrap() else LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }, matchWrap().apply { topMargin = s.gap / 2 })
         timeBlock = progressBlock
         column.addView(progressBlock, matchWrap().apply { topMargin = s.gap * 2 })
@@ -301,7 +326,7 @@ internal class MeloTabletScreen(
         val playBtn = themedTransportButton(R.drawable.ic_play_arrow, "Phát", true) { host.playPause() }
         playButton = playBtn
         playIcon = playBtn.getChildAt(0) as ImageView
-        transport.addView(playBtn, LinearLayout.LayoutParams(0, s.playButtonHeight, 1.5f).apply { marginEnd = s.gap })
+        transport.addView(playBtn, LinearLayout.LayoutParams(0, s.playButtonHeight, 1f).apply { marginEnd = s.gap })
         transport.addView(themedTransportButton(R.drawable.ic_skip_next, "Bài kế", false) { host.next() },
             LinearLayout.LayoutParams(0, s.playButtonHeight, 1f))
         column.addView(transport, matchWrap().apply { topMargin = s.gap * 2 })
@@ -327,10 +352,27 @@ internal class MeloTabletScreen(
         scroll.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or_, ob ->
             if (r - l != or_ - ol || b - t != ob - ot) requestArtFit()
         }
-        return scroll
+        return pinPlayerDock(scroll, column)
     }
 
-    /** Large rounded transport button: a vector on a card, the primary one on the accent gradient. */
+    /** Controls stay outside secondary-content scrolling at every font size. */
+    private fun pinPlayerDock(scroll: ScrollView, column: LinearLayout): View {
+        column.removeView(timeBlock)
+        column.removeView(transportRow)
+        val dock = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(p.background)
+            addView(timeBlock, matchWrap())
+            addView(transportRow, matchWrap().apply { topMargin = s.gap })
+        }
+        return LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+            addView(dock, matchWrap())
+        }
+    }
+
+    /** Large transport button, with a vector and the primary accent background. */
     private fun themedTransportButton(iconRes: Int, description: String, primary: Boolean, onClick: () -> Unit): FrameLayout {
         val radius = s.corner * 9 / 8
         val icon = (s.playButtonHeight * 0.5f).toInt()
@@ -367,7 +409,7 @@ internal class MeloTabletScreen(
             val row = if (stacked && i >= 2) extrasRow2 else extrasRow1
             val last = if (stacked) i % 2 == 1 else i == chips.lastIndex
             // Equal cells across the whole width, label centred.
-            chip.layoutParams = LinearLayout.LayoutParams(0, s.minTouch, 1f).apply { marginEnd = if (last) 0 else s.gap }
+            chip.layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = if (last) 0 else s.gap }
             row.addView(chip)
         }
         extrasRow2.visibility = if (stacked) View.VISIBLE else View.GONE
@@ -602,6 +644,7 @@ internal class MeloTabletScreen(
     }
 
     fun onLibraryChanged() {
+        if (showingQueue) queuePane.update()
         playFeedbackView.refresh()
         val snap = host.snapshot()
         snapshot = snap
@@ -634,7 +677,7 @@ internal class MeloTabletScreen(
                 syncLine.isClickable = false
             }
         }
-        backCallback.isEnabled = snap.showingSources || snap.local || snap.sourceTitle != null
+        backCallback.isEnabled = showingQueue || snap.showingSources || snap.local || snap.sourceTitle != null
         // Sources and songs share the right pane. The full player is never replaced by quickPane.
         playerPane.visibility = View.VISIBLE
         pane.onLibraryChanged()
@@ -659,6 +702,8 @@ internal class MeloTabletScreen(
     }
 
     fun onPlaybackChanged() {
+        if (showingQueue) queuePane.update()
+
         playFeedbackView.refresh()
         val now: NowPlaying? = host.nowPlaying()
         var relayout: Boolean
@@ -677,7 +722,7 @@ internal class MeloTabletScreen(
         } else {
             relayout = title.show(now.title)
             relayout = source.show(MeloNowPlayingPolicy.sourceLine(now.sourceTitle, now.local, now.sourceIsFolder).orEmpty()) or relayout
-            val qualityParts = listOfNotNull(host.qualityLabel(null), now.downloadNote?.takeUnless { it.startsWith("Đã tải") })
+            val qualityParts = listOfNotNull(host.qualityLabel(null), now.downloadNote?.takeUnless { now.download?.state == MeloDownloadUiPolicy.State.READY })
             val save = MeloSavePolicy.buttonState(now.saveAvailability, now.favorite, now.saveBusy)
             if (teal) {
                 quality.show(MeloNowPlayingPolicy.qualityPillText(qualityParts))
@@ -704,6 +749,6 @@ internal class MeloTabletScreen(
             showArt(now.art, now.sourceTitle, now.title)
         }
         if (relayout && ::playerScroll.isInitialized) requestArtFit()
-        pane.onPlaybackChanged(now?.songKey, now?.paused == true)
+        pane.onPlaybackChanged(now?.songKey, now?.paused == true, now?.playing == true, now?.buffering == true)
     }
 }

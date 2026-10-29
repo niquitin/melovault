@@ -70,6 +70,10 @@ internal object MeloDesignTokens {
         if (theme == MeloThemePolicy.ColorTheme.TEAL_BRIGHT && (profile == Profile.PHONE || profile == Profile.TABLET)) TEAL_PALETTE
         else palette(profile)
 
+    /** Local Phone/Tablet row opt-in: all small text on the highlight meets 4.5:1. */
+    fun libraryHighlightedPalette(base: Palette): Palette =
+        base.copy(accentSoft = base.surfaceRaised, textSecondary = base.text)
+
     /** WCAG relative luminance of an ARGB colour (alpha ignored). */
     fun luminance(argb: Int): Double {
         fun channel(shift: Int): Double {

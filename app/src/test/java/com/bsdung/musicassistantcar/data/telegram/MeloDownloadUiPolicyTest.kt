@@ -86,6 +86,14 @@ class MeloDownloadUiPolicyTest {
         h.facts = good.copy(readable = false); h.controller.recheck(10); h.finish()
         assertEquals(MeloDownloadUiPolicy.State.UNAVAILABLE, h.controller.presentation(10).state)
     }
+    @Test fun repeatedCompletionAndPreplayChecksShareFreshPendingWork() {
+        val h = Harness(); var calls = 0
+        h.controller.observe(evidence(), force = true) { calls++ }
+        h.controller.observe(evidence(), force = true) { calls++ }
+        assertEquals(1, h.workers.size)
+        h.finish(); assertEquals(2, calls); assertEquals(1, h.stats)
+        h.controller.observe(evidence(), force = true); assertEquals(1, h.workers.size)
+    }
     @Test fun missingCopyDoesNotRemoveIndexAndAlternateIsSelected() {
         val h = Harness(); h.facts = good.copy(exists = false); h.controller.observe(evidence()); h.finish()
         h.facts = good; h.controller.observe(evidence().copy(songKey = 11, path = "/owner/b")); h.finish()
