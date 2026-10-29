@@ -288,6 +288,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private val overflowMenu by lazy { MeloOverflowMenu(this) }
     private val dbExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val uiQueryGeneration = java.util.concurrent.atomic.AtomicLong(1L)
+    private var browseRequest: MeloBrowseUiPolicy.Request? = null
+    private var browseLoadState = MeloBrowseUiPolicy.LoadState.INITIAL_LOADING
+    private var browseTotal: Int? = null
     private val offlineExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val pendingOffline = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<JSONObject>>()
     private var offlineGroups = emptyList<TelegramOfflineLibrary.Group>()
@@ -627,7 +630,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     mimeType = song.mimeType,
                     local = true,
                     artKey = if (rowArtOn()) MeloRowArtPolicy.localKey(song.mediaStoreId) else null,
-                    mediaStoreId = song.mediaStoreId
+                    mediaStoreId = song.mediaStoreId,
+                    sourceIsFolder = MeloNowPlayingPolicy.localSourceIsFolder(song.artist, song.folder)
                 )
             }
         }
@@ -637,7 +641,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             mode = MeloCompactPolicy.Mode.ALL,
             rows = localRows,
             sources = emptyList(),
-            total = shown,
+            total = MeloBrowseUiPolicy.authoritativeCount(library.browseLoadState, shown),
             sourceTitle = MeloLocalSourcePolicy.SOURCE_TITLE,
             playingKey = currentSongKey(),
             paused = player?.let { it.currentMediaItem != null && !it.playWhenReady } == true,
@@ -646,7 +650,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
             sort = sort,
             letterFloor = null,
             selectedChatId = null,
-            local = true
+            local = true,
+            browseScope = MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.LOCAL),
+            browseLoadState = library.browseLoadState,
+            browseOwnerId = this.library.authorizedUser()?.value ?: 0L,
+            browseGeneration = library.browseGeneration
         )
     }
 
@@ -4144,14 +4152,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
     ) {
         val sortForScan = activeSort()
         val root = filesRoot
+        val keepPreviousRows = shownSongs.isNotEmpty()
         downloadedCountGeneration.incrementAndGet() // the Đã tải chip scan replaces any background count
-        val cancelled = { uiQueryGeneration.get() != generation || isDestroyed ||
+        val cancelled = { uiQueryGeneration.get() != generation || isDestroyed || isFinishing ||
             Thread.currentThread().isInterrupted || !auth.isReady() || library.authorizedUser()?.value != account }
         offlineSummary = "Đang kiểm tra tệp offline trên toàn bộ thư viện…"
-        shownSongs = emptyList()
         tracks.adapter = adapter
-        adapter.clear()
-        tracks.setSelectionFromTop(0, tracks.paddingTop)
         updateSyncHeaderSubtitle()
         offlineExecutor.execute {
             try {
@@ -4159,6 +4165,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     val groups = sortGroups(TelegramOfflineLibrary.groups(snapshot.entries), sortForScan)
                     runOnUiThread {
                         if (cancelled()) return@runOnUiThread
+                        if (!snapshot.finished && keepPreviousRows) {
+                            // Progress belongs to the new scan, while the visible rows still belong to its predecessor.
+                            browseLoadState = MeloBrowseUiPolicy.LoadState.UPDATING
+                            offlineSummary = "Đang kiểm tra tệp trên máy… ${snapshot.checked} mục đã kiểm tra"
+                            updateSyncHeaderSubtitle()
+                            return@runOnUiThread
+                        }
                         offlineGroups = groups
                         if (snapshot.finished && chat == null && query.isBlank() && !playlist) {
                             downloadedLibraryTotal = groups.size
@@ -4167,6 +4180,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         }
                         snapshot.entries.forEach { cachedSongPaths[it.song.songKey] = it.path }
                         shownSongs = groups.take(offlineVisibleLimit).map { offlineRepresentative(it) }
+                        browseLoadState = if (snapshot.finished) MeloBrowseUiPolicy.LoadState.READY
+                            else MeloBrowseUiPolicy.loading(groups.isNotEmpty())
+                        browseTotal = MeloBrowseUiPolicy.authoritativeCount(browseLoadState, groups.size)
                         totalCountForCurrentView = groups.size
                         offlineSummary = "${groups.size} nhóm / ${snapshot.entries.size} bản offline đã xác minh · " +
                             "${snapshot.checked} mục đã kiểm tra" +
@@ -4206,6 +4222,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
             } catch (_: Exception) {
                 runOnUiThread {
                     if (!cancelled()) {
+                        browseLoadState = MeloBrowseUiPolicy.LoadState.ERROR
+                        browseTotal = null
                         offlineSummary = "Kiểm tra offline chưa hoàn tất. Hãy thử lại."
                         updateSyncHeaderSubtitle()
                     }
@@ -4462,6 +4480,28 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
     }
 
+    private fun currentBrowseRequest(request: MeloBrowseUiPolicy.Request?): Boolean = MeloBrowseUiPolicy.accepts(
+        request, library.authorizedUser()?.value ?: 0L, uiQueryGeneration.get(),
+        !isDestroyed && !isFinishing && auth.isReady())
+
+    /** Converts only this list read's failure to UI state; the existing DB executor stays unchanged. */
+    private fun executeBrowseQuery(request: MeloBrowseUiPolicy.Request, task: () -> Unit) {
+        executeOnDb {
+            if (!currentBrowseRequest(request)) return@executeOnDb
+            try {
+                task()
+            } catch (_: Exception) {
+                runOnUiThread {
+                    if (!currentBrowseRequest(request)) return@runOnUiThread
+                    browseLoadState = MeloBrowseUiPolicy.LoadState.ERROR
+                    browseTotal = null
+                    isLoadingMoreSongs = false
+                    scheduleMeloLibraryRefresh()
+                }
+            }
+        }
+    }
+
     private fun refreshSongRows() {
         if (!::sourcesAdapter.isInitialized || !::songFilter.isInitialized) return
         val q = songFilter.text?.toString()?.trim().orEmpty()
@@ -4472,6 +4512,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val db = if (userId > 0L) libraryDb else null
 
         val generation = uiQueryGeneration.incrementAndGet()
+        isLoadingMoreSongs = false
         val isBrowseSources = allChatsMode && browseSources && !playlistMode
         val isPlaylist = playlistMode
         val currentChatId = selectedChatId
@@ -4484,17 +4525,29 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val currentSort = activeSort()
         val currentFloor = letterFloor.takeIf { currentSort == SongSort.NAME }
 
+        val request = MeloBrowseUiPolicy.Request(userId, generation,
+            MeloBrowseUiPolicy.scope(isBrowseSources, isPlaylist, filterOnlyDownloaded, isAllChats, currentChatId))
+        val keepRows = MeloBrowseUiPolicy.canKeepRows(browseRequest, request)
+        if (!keepRows) {
+            shownSongs = emptyList()
+            visibleSourceCounts = emptyList()
+            adapter.clear()
+        }
+        browseRequest = request
+        browseLoadState = MeloBrowseUiPolicy.loading(
+            if (isBrowseSources) visibleSourceCounts.isNotEmpty() else shownSongs.isNotEmpty())
+        browseTotal = null
+        scheduleMeloLibraryRefresh()
+
         offlineSummary = null
-        offlineGroups = emptyList()
+        if (!keepRows || !filterOnlyDownloaded) offlineGroups = emptyList()
         offlineVisibleLimit = 200
         if (filterOnlyDownloaded && !isBrowseSources && db != null && userId > 0L) {
             discoverOffline(db, userId, currentChatId, q, isPlaylist, currentFavIds, generation)
             return
         }
 
-        executeOnDb {
-            if (uiQueryGeneration.get() != generation) return@executeOnDb
-
+        executeBrowseQuery(request) {
             if (isBrowseSources) {
                 val sources = if (db != null && userId > 0L) withLiveCounts(db, userId, db.getSources(userId)) else emptyList()
                 val totalCount = if (db != null && userId > 0L) db.getSongCount(userId) else songs.size
@@ -4510,18 +4563,19 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         )
                     }
                 }
-                rawSources.forEach { s ->
-                    if (s.title.isNotBlank()) sourceNames[s.chatId] = s.title
-                }
                 val distinctSources = TelegramVaultBentoPolicy.distinctSourcesByChatId(rawSources)
-                currentAuthoritativeSourceCount = distinctSources.size
                 val visibleSources = if (hideZeroSources) distinctSources.filter { it.trackCount > 0 } else distinctSources
                 val filteredSources = TelegramVaultBentoPolicy.filterSources(visibleSources, q)
                 val activeCount = distinctSources.count { it.trackCount > 0 }
                 val sourceCount = distinctSources.size
 
                 runOnUiThread {
-                    if (uiQueryGeneration.get() != generation || isDestroyed) return@runOnUiThread
+                    if (!currentBrowseRequest(request)) return@runOnUiThread
+                    rawSources.forEach { s -> if (s.title.isNotBlank()) sourceNames[s.chatId] = s.title }
+                    currentAuthoritativeSourceCount = distinctSources.size
+                    browseLoadState = if (db != null) MeloBrowseUiPolicy.LoadState.READY
+                        else MeloBrowseUiPolicy.loading(visibleSourceCounts.isNotEmpty())
+                    browseTotal = MeloBrowseUiPolicy.authoritativeCount(browseLoadState, totalCount)
                     shownSongs = emptyList()
                     libraryTitle.text = TelegramVaultBentoPolicy.formatHeaderTitle(activeCount)
                     sourcesButton.text = "☷  Nhóm / kênh / bot ($sourceCount)"
@@ -4575,6 +4629,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     updateSyncHeaderSubtitle()
                 }
             } else {
+                var floorCount = 0
                 val (loadedSongs, totalDisplayCount) = if (isPlaylist) {
                     val entries = resolvePlaylistEntries(userId, db, currentFavList, loadedSongsSnapshot)
                     val known = entries.mapNotNull { it.item }
@@ -4588,7 +4643,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 } else if (isAllChats && db != null && userId > 0L) {
                     val filterQuery = q.takeIf { it.isNotBlank() }
                     val count = db.getSongCount(userId, chatId = currentChatId, searchQuery = filterQuery)
-                    floorCountForCurrentView = if (currentFloor != null) {
+                    floorCount = if (currentFloor != null) {
                         db.getSongCount(userId, chatId = currentChatId, searchQuery = filterQuery, fromKey = currentFloor)
                     } else count
                     val page = db.getSongs(
@@ -4626,13 +4681,22 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 val finalDisplayCount = if (filterOnlyDownloaded) finalSongs.size else totalDisplayCount
 
                 val sourceCount = if (db != null && userId > 0L) db.getSources(userId).size else songs.map { it.chatId }.distinct().size
-                currentAuthoritativeSourceCount = sourceCount
 
                 val withDurationCount = finalSongs.count { it.durationSeconds > 0 }
                 android.util.Log.i("MeloVault", "SongItemCard duration audit: $withDurationCount of ${finalSongs.size} displayed songs have positive duration metadata")
 
                 runOnUiThread {
-                    if (uiQueryGeneration.get() != generation || isDestroyed) return@runOnUiThread
+                    if (!currentBrowseRequest(request)) return@runOnUiThread
+                    currentAuthoritativeSourceCount = sourceCount
+                    floorCountForCurrentView = floorCount
+                    browseLoadState = when {
+                        isPlaylist && playlistUnreadable -> MeloBrowseUiPolicy.LoadState.ERROR
+                        isPlaylist && !playlistLoaded -> MeloBrowseUiPolicy.loading(finalSongs.isNotEmpty())
+                        !isPlaylist && isAllChats && db == null -> MeloBrowseUiPolicy.loading(finalSongs.isNotEmpty())
+                        !isPlaylist && !isAllChats && historyLoading -> MeloBrowseUiPolicy.loading(finalSongs.isNotEmpty())
+                        else -> MeloBrowseUiPolicy.LoadState.READY
+                    }
+                    browseTotal = MeloBrowseUiPolicy.authoritativeCount(browseLoadState, finalDisplayCount)
                     if (::sourceViewModeToggle.isInitialized) {
                         sourceViewModeToggle.visibility = View.GONE
                     }
@@ -5298,6 +5362,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private val meloHost = object : MeloScreenHost {
         override fun snapshot(): MeloScreenHost.Snapshot {
             if (localMode) return localSnapshot()
+            val requestIsCurrent = currentBrowseRequest(browseRequest)
+            val loadState = if (requestIsCurrent) browseLoadState else MeloBrowseUiPolicy.LoadState.INITIAL_LOADING
             val showingSources = allChatsMode && browseSources && !playlistMode
             val mode = when {
                 playlistMode -> MeloCompactPolicy.Mode.PLAYLIST
@@ -5310,7 +5376,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val sort = activeSort()
             val rowArt = rowArtOn()
             val rowArtAccount = if (rowArt) library.authorizedUser()?.value ?: 0L else 0L
-            val rows = if (showingSources) emptyList() else shownSongs.map { song ->
+            val rows = if (showingSources || !requestIsCurrent) emptyList() else shownSongs.map { song ->
                 MeloScreenHost.Row(
                     artKey = if (rowArtAccount > 0L && song.chatId != 0L) {
                         MeloRowArtPolicy.telegramKey(rowArtAccount, song.chatId, song.genuineMessageId)
@@ -5326,18 +5392,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     downloaded = songIsDownloaded(song),
                     downloadingPercent = if (song.messageId == playingKey) downloadingPercent else null,
                     art = thumbnailCache.get(song.messageId),
+                    performer = song.performer,
                     sortKey = if (sort == SongSort.NAME) MeloAlphabetPolicy.keyOf(song.title, song.performer, song.filename) else ""
                 )
             }
-            val sources = visibleSourceCounts.map { (chatId, count) ->
+            val sources = visibleSourceCounts.takeIf { requestIsCurrent }.orEmpty().map { (chatId, count) ->
                 MeloScreenHost.SourceRow(chatId, if (chatId == 0L) "Tất cả nguồn" else sourceTitleOf(chatId), count)
             }
-            val total = when {
-                showingSources -> null
-                filterOnlyDownloaded -> offlineGroups.size
-                playlistMode -> shownSongs.size
-                else -> totalCountForCurrentView
-            }
+            val total = MeloBrowseUiPolicy.authoritativeCount(loadState, browseTotal)
             val sourceTitle = when {
                 playlistMode -> null
                 !allChatsMode -> "Saved Messages"
@@ -5356,7 +5418,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 note = offlineSummary.takeIf { filterOnlyDownloaded && !showingSources },
                 sort = sort,
                 letterFloor = letterFloor.takeIf { sort == SongSort.NAME },
-                selectedChatId = selectedChatId.takeIf { allChatsMode && !playlistMode }
+                selectedChatId = selectedChatId.takeIf { allChatsMode && !playlistMode },
+                browseScope = MeloBrowseUiPolicy.scope(showingSources, playlistMode, filterOnlyDownloaded, allChatsMode, selectedChatId),
+                browseLoadState = loadState,
+                browseOwnerId = browseRequest?.ownerId ?: 0L,
+                browseGeneration = browseRequest?.generation ?: 0L
             )
         }
 
@@ -5481,10 +5547,19 @@ class TelegramPreviewActivity : AppCompatActivity() {
             if (localMode) {
                 // Its own search text: the Telegram filter box (and its database query) is left alone.
                 localMusic.setQuery(query) { scheduleMeloLibraryRefresh() }
+                scheduleMeloLibraryRefresh()
                 return
             }
             if (songFilter.text?.toString() != query) letterFloor = null
             if (songFilter.text?.toString() != query) songFilter.setText(query)
+        }
+
+        override fun retryBrowse() {
+            if (!auth.isReady()) return
+            if (localMode) {
+                localMusic.load(force = true) { scheduleMeloLibraryRefresh() }
+                scheduleMeloLibraryRefresh()
+            } else refreshSongRows()
         }
 
         override fun loadMore() {
@@ -5661,7 +5736,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         override fun syncSubtitle(): String? =
             if (localMode) "${MeloLocalSourcePolicy.SOURCE_TITLE} · chỉ đọc" else syncSubtitleText()
 
-        override fun downloadedCount(): Int? = offlineGroups.size.takeIf { offlineSummary != null }
+        override fun downloadedCount(): Int? = MeloBrowseUiPolicy.authoritativeCount(
+            browseLoadState, offlineGroups.size.takeIf { offlineSummary != null })
 
         override fun sourceSummaries(): List<MeloSourceCardPolicy.Source> = listOfNotNull(
             MeloSourceCardPolicy.Source(MeloSourceCardPolicy.Kind.TELEGRAM, telegramLibraryTotal, downloadedLibraryTotal),
@@ -5818,6 +5894,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         )
 
     private fun loadMoreSongsIfNeeded() {
+        // A refresh owns the list until its current query completes. Paging never hides existing rows.
+        if (browseLoadState != MeloBrowseUiPolicy.LoadState.READY || !currentBrowseRequest(browseRequest)) return
         if (filterOnlyDownloaded && !(allChatsMode && browseSources && !playlistMode) &&
             shownSongs.size < offlineGroups.size) {
             val more = offlineGroups.drop(shownSongs.size).take(200).map { offlineRepresentative(it) }
@@ -5833,12 +5911,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 val floor = letterFloor.takeIf { sort == SongSort.NAME }
                 val reachable = if (floor != null) floorCountForCurrentView else totalCountForCurrentView
                 if (shownSongs.size < reachable) {
+                    val request = browseRequest ?: return
                     isLoadingMoreSongs = true
+                    browseLoadState = MeloBrowseUiPolicy.LoadState.UPDATING
+                    scheduleMeloLibraryRefresh()
                     val nextOffset = shownSongs.size
-                    val currentGen = uiQueryGeneration.get()
                     val q = songFilter.text?.toString()?.trim().orEmpty().takeIf { it.isNotBlank() }
                     val currentChat = selectedChatId
-                    executeOnDb {
+                    executeBrowseQuery(request) {
                         val count = db.getSongCount(userId, chatId = currentChat, searchQuery = q)
                         val floorCount = if (floor != null) {
                             db.getSongCount(userId, chatId = currentChat, searchQuery = q, fromKey = floor)
@@ -5859,10 +5939,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
                             )
                         }
                         runOnUiThread {
-                            if (uiQueryGeneration.get() == currentGen &&
-                                shownSongs.size == nextOffset &&
-                                allChatsMode && !browseSources && !playlistMode &&
-                                mapped.isNotEmpty() && !isDestroyed) {
+                            if (!currentBrowseRequest(request)) return@runOnUiThread
+                            browseLoadState = MeloBrowseUiPolicy.LoadState.READY
+                            browseTotal = count
+                            isLoadingMoreSongs = false
+                            if (shownSongs.size == nextOffset &&
+                                allChatsMode && !browseSources && !playlistMode) {
                                 totalCountForCurrentView = count
                                 floorCountForCurrentView = floorCount
                                 shownSongs = shownSongs + mapped
@@ -5871,7 +5953,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                                 )
                                 updateSyncHeaderSubtitle()
                             }
-                            isLoadingMoreSongs = false
+                            scheduleMeloLibraryRefresh()
                         }
                     }
                 }

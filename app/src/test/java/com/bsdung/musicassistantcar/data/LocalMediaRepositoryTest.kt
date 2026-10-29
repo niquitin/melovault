@@ -13,6 +13,43 @@ import org.junit.Test
 
 class LocalMediaRepositoryTest {
 
+    @Test
+    fun emptySuccessAndUnavailableMediaStoreHaveDifferentReadFacts() {
+        val empty = LocalMediaRepository(permissionChecker = { true }, tracksProvider = { emptyList() })
+        assertTrue(empty.getAllTracks().isEmpty())
+        assertFalse(empty.lastTrackReadFailed)
+        val unavailable = LocalMediaRepository(permissionChecker = { true }, contentResolverSupplier = { null })
+        assertTrue(unavailable.getAllTracks().isEmpty())
+        assertTrue(unavailable.lastTrackReadFailed)
+        // A cached empty/partial result must not silently become a successful new read.
+        unavailable.getAllTracks()
+        assertTrue(unavailable.lastTrackReadFailed)
+    }
+
+    @Test
+    fun failedProviderKeepsExistingExceptionContractAndRetryClearsFailureFact() {
+        var fail = true
+        val repo = LocalMediaRepository(permissionChecker = { true }, tracksProvider = {
+            if (fail) throw SecurityException("fake permission failure")
+            emptyList()
+        })
+        try {
+            repo.getAllTracks()
+            org.junit.Assert.fail("provider exception must still propagate")
+        } catch (_: SecurityException) { }
+        assertTrue(repo.lastTrackReadFailed)
+        fail = false
+        repo.getAllTracks()
+        assertFalse(repo.lastTrackReadFailed)
+    }
+
+    @Test
+    fun absentPermissionIsNotAnAuthoritativeEmptyRead() {
+        val repo = LocalMediaRepository(permissionChecker = { false })
+        assertTrue(repo.getAllTracks().isEmpty())
+        assertTrue(repo.lastTrackReadFailed)
+    }
+
     private fun createTrack(
         id: Long,
         volume: String = "external_primary",

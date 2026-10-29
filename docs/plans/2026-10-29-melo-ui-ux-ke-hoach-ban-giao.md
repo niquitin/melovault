@@ -1,6 +1,55 @@
 # Bàn giao — Melo UI/UX sau video
 
 TASK_ID: **2026-10-29-melo-ui-ux-ke-hoach**.
+
+## Checkpoint hiện tại — S0–S1, 29/10/2026, sau test cuối 11:07:31 +07
+
+**S0–S1 đã xong code/test mục tiêu; chưa QA UI hoặc tạo candidate. Phiên thực thi dừng sau commit checkpoint này.** Không dùng prompt S0–S1 lịch sử bên dưới để làm lại; không coi checkpoint này là lệnh triển khai S2.
+
+| Mục | Giá trị đã kiểm |
+|---|---|
+| Vai/công cụ | THỰC THI, Codex; model/effort không xác định từ metadata, không tự đổi |
+| Worktree | `C:\Users\ntdun\.codex\worktrees\melo-ui-ux-plan\MeloVault-E91-Shareable` |
+| Nhánh | `dot/2026-10-29-melo-ui-ux-ke-hoach` |
+| Baseline source | `7f3cca874e525956a10f94f8caf577c6cc80f815` |
+| Commit kế hoạch / HEAD trước sửa | `f912ef5eca8574deb304872af73a2f7ad5856f95` |
+| Source S1 / HEAD tiếp nhận | Commit chứa code và checkpoint này; lấy hai SHA bằng lệnh bên dưới, sau đó kiểm HEAD thực |
+| Báo cáo | [Báo cáo S0–S1](2026-10-29-melo-ui-ux-ke-hoach-bao-cao.md) |
+| Quy tắc áp dụng | Bốn file luật 29/10 tại `c9a1c09`, đọc bằng Git; không merge nhánh chứa source E105 khác baseline |
+| Trạng thái chính thức | **CHỜ CHỦ DỰ ÁN NGHIỆM THU**; chưa có kết luận sơ bộ/PASS |
+
+~~~powershell
+git log -1 --format=%H -- docs/plans/2026-10-29-melo-ui-ux-ke-hoach-ban-giao.md
+git log -1 --format=%H -- app/src/shareable/java/com/bsdung/musicassistantcar/data/telegram/TelegramPreviewActivity.kt
+git status --short
+git branch --show-current
+git rev-parse HEAD
+git log -5 --oneline
+git diff --check
+~~~
+
+| Bước | Trạng thái | Bằng chứng / việc còn lại |
+|---|---|---|
+| S0 | Xong | Cây sạch trước sửa, đúng HEAD/baseline; không có build/agent tham chiếu worktree; phiên kế hoạch đã dừng |
+| S1 policy/adapter | Xong code | Bảy scope, ID nguồn, initial/update/ready/error, count null, guard owner/generation/lifecycle, retry đúng scope |
+| S1 metadata | Xong code | Nghệ sĩ thật tách Kênh; thư mục LOCAL có nhãn; opt-in list Phone/Tablet, mặc định Gọn/Car giữ cũ |
+| S1 test | Xong mục tiêu | Debug 220 passed/0 skipped/0 failed/0 errors; Release cùng kết quả, 14 suite/biến thể |
+| S2–S6 | Chưa làm | Chỉ thực thi khi chủ dự án giao chặng; S6 có full unit/assemble tích hợp |
+| S7 / sơ bộ / chính thức | Chưa làm | Candidate/build/QA/Drive rồi phiên sơ bộ riêng; chủ dự án nghiệm thu |
+
+- Hai bổ sung phạm vi được chủ dự án xác nhận trực tiếp trong hội thoại 29/10: (1) tối thiểu `MeloLocalLibrary.kt` + test; (2) cờ kết quả đọc `LocalMediaRepository.kt` + test. Đã gỡ hai BLOCKED về lỗi LOCAL bị che, không đổi truy vấn/cache/hợp đồng trả về cũ.
+- Phần giao nộp: 7 file production (policy mới, host, Activity, pane, components, local library, repository), 3 file test (policy mới, local library, repository), báo cáo và file bàn giao này. Không có code còn dở; các file kế hoạch/luật giữ nguyên. Tất cả phần việc được commit cùng checkpoint; khi tiếp nhận phải kiểm status thực, không nhận file lạ.
+- Lượt cuối: 11:07:11–11:07:31 +07, exit 0, BUILD SUCCESSFUL in 19s. Log `artifacts/2026-10-29-melo-ui-ux-ke-hoach/s1-targeted-20261029_110711.log`; XML riêng `s1-results-20261029_110711/`; manifest `s1-source-20261029_110711.txt`, SHA-256 `022977A92D683B1E473838AA437F7D082052F9E5822F14173F99850998FF1951`. Đã kiểm từng hash source/test sau test, tất cả khớp; sau đó chỉ sửa hồ sơ.
+- Lượt đầu 219 passed mỗi biến thể, exit 0; log/XML/manifest `20261029_110215` vẫn giữ. Sau lượt đầu có chỉnh giữ rows qua scan/paging và test callback; chỉ lượt cuối đại diện source bàn giao.
+- Không có wrapper/test worker/build/ADB nền đang chạy tiếp. Gradle daemon PID 27832 và Kotlin daemon PID 27228 còn thường trú sau lệnh test đã exit; không phải candidate đang build. Một sub-agent chỉ đọc kiểm kê test đã kết thúc; agent chính là người duy nhất sửa file.
+- Commit đầu bị từ chối vì thiếu danh tính Git; ba commit gần nhất xác minh cùng `Codex <codex@openai.com>`, dùng lại bằng tùy chọn `git -c` chỉ cho lệnh commit, không thay cấu hình global/local. Source test không đổi.
+- Không tạo/cài APK, không ADB/Tiny/Drive, không có ảnh/video/00_tong_hop.png; không xác nhận app đang cài. SHANLING_SCREEN_END và SONY_SCREEN_END: **không thao tác, chưa xác minh trạng thái màn**.
+- Chưa chứng minh runtime thường/Teal, tablet thật, hiệu năng, audio/offline; test JVM không thay QA UI. Chưa full suite/assemble; S1 chưa là candidate. E105 không được nghiệm thu bằng nhiệm vụ này.
+- Bước chưa làm đầu tiên trong kế hoạch là S2 giữ ngữ cảnh duyệt; chỉ đọc phụ lục S2 và source cần thiết khi chủ dự án giao phiên thực thi mới. Không tự chạy S2–S7/P2, sơ bộ, merge/push hoặc sửa quy trình.
+
+Đã dừng, bàn giao phiên thực thi tiếp theo.
+
+Phần bên dưới là **lịch sử phiên lập kế hoạch**, không thay checkpoint hiện tại ở trên.
 Ngày: 29/10/2026. Người lập: Codex; model/effort không xác định từ metadata.
 Vai đã thực hiện: **lập kế hoạch**, không code/build/QA.
 

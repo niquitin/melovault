@@ -84,7 +84,9 @@ internal class MeloComponents(
         /** A "Nhạc trên máy" song: the status line says "Trên máy" instead of "Đã tải". */
         val local: Boolean = false,
         /** E98 teal theme: identity of the row's cover, so a cover that arrives later finds its row. */
-        val artKey: String? = null
+        val artKey: String? = null,
+        /** Library opt-in; null keeps the existing Compact/Car/queue metadata. Empty means no tags. */
+        val browseMetadata: String? = null
     )
 
     data class MiniPlayerModel(
@@ -247,6 +249,7 @@ internal class MeloComponents(
         // E96 P5B3: lookalike/combining characters in channel names are drawn by a fallback font; show their plain form.
         val shownTitle = DisplayTextPolicy.clean(model.title)
         val shownSource = DisplayTextPolicy.cleanOrNull(model.sourceTitle)
+        val metadata = model.browseMetadata?.let(DisplayTextPolicy::clean) ?: shownSource
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -258,7 +261,7 @@ internal class MeloComponents(
             )
             isClickable = true
             isFocusable = true
-            contentDescription = listOfNotNull(shownTitle, status.label, shownSource).joinToString(", ")
+            contentDescription = listOfNotNull(shownTitle, status.label, metadata).filter { it.isNotBlank() }.joinToString(", ")
             if (onClick != null) setOnClickListener { onClick() }
             if (onLongClick != null) setOnLongClickListener { onLongClick(); true }
         }
@@ -303,7 +306,7 @@ internal class MeloComponents(
             statusLine.addView(MeloStatusIconView(context, model.status, color(status.color), model.progressPercent, palette.onAccent).apply {
                 layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply { marginEnd = sizes.gap / 2 }
             })
-            val detail = listOfNotNull(status.label, shownSource?.takeIf { it.isNotBlank() }).joinToString(" · ")
+            val detail = listOfNotNull(status.label, metadata?.takeIf { it.isNotBlank() }).joinToString(" · ")
             statusLine.addView(text(detail, sizes.secondaryText, color(status.color)).apply {
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             })
@@ -527,6 +530,7 @@ internal class MeloComponents(
         val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local)
         val shownTitle = DisplayTextPolicy.clean(model.title)
         val shownSource = DisplayTextPolicy.cleanOrNull(model.sourceTitle)
+        val metadata = model.browseMetadata?.let(DisplayTextPolicy::clean) ?: shownSource
         val playing = status.highlightRow
         val radius = sizes.corner * 7 / 8
         val row = LinearLayout(context).apply {
@@ -544,7 +548,7 @@ internal class MeloComponents(
             }
             isClickable = true
             isFocusable = true
-            contentDescription = listOfNotNull(shownTitle, status.label, shownSource).joinToString(", ")
+            contentDescription = listOfNotNull(shownTitle, status.label, metadata).filter { it.isNotBlank() }.joinToString(", ")
             if (onClick != null) setOnClickListener { onClick() }
             if (onLongClick != null) setOnLongClickListener { onLongClick(); true }
         }
@@ -558,7 +562,7 @@ internal class MeloComponents(
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
         body.addView(text(shownTitle, sizes.titleText, if (playing) palette.accent else palette.text, bold = true, maxLines = 2))
-        body.addView(text(MeloComponentPolicy.themedSecondLine(model.status, status.label, shownSource), sizes.secondaryText,
+        body.addView(text(MeloComponentPolicy.themedSecondLine(model.status, status.label, metadata), sizes.secondaryText,
             if (model.status == Status.ERROR) palette.warning else palette.textSecondary).apply {
             setPadding(0, sizes.gap / 2, 0, 0)
         })

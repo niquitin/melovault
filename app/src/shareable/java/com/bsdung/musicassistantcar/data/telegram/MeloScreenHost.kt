@@ -20,6 +20,8 @@ internal interface MeloScreenHost {
     /** Leaves "Nhạc trên máy" back to the Telegram screen the owner came from. */
     fun closeLocal()
     fun setQuery(query: String)
+    /** Retry only the list currently being browsed; never starts a sync or changes playback. */
+    fun retryBrowse() = Unit
     fun loadMore()
     fun playAt(index: Int)
 
@@ -168,7 +170,9 @@ internal interface MeloScreenHost {
         val rawMessageId: Long = 0L,
         /** Path of the downloaded file, when the song is on the device; the loader checks it is the account's own. */
         val localFile: String? = null,
-        val mediaStoreId: Long = 0L
+        val mediaStoreId: Long = 0L,
+        val performer: String? = null,
+        val sourceIsFolder: Boolean = false
     )
 
     data class SourceRow(val chatId: Long, val title: String, val count: Int)
@@ -196,7 +200,11 @@ internal interface MeloScreenHost {
         /** The channel open in the list, null for all sources, Saved Messages or Playlist. */
         val selectedChatId: Long? = null,
         /** The list on screen is "Nhạc trên máy" (not Telegram). */
-        val local: Boolean = false
+        val local: Boolean = false,
+        val browseScope: MeloBrowseUiPolicy.Scope = MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.LIBRARY),
+        val browseLoadState: MeloBrowseUiPolicy.LoadState = MeloBrowseUiPolicy.LoadState.READY,
+        val browseOwnerId: Long = 0L,
+        val browseGeneration: Long = 0L
     )
 
     data class NowPlaying(
