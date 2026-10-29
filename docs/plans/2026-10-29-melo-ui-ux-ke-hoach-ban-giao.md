@@ -2,6 +2,18 @@
 
 TASK_ID: **2026-10-29-melo-ui-ux-ke-hoach**.
 
+## Sơ bộ vòng 1 — 29/10/2026, sau hồ sơ d89459e
+
+- Chủ dự án giao riêng kiểm sơ bộ nhanh, không code/build mới. Đã làm theo prompt sơ bộ S7 bên dưới; kết luận **SƠ BỘ: CẦN SỬA** tại [biên bản](2026-10-29-melo-ui-ux-ke-hoach-nghiem-thu-so-bo.md). Các mục bên dưới là lịch sử thực thi, không ghi đè kết quả cũ.
+- Đầu phiên Git sạch, đúng worktree/nhánh; HEAD hồ sơ `d89459e3398addbebd6456856bb2740ac2b55dbe`, source APK vẫn `278f0d277aeb077bb938cf76f0e055c5058dd996`. Source→HEAD chỉ 4 Markdown; không Java/Gradle đang chạy trên Ni. Luật29/10 đọc từ `c9a1c09`, không merge quy trình.
+- Tự kiểm lại SHA/bytes hai APK Ni và ảnh tổng hợp v2: khớp S7. Manifest S6 14/14 file khớp; cộng XML độc lập: mỗi Debug/Release **2240 passed /21 skipped /0 failed /0 errors**,178 suites/2261 tổng. Không rerun test/build/cài/QA thiết bị hoặc truy cập Drive.
+- **SB-01 xác nhận:** XML/ảnh22→23 giữ hàng neo; 3 vòng xoay25 đổi hàng neo ngay vòng1 dù query giữ, media24/26 cùng state2/65943ms. Cần điều tra capture/detach/restore/layout, chưa chốt nguyên nhân runtime.
+- **SB-02 xác nhận:** ảnh16a Deck còn Tạm dừng khi media state3/41867ms; mã có đường cached Next không tạo attempt mới, observe khác key bỏ qua, presentation theo owner giữ PAUSED cũ. Cơ chế phù hợp bằng chứng, chưa có trace chốt nhánh đã chạy. Tiêu chí REWORK và vị trí mã ghi trong biên bản.
+- Giữ **BLOCKED Đảo**, **Drive403 cannotDownloadAbusiveFile**, **QA1 tablet thật**, **QA6 Shanling**; giữ toàn bộ giới hạn audio/offline/font/IME/star/full queue/Release UI. Không coi S6/P1 hoàn tất, không PASS chính thức.
+- Phiên sơ bộ: **SONY_SCREEN_END/SHANLING_SCREEN_END=KHÔNG THAO TÁC, chưa xác minh**. OFF Sony17:47:44 và UNKNOWN Shanling là mốc S7 cũ, không phải quan sát mới.
+- Chỉ tạo `*-nghiem-thu-so-bo.md` và cập nhật checkpoint này; commit tài liệu rồi dừng. Commit hồ sơ mới tra `git log -1 --format=%H -- docs/plans/2026-10-29-melo-ui-ux-ke-hoach-nghiem-thu-so-bo.md`; không tiến trình nền do sơ bộ khởi chạy.
+- Bước sau chỉ khi chủ dự án giao: REWORK SB-01/SB-02 ở phiên thực thi mới cùng TASK_ID/nhánh; Đảo cần bổ sung kế hoạch và quyền sửa service trước. Không tự bắt đầu sửa, build, nhiệm vụ khác, merge hoặc push. **Đã dừng, chờ chủ dự án nghiệm thu.**
+
 ## S7 có điều kiện — đã kết thúc phần được kiểm 29/10/2026
 
 - Chủ dự án giao S7 riêng sau khi phiên code dừng: cho phép build/QA phần độc lập; **giữ BLOCKED S6 thứ tự khi bật Đảo**, không sửa service/playback, không gọi S6/P1 hoàn tất. Chỉ thị này thay gate chờ gỡ BLOCKED trong prompt S7 lịch sử bên dưới; không sửa lại kết luận lịch sử.
