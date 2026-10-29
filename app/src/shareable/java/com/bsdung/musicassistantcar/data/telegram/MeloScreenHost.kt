@@ -38,6 +38,7 @@ internal interface MeloScreenHost {
     fun previous()
     fun seekTo(positionMs: Long)
     fun toggleFavorite()
+    fun toggleRowFavorite(songKey: Long) = Unit
 
     /**
      * E96 P4: the honest one-line state of the saved Playlist (saved on this device / waiting / synced / why not),
@@ -182,7 +183,10 @@ internal interface MeloScreenHost {
         val localFile: String? = null,
         val mediaStoreId: Long = 0L,
         val performer: String? = null,
-        val sourceIsFolder: Boolean = false
+        val sourceIsFolder: Boolean = false,
+        val saved: Boolean = false,
+        val saveBusy: Boolean = false,
+        val saveAvailability: MeloSavePolicy.Availability = MeloSavePolicy.Availability.NOT_IDENTIFIED
     )
 
     data class SourceRow(val chatId: Long, val title: String, val count: Int)

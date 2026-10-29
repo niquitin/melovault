@@ -744,7 +744,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     local = true,
                     artKey = if (rowArtOn()) MeloRowArtPolicy.localKey(song.mediaStoreId) else null,
                     mediaStoreId = song.mediaStoreId,
-                    sourceIsFolder = MeloNowPlayingPolicy.localSourceIsFolder(song.artist, song.folder)
+                    sourceIsFolder = MeloNowPlayingPolicy.localSourceIsFolder(song.artist, song.folder),
+                    saveAvailability = MeloSavePolicy.Availability.LOCAL_ONLY
                 )
             }
         }
@@ -830,10 +831,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val popup = PopupMenu(ContextThemeWrapper(this, R.style.Theme_MeloVault_Dialog), anchor)
         popup.menu.add(0, 1, 1, "▶ Phát bài này")
         popup.menu.add(0, 2, 2, "ℹ Thông tin")
+        popup.menu.add(0, 3, 3, "☆ Lưu vào Playlist · chỉ bài Telegram")
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> onPlay()
                 2 -> onInfo()
+                3 -> toast(MeloSavePolicy.HINT_LOCAL_ONLY)
             }
             true
         }
@@ -4900,6 +4903,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val guard = saveGuard
         // A write is already running: this tap is counted and the running write's end will pick it up.
         if (guard.tap(target)) startPlaylistWrite(guard, account, target, title)
+        scheduleMeloLibraryRefresh()
         notifyMeloPlayback()
     }
 
@@ -4916,6 +4920,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         guard: SaveToggleGuard<PlaylistTarget>, account: TelegramUserId,
         outcome: TelegramPlaylistSession.ToggleOutcome, title: String?
     ) {
+        if (!MeloSavePolicy.acceptsCallback(account.value, library.authorizedUser()?.value ?: 0L,
+                guard === saveGuard, !isDestroyed && !isFinishing && auth.isReady())) return
         val written = outcome is TelegramPlaylistSession.ToggleOutcome.Added || outcome is TelegramPlaylistSession.ToggleOutcome.Removed
         val next = guard.finish(written)
         onPlaylistToggled(account, outcome, title)
@@ -4923,6 +4929,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         if (written) SyncRuntime.automatic(noBackupFilesDir).afterSave()
         // A guard replaced by an account change belongs to the previous account: its leftovers are not re-run.
         if (guard === saveGuard && next != null) startPlaylistWrite(guard, account, next, null)
+        scheduleMeloLibraryRefresh()
         notifyMeloPlayback()
     }
 
@@ -4977,7 +4984,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         favoriteIds = ids
         playlistUnreadable = false
         updatePlaylistButtons()
-        refreshSongRows()
+        if (playlistMode) refreshSongRows() else scheduleMeloLibraryRefresh()
     }
 
     /**
@@ -5498,6 +5505,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val sort = activeSort()
             val rowArt = rowArtOn()
             val rowArtAccount = if (rowArt) library.authorizedUser()?.value ?: 0L else 0L
+            val saveOwner = library.authorizedUser()?.value ?: 0L
+            val savedKeys = favoriteIds.toSet()
             val rows = if (showingSources || !requestIsCurrent) emptyList() else shownSongs.map { song ->
                 MeloScreenHost.Row(
                     artKey = if (rowArtAccount > 0L && song.chatId != 0L) {
@@ -5515,6 +5524,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     downloadingPercent = if (song.messageId == playingKey) downloadingPercent else null,
                     art = thumbnailCache.get(song.messageId),
                     performer = song.performer,
+                    saved = song.messageId in savedKeys,
+                    saveBusy = saveGuardAccount == saveOwner && saveGuard.isPendingWith(PlaylistTarget(song.messageId, song.chatId, song.rawMessageId)),
+                    saveAvailability = MeloSavePolicy.rowAvailability(false, song.messageId, !song.placeholder,
+                        song.chatId, song.rawMessageId, saveOwner, playlistUnreadable, playlistLoaded),
                     sortKey = if (sort == SongSort.NAME) MeloAlphabetPolicy.keyOf(song.title, song.performer, song.filename) else ""
                 )
             }
@@ -5800,7 +5813,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     accountId = library.authorizedUser()?.value ?: 0L,
                     playlistUnreadable = playlistUnreadable, playlistLoaded = playlistLoaded
                 ),
-                saveBusy = saveGuard.busy
+                saveBusy = saveGuardAccount == (library.authorizedUser()?.value ?: 0L) && song?.let {
+                    saveGuard.isPendingWith(PlaylistTarget(it.messageId, it.chatId, it.rawMessageId))
+                } == true
             )
         }
 
@@ -5828,6 +5843,21 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
 
         override fun toggleFavorite() = toggleCurrentFavorite()
+        override fun toggleRowFavorite(songKey: Long) {
+            if (!auth.isReady() || isDestroyed || isFinishing) return
+            if (localMode) { toast(MeloSavePolicy.HINT_LOCAL_ONLY); return }
+            val account = library.authorizedUser() ?: return
+            val song = shownSongs.firstOrNull { it.messageId == songKey } ?: return
+            val availability = MeloSavePolicy.rowAvailability(false, songKey, !song.placeholder, song.chatId,
+                song.rawMessageId, account.value, playlistUnreadable, playlistLoaded)
+            val target = MeloSavePolicy.rowTarget(browseRequest?.ownerId ?: 0L, account.value, songKey,
+                song.chatId, song.rawMessageId, availability)
+            if (target == null) {
+                toast(MeloSavePolicy.rowButtonState(song.title, availability, false, false).hint ?: "Danh sách đã thay đổi. Hãy chọn lại bài.")
+                return
+            }
+            requestPlaylistToggle(account, target, null)
+        }
 
         override fun toggleShuffle() {
             player?.let {

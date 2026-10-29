@@ -2,6 +2,7 @@ package com.bsdung.musicassistantcar.data.telegram
 
 import android.content.Context
 import android.graphics.Typeface
+import android.graphics.Paint
 import android.os.Handler
 import android.os.Looper
 import android.util.TypedValue
@@ -87,6 +88,7 @@ internal class MeloLibraryPane(
     ).apply { visibility = View.GONE }
     private var pendingJump: Runnable? = null
     private val adapter = RowsAdapter()
+    private val durationPaint = Paint()
     private val sourcesScroll = ScrollView(context)
     private val sourcesBox = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     private val sourceList = ListView(context)
@@ -173,6 +175,7 @@ internal class MeloLibraryPane(
             bottomMargin = s.gap / 2
         })
         list.apply {
+            itemsCanFocus = true
             adapter = this@MeloLibraryPane.adapter
             divider = null
             dividerHeight = if (c.teal) s.gap else s.gap / 2
@@ -212,6 +215,9 @@ internal class MeloLibraryPane(
                     }
                 }
             })
+        }
+        list.addOnLayoutChangeListener { _, l, _, r, _, oldL, _, oldR, _ ->
+            if (r - l != oldR - oldL) list.post { adapter.notifyDataSetChanged() }
         }
         sourcesScroll.addView(sourcesBox, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         sourcesScroll.setOnScrollChangeListener { _, _, y, _, _ ->
@@ -687,6 +693,18 @@ internal class MeloLibraryPane(
                 MeloCompactPolicy.rowStatus(row.downloaded, row.downloadingPercent, playing, snap.paused)
             }
             val quality = MeloComponentPolicy.qualityLabel(MeloComponentPolicy.formatOf(row.mimeType, row.filename), null, null, null)
+            durationPaint.textSize = s.secondaryText
+            val durationWidth = kotlin.math.ceil(durationPaint.measureText(TelegramSongDisplayPolicy.formatDuration(row.durationSeconds).orEmpty()).toDouble()).toInt()
+            val metrics = context.resources.displayMetrics
+            val directSave = !row.local && !snap.local && MeloSavePolicy.directRowSave(
+                (parent?.width ?: list.width) - list.paddingLeft - list.paddingRight, s.rowArt,
+                s.gap * 5 + if (c.teal) (s.secondaryText * 1.5f).toInt() + s.gap else 0,
+                durationWidth, s.minTouch, metrics.density, metrics.scaledDensity / metrics.density)
+            fun index(): Int? {
+                val current = host.snapshot()
+                if (current.browseOwnerId != snap.browseOwnerId) return null
+                return current.rows.indexOfFirst { it.songKey == row.songKey }.takeIf { it >= 0 }
+            }
             return c.songRow(
                 SongRowModel(
                     row.title, row.sourceTitle, row.durationSeconds, status, quality, row.downloadingPercent,
@@ -694,9 +712,19 @@ internal class MeloLibraryPane(
                     local = snap.local || row.local,
                     artKey = if (c.teal) row.artKey else null,
                     browseMetadata = MeloBrowseUiPolicy.rowMetadata(row.performer, row.sourceTitle,
-                        snap.local || row.local, row.sourceIsFolder).orEmpty()
-                )
-            ).also { unclickable(it, position) }
+                        snap.local || row.local, row.sourceIsFolder).orEmpty(),
+                    rowSave = if (directSave) MeloSavePolicy.rowButtonState(row.title, row.saveAvailability, row.saved, row.saveBusy) else null
+                ),
+                onClick = { index()?.let(host::playAt) },
+                onLongClick = { index()?.let { host.openSongMenu(it, list) } },
+                onMore = { index()?.let { host.openSongMenu(it, list) } },
+                onSave = { if (index() != null) host.toggleRowFavorite(row.songKey) }
+            ).also {
+                unclickable(it) { anchor -> index()?.let { position -> host.openSongMenu(position, anchor) } }
+                it.isClickable = true; it.isLongClickable = true; it.isFocusable = true
+                it.setOnLongClickListener { anchor -> index()?.let { position -> host.openSongMenu(position, anchor) }; true }
+                (it as? ViewGroup)?.descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+            }
         }
     }
 
@@ -741,16 +769,16 @@ internal class MeloLibraryPane(
      * Rows are driven by the ListView (tap = play, long press = menu), so the row must not
      * swallow clicks. Only the ⋮ button stays clickable and opens the same song menu.
      */
-    private fun unclickable(v: View, position: Int) {
-        if (v.tag == MELO_SONG_ROW_MORE_TAG) {
-            v.setOnClickListener { host.openSongMenu(position, v) }
-            v.isFocusable = false
+    private fun unclickable(v: View, onMore: (View) -> Unit) {
+        if (v.tag == MELO_SONG_ROW_MORE_TAG || v.tag == MELO_SONG_ROW_SAVE_TAG) {
+            if (v.tag == MELO_SONG_ROW_MORE_TAG) v.setOnClickListener { onMore(v) }
+            v.isFocusable = true
             return
         }
         v.isClickable = false
         v.isLongClickable = false
         v.isFocusable = false
-        if (v is ViewGroup) for (i in 0 until v.childCount) unclickable(v.getChildAt(i), position)
+        if (v is ViewGroup) for (i in 0 until v.childCount) unclickable(v.getChildAt(i), onMore)
     }
 
     // ---- Telegram sources ---------------------------------------------------------------------

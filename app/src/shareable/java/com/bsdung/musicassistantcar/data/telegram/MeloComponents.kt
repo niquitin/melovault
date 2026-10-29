@@ -45,6 +45,7 @@ import kotlin.math.sin
 
 /** Tag on the ⋮ button of a song row, so a ListView host can keep just that button clickable. */
 internal const val MELO_SONG_ROW_MORE_TAG = "melo.songrow.more"
+internal const val MELO_SONG_ROW_SAVE_TAG = "melo.songrow.save"
 
 /** Tag on the cover frame of a teal-theme song row: which cover ([MeloRowArtPolicy] key) belongs there. */
 internal class MeloArtTag(val key: String)
@@ -86,7 +87,9 @@ internal class MeloComponents(
         /** E98 teal theme: identity of the row's cover, so a cover that arrives later finds its row. */
         val artKey: String? = null,
         /** Library opt-in; null keeps the existing Compact/Car/queue metadata. Empty means no tags. */
-        val browseMetadata: String? = null
+        val browseMetadata: String? = null,
+        /** Explicit list opt-in only; Compact, Car and queue callers keep null. */
+        val rowSave: MeloSavePolicy.ButtonState? = null
     )
 
     data class MiniPlayerModel(
@@ -242,9 +245,10 @@ internal class MeloComponents(
         model: SongRowModel,
         onClick: (() -> Unit)? = null,
         onLongClick: (() -> Unit)? = null,
-        onMore: (() -> Unit)? = null
+        onMore: (() -> Unit)? = null,
+        onSave: (() -> Unit)? = null
     ): View {
-        if (teal && !isCompact && !isCar) return tealSongRow(model, onClick, onLongClick, onMore)
+        if (teal && !isCompact && !isCar) return tealSongRow(model, onClick, onLongClick, onMore, onSave)
         val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local)
         // E96 P5B3: lookalike/combining characters in channel names are drawn by a fallback font; show their plain form.
         val shownTitle = DisplayTextPolicy.clean(model.title)
@@ -320,6 +324,7 @@ internal class MeloComponents(
             })
         }
         if (!isCar) {
+            rowSaveButton(model, onSave)?.let(row::addView)
             row.addView(TextView(context).apply {
                 text = "⋮"
                 gravity = Gravity.CENTER
@@ -525,7 +530,8 @@ internal class MeloComponents(
         model: SongRowModel,
         onClick: (() -> Unit)?,
         onLongClick: (() -> Unit)?,
-        onMore: (() -> Unit)?
+        onMore: (() -> Unit)?,
+        onSave: (() -> Unit)?
     ): View {
         val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local)
         val shownTitle = DisplayTextPolicy.clean(model.title)
@@ -584,6 +590,7 @@ internal class MeloComponents(
                 setPadding(0, 0, sizes.gap / 2, 0)
             })
         }
+        rowSaveButton(model, onSave)?.let(row::addView)
         row.addView(TextView(context).apply {
             text = "⋮"
             gravity = Gravity.CENTER
@@ -597,6 +604,20 @@ internal class MeloComponents(
             setOnClickListener { (onMore ?: onLongClick)?.invoke() }
         })
         return row
+    }
+
+    private fun rowSaveButton(model: SongRowModel, onSave: (() -> Unit)?): View? {
+        val state = model.rowSave ?: return null
+        if (isCompact || isCar) return null
+        return text(state.label, sizes.titleText, if (state.saved) palette.accent else palette.textSecondary).apply {
+            tag = MELO_SONG_ROW_SAVE_TAG
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(sizes.minTouch, sizes.minTouch)
+            isFocusable = true
+            contentDescription = state.contentDescription
+            androidx.core.view.ViewCompat.setStateDescription(this, state.stateDescription)
+            setOnClickListener { onSave?.invoke() }
+        }
     }
 
     /** The "☁ Đồng bộ: 27.971 bài ●" line with the ⚙ button at its end. */

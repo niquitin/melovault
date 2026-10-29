@@ -9,7 +9,17 @@ Trạng thái chính thức: **CHỜ CHỦ DỰ ÁN NGHIỆM THU**. Đây là ch
 
 - Chủ dự án xác nhận S0–S1 đã làm xong, giao liên tục S2–S6 trong cùng vai THỰC THI; không coi là nghiệm thu chính thức.
 - Đầu phiên 11:19 +07: HEAD S1 `fb896d4c537d007c633d9008f3a95ee521d9784f`, cây sạch, nhánh/worktree và diff-check đúng; không có build/test worker đang chạy, chỉ daemon thường trú.
-- S2 commit `e18979fa5dd37b2f889348991e8442d5f60f56fb`; S3 xong code/test mục tiêu; tiếp tục S4–S6 theo chỉ thị liên tục. S6 full unit + assemble. Không làm S7/P2/cài thiết bị hoặc sơ bộ.
+- S2 commit `e18979fa5dd37b2f889348991e8442d5f60f56fb`; S3 commit `12d5fd2554eafe1be848bb8c6892a1d8b9cf1e21`; S4 xong code/test mục tiêu; tiếp tục S5a–S6. S6 full unit + assemble. Không làm S7/P2/cài thiết bị hoặc sơ bộ.
+
+### S4 — lưu nhanh theo đúng bài trên dòng
+
+- Sửa Host Row/API, Activity snapshot/toggle/notify, Components, LibraryPane, MeloSavePolicy; thêm `MeloRowSavePolicyTest.kt` (9 ca). Row có saved/busy/availability mặc định không actionable; LOCAL không giả hỗ trợ, ⋮ có giải thích hạn chế.
+- Direct ☆/★ chỉ Phone/Tablet opt-in khi body còn ≥160dp sau ảnh/gap/duration đo thật/hai nút ≥48dp, fontScale≤1.3; thiếu chỗ giữ ⋮. Save/menu có focus và listener riêng; parent tap/long press được nối riêng theo owner + songKey, không dựa vị trí sau async/recycle.
+- Row target chỉ từ bản đang hiển thị, owner khớp và (chat,message,key) thật; nhóm offline lưu đúng representative. Cùng `requestPlaylistToggle`/SaveToggleGuard/writer và hook E105 `afterSave`, không sync trực tiếp từ UI, không playback trong row-save handler.
+- ★ từ favoriteIds đã commit; busy theo target in-flight/queued parity. Lỗi/not-ready/full giữ committed state. Callback owner/guard/lifecycle cũ bị bỏ; NowPlaying busy cũng theo đúng target, wording cũ giữ nguyên. Save/remote đổi star ngoài Playlist chỉ notify UI, không reload/query/scan hay reset scope; trong Playlist vẫn refresh thành viên.
+- Test `S4-20261029_114717`: Debug **122 passed/0 skipped/0 failed/0 errors**, Release cùng kết quả; 7 suites/biến thể, exit 0, BUILD SUCCESSFUL in 22s; XML fresh và source.json match. Source nền `12d5fd2` + manifest; log/result/XML tại artifacts cùng tên.
+- Bộ mục tiêu Debug/Release: MeloRowSavePolicyTest, MeloSavePolicyTest, PlaylistLiveRefreshTest, TelegramPlaylistSessionTest, TelegramPlaylistV2SessionTest, TelegramPlaylistViewPolicyTest, AutomaticPlaylistSyncTest; cùng `--tests`, `--console=plain`. `git diff --check` đạt.
+- Chưa QA3/touch/keyboard/TalkBack trên máy; không dùng test policy như chứng minh click thật không phát. Gọn/Car/queue không opt-in nút dòng. S4 commit chứa mục này; bước tiếp S5a.
 
 ### S3 — nguồn bên phải, player giữ bên trái
 

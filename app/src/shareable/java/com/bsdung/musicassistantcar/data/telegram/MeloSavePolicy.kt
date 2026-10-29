@@ -102,6 +102,37 @@ internal object MeloSavePolicy {
     /** Short label for the chips of the other screens (Gọn, Tablet, Studio Deck). */
     fun chipLabel(saved: Boolean): String = if (saved) "★ Bỏ lưu" else "☆ Lưu"
 
+    /** A list row needs a real Telegram identity; NowPlaying's legacy-only wording is unchanged. */
+    fun rowAvailability(local: Boolean, songKey: Long, known: Boolean, chatId: Long, rawMessageId: Long,
+        ownerId: Long, unreadable: Boolean, loaded: Boolean): Availability =
+        availability(true, local, songKey, known, chatId, rawMessageId, ownerId, unreadable, loaded)
+            .let { if (it == Availability.LEGACY_ONLY) Availability.NOT_IDENTIFIED else it }
+
+    fun rowButtonState(title: String, availability: Availability, saved: Boolean, busy: Boolean): ButtonState {
+        val state = buttonState(availability, saved, busy)
+        val hint = if (availability == Availability.NOT_IDENTIFIED) "Chưa xác định được nguồn Telegram của bài này" else state.hint
+        return state.copy(label = (if (state.saved) "★" else "☆") + if (busy) "…" else "",
+            hint = hint,
+            contentDescription = (if (state.saved) "Bỏ lưu $title khỏi Playlist" else "Lưu $title vào Playlist") +
+                (if (busy) ", đang xử lý lưu" else "") + (hint?.let { ". $it" } ?: ""),
+            stateDescription = if (busy) "Đang xử lý lưu Playlist" else state.stateDescription)
+    }
+
+    fun rowTarget(boundOwner: Long, currentOwner: Long, key: Long, chatId: Long, rawMessageId: Long,
+        availability: Availability): PlaylistTarget? =
+        if (boundOwner == currentOwner && availability == Availability.READY && isResolved(key, chatId, rawMessageId, currentOwner))
+            PlaylistTarget(key, chatId, rawMessageId) else null
+
+    fun acceptsCallback(owner: Long, currentOwner: Long, sameGuard: Boolean, active: Boolean): Boolean =
+        owner > 0L && owner == currentOwner && sameGuard && active
+
+    /** Two full 48dp actions, measured duration and cover must leave at least 160dp for the body. */
+    fun directRowSave(widthPx: Int, artPx: Int, gapsPx: Int, durationPx: Int, actionPx: Int,
+        density: Float, fontScale: Float): Boolean =
+        widthPx > 0 && artPx >= 0 && gapsPx >= 0 && durationPx >= 0 && density.isFinite() && density > 0f &&
+            actionPx >= kotlin.math.ceil(48 * density).toLong() && fontScale.isFinite() && fontScale > 0f && fontScale <= 1.3f &&
+            widthPx.toLong() - artPx - gapsPx - durationPx - 2L * actionPx >= kotlin.math.ceil(160 * density).toLong()
+
     /**
      * Height of the Car Save row: at least the larger of the minimum touch target and the page buttons, so it is a
      * big target but never taller than a page button.
@@ -128,6 +159,7 @@ internal class SaveToggleGuard<T : Any> {
     val busy: Boolean get() = inFlight != null
 
     fun isBusyWith(target: T): Boolean = inFlight == target
+    fun isPendingWith(target: T): Boolean = inFlight == target || (extra[target] ?: 0) % 2 == 1
 
     /** True = start the write for [target] now. False = counted (or ignored); [finish] will pick it up. */
     fun tap(target: T): Boolean {
