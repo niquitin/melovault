@@ -7,6 +7,17 @@ Trạng thái chính thức: **CHỜ CHỦ DỰ ÁN NGHIỆM THU**. Đây là ch
 
 ## Phiên tiếp tục S2–S6
 
+### S5b — bằng chứng tệp cho trạng thái Đã tải
+
+- Nền `3615d643593d4650b36addfacc8d6b122d5328a0`; đối chiếu tám đường cachedSongPaths. Thêm MeloDownloadUiPolicy/Controller + 12 test; sửa Activity, Host, Components/LibraryPane/StudioDeck để dùng facts typed chung. Không đổi service/cache/index/schema hoặc truy vấn sync.
+- UNKNOWN/REMOTE/DOWNLOADING/READY/UNAVAILABLE tách playback. READY chỉ completed thật từ message/resolve/completion/local scan, đúng owner/root, readable/non-empty và exact expected size khi có; percent100 không đủ. Bỏ shortcut bộ lọc Đã tải. Scan/callback owner/query/session cũ không publish; checker có owner/epoch/revision, gộp trùng và kiểm nền, shutdown khi Activity hủy.
+- Path từ service queue chưa có completion giữ UNKNOWN; bàn giao path cũ cho playback chỉ sau worker kiểm, không tự nâng READY. List/queue/now dùng cùng presentation; quality bytes lấy từ RAM, getter/bind không stat file/TDLib. Foreground kiểm lại các bài hiện có và nhóm offline; pending action listener được giữ nếu check còn chạy. Global downloadedCount vẫn generation/pipeline cũ, không tính lại từ subset rows.
+- Representative offline dùng helper với facts READY, chuyển sang bản còn hợp lệ, giữ nguyên group/index/Playlist. Mất/unreadable/zero/mismatch ghi “Tệp trên máy không còn dùng được”; trước phát check nền theo action đã bấm, failure chỉ retry thủ công qua resolver cũ. Local vẫn “Trên máy”. Không xóa nhạc thật để test.
+- Test cuối `S5b-final-20261029_163743`: Debug và Release mỗi biến thể **58 passed/0 skipped/0 failed/0 errors**, 6 suites, exit0, XML fresh/source.json match; log/result/XML ở artifacts TASK_ID cùng tên. Nền HEAD trên + manifest. Lượt đầu57 và checkpoint58 giữ riêng; chỉnh cuối bảo toàn cached-path handoff nên chỉ lượt final đại diện source bàn giao.
+- Hai task test Debug/Release cùng filters: MeloDownloadUiPolicyTest, TelegramOfflineLibraryTest, TelegramOfflinePlayPolicyTest, TelegramAccountPartitionTest, MeloDownloadedCountPolicyTest, MeloComponentPolicyTest; `--console=plain`. Kiểm diff-check sạch. Không Gradle worker còn chạy sau exit; artifact không commit.
+- Chưa QA tệp bị thu hồi trên thiết bị/offline thật hoặc các màu/font; không APK/ADB. SHANLING_SCREEN_END/SONY_SCREEN_END không thao tác, chưa xác minh. S5b commit riêng chứa hồ sơ này; tiếp tục S6 đã được giao. Hàng chờ typed refresh/paused/buffering sẽ chốt ở S6.
+
+
 - S5a xong code/test trên HEAD nền S4 `cfd0bd3160dcad183d3e12c2d9bc8acebeb264c2`. Tiếp tục 16:01 +07 sau chỉ thị chủ dự án; hai file policy/state chưa commit trước đó khớp phần do phiên này viết, không file lạ hoặc worker nền. S5b–S6 chưa làm.
 
 ### S5a — feedback và retry theo attempt

@@ -89,7 +89,8 @@ internal class MeloComponents(
         /** Library opt-in; null keeps the existing Compact/Car/queue metadata. Empty means no tags. */
         val browseMetadata: String? = null,
         /** Explicit list opt-in only; Compact, Car and queue callers keep null. */
-        val rowSave: MeloSavePolicy.ButtonState? = null
+        val rowSave: MeloSavePolicy.ButtonState? = null,
+        val statusTextOverride: String? = null
     )
 
     data class MiniPlayerModel(
@@ -249,7 +250,7 @@ internal class MeloComponents(
         onSave: (() -> Unit)? = null
     ): View {
         if (teal && !isCompact && !isCar) return tealSongRow(model, onClick, onLongClick, onMore, onSave)
-        val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local)
+        val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local).let { it.copy(label = model.statusTextOverride ?: it.label) }
         // E96 P5B3: lookalike/combining characters in channel names are drawn by a fallback font; show their plain form.
         val shownTitle = DisplayTextPolicy.clean(model.title)
         val shownSource = DisplayTextPolicy.cleanOrNull(model.sourceTitle)
@@ -402,7 +403,7 @@ internal class MeloComponents(
             view.setOnLongClickListener { onLongClick(); true }
             if (model == bound) return
             bound = model
-            val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local)
+            val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local).let { it.copy(label = model.statusTextOverride ?: it.label) }
             view.background = roundedBackground(
                 if (status.highlightRow) palette.accentSoft else palette.surface,
                 stroke = if (status.highlightRow) palette.accent else null
@@ -533,7 +534,7 @@ internal class MeloComponents(
         onMore: (() -> Unit)?,
         onSave: (() -> Unit)?
     ): View {
-        val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local)
+        val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local).let { it.copy(label = model.statusTextOverride ?: it.label) }
         val shownTitle = DisplayTextPolicy.clean(model.title)
         val shownSource = DisplayTextPolicy.cleanOrNull(model.sourceTitle)
         val metadata = model.browseMetadata?.let(DisplayTextPolicy::clean) ?: shownSource
@@ -568,7 +569,7 @@ internal class MeloComponents(
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
         body.addView(text(shownTitle, sizes.titleText, if (playing) palette.accent else palette.text, bold = true, maxLines = 2))
-        body.addView(text(MeloComponentPolicy.themedSecondLine(model.status, status.label, metadata), sizes.secondaryText,
+        body.addView(text((model.statusTextOverride?.let { listOfNotNull(it, metadata).filter { part -> part.isNotBlank() }.joinToString(" · ") } ?: MeloComponentPolicy.themedSecondLine(model.status, status.label, metadata)), sizes.secondaryText,
             if (model.status == Status.ERROR) palette.warning else palette.textSecondary).apply {
             setPadding(0, sizes.gap / 2, 0, 0)
         })

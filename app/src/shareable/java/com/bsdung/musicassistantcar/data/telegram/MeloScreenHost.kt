@@ -159,7 +159,8 @@ internal interface MeloScreenHost {
         val downloaded: Boolean,
         val downloadingPercent: Int?,
         /** A "Nhạc trên máy" song: its row says "Trên máy", not "Đã tải". */
-        val local: Boolean = false
+        val local: Boolean = false,
+        val download: MeloDownloadUiPolicy.Presentation? = null
     )
 
     data class Row(
@@ -188,7 +189,8 @@ internal interface MeloScreenHost {
         val sourceIsFolder: Boolean = false,
         val saved: Boolean = false,
         val saveBusy: Boolean = false,
-        val saveAvailability: MeloSavePolicy.Availability = MeloSavePolicy.Availability.NOT_IDENTIFIED
+        val saveAvailability: MeloSavePolicy.Availability = MeloSavePolicy.Availability.NOT_IDENTIFIED,
+        val download: MeloDownloadUiPolicy.Presentation? = null
     )
 
     data class SourceRow(val chatId: Long, val title: String, val count: Int)
@@ -247,6 +249,7 @@ internal interface MeloScreenHost {
         /** E96 P4: whether and how the Save button may act on this song (see [MeloSavePolicy]). */
         val saveAvailability: MeloSavePolicy.Availability = MeloSavePolicy.Availability.READY,
         /** A Save write for this song is running; [favorite] still shows what is committed. */
-        val saveBusy: Boolean = false
+        val saveBusy: Boolean = false,
+        val download: MeloDownloadUiPolicy.Presentation? = null
     )
 }

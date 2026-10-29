@@ -553,7 +553,11 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
             durationSeconds = item.durationSeconds,
             status = status,
             progressPercent = item.downloadingPercent,
-            local = item.local
+            local = item.local,
+            statusTextOverride = item.download?.let { fact -> host.nowPlaying()?.let { now ->
+                MeloDownloadUiPolicy.rowText(fact, item.songKey == currentKey, now.playing, now.paused,
+                    !now.playing && !now.paused, local = item.local)
+            } ?: fact.text }
         ), onMore = { row?.let { host.openQueueSongMenu(index, it) } })
         return row
     }

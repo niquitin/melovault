@@ -717,6 +717,11 @@ internal class MeloLibraryPane(
                     artKey = if (c.teal) row.artKey else null,
                     browseMetadata = MeloBrowseUiPolicy.rowMetadata(row.performer, row.sourceTitle,
                         snap.local || row.local, row.sourceIsFolder).orEmpty(),
+                    statusTextOverride = row.download?.let { MeloDownloadUiPolicy.rowText(it, playing,
+                        host.nowPlaying()?.playing == true, snap.paused,
+                        host.nowPlaying()?.let { now -> !now.playing && !now.paused } == true,
+                        opening = status == MeloComponentPolicy.Status.OPENING,
+                        local = snap.local || row.local, quality = quality) },
                     rowSave = if (directSave) MeloSavePolicy.rowButtonState(row.title, row.saveAvailability, row.saved, row.saveBusy) else null
                 ),
                 onClick = { index()?.let(host::playAt) },

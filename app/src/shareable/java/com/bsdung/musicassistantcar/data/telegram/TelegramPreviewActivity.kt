@@ -292,6 +292,51 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var browseLoadState = MeloBrowseUiPolicy.LoadState.INITIAL_LOADING
     private var browseTotal: Int? = null
     private val offlineExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val downloadUiExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
+    private val downloadUi = MeloDownloadUiPolicy.Controller(
+        stat = { evidence ->
+            val file = File(evidence.path.orEmpty())
+            MeloDownloadUiPolicy.FileFacts(file.exists(), file.isFile, file.canRead(), file.length(),
+                TelegramAccountStoragePolicy.isOwnedFile(File(evidence.rootPath), file))
+        },
+        execute = { if (!downloadUiExecutor.isShutdown) downloadUiExecutor.execute(it) },
+        post = { mainHandler.post(it) }, changed = {
+            if (filterOnlyDownloaded && offlineGroups.isNotEmpty()) {
+                shownSongs = offlineGroups.take(offlineVisibleLimit).map { offlineRepresentative(it) }
+            }
+            scheduleMeloLibraryRefresh()
+        })
+
+    /** Completion facts are captured at existing TDLib/scan boundaries, never requested by row bind. */
+    private fun observeDownload(owner: Long, key: Long, path: String?, complete: Boolean, size: Long,
+        fileId: Int? = null, remote: Boolean = true, force: Boolean = false,
+        checked: ((MeloDownloadUiPolicy.Presentation) -> Unit)? = null) {
+        if (!auth.isReady() || owner <= 0L || library.authorizedUser()?.value != owner || isDestroyed) return
+        downloadUi.setOwner(owner)
+        downloadUi.observe(MeloDownloadUiPolicy.Evidence(owner, key, path?.takeIf { it.isNotBlank() },
+            complete, size, filesRoot.path, fileId, remote), force, checked)
+    }
+
+    private fun downloadPresentation(key: Long): MeloDownloadUiPolicy.Presentation {
+        if (downloadUi.ownerId != (library.authorizedUser()?.value ?: 0L)) return MeloDownloadUiPolicy.Presentation(MeloDownloadUiPolicy.State.UNKNOWN)
+        val active = currentDownloadingSong?.messageId == key && downloadWaiting != null
+        val percent = if (active) downloadWaiting?.let {
+            MeloCompactPolicy.progressPercent(TelegramProgressiveCache.readyBytes(it), TelegramProgressiveCache.totalBytes(it))
+        } else null
+        return downloadUi.presentation(key, active, percent)
+    }
+
+    private fun recheckDownloadUi() {
+        val owner = library.authorizedUser()?.value ?: 0L
+        downloadUi.setOwner(owner)
+        val keys = (shownSongs.map { it.messageId } + queueSongOrder.map { it.messageId } +
+            offlineGroups.flatMap { it.entries.map { entry -> entry.song.songKey } } + listOfNotNull(currentTelegramMessageId())).toSet()
+        keys.forEach { key ->
+            val known = downloadUi.evidence(key)
+            if (known != null) downloadUi.recheck(key)
+            else cachedSongPaths[key]?.let { observeDownload(owner, key, it, false, -1L, remote = false) }
+        }
+    }
     private val pendingOffline = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<JSONObject>>()
     private var offlineGroups = emptyList<TelegramOfflineLibrary.Group>()
     private var offlineSummary: String? = null
@@ -503,6 +548,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private val maxGlobalPagesPerKind = 15
     private var downloadWaiting: Int? = null
     private var prefetchWaiting: Int? = null
+    private var prefetchUiTarget: Pair<Long, Song>? = null
     private lateinit var filesRoot: File
     private var currentTask = ""
     private var mutedMessages = false
@@ -644,6 +690,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     /** Logout / session closed: forget the list and the card so nothing outlives the account screen. */
     private fun resetLocalMusic() {
+        downloadUi.setOwner(0L)
         playUi.clear()
         playFeedback = null; downloadAttempt = null; lastPlayTarget = null
         meloBrowse.clear()
@@ -1204,6 +1251,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
         }
         if (auth.isReady()) {
+            recheckDownloadUi()
             refreshLocalCount()
             val user = library.authorizedUser()?.value ?: 0L
             if (user > 0L && songs.isEmpty()) {
@@ -4008,9 +4056,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         restored.forEach { track ->
             val path = track.cachedPath ?: return@forEach
-            val local = File(path)
-            if (local.isFile && TelegramAccountStoragePolicy.isOwnedFile(filesRoot, local)) {
-                cachedSongPaths[track.messageId] = local.canonicalPath
+            if (downloadUi.evidence(track.messageId) == null) {
+                observeDownload(accountId, track.messageId, path, false, track.expectedSize, remote = false) { fact ->
+                    // Preserve the service's cached-path handoff after the worker validates the file.
+                    // This path-only fact still cannot show a downloaded badge.
+                    if (fact.state == MeloDownloadUiPolicy.State.UNKNOWN) cachedSongPaths[track.messageId] = path
+                }
             }
         }
     }
@@ -4220,12 +4271,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
     )
 
     private fun offlineRepresentative(group: TelegramOfflineLibrary.Group): Song = offlineSong(
-        group.entries.firstOrNull { it.song.songKey == currentTelegramMessageId() }?.song ?: group.entries.first().song
+        TelegramOfflinePlayPolicy.defaultEntry(group, library.authorizedUser()?.value ?: 0L,
+            currentTelegramMessageId()) { downloadPresentation(it.song.songKey).state == MeloDownloadUiPolicy.State.READY }
+            ?.song ?: group.entries.first().song
     )
 
     private fun isReadableOfflineCopy(entry: TelegramOfflineLibrary.Entry): Boolean = runCatching {
         val file = File(entry.path)
         file.isFile && file.canRead() && file.length() > 0L &&
+            (entry.song.fileSize <= 0L || file.length() == entry.song.fileSize) &&
             TelegramAccountStoragePolicy.isOwnedFile(filesRoot, file)
     }.getOrDefault(false)
 
@@ -4390,9 +4444,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 if (json.optLong("chat_id") != song.chatId || json.optLong("id") != song.messageId) {
                     TelegramOfflineLibrary.Local.Unknown
                 } else when (val result = TelegramAudioResolverPolicy.parseMessage(json)) {
-                    is TelegramAudioResolverPolicy.Result.Resolved -> if (result.isDownloadingCompleted) {
-                        TelegramOfflineLibrary.Local.Complete(result.localPath, result.size)
-                    } else TelegramOfflineLibrary.Local.NotDownloaded
+                    is TelegramAudioResolverPolicy.Result.Resolved -> {
+                        runOnUiThread {
+                            if (!cancelled()) observeDownload(song.accountId, song.songKey, result.localPath,
+                                result.isDownloadingCompleted, result.size, result.freshFileId)
+                        }
+                        if (result.isDownloadingCompleted) TelegramOfflineLibrary.Local.Complete(result.localPath, result.size)
+                        else TelegramOfflineLibrary.Local.NotDownloaded
+                    }
                     else -> TelegramOfflineLibrary.Local.Unknown
                 }
             }
@@ -5417,9 +5476,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun songIsDownloaded(song: Song): Boolean {
-        if (filterOnlyDownloaded) return true
-        val local = cachedSongPaths[song.messageId]?.let { File(it) } ?: return false
-        return local.isFile && TelegramAccountStoragePolicy.isOwnedFile(filesRoot, local)
+        return downloadPresentation(song.messageId).state == MeloDownloadUiPolicy.State.READY
     }
 
     private fun sourceTitleOf(chatId: Long): String = sourceNames[chatId] ?: "Nguồn Telegram $chatId"
@@ -5538,6 +5595,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     durationSeconds = song.durationSeconds,
                     songKey = song.messageId,
                     downloaded = songIsDownloaded(song),
+                    download = downloadPresentation(song.messageId),
                     downloadingPercent = if (song.messageId == playingKey) downloadingPercent else null,
                     art = thumbnailCache.get(song.messageId),
                     performer = song.performer,
@@ -5830,7 +5888,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     Player.REPEAT_MODE_ONE -> "một bài"
                     else -> "tắt"
                 },
-                downloadNote = currentDownloadNote(),
+                downloadNote = key?.let { downloadPresentation(it).text },
+                download = key?.let { downloadPresentation(it) },
                 paused = !controller.playWhenReady,
                 saveAvailability = MeloSavePolicy.availability(
                     playing = true, local = false, songKey = key, songKnown = song != null,
@@ -6028,6 +6087,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     durationSeconds = song.durationSeconds,
                     songKey = song.messageId,
                     downloaded = ownedCachedFile(song.messageId) != null,
+                    download = downloadPresentation(song.messageId),
                     downloadingPercent = if (song.messageId == current) percent else null
                 )
             }
@@ -6099,7 +6159,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 )
             }
             // The size Telegram announced; a fully downloaded file is the fallback when it is unknown.
-            val size = song?.expectedSize?.takeIf { it > 0L } ?: key?.let { ownedCachedFile(it) }?.length() ?: -1L
+            val size = song?.expectedSize?.takeIf { it > 0L } ?: key?.let { downloadPresentation(it).bytes } ?: -1L
             return MeloNowPlayingPolicy.qualityChips(mime, song?.filename, sampleRate, bitrate, bitDepth, size)
         }
 
@@ -6125,8 +6185,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     /** A downloaded, account-owned file for [songKey], same check as the legacy list. */
     private fun ownedCachedFile(songKey: Long): File? {
-        val local = cachedSongPaths[songKey]?.let { File(it) } ?: return null
-        return local.takeIf { it.isFile && TelegramAccountStoragePolicy.isOwnedFile(filesRoot, it) }
+        return downloadPresentation(songKey).readyPath?.let { File(it) }
     }
 
     /** Next page of the visible list; callers decide the list is near its end. */
@@ -7103,14 +7162,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
             ?: (library.authorizedUser()?.value ?: 0L)
         val key = TelegramSongKey.forMessage(chatId, messageId, selfChatId)
         val local = file.optJSONObject("local")
-        if (local?.optBoolean("is_downloading_completed") == true) {
-            val path = local.optString("path")
-            if (path.isNotBlank()) {
-                val cached = File(path)
-                if (cached.isFile &&
-                    TelegramAccountStoragePolicy.isOwnedFile(filesRoot, cached)) {
-                    cachedSongPaths[key] = cached.canonicalPath
-                }
+        val factOwner = library.authorizedUser()?.value ?: 0L
+        runOnUiThread {
+            observeDownload(factOwner, key, local?.optString("path"),
+                local?.optBoolean("is_downloading_completed") == true,
+                file.optLong("size", -1L), fileId) { fact ->
+                if (fact.state == MeloDownloadUiPolicy.State.READY) cachedSongPaths[key] = fact.readyPath!!
             }
         }
         if (allChatsMode && requestedSourceNames.size < 180 &&
@@ -7597,11 +7654,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val rawMsgId = next.genuineMessageId
         if (effectiveChatId == 0L || rawMsgId <= 0L) return
 
+        val prefetchOwner = library.authorizedUser()?.value ?: return
+        val prefetchEpoch = authEpoch
         resolveTelegramMessage(effectiveChatId, rawMsgId) { result ->
-            if (!auth.isReady() || !running || isDestroyed) return@resolveTelegramMessage
+            if (!auth.isReady() || !running || isDestroyed || library.authorizedUser()?.value != prefetchOwner || authEpoch != prefetchEpoch) return@resolveTelegramMessage
             if (result is TelegramAudioResolverPolicy.Result.Resolved) {
                 val freshId = result.freshFileId
                 val resolvedNext = next.copy(fileId = freshId)
+                observeDownload(prefetchOwner, next.messageId, result.localPath, result.isDownloadingCompleted, result.size, freshId)
                 val user = library.authorizedUser()?.value
                 if (user != null && user > 0L) {
                     executeOnDb {
@@ -7616,6 +7676,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     prefetchNextCachedNeighbor()
                 } else if (prefetchWaiting == null && downloadWaiting == null) {
                     prefetchWaiting = freshId
+                    prefetchUiTarget = prefetchOwner to resolvedNext
                     runCatching {
                         send("downloadFile", "prefetch:$freshId") {
                             it.put("file_id", freshId)
@@ -7631,19 +7692,24 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun observePrefetch(file: JSONObject) {
-        if (!auth.isReady() || file.optInt("id") != prefetchWaiting) return
+        val identity = prefetchUiTarget ?: return
+        if (!auth.isReady() || library.authorizedUser()?.value != identity.first || file.optInt("id") != prefetchWaiting) return
         val local = file.optJSONObject("local") ?: return
         if (!local.optBoolean("is_downloading_completed")) return
-        prefetchWaiting = null
-        val path = local.optString("path")
-        val target = File(path)
-        if (!target.isFile || !TelegramAccountStoragePolicy.isOwnedFile(filesRoot, target)) return
-        val song = songs.firstOrNull { it.fileId == file.optInt("id") } ?: return
-        cachedSongPaths[song.messageId] = target.canonicalPath
+        val expectedId = file.optInt("id")
         runOnUiThread {
-            if (!auth.isReady()) return@runOnUiThread
-            insertCachedNeighborIfRelevant(song, target)
-            prefetchNextCachedNeighbor()
+            if (prefetchWaiting != expectedId || prefetchUiTarget != identity) return@runOnUiThread
+            observeDownload(identity.first, identity.second.messageId, local.optString("path"), true,
+                file.optLong("size", identity.second.expectedSize), expectedId, force = true) { fact ->
+                if (prefetchWaiting == expectedId && prefetchUiTarget == identity) {
+                    prefetchWaiting = null; prefetchUiTarget = null
+                    if (fact.state == MeloDownloadUiPolicy.State.READY) {
+                        cachedSongPaths[identity.second.messageId] = fact.readyPath!!
+                        insertCachedNeighborIfRelevant(identity.second, File(fact.readyPath))
+                        prefetchNextCachedNeighbor()
+                    }
+                }
+            }
         }
     }
 
@@ -7731,64 +7797,71 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         }
                     }
 
-                    val localFile = if (result.localPath.isNotBlank()) File(result.localPath) else null
-                    if (result.isDownloadingCompleted && localFile != null && localFile.isFile &&
-                        TelegramAccountStoragePolicy.isOwnedFile(filesRoot, localFile)) {
-                        switchDownload()
-                        cachedSongPaths[song.messageId] = localFile.canonicalPath
-                        nowPlayingTitle.text = song.title
-                        setPlayFeedback(TelegramPlayFeedbackPolicy.Stage.BUFFERING, song.messageId, TelegramPlayFeedbackPolicy.BUFFERING_TEXT)
-                        enqueueTelegramPlayback(
-                            resolvedSong, localFile,
-                            MeloResumePolicy.startPositionMs(resumeFromMs, resolvedSong.durationSeconds, fileComplete = true)
-                        )
-                        showMessage("Đang phát: ${song.title}")
-                    } else {
-                        val account = library.authorizedUser()?.value
-                        if (account == null || account <= 0L) {
-                            showMessage("Phiên Telegram chưa sẵn sàng.")
-                            reportPlayError(attempt, TelegramPlayFeedbackPolicy.NOT_READY_MESSAGE, null)
-                            return@resolveTelegramMessage
+                    observeDownload(attempt.ownerId, song.messageId, result.localPath,
+                        result.isDownloadingCompleted, result.size, freshId, force = true) checked@ { fact ->
+                        if (!acceptsPlay(attempt) || epoch != localPlayEpoch) return@checked
+                        val localFile = fact.readyPath?.let { File(it) }
+                        if (result.isDownloadingCompleted && localFile == null) {
+                            publishPlayFailure(attempt, TelegramPlayFeedbackPolicy.Failure("Tệp trên máy không còn dùng được. Thử lại.", true))
+                            return@checked
                         }
-                        if (!TelegramProgressiveCache.begin(
-                                account, filesRoot, freshId, resolvedSong.expectedSize
-                            )) {
-                            showMessage(TelegramPlayFeedbackPolicy.CACHE_MESSAGE)
-                            reportPlayError(attempt, TelegramPlayFeedbackPolicy.CACHE_MESSAGE, null)
-                            return@resolveTelegramMessage
-                        }
-                        switchDownload(freshId)
-                        downloadWaiting = freshId
-                        currentDownloadingSong = resolvedSong
-                        downloadAttempt = attempt
-                        nowPlayingTitle.text = song.title
-                        showMessage("Đang đệm nhạc qua Telegram: ${song.title}")
-                        setPlayFeedback(TelegramPlayFeedbackPolicy.Stage.BUFFERING, song.messageId, TelegramPlayFeedbackPolicy.BUFFERING_TEXT)
-                        android.util.Log.w("MeloVaultPlay", "stage=begin chat=$effectiveChatId msg=$rawMsgId size=${resolvedSong.expectedSize}")
-                        mainHandler.postDelayed({
-                            if (acceptsPlay(attempt) && downloadAttempt == attempt && downloadWaiting == freshId) {
-                                val ready = TelegramProgressiveCache.readyBytes(freshId)
-                                android.util.Log.w("MeloVaultPlay",
-                                    "stage=download_stall_check msg=$rawMsgId ready=$ready total=${TelegramProgressiveCache.totalBytes(freshId)}")
-                                if (TelegramPlayFeedbackPolicy.stalled(ready)) reportPlayError(attempt, TelegramPlayFeedbackPolicy.STALL_TEXT, null)
+                        if (localFile != null) {
+                            switchDownload()
+                            cachedSongPaths[song.messageId] = localFile.canonicalPath
+                            nowPlayingTitle.text = song.title
+                            setPlayFeedback(TelegramPlayFeedbackPolicy.Stage.BUFFERING, song.messageId, TelegramPlayFeedbackPolicy.BUFFERING_TEXT)
+                            enqueueTelegramPlayback(
+                                resolvedSong, localFile,
+                                MeloResumePolicy.startPositionMs(resumeFromMs, resolvedSong.durationSeconds, fileComplete = true)
+                            )
+                            showMessage("Đang phát: ${song.title}")
+                        } else {
+                            val account = library.authorizedUser()?.value
+                            if (account == null || account <= 0L) {
+                                showMessage("Phiên Telegram chưa sẵn sàng.")
+                                reportPlayError(attempt, TelegramPlayFeedbackPolicy.NOT_READY_MESSAGE, null)
+                                return@checked
                             }
-                        }, TelegramPlayFeedbackPolicy.STALL_SECONDS * 1000L)
-                        enqueueProgressivePlayback(resolvedSong)
-                        try {
-                            send("downloadFile", downloadTag(freshId, attempt)) {
-                                it.put("file_id", freshId)
-                                it.put("priority", 32)
-                                it.put("offset", 0)
-                                it.put("limit", 0)
-                                it.put("synchronous", false)
+                            if (!TelegramProgressiveCache.begin(
+                                    account, filesRoot, freshId, resolvedSong.expectedSize
+                                )) {
+                                showMessage(TelegramPlayFeedbackPolicy.CACHE_MESSAGE)
+                                reportPlayError(attempt, TelegramPlayFeedbackPolicy.CACHE_MESSAGE, null)
+                                return@checked
                             }
-                        } catch (_: Exception) {
-                            TelegramProgressiveCache.stop(freshId)
-                            downloadWaiting = null
-                            currentDownloadingSong = null
-                            showMessage(TelegramPlayFeedbackPolicy.DOWNLOAD_START_MESSAGE)
-                            downloadAttempt = null
-                            reportPlayError(attempt, TelegramPlayFeedbackPolicy.DOWNLOAD_START_MESSAGE, null)
+                            switchDownload(freshId)
+                            downloadWaiting = freshId
+                            currentDownloadingSong = resolvedSong
+                            downloadAttempt = attempt
+                            nowPlayingTitle.text = song.title
+                            showMessage("Đang đệm nhạc qua Telegram: ${song.title}")
+                            setPlayFeedback(TelegramPlayFeedbackPolicy.Stage.BUFFERING, song.messageId, TelegramPlayFeedbackPolicy.BUFFERING_TEXT)
+                            android.util.Log.w("MeloVaultPlay", "stage=begin chat=$effectiveChatId msg=$rawMsgId size=${resolvedSong.expectedSize}")
+                            mainHandler.postDelayed({
+                                if (acceptsPlay(attempt) && downloadAttempt == attempt && downloadWaiting == freshId) {
+                                    val ready = TelegramProgressiveCache.readyBytes(freshId)
+                                    android.util.Log.w("MeloVaultPlay",
+                                        "stage=download_stall_check msg=$rawMsgId ready=$ready total=${TelegramProgressiveCache.totalBytes(freshId)}")
+                                    if (TelegramPlayFeedbackPolicy.stalled(ready)) reportPlayError(attempt, TelegramPlayFeedbackPolicy.STALL_TEXT, null)
+                                }
+                            }, TelegramPlayFeedbackPolicy.STALL_SECONDS * 1000L)
+                            enqueueProgressivePlayback(resolvedSong)
+                            try {
+                                send("downloadFile", downloadTag(freshId, attempt)) {
+                                    it.put("file_id", freshId)
+                                    it.put("priority", 32)
+                                    it.put("offset", 0)
+                                    it.put("limit", 0)
+                                    it.put("synchronous", false)
+                                }
+                            } catch (_: Exception) {
+                                TelegramProgressiveCache.stop(freshId)
+                                downloadWaiting = null
+                                currentDownloadingSong = null
+                                showMessage(TelegramPlayFeedbackPolicy.DOWNLOAD_START_MESSAGE)
+                                downloadAttempt = null
+                                reportPlayError(attempt, TelegramPlayFeedbackPolicy.DOWNLOAD_START_MESSAGE, null)
+                            }
                         }
                     }
                 }
@@ -7802,27 +7875,24 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val fileId = file.optInt("id")
         val local = file.optJSONObject("local") ?: return
         if (!local.optBoolean("is_downloading_completed")) return
-        val path = local.optString("path")
-        val target = File(path)
-        // Treat TDLib file path as untrusted until canonical containment passes.
-        if (!TelegramAccountStoragePolicy.isOwnedFile(filesRoot, target) ||
-            !target.isFile) {
-            showMessage("Từ chối file ngoài vùng riêng của phiên Telegram.")
-            return
-        }
-        val ownedPath = target.canonicalPath
         runOnUiThread {
             if (!auth.isReady() || library.authorizedUser()?.value != eventOwner || fileId != downloadWaiting || isDestroyed) return@runOnUiThread
             val song = currentDownloadingSong ?: return@runOnUiThread
             val attempt = downloadAttempt
-            downloadWaiting = null; currentDownloadingSong = null; downloadAttempt = null
-            cachedSongPaths[song.messageId] = ownedPath
-            // Never restart at 0: the same Media3 item is already reading
-            // the growing TDLib file and may be several minutes in.
-            val sameStream = player?.currentMediaItem?.mediaId ==
-                "telegram:${song.messageId}"
-            if (!sameStream && acceptsPlay(attempt)) enqueueTelegramPlayback(song, target)
-            status.text = "Nhạc đã tải xong: ${song.title}"
+            observeDownload(eventOwner, song.messageId, local.optString("path"), true,
+                file.optLong("size", song.expectedSize), fileId, force = true) checked@ { fact ->
+                if (fileId != downloadWaiting || downloadAttempt != attempt) return@checked
+                downloadWaiting = null; currentDownloadingSong = null; downloadAttempt = null
+                if (fact.state != MeloDownloadUiPolicy.State.READY) {
+                    if (acceptsPlay(attempt)) publishPlayFailure(attempt!!,
+                        TelegramPlayFeedbackPolicy.Failure("Tệp trên máy không còn dùng được. Thử lại.", true))
+                    return@checked
+                }
+                cachedSongPaths[song.messageId] = fact.readyPath!!
+                val sameStream = player?.currentMediaItem?.mediaId == "telegram:${song.messageId}"
+                if (!sameStream && acceptsPlay(attempt)) enqueueTelegramPlayback(song, File(fact.readyPath))
+                status.text = "Nhạc đã tải xong: ${song.title}"
+            }
         }
     }
 
@@ -7895,6 +7965,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         TelegramPlaylistRuntime.submit { playlistSession.detachIndex(playlistIndex) }
         dbExecutor.shutdownNow()
         offlineExecutor.shutdownNow()
+        downloadUi.setOwner(0L)
+        downloadUiExecutor.shutdownNow()
         pendingOffline.values.forEach { it.cancel(false) }
         pendingOffline.clear()
         thumbnailExecutor.shutdownNow()
