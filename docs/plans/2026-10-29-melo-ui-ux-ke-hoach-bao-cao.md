@@ -1,9 +1,43 @@
-Thực thi: Codex model/effort không xác định từ metadata, S0–S1 và phiên tiếp tục S2–S6 ngày 29/10/2026.
+Thực thi: Codex model/effort không xác định từ metadata, S0–S1, phiên tiếp tục S2–S6 và phiên S7 có điều kiện ngày 29/10/2026.
 
 # Báo cáo thực thi Melo UI/UX
 
 TASK_ID: `2026-10-29-melo-ui-ux-ke-hoach`.
-Trạng thái chính thức: **CHỜ CHỦ DỰ ÁN NGHIỆM THU**. Đây là chặng code/test, chưa phải candidate APK.
+Trạng thái chính thức: **CHỜ CHỦ DỰ ÁN NGHIỆM THU**. Các mục S0–S6 dưới đây giữ lịch sử; S7 hiện hành ở mục này.
+
+## S7 có điều kiện — kết thúc phần đã kiểm 29/10/2026
+
+- Chủ dự án cho phép build/QA phần độc lập, giữ **BLOCKED S6 thứ tự khi bật Đảo**; không sửa service/playback hoặc tự mở rộng kế hoạch. S6/P1 chưa hoàn tất toàn bộ. Nhãn: **QA CANDIDATE — CHƯA NGHIỆM THU; còn điểm chặn thứ tự khi bật Đảo.**
+- Git đầu phiên sạch, đúng nhánh/worktree giao; source `278f0d277aeb077bb938cf76f0e055c5058dd996`, tree `a7713aaa4321b6fa7c637db687c9061aca7f747d`, plan `f912ef5eca8574deb304872af73a2f7ad5856f95`. Không wrapper/worker, chỉ daemon. Luật29/10 đọc tại `c9a1c09`, không sửa quy trình/source.
+- Tái sử dụng full test/build Ni S6 đã đối chiếu 14 hashes/manifest và cộng XML: mỗi Debug/Release 178 suites,2261 total =2240 passed/21 skipped/0 failures/0 errors,exit0; không chạy lại vì source không đổi.
+- Bundle 13089657 bytes,SHA256 hai đầu `8016797C18E0C93A9D9F797DE388E74C7D4E776CA723BCD57ECB0431E6F98DD9`; clone mới `C:\Bots\MeloVault-S7-IsolatedQA-20261029_170707`. Chỉ copy config tại Tiny theo ngoại lệ đã cấp; không đọc/in/hash/mang raw secrets về Ni.
+- Tiny build17:11:07–17:17:09 +07,exit0,BUILD SUCCESSFUL in5m42s; package `app.melovault.player`,vc121,`0.6.96-beta`,config=true,cả hai cert `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8`,source/tree đúng và sạch. Script đầu lỗi mã hóa/stderr trước Gradle; giữ log riêng, chỉ v3 là build thực.
+- Debug33560516 bytes,SHA256 `EB65BBFEDC851188ADAD28A36F374AC6B09878820060CEA0680F16D44146B133`; Release30769518 bytes,SHA256 `51DC50E4787CF127A439F479BA33BF953D6CCDEBF49E53FA942131FAB13BD300`. Ni copy cùng hash; đường dẫn/gates ở [APK-index](2026-10-29-melo-ui-ux-ke-hoach-apk-test.md).
+- Sony Tiny `QV725WEQ54`/XQ-AS52/Sony; installedvc121,cert khớp,media state0 trước cài. Chỉ install-r Debug đã kiểm,Success; Release chưa cài. Mở app không tự phát. Shanling: ADB Ni trống, **BLOCKED QA6**, không dùng Sony thay thế.
+- Drive Ni N nhận Debug,folder/file chỉowner `nigamehome@gmail.com`,shared=false,size khớp; kiểm tải HTTP403 `cannotDownloadAbusiveFile` (malware/spam) → **BLOCKED — CHƯA BÀN GIAO QUA DRIVE**. Không né cảnh báo/public/upload Release làm đường vòng. URL lưu trữ và lỗi ở APK-index.
+- Đã quan sát mixset3:21:07 paused; +60 từ60199→120404ms,−30→90404ms,giữ identity/state2. Kéo tua lượt xác minh lại→3029030ms,state2; queue preview hiện tối đa12/54,dock giữ ở đáy. Một lượt ADB reconnect,không dùng làm bằng chứng tua; xác minh lại serial/model/device,finally OFF.
+- **Lỗi mới QA5:** Next đổi identity và phát(state3); sau≈42s,queue/nút pause đúng đang phát nhưng feedback Deck vẫn “Tạm dừng” (`16a_sony_next_settled_1730.png`,media digest/timestamp private). Đã pause lại,state2. Không sửa code trong S7; cần chủ dự án giao phạm vi sửa và test nhãn theo player thực.
+- Lượt menu theo tọa độ trong scan đổi hàng không chứng minh save; có chạm phát ngoài dự kiến,đã pause và loại bằng chứng đó. QA3 thật dùng target XML mới ở17–19: Playlist2→3→2,có★; media cùng identity/state2/54544ms khi lưu/bỏ lưu. Membership đã trả ban đầu; chưa kiểm đủ star mọi surface/keyboard/TalkBack.
+- QA4 ảnh20–21 có Đang đệm/Đang tải→row Đang phát khi chọn bài chưa tải đủ thật. Không tạo flood/xóa tệp/thay mạng. FLOOD_WAIT_3/error/invalid file và font/layout matrix dùng JVM S6,không thay QA thật.
+- **Lỗi mới QA2:** query thực “mĩ” (IME từ phím mix),scope giữ; Deck→Back22→23 giữ digest dòng `7EE449…F9DF`,bounds[42,725][965,857]. Cả3 chu kỳ xoay sau đó mất anchor ngay lần1: digest `78BF51…9D72`,bounds[42,1164][965,1353],về đầu list. Media vẫn cùng identity/state2/65943ms. `qa2-anchor-comparison.json` có full hashes; không sửa S7.
+- Hai màu Current/Teal đã quan sát trên Sony dọc/ngang. Sony Teal Nguồn→kênh khác→query2026 có159 kết quả trong kênh,player trái giữ identity/state2/65943ms (29–31). Đây là bổ sung trên điện thoại,không thay tablet.
+- Artifact S7: `docs/plans/artifacts/2026-10-29-melo-ui-ux-ke-hoach/S7-20261029_170707/`; Tiny `C:\Bots\_qa_temp\MeloVault-S7-20261029_170707`. Ảnh/log/XML private,không commit. [Ảnh-index](2026-10-29-melo-ui-ux-ke-hoach-hinh-nghiem-thu.md). Chưa tự sơ bộ/PASS/merge/push/P2.
+
+| QA | Phần đã kiểm kỹ thuật | Còn thiếu / kết quả |
+|---|---|---|
+| QA1 | Sony ngang hai màu,player giữ khi mở nguồn/kênh/tìm | BLOCKED tablet thật |
+| QA2 | Query/scope,Deck→Back,3 chu kỳ xoay; media không tự play/seek | LỖI mất anchor khi xoay; process recreation chưa thử |
+| QA3 | Lưu qua ⋮,★ trong Playlist,bỏ lưu,không phát/seek | Star mọi surface/keyboard/TalkBack chưa đủ |
+| QA4 | Buffer/download thật,bài chưa tải đủ; fake JVM S6 | FLOOD/error/tệp invalid thật chưa thử |
+| QA5 | Mixset>2h,paused,Next,±seek/seekbar,preview queue,dock | LỖI feedback paused khi playing; Đảo BLOCKED; full queue/chữ lớn/IME chưa đủ |
+| QA6 | Compact/Car unit S6 | BLOCKED Shanling ADB trống; không FYT |
+
+- Ảnh bàn giao:8 ảnh che nội dung + [00_tong_hop.png](https://drive.google.com/file/d/1stAVkxFoZUTUDVOi4VPKyi9qkNrGYW6q/view?usp=drivesdk),1280×1580,SHA256 `F9561AB73078F5A9D12136C0070FF1D9703B9C27E9314339D5D3481D361F0107`. Folder/file Ni N owner-only,shared=false,9 sizes khớp; summary fetch thành công. Bản cuối local `S7-20261029_170707/redacted-v2/00_tong_hop.png`; bản nháp đầu giữ private,không upload,không ghi đè. Vùng che có thể che cả status trong dòng; ảnh gốc/media private để kiểm chi tiết.
+- Cuối QA đã trả màu Hiện tại,xóa query thử,xoay free,mật độ420,font1.0; media state2/65943ms. Installed APK kéo lại có SHA khớp Debug. Crash buffer PID14776 từ17:18:exit0,0 dòng/0 fatal-ANR match; không suy thành kiểm ANR toàn hệ thống/soak.
+- **SONY_SCREEN_END=OFF lúc17:47:44 +07**,finally OFF sau từng nhóm UI. **SHANLING_SCREEN_END=UNKNOWN** (không kết nối/không thao tác). Audio thật CHƯA XÁC NHẬN; offline mất mạng,tablet/Y700/S25/FYT thật,font1.3/1.5/2 thực CHƯA KIỂM CHỨNG. QA thay bài/nghe tiếp và bắt đầu tải bài; không xóa cache/data.
+- S7 chỉ hoàn thành build/gates/QA và hồ sơ trong điều kiện có được; **không kết luận toàn bộ S6/P1 hoàn tất**. Trước sửa order Đảo cần bổ sung kế hoạch authority chung cho queue/Next/transport,logical queue/Media3 window/local,quyền sửa service và test. Hai lỗi UI cần chủ dự án giao phạm vi sửa/test riêng sau sơ bộ; không tự mở REWORK.
+- Bàn giao prompt sơ bộ ở mục S7 của [bàn giao](2026-10-29-melo-ui-ux-ke-hoach-ban-giao.md). Chưa nghiệm thu chính thức; commit hồ sơ rồi dừng,không merge/push.
+- Tiếp tục22:37 +07 theo chủ dự án: Git/source và4 hồ sơ staged đúng mốc cũ; SHA hai APK/summary v2 còn khớp,không build/test/QA lại. Commit trước chưa tạo vì thiếu identity; dùng danh tính Codex/codex@openai.com như lịch sử qua `git -c` riêng lệnh commit,không sửa config global. Mốc màn/Drive17h giữ nguyên,không tuyên bố đã kiểm mới22h.
 
 ## Phiên tiếp tục S2–S6
 
