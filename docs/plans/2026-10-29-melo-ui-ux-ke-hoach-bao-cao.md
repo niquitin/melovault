@@ -9,7 +9,17 @@ Trạng thái chính thức: **CHỜ CHỦ DỰ ÁN NGHIỆM THU**. Đây là ch
 
 - Chủ dự án xác nhận S0–S1 đã làm xong, giao liên tục S2–S6 trong cùng vai THỰC THI; không coi là nghiệm thu chính thức.
 - Đầu phiên 11:19 +07: HEAD S1 `fb896d4c537d007c633d9008f3a95ee521d9784f`, cây sạch, nhánh/worktree và diff-check đúng; không có build/test worker đang chạy, chỉ daemon thường trú.
-- S2 xong code/test mục tiêu; tiếp tục S3–S6 theo chỉ thị liên tục. S6 full unit + assemble. Không làm S7/P2/cài thiết bị hoặc sơ bộ.
+- S2 commit `e18979fa5dd37b2f889348991e8442d5f60f56fb`; S3 xong code/test mục tiêu; tiếp tục S4–S6 theo chỉ thị liên tục. S6 full unit + assemble. Không làm S7/P2/cài thiết bị hoặc sơ bộ.
+
+### S3 — nguồn bên phải, player giữ bên trái
+
+- `MeloTabletScreen`: ngừng mount nav/quickPane trái và gọi renderQuickSwitch/updateMini; full player luôn ở leftSlot, giữ tỷ lệ 40/60/ngưỡng layout. Màu thường giữ Cài đặt/Mở Đang phát ở heading phải; thường và Teal cùng bốn tab tại vùng thư viện.
+- `MeloLibraryPane`: Hai khung dùng ListView + adapter tái sử dụng dòng nguồn, không tạo một View cho mỗi kênh. Nguồn count>0, nhóm count=0 thu gọn, count âm ghi chưa rõ; chọn nguồn ghi ✓/Đang duyệt theo chatId, độc lập playingKey. Portrait giữ renderer grid hiện có.
+- `MeloLibraryPolicy`/test và `MeloBrowseUiPolicyTest`: scope toàn cục chuẩn, selection khác scope kênh/Tin đã lưu, count unknown và load/empty/error. Host/Activity thêm route `openBrowseScope` nguyên tử, `filterInSource` riêng trong kênh, Back Sources về context cũ; chọn lại scope hiện hành không chạy load thứ hai. Không gọi player trong route chỉ duyệt.
+- Bridge S2 (`MeloBrowseState`, Host, Activity) bổ sung anchor chatId + offset cho danh sách nguồn ảo hóa; Bundle vẫn chỉ scalar/owner-verified. Yêu cầu Phát ngẫu nhiên còn chờ được gắn owner/scope/generation, bị hủy khi chuyển scope; không biến thao tác duyệt thành phát bài khác.
+- Test cuối `S3-checkpoint-20261029_113957`: Debug **130 passed/0 skipped/0 failed/0 errors**, Release cùng kết quả; 6 suites/biến thể, exit 0, BUILD SUCCESSFUL in 7s; XML fresh, source.json khớp. Log/result/XML tại thư mục artifacts cùng tên. Lượt trung gian `S3-20261029_113833` 129 tests/biến thể vẫn giữ, không thay nguồn cuối.
+- Bộ mục tiêu: MeloLibraryPolicyTest, MeloBrowseUiPolicyTest, MeloBrowseStateTest, MeloScreenPolicyTest, MeloSourceCardPolicyTest, MeloBottomBarPolicyTest; hai task Debug/Release cùng `--tests`, `--console=plain`. `git diff --check` đạt.
+- Chưa QA1/QA2 hoặc xác minh font/layout trên máy; chỉ xác minh code/test theo giới hạn cấm thiết bị của phiên. Source S3 là commit chứa mục này, tra log theo MeloTabletScreen.kt; tiếp theo S4 đã được giao.
 
 ### S2 — giữ ngữ cảnh duyệt
 

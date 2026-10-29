@@ -109,7 +109,8 @@ internal class MeloTabletScreen(
     private val backCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
             val snap = snapshot
-            if (snap != null && snap.local) host.closeLocal()
+            if (snap?.showingSources == true) host.closeSources()
+            else if (snap != null && snap.local) host.closeLocal()
             else if (snap != null && !snap.showingSources && snap.sourceTitle != null) host.showSources()
             else { isEnabled = false; backDispatcher.onBackPressed() }
         }
@@ -119,16 +120,19 @@ internal class MeloTabletScreen(
         if (teal) {
             view.background = c.gradient(p.background, p.backgroundEnd, 0)
             view.setPadding(s.screenMargin, s.gap, s.screenMargin, s.gap)
-        } else {
-            buildNav()
-            view.addView(navColumn, LinearLayout.LayoutParams(s.minTouch * 80 / 48, ViewGroup.LayoutParams.MATCH_PARENT))
         }
         playerPane = if (teal) buildThemedPlayerPane() else buildPlayerPane()
         leftSlot.addView(playerPane, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        leftSlot.addView(buildQuickPane(), FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         view.addView(leftSlot, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 40f).apply { marginEnd = s.screenMargin })
         val right = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        right.addView(if (teal) syncRow.view else syncLine, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+        val heading = if (teal) syncRow.view else LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(syncLine, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(c.iconButton("⤢", "Mở Đang phát") { host.openNowPlaying() })
+            addView(c.iconButton("⚙", "Cài đặt") { host.openUiLab() })
+        }
+        right.addView(heading, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = s.gap
         })
         right.addView(pane.view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -171,7 +175,7 @@ internal class MeloTabletScreen(
 
     private fun onNav(item: NavItem) {
         when (item) {
-            NavItem.LIBRARY -> { host.openSource(null); host.setMode(Mode.ALL) }
+            NavItem.LIBRARY -> host.openBrowseScope(MeloLibraryPolicy.tabScope(MeloLibraryPolicy.TabKind.ALL))
             NavItem.TELEGRAM -> host.showSources()
             NavItem.PLAYLIST -> host.setMode(Mode.PLAYLIST)
             NavItem.NOW -> host.openNowPlaying()
@@ -624,9 +628,9 @@ internal class MeloTabletScreen(
                 syncLine.isClickable = false
             }
         }
-        backCallback.isEnabled = !snap.showingSources && snap.sourceTitle != null
-        if (!teal) renderNav(snap)
-        renderQuickSwitch(snap)
+        backCallback.isEnabled = snap.showingSources || snap.local || snap.sourceTitle != null
+        // Sources and songs share the right pane. The full player is never replaced by quickPane.
+        playerPane.visibility = View.VISIBLE
         pane.onLibraryChanged()
     }
 
@@ -693,7 +697,6 @@ internal class MeloTabletScreen(
             showArt(now.art, now.sourceTitle, now.title)
         }
         if (relayout && ::playerScroll.isInitialized) requestArtFit()
-        updateMini(now)
         pane.onPlaybackChanged(now?.songKey, now?.paused == true)
     }
 }

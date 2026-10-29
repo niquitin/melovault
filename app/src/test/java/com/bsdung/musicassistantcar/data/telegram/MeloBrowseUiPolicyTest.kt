@@ -8,6 +8,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MeloBrowseUiPolicyTest {
+    @Test fun sourceListLoadingEmptyAndFailureKeepTheirOwnScope() {
+        val scope = Scope(Kind.SOURCES)
+        assertEquals("Đang tải danh sách…", present(scope, LoadState.INITIAL_LOADING).message)
+        assertEquals("Chưa có nguồn Telegram", present(scope).message)
+        assertEquals("Không tìm thấy nguồn Telegram", present(scope, query = "a").message)
+        assertTrue(present(scope, LoadState.ERROR, rows = 2).retry)
+    }
     private fun present(scope: Scope, state: LoadState = LoadState.READY, rows: Int = 0, query: String = "") =
         MeloBrowseUiPolicy.present(scope, "Nhạc Việt", state, rows, query)
 

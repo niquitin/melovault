@@ -7,7 +7,8 @@ internal class MeloBrowseState(private val capacity: Int = 16) {
     }
     data class Context(
         val query: String = "", val sort: SongSort = SongSort.NEWEST, val letterFloor: String? = null,
-        val anchorSongKey: Long? = null, val offsetPx: Int = 0, val sourceScrollY: Int = 0
+        val anchorSongKey: Long? = null, val offsetPx: Int = 0, val sourceScrollY: Int = 0,
+        val sourceAnchorChatId: Long? = null, val sourceOffsetPx: Int = 0
     )
     enum class DeckTab { QUEUE }
     data class Deck(val tab: DeckTab = DeckTab.QUEUE, val songKey: Long? = null,
@@ -51,7 +52,7 @@ internal class MeloBrowseState(private val capacity: Int = 16) {
     fun query(key: Key, query: String) {
         val old = contexts[key] ?: Context()
         if (query != old.query) put(key, old.copy(query = query, letterFloor = null,
-            anchorSongKey = null, offsetPx = 0, sourceScrollY = 0))
+            anchorSongKey = null, offsetPx = 0, sourceScrollY = 0, sourceAnchorChatId = null, sourceOffsetPx = 0))
     }
     fun sort(key: Key, sort: SongSort, floor: String? = null) {
         val old = contexts[key] ?: Context()
@@ -67,6 +68,9 @@ internal class MeloBrowseState(private val capacity: Int = 16) {
     }
     fun pending(key: Key, generation: Long): Pending? = contexts[key]?.takeIf { it.anchorSongKey != null }
         ?.let { Pending(key, generation, it) }
+    fun sourcePosition(key: Key, chatId: Long?, offsetPx: Int) {
+        contexts[key]?.let { put(key, it.copy(sourceAnchorChatId = chatId, sourceOffsetPx = offsetPx)) }
+    }
 
     fun save(): Saved? {
         val key = active ?: return null

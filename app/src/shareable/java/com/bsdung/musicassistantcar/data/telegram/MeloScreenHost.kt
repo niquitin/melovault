@@ -14,6 +14,10 @@ internal interface MeloScreenHost {
     fun setMode(mode: Mode)
     fun showSources()
     fun openSource(chatId: Long?)
+    fun openBrowseScope(scope: MeloBrowseUiPolicy.Scope) = Unit
+    fun filterInSource(mode: Mode) = setMode(mode)
+    fun closeSources() = openSource(null)
+    fun selectedBrowseSource(): Long? = null
 
     /** "Nhạc trên máy": opens the device music list; asks for audio access only here (the owner tapped it). */
     fun openLocal()
@@ -63,6 +67,7 @@ internal interface MeloScreenHost {
     fun setBrowseCapture(listener: (() -> Unit)?) = Unit
     fun browseContext(): MeloBrowseState.Context? = null
     fun saveBrowsePosition(generation: Long, songKey: Long?, offsetPx: Int, sourceScrollY: Int) = Unit
+    fun saveSourcePosition(generation: Long, chatId: Long?, offsetPx: Int) = Unit
     fun deckState(): MeloBrowseState.Deck = MeloBrowseState.Deck()
     fun saveDeckState(state: MeloBrowseState.Deck) = Unit
 

@@ -89,6 +89,15 @@ internal class MeloLibraryPane(
     private val adapter = RowsAdapter()
     private val sourcesScroll = ScrollView(context)
     private val sourcesBox = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+    private val sourceList = ListView(context)
+    private sealed class SourceItem {
+        object Header : SourceItem()
+        data class Channel(val row: SourceRow) : SourceItem()
+        data class EmptyToggle(val count: Int) : SourceItem()
+    }
+    private data class SourceHolder(val root: LinearLayout, val title: TextView, val detail: TextView)
+    private var sourceItems: List<SourceItem> = emptyList()
+    private val sourceAdapter = SourceAdapter()
     // E98: the filter button does something only on the teal theme; the current theme keeps its inert button.
     private val searchHandle = c.searchBarWithField(null, onQuery = ::queueQuery, onFilter = if (c.teal) ::openFilterDialog else null)
     private val searchBar = searchHandle.view
@@ -105,7 +114,7 @@ internal class MeloLibraryPane(
     private var pendingQuery: Runnable? = null
     private var collapsed = false
     private var lastScrollKey = 0
-    private var playAllWhenLoaded = false
+    private var playAllWhenLoaded: MeloBrowseUiPolicy.Request? = null
     private var groupKey: String? = null
     private var emptyExpanded = false
     private var pendingTopReset = false
@@ -219,7 +228,21 @@ internal class MeloLibraryPane(
         listContent.addView(listStatus)
         listContent.addView(listFrame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         view.addView(listContent, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        view.addView(sourcesScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        if (layer == NewLayer.TWO_PANE) {
+            sourceList.adapter = sourceAdapter
+            sourceList.divider = null
+            sourceList.visibility = View.GONE
+            sourceList.setOnScrollListener(object : AbsListView.OnScrollListener {
+                override fun onScrollStateChanged(v: AbsListView?, state: Int) = Unit
+                override fun onScroll(v: AbsListView?, first: Int, visible: Int, total: Int) {
+                    val snap = snapshot ?: return
+                    if (snap.showingSources && !restoringSourceScroll && snap.browseLoadState == MeloBrowseUiPolicy.LoadState.READY) {
+                        host.saveSourcePosition(snap.browseGeneration, sourceItemId(first), sourceList.getChildAt(0)?.top ?: 0)
+                    }
+                }
+            })
+            view.addView(sourceList, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        } else view.addView(sourcesScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
     }
 
     fun detach() {
@@ -240,7 +263,9 @@ internal class MeloLibraryPane(
         val key = groupKey ?: return
         if (snap.browseLoadState != MeloBrowseUiPolicy.LoadState.READY) return
         if (snap.showingSources) {
-            host.saveBrowsePosition(snap.browseGeneration, null, 0, sourcesScroll.scrollY)
+            if (layer == NewLayer.TWO_PANE) {
+                host.saveSourcePosition(snap.browseGeneration, sourceItemId(sourceList.firstVisiblePosition), sourceList.getChildAt(0)?.top ?: 0)
+            } else host.saveBrowsePosition(snap.browseGeneration, null, 0, sourcesScroll.scrollY)
             return
         }
         if (restoringAnchor != null || restoringSongScroll || snap.rows.isEmpty() || listFrame.visibility != View.VISIBLE) return
@@ -276,6 +301,8 @@ internal class MeloLibraryPane(
     fun onLibraryChanged() {
         val snap = host.snapshot()
         snapshot = snap
+        val pendingPlay = playAllWhenLoaded?.let { MeloLibraryPolicy.pendingBrowsePlay(it, snap) }
+        if (pendingPlay == MeloLibraryPolicy.BrowsePlayDecision.CANCEL) playAllWhenLoaded = null
         val browseKey = snap.browseOwnerId.takeIf { it > 0L }?.let { MeloBrowseState.Key(it, snap.browseScope) }
         val key = "${snap.browseOwnerId}|${snap.browseScope}|${snap.query}|${snap.sort}|${snap.letterFloor}"
         val contextChanged = key != groupKey
@@ -318,14 +345,19 @@ internal class MeloLibraryPane(
             sortChip.visibility = View.GONE
             note.visibility = View.GONE
             listContent.visibility = View.GONE
-            sourcesScroll.visibility = View.VISIBLE
-            val sourceY = host.browseContext()?.sourceScrollY ?: 0
-            restoringSourceScroll = true
-            renderSources(snap)
-            sourcesScroll.post {
-                if (groupKey == key && snapshot?.browseGeneration == snap.browseGeneration) {
-                    sourcesScroll.scrollTo(0, sourceY)
-                    restoringSourceScroll = false
+            sourcesScroll.visibility = if (layer == NewLayer.TWO_PANE) View.GONE else View.VISIBLE
+            sourceList.visibility = if (layer == NewLayer.TWO_PANE) View.VISIBLE else View.GONE
+            if (layer == NewLayer.TWO_PANE) {
+                renderVirtualSources(snap)
+            } else {
+                val sourceY = host.browseContext()?.sourceScrollY ?: 0
+                restoringSourceScroll = true
+                renderSources(snap)
+                sourcesScroll.post {
+                    if (groupKey == key && snapshot?.browseGeneration == snap.browseGeneration) {
+                        sourcesScroll.scrollTo(0, sourceY)
+                        restoringSourceScroll = false
+                    }
                 }
             }
         } else {
@@ -337,6 +369,7 @@ internal class MeloLibraryPane(
             note.text = detailNote.orEmpty()
             note.visibility = if (detailNote.isNullOrBlank()) View.GONE else View.VISIBLE
             sourcesScroll.visibility = View.GONE
+            sourceList.visibility = View.GONE
             listContent.visibility = View.VISIBLE
             listFrame.visibility = if (snap.rows.isEmpty()) View.GONE else View.VISIBLE
             // E98: on the teal theme the sort lives in the filter panel, so the chip goes.
@@ -382,8 +415,8 @@ internal class MeloLibraryPane(
                     }
                 }
             }
-            if (playAllWhenLoaded && snap.rows.isNotEmpty()) {
-                playAllWhenLoaded = false
+            if (pendingPlay == MeloLibraryPolicy.BrowsePlayDecision.PLAY) {
+                playAllWhenLoaded = null
                 host.playAll(true)
             }
         }
@@ -461,7 +494,7 @@ internal class MeloLibraryPane(
         val density = context.resources.displayMetrics.density
         val widthDp = (view.width / density).toInt()
         val total = host.sourceSummaries().firstOrNull { it.kind == MeloSourceCardPolicy.Kind.TELEGRAM }?.total
-        val tabs = MeloLibraryPolicy.themeTabs(total, widthDp, snap.mode, snap.showingSources)
+        val tabs = MeloLibraryPolicy.themeTabs(total, widthDp, snap.mode, snap.showingSources, snap.browseScope)
         val narrow = widthDp in 1 until MeloLibraryPolicy.NARROW_TABS_DP
         val key = tabs.joinToString("|") { "${it.label}:${it.selected}" } + "#$narrow"
         if (key == chipKey) return
@@ -484,12 +517,7 @@ internal class MeloLibraryPane(
     }
 
     private fun onThemeTab(kind: MeloLibraryPolicy.TabKind) {
-        when (kind) {
-            MeloLibraryPolicy.TabKind.ALL -> host.openSource(null)
-            MeloLibraryPolicy.TabKind.DOWNLOADED -> host.setMode(Mode.DOWNLOADED)
-            MeloLibraryPolicy.TabKind.PLAYLIST -> host.setMode(Mode.PLAYLIST)
-            MeloLibraryPolicy.TabKind.SOURCES -> host.showSources()
-        }
+        host.openBrowseScope(MeloLibraryPolicy.tabScope(kind))
     }
 
     private fun clearSearch() = applyGenre(null)
@@ -557,27 +585,37 @@ internal class MeloLibraryPane(
             renderThemeTabs(snap)
             return
         }
-        // Telegram's Tất cả / Đã tải / Playlist chips (and its counts) mean nothing on the device list.
-        if (snap.showingSources || snap.local) {
+        if (snap.local) {
             chipHolder.visibility = View.GONE
             return
         }
         chipHolder.visibility = View.VISIBLE
-        val downloaded = host.downloadedCount()
-        val chips = MeloLibraryPolicy.chips(downloaded)
-        val selected = MeloLibraryPolicy.selectedChip(snap.mode, snap.query, downloaded)
-        val key = chips.joinToString("|") { it.label } + "#" + selected
+        val tabs = MeloLibraryPolicy.themeTabs(null, 1, snap.mode, snap.showingSources, snap.browseScope)
+        val key = "${snap.browseScope}|${snap.query}"
         if (key == chipKey) return
         chipKey = key
         chipHolder.removeAllViews()
-        val strip = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-        chips.forEachIndexed { i, chip ->
-            strip.addView(c.chip(chip.label, i == selected) { onChip(chip) })
-        }
-        chipHolder.addView(HorizontalScrollView(context).apply {
+        val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        fun strip(build: LinearLayout.() -> Unit) = HorizontalScrollView(context).apply {
             isHorizontalScrollBarEnabled = false
-            addView(strip)
+            addView(LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; build() })
+        }
+        column.addView(strip {
+            tabs.forEach { tab ->
+                addView(c.chip(if (tab.kind == MeloLibraryPolicy.TabKind.ALL) "Thư viện" else tab.label,
+                    tab.selected) { onThemeTab(tab.kind) })
+            }
         })
+        if (!snap.showingSources) column.addView(strip {
+            if (snap.browseScope.chatId != null) {
+                addView(c.chip("Tất cả trong kênh", snap.mode == Mode.ALL) { host.filterInSource(Mode.ALL) })
+                addView(c.chip("Đã tải trong kênh", snap.mode == Mode.DOWNLOADED) { host.filterInSource(Mode.DOWNLOADED) })
+            }
+            MeloLibraryPolicy.GenreChip.entries.forEach { genre ->
+                addView(c.chip(genre.label, MeloLibraryPolicy.activeGenre(snap.query) == genre) { applyGenre(genre) })
+            }
+        })
+        chipHolder.addView(column)
     }
 
     // ---- Source cards -------------------------------------------------------------------------
@@ -627,7 +665,7 @@ internal class MeloLibraryPane(
 
     private fun onChip(chip: MeloLibraryPolicy.Chip) {
         val query = MeloLibraryPolicy.queryFor(chip)
-        if (chip.mode != null) { host.setMode(chip.mode); return }
+        if (chip.mode != null) { host.filterInSource(chip.mode); return }
         lastQuery = query
         if (searchField.text.toString() != query) searchField.setText(query)
         host.setQuery(query)
@@ -717,6 +755,100 @@ internal class MeloLibraryPane(
 
     // ---- Telegram sources ---------------------------------------------------------------------
 
+    private fun sourceItemId(index: Int): Long? = when (val item = sourceItems.getOrNull(index)) {
+        is SourceItem.Channel -> item.row.chatId
+        is SourceItem.EmptyToggle -> 0L
+        else -> null
+    }
+
+    /** Two-pane sources are recycled rows, rather than one View per channel. */
+    private fun renderVirtualSources(snap: Snapshot) {
+        val saved = host.browseContext()
+        restoringSourceScroll = true
+        val positive = MeloLibraryPolicy.quickSwitchRows(snap.sources)
+        val zeros = snap.sources.filter { it.chatId != 0L && it.count == 0 }
+        sourceItems = buildList {
+            add(SourceItem.Header)
+            positive.forEach { add(SourceItem.Channel(it)) }
+            if (zeros.isNotEmpty()) {
+                add(SourceItem.EmptyToggle(zeros.size))
+                if (emptyExpanded) zeros.forEach { add(SourceItem.Channel(it)) }
+            }
+        }
+        sourceAdapter.notifyDataSetChanged()
+        val index = sourceItems.indices.firstOrNull { sourceItemId(it) == saved?.sourceAnchorChatId } ?: 0
+        sourceList.post {
+            if (snapshot?.browseGeneration == snap.browseGeneration && snapshot?.showingSources == true) {
+                sourceList.setSelectionFromTop(index, saved?.sourceOffsetPx ?: 0)
+                restoringSourceScroll = false
+            }
+        }
+    }
+
+    private inner class SourceAdapter : BaseAdapter() {
+        override fun getCount() = sourceItems.size
+        override fun getItem(position: Int): Any = sourceItems[position]
+        override fun getItemId(position: Int) = position.toLong()
+        override fun getViewTypeCount() = 3
+        override fun getItemViewType(position: Int) = when (sourceItems[position]) {
+            SourceItem.Header -> 0
+            is SourceItem.Channel -> 1
+            is SourceItem.EmptyToggle -> 2
+        }
+        override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
+            return when (val item = sourceItems[position]) {
+                SourceItem.Header -> buildSourceHeader(snapshot ?: return View(context))
+                is SourceItem.EmptyToggle -> c.text(MeloLibraryPolicy.emptySourcesLabel(item.count, emptyExpanded).orEmpty(),
+                    s.titleText, p.text, bold = true, maxLines = 2).apply {
+                    minimumHeight = s.minTouch
+                    gravity = Gravity.CENTER_VERTICAL
+                    setOnClickListener { emptyExpanded = !emptyExpanded; snapshot?.let(::renderVirtualSources) }
+                }
+                is SourceItem.Channel -> {
+                    val holder = convertView?.tag as? SourceHolder ?: run {
+                        val title = c.text("", s.titleText, p.text, maxLines = 2)
+                        val detail = c.text("", s.secondaryText, p.textSecondary, maxLines = 2)
+                        val root = LinearLayout(context).apply {
+                            orientation = LinearLayout.VERTICAL
+                            minimumHeight = s.minTouch
+                            gravity = Gravity.CENTER_VERTICAL
+                            setPadding(s.gap * 2, s.gap, s.gap * 2, s.gap)
+                            addView(title); addView(detail)
+                        }
+                        SourceHolder(root, title, detail).also { root.tag = it }
+                    }
+                    val facts = MeloLibraryPolicy.sourcePresentation(item.row, host.selectedBrowseSource())
+                    holder.title.text = (if (facts.selected) "✓ " else "") + item.row.title
+                    holder.detail.text = facts.detail
+                    holder.root.isSelected = facts.selected
+                    holder.root.background = c.roundedBackground(if (facts.selected) p.accentSoft else p.surface)
+                    holder.root.contentDescription = item.row.title + ", " + facts.detail
+                    holder.root.setOnClickListener { host.openSource(item.row.chatId) }
+                    holder.root
+                }
+            }
+        }
+    }
+
+    private fun buildSourceHeader(snap: Snapshot): View = LinearLayout(context).apply {
+        orientation = LinearLayout.VERTICAL
+        val presentation = MeloBrowseUiPolicy.present(snap.browseScope, snap.sourceTitle, snap.browseLoadState,
+            snap.sources.count { it.chatId != 0L }, snap.query)
+        presentation.message?.let { addView(c.text(it, s.secondaryText, p.textSecondary, maxLines = 4)) }
+        if (presentation.retry) addView(c.chip("Thử lại", false) { host.retryBrowse() })
+        if (snap.sources.any { it.count < 0 }) addView(c.text("Đang cập nhật số bài của nguồn…", s.secondaryText, p.textSecondary))
+        addView(heroCard(snap.sources.firstOrNull { it.chatId == 0L }?.count ?: snap.total))
+        addView(HorizontalScrollView(context).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(c.chip("‹ Thư viện", false) { host.closeSources() })
+                addView(c.chip(if (host.hideZeroSources()) "Hiện kênh 0 bài" else "Ẩn kênh 0 bài", host.hideZeroSources()) { host.toggleHideZeroSources() })
+                addView(c.chip("Quét lại", false) { host.rescan() })
+            })
+        })
+    }
+
     private fun renderSources(snap: Snapshot) {
         sourcesBox.removeAllViews()
         val presentation = MeloBrowseUiPolicy.present(snap.browseScope, snap.sourceTitle, snap.browseLoadState,
@@ -796,16 +928,19 @@ internal class MeloLibraryPane(
         addView(c.text("Kho tổng hợp", s.titleText, p.text, bold = true))
         val downloaded = host.downloadedCount()
         val detail = listOfNotNull(
-            total?.let { "${MeloComponentPolicy.formatCount(it)} bài" },
+            total?.takeIf { it >= 0 }?.let { "${MeloComponentPolicy.formatCount(it)} bài" },
             downloaded?.let { "${MeloComponentPolicy.formatCount(it)} đã tải" }
         ).joinToString(" · ")
         if (detail.isNotEmpty()) addView(c.text(detail, s.secondaryText, p.textSecondary).apply { setPadding(0, s.gap / 2, 0, s.gap) })
         val buttons = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
-        buttons.addView(c.chip("Mở tất cả", false) { host.openSource(null) })
+        buttons.addView(c.chip("Mở tất cả", false) { host.openBrowseScope(MeloLibraryPolicy.tabScope(MeloLibraryPolicy.TabKind.ALL)) })
         buttons.addView(c.chip("⇄ Phát ngẫu nhiên", true) {
-            playAllWhenLoaded = true
-            host.openSource(null)
-            host.setMode(Mode.ALL)
+            host.openBrowseScope(MeloLibraryPolicy.tabScope(MeloLibraryPolicy.TabKind.ALL))
+            val target = host.snapshot()
+            playAllWhenLoaded = target.browseOwnerId.takeIf { it > 0L }?.let {
+                MeloBrowseUiPolicy.Request(it, target.browseGeneration, target.browseScope)
+            }
+            onLibraryChanged()
         })
         addView(buttons)
     }
