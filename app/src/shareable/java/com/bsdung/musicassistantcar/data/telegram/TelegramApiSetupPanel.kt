@@ -82,6 +82,15 @@ internal class TelegramApiSetupPanel(
             }
         }
     }
+    // 2026-10-30 D9: only visible when opened from the "advanced" link; closing saves nothing.
+    private val back = Button(context).apply {
+        text = "Quay lại"
+        isAllCaps = false
+        setTextColor(colors.text)
+        background = rounded()
+        minHeight = dp(MeloDesignTokens.MIN_TOUCH_DP)
+        visibility = View.GONE
+    }
     init {
         root.addView(TextView(context).apply {
             text = "Kết nối Telegram của bạn"
@@ -94,7 +103,7 @@ internal class TelegramApiSetupPanel(
             textSize = 13f
             setTextColor(colors.subtle)
         })
-        listOf(id, idError, hash, hashError, saveError, save, browser).forEach {
+        listOf(id, idError, hash, hashError, saveError, save, browser, back).forEach {
             root.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(MeloDesignTokens.GAP_DP) })
         }
     }
@@ -111,4 +120,15 @@ internal class TelegramApiSetupPanel(
         browser.isEnabled = !value
     }
     fun clearInput() { id.text.clear(); hash.text.clear() }
+
+    /** 2026-10-30 D9: [action] null hides the button; non-null shows it and replaces its tap handler. */
+    fun setBackAction(action: (() -> Unit)?) {
+        if (action == null) {
+            back.visibility = View.GONE
+            back.setOnClickListener(null)
+        } else {
+            back.visibility = View.VISIBLE
+            back.setOnClickListener { action() }
+        }
+    }
 }

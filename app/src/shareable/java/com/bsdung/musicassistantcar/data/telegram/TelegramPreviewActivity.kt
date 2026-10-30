@@ -146,6 +146,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private lateinit var loginPanel: TelegramLoginPanel
     private lateinit var apiSetupPanel: TelegramApiSetupPanel
     private lateinit var reenterApi: Button
+    // 2026-10-30 D7/D9: "Dùng mã API của tôi" (shown after an embedded-pair rejection) and
+    // "Dùng mã API riêng (nâng cao)" (always offered at the phone step on the open build).
+    // Both just toggle to apiSetupPanel; neither touches apiStore or TDLib.
+    private lateinit var useOwnApi: Button
+    private lateinit var useOwnApiLink: Button
     @Volatile private var apiCredentials: TelegramApiCredentialPolicy.Credentials? = null
     private val apiStore by lazy { TelegramApiCredentialStore(applicationContext) }
     private var apiOperationPending = false
@@ -159,6 +164,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var loginEditingPhone = false
     private var loginMaskedPhone: String? = null
     private var loginPasswordHint: String? = null
+    // 2026-10-30 D10: code_info.type.@type from authorizationStateWaitCode, for codeSentText.
+    private var loginCodeType: String? = null
     private var loginResendUntilMs = 0L
     private var loginResendAllowed = true
     private lateinit var nowPlayingTitle: TextView
@@ -1138,16 +1145,21 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun loadApiCredentials() {
         if (apiRestartRequired) { showApiRestartMessage(); return }
-        val embedded = TelegramApiCredentialPolicy.resolve(
-            BuildConfig.TELEGRAM_APP_API_ID, BuildConfig.TELEGRAM_APP_API_HASH, null)
-        if (embedded != null) { apiCredentials = embedded; initNative(); return }
+        // 2026-10-30 D6: the private build keeps its synchronous embedded-only fast path (unchanged).
+        // The open build always reads apiStore first so a user's saved code outranks the open pair.
+        if (!BuildConfig.MELO_OPEN_BUILD) {
+            val embedded = TelegramApiCredentialPolicy.resolve(
+                BuildConfig.TELEGRAM_APP_API_ID, BuildConfig.TELEGRAM_APP_API_HASH, null)
+            if (embedded != null) { apiCredentials = embedded; initNative(); return }
+        }
         authControls.visibility = View.GONE
         apiExecutor.execute {
             val stored = apiStore.read()
             runOnUiThread {
                 if (isDestroyed || isFinishing || apiRestartRequired) return@runOnUiThread
                 val resolved = TelegramApiCredentialPolicy.resolve(
-                    BuildConfig.TELEGRAM_APP_API_ID, BuildConfig.TELEGRAM_APP_API_HASH, stored)
+                    BuildConfig.TELEGRAM_APP_API_ID, BuildConfig.TELEGRAM_APP_API_HASH, stored,
+                    preferStored = BuildConfig.MELO_OPEN_BUILD)
                 when {
                     resolved != null -> { apiCredentials = resolved; initNative() }
                     BuildConfig.MELO_OPEN_BUILD -> {
@@ -1169,14 +1181,41 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 if (isDestroyed || isFinishing) return@runOnUiThread
                 apiOperationPending = false
                 apiSetupPanel.setBusy(false)
-                if (saved) {
-                    apiSetupPanel.clearInput()
+                if (!saved) { apiSetupPanel.showError("Không lưu được mã API. Hãy thử lại."); return@runOnUiThread }
+                apiSetupPanel.clearInput()
+                // 2026-10-30 D8: TDLib only accepts setTdlibParameters once. If it was already sent
+                // (always true once past the phone/code/password steps), do NOT call initNative()
+                // again; detach like clearApiCredentials() and require a full app restart instead.
+                if (tdlibParametersSent) {
+                    apiRestartRequired = true
+                    nativeReceiver?.let { ShareableTdlibOwner.detachUi(it) }
+                    nativeReceiver = null
+                    apiCredentials = null
+                    showApiRestartMessage()
+                } else {
                     apiSetupPanel.root.visibility = View.GONE
                     apiCredentials = credentials
                     initNative()
-                } else apiSetupPanel.showError("Không lưu được mã API. Hãy thử lại.")
+                }
             }
         }
+    }
+
+    /** 2026-10-30 D7/D9: toggle to the API setup panel without touching apiStore or TDLib. */
+    private fun showApiSetupPanel(allowBack: Boolean) {
+        authControls.visibility = View.GONE
+        apiSetupPanel.setBackAction(if (allowBack) { { closeApiSetupPanel() } } else null)
+        apiSetupPanel.root.visibility = View.VISIBLE
+        collapsibleNavigation.visibility = View.VISIBLE
+    }
+
+    /** 2026-10-30 D9: "Quay lại" from the advanced link — saves nothing, restores the phone form. */
+    private fun closeApiSetupPanel() {
+        apiSetupPanel.setBackAction(null)
+        apiSetupPanel.clearInput()
+        apiSetupPanel.showError(null)
+        apiSetupPanel.root.visibility = View.GONE
+        authControls.visibility = View.VISIBLE
     }
 
     private fun canReenterApi() = BuildConfig.MELO_OPEN_BUILD && !apiRestartRequired &&
@@ -2947,6 +2986,20 @@ class TelegramPreviewActivity : AppCompatActivity() {
             setOnClickListener { clearApiCredentials() }
         }
         authControls.addView(reenterApi, LinearLayout.LayoutParams(-1, -2))
+        // 2026-10-30 D7: shown only after the open build's embedded pair is rejected.
+        useOwnApi = uiButton("Dùng mã API của tôi").apply {
+            visibility = View.GONE
+            minHeight = dp(MeloDesignTokens.MIN_TOUCH_DP)
+            setOnClickListener { showApiSetupPanel(allowBack = false) }
+        }
+        authControls.addView(useOwnApi, LinearLayout.LayoutParams(-1, -2))
+        // 2026-10-30 D9: always-available advanced link at the phone step on the open build.
+        useOwnApiLink = uiButton("Dùng mã API riêng (nâng cao)").apply {
+            visibility = View.GONE
+            minHeight = dp(MeloDesignTokens.MIN_TOUCH_DP)
+            setOnClickListener { showApiSetupPanel(allowBack = true) }
+        }
+        authControls.addView(useOwnApiLink, LinearLayout.LayoutParams(-1, -2))
         apiSetupPanel = TelegramApiSetupPanel(
             this, TelegramLoginPanel.Colors(ink, subtle, accent, accentContrast, panel, border),
             onSave = { saveApiCredentials(it) }
@@ -6779,15 +6832,25 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 val field = TelegramLoginStepPolicy.contentFor(
                     auth.step, null, null, loginEditingPhone
                 )?.field ?: TelegramLoginStepPolicy.Field.CODE
-                val apiError = if (apiCredentials?.source == TelegramApiCredentialPolicy.Source.USER)
-                    TelegramApiCredentialPolicy.loginErrorFor(result.optString("message")) else null
-                val text = apiError ?: TelegramLoginStepPolicy.errorFor(result.optString("message"), field)
+                val rawMessage = result.optString("message")
+                // 2026-10-30 D2/D7: REENTER_USER is the unchanged E104 flow; OFFER_OWN_API is new.
+                val action = TelegramApiCredentialPolicy.rejectionAction(
+                    apiCredentials?.source, BuildConfig.MELO_OPEN_BUILD, rawMessage)
+                val apiError = if (action == TelegramApiCredentialPolicy.RejectAction.REENTER_USER)
+                    TelegramApiCredentialPolicy.loginErrorFor(rawMessage) else null
+                val text = when (action) {
+                    TelegramApiCredentialPolicy.RejectAction.OFFER_OWN_API -> TelegramApiCredentialPolicy.OFFER_OWN_API_MESSAGE
+                    else -> apiError ?: TelegramLoginStepPolicy.errorFor(rawMessage, field)
+                }
                 runOnUiThread {
                     if (apiRestartRequired) return@runOnUiThread
                     loginPanel.setBusy(false)
                     loginPanel.showError(text)
                     reenterApi.isEnabled = true
-                    if (apiError != null && canReenterApi()) reenterApi.visibility = View.VISIBLE
+                    reenterApi.visibility = if (action == TelegramApiCredentialPolicy.RejectAction.REENTER_USER &&
+                        canReenterApi()) View.VISIBLE else View.GONE
+                    useOwnApi.visibility = if (action == TelegramApiCredentialPolicy.RejectAction.OFFER_OWN_API)
+                        View.VISIBLE else View.GONE
                     updateResendButton()
                 }
                 return
@@ -6797,16 +6860,23 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val safeStage = tag.takeIf { it in setOf("parameters", "state", "identity") }
                 ?: "authentication"
             val message = result.optString("message")
-            val apiError = if (apiCredentials?.source == TelegramApiCredentialPolicy.Source.USER)
+            val initialAction = TelegramApiCredentialPolicy.rejectionAction(
+                apiCredentials?.source, BuildConfig.MELO_OPEN_BUILD, message)
+            val apiError = if (initialAction == TelegramApiCredentialPolicy.RejectAction.REENTER_USER)
                 TelegramApiCredentialPolicy.loginErrorFor(message) else null
-            if (apiError != null && BuildConfig.MELO_OPEN_BUILD) {
+            if (initialAction != TelegramApiCredentialPolicy.RejectAction.NONE) {
                 runOnUiThread {
                     if (apiRestartRequired) return@runOnUiThread
                     authControls.visibility = View.VISIBLE
                     loginPanel.setBusy(false)
-                    loginPanel.showError(apiError)
+                    loginPanel.showError(
+                        if (initialAction == TelegramApiCredentialPolicy.RejectAction.OFFER_OWN_API)
+                            TelegramApiCredentialPolicy.OFFER_OWN_API_MESSAGE else apiError)
                     reenterApi.isEnabled = true
-                    reenterApi.visibility = if (canReenterApi()) View.VISIBLE else View.GONE
+                    reenterApi.visibility = if (initialAction == TelegramApiCredentialPolicy.RejectAction.REENTER_USER &&
+                        canReenterApi()) View.VISIBLE else View.GONE
+                    useOwnApi.visibility = if (initialAction == TelegramApiCredentialPolicy.RejectAction.OFFER_OWN_API)
+                        View.VISIBLE else View.GONE
                 }
                 return
             }
@@ -7018,6 +7088,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 val info = state.optJSONObject("code_info")
                 // Keep only the masked number for display; the raw one is dropped here.
                 loginMaskedPhone = TelegramLoginStepPolicy.maskPhone(info?.optString("phone_number"))
+                loginCodeType = info?.optJSONObject("type")?.optString("@type")
                 startResendTimer(info?.optInt("timeout", 0) ?: 0, info?.optJSONObject("next_type") != null)
                 showLoginStep(TelegramAuthStep.WAIT_CODE)
             }
@@ -7049,12 +7120,17 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 showMessage("Tài khoản mới cần đăng ký; bản Preview chưa hỗ trợ.")
             }
             "authorizationStateReady" -> {
-                runOnUiThread { reenterApi.visibility = View.GONE }
+                runOnUiThread {
+                    reenterApi.visibility = View.GONE
+                    useOwnApi.visibility = View.GONE
+                    useOwnApiLink.visibility = View.GONE
+                }
                 clearPendingQrLink()
                 runOnUiThread {
                     qrLogin.isEnabled = false
                     loginPanel.clearInput()
                     loginMaskedPhone = null
+                    loginCodeType = null
                     loginPasswordHint = null
                     loginEditingPhone = false
                     mainRoot.removeCallbacks(loginResendTick)
@@ -7081,6 +7157,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     clearPlaybackSession()
                     loginPanel.clearInput()
                     loginMaskedPhone = null
+                    loginCodeType = null
                     loginPasswordHint = null
                     loginEditingPhone = false
                     tracks.adapter = adapter
@@ -7128,7 +7205,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun renderLoginStep() {
         if (apiRestartRequired || apiOperationPending) return
         val content = TelegramLoginStepPolicy.contentFor(
-            auth.step, loginMaskedPhone, loginPasswordHint, loginEditingPhone
+            auth.step, loginMaskedPhone, loginPasswordHint, loginEditingPhone, loginCodeType
         ) ?: return
         mainRoot.removeCallbacks(loginResendTick)
         loginPanel.clearInput()
@@ -7136,6 +7213,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
         reenterApi.isEnabled = true
         reenterApi.visibility = if (canReenterApi() && content.field == TelegramLoginStepPolicy.Field.PHONE)
             View.VISIBLE else View.GONE
+        // 2026-10-30 D9: the advanced link only at the phone step; D7's button resets on any fresh render.
+        useOwnApiLink.visibility = if (canReenterApi() && content.field == TelegramLoginStepPolicy.Field.PHONE)
+            View.VISIBLE else View.GONE
+        useOwnApi.visibility = View.GONE
         authControls.visibility = View.VISIBLE
         collapsibleNavigation.visibility = View.VISIBLE
         input.visibility = View.VISIBLE
