@@ -130,7 +130,7 @@ internal interface MeloScreenHost {
 
     // ---- Studio Deck (Now Playing) --------------------------------------------------------
 
-    /** Base queue snapshot. Shuffle transport order is not exposed by the existing service contract. */
+    /** Actual play order (already shuffled while Đảo is on), kept by ShareablePlaybackService. */
     fun queue(): List<QueueItem>
     fun playQueueAt(index: Int)
     /** Same song menu as the library rows, for the queue song at [index]. */

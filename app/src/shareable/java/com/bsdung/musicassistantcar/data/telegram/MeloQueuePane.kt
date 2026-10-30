@@ -12,6 +12,9 @@ import android.widget.ListView
 internal object MeloQueueUiPolicy {
     data class Key(val owner: Long, val rows: List<MeloScreenHost.QueueItem>, val current: Long?,
         val playing: Boolean, val paused: Boolean, val buffering: Boolean, val shuffle: Boolean = false)
+    /** The rows are the real play order (the service applies Shuffle), so the title says so while Đảo is on. */
+    fun caption(shuffle: Boolean, preview: Boolean): String =
+        if (shuffle) "Thứ tự phát · Đảo bật" else if (preview) "Tiếp theo" else "Hàng đợi"
     fun scrollToCurrent(previous: Key?, next: Key): Boolean = next.current != null &&
         (previous?.current != next.current || previous.owner != next.owner)
     fun window(size: Int, currentIndex: Int): IntRange {
@@ -60,7 +63,7 @@ internal class MeloQueuePane(context: Context, private val c: MeloComponents, pr
         if (next == old) return
         val anchor = anchor()
         key = next
-        val caption = if (next.shuffle) "Thứ tự gốc · Đảo đang bật" else if (preview) "Tiếp theo" else "Hàng đợi"
+        val caption = MeloQueueUiPolicy.caption(next.shuffle, preview)
         title.text = if (preview) "$caption · tối đa 12 / ${next.rows.size} bài"
             else "$caption · ${next.rows.size} bài"
         if (list != null) {
