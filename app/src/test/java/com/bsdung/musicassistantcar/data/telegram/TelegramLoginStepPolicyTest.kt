@@ -119,4 +119,70 @@ class TelegramLoginStepPolicyTest {
         assertTrue(P.showMiniPlayer(true))
         assertTrue(P.showLogout(true))
     }
+
+    // 2026-10-30 D10: codeSentText groups, cross-checked against the bundled libtdjsonjava.so type names.
+    private val phone = "+84 ••••• 567"
+
+    @Test fun codeSentTextTelegramMessage() {
+        assertEquals(
+            "Mã đã gửi trong ứng dụng Telegram trên thiết bị khác của bạn.",
+            P.codeSentText("authenticationCodeTypeTelegramMessage", phone)
+        )
+        assertEquals(
+            "Mã đã gửi trong ứng dụng Telegram trên thiết bị khác của bạn.",
+            P.codeSentText("authenticationCodeTypeTelegramMessage", null)
+        )
+    }
+
+    @Test fun codeSentTextSmsGroupWithPhone() {
+        for (type in listOf("authenticationCodeTypeSms", "authenticationCodeTypeSmsWord", "authenticationCodeTypeSmsPhrase")) {
+            assertEquals(type, "Mã đã gửi qua SMS đến $phone.", P.codeSentText(type, phone))
+        }
+    }
+
+    @Test fun codeSentTextSmsGroupWithoutPhone() {
+        for (type in listOf("authenticationCodeTypeSms", "authenticationCodeTypeSmsWord", "authenticationCodeTypeSmsPhrase")) {
+            assertEquals(type, "Mã đã gửi qua SMS.", P.codeSentText(type, null))
+            assertEquals(type, "Mã đã gửi qua SMS.", P.codeSentText(type, ""))
+        }
+    }
+
+    @Test fun codeSentTextCallGroupWithPhone() {
+        for (type in listOf("authenticationCodeTypeCall", "authenticationCodeTypeFlashCall", "authenticationCodeTypeMissedCall")) {
+            assertEquals(type, "Telegram sẽ gọi đến $phone để báo mã.", P.codeSentText(type, phone))
+        }
+    }
+
+    @Test fun codeSentTextCallGroupWithoutPhoneFallsBackToNull() {
+        for (type in listOf("authenticationCodeTypeCall", "authenticationCodeTypeFlashCall", "authenticationCodeTypeMissedCall")) {
+            assertNull(type, P.codeSentText(type, null))
+        }
+    }
+
+    @Test fun codeSentTextFragment() {
+        assertEquals("Mã đã gửi qua Fragment.", P.codeSentText("authenticationCodeTypeFragment", phone))
+        assertEquals("Mã đã gửi qua Fragment.", P.codeSentText("authenticationCodeTypeFragment", null))
+    }
+
+    @Test fun codeSentTextUnknownOrMissingTypeReturnsNull() {
+        assertNull(P.codeSentText("authenticationCodeTypeFirebaseAndroid", phone))
+        assertNull(P.codeSentText("authenticationCodeTypeFirebaseIos", phone))
+        assertNull(P.codeSentText(null, phone))
+        assertNull(P.codeSentText("", phone))
+    }
+
+    @Test fun contentForWaitCodeUsesRecognizedCodeType() {
+        val c = P.contentFor(TelegramAuthStep.WAIT_CODE, maskedPhone = phone, codeType = "authenticationCodeTypeSms")!!
+        assertEquals("Mã đã gửi qua SMS đến $phone.", c.description)
+    }
+
+    @Test fun contentForWaitCodeFallsBackWhenCodeTypeUnrecognized() {
+        val c = P.contentFor(TelegramAuthStep.WAIT_CODE, maskedPhone = phone, codeType = "authenticationCodeTypeFirebaseAndroid")!!
+        assertEquals("Nhập mã Telegram đã gửi đến $phone.", c.description)
+    }
+
+    @Test fun editingPhoneIgnoresCodeType() {
+        val c = P.contentFor(TelegramAuthStep.WAIT_CODE, editingPhone = true, codeType = "authenticationCodeTypeSms")!!
+        assertEquals(TelegramLoginStepPolicy.Field.PHONE, c.field)
+    }
 }

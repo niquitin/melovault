@@ -42,12 +42,15 @@ internal object TelegramLoginStepPolicy {
      * @param maskedPhone already masked by [maskPhone], or null when TDLib sent none.
      * @param editingPhone the user pressed "Sửa số điện thoại" / "Quay lại": show the phone
      * form again although TDLib is still waiting for the code or password.
+     * @param codeType `code_info.type.@type` from `authorizationStateWaitCode`, or null; see
+     * [codeSentText]. Unrecognized or missing types fall back to the previous fixed sentence.
      */
     fun contentFor(
         step: TelegramAuthStep,
         maskedPhone: String? = null,
         passwordHint: String? = null,
-        editingPhone: Boolean = false
+        editingPhone: Boolean = false,
+        codeType: String? = null
     ): StepContent? {
         if (editingPhone && (step == TelegramAuthStep.WAIT_CODE ||
                 step == TelegramAuthStep.WAIT_PASSWORD ||
@@ -60,7 +63,7 @@ internal object TelegramLoginStepPolicy {
             TelegramAuthStep.WAIT_CODE -> StepContent(
                 field = Field.CODE,
                 title = "Nhập mã Telegram",
-                description = if (maskedPhone.isNullOrBlank()) {
+                description = codeSentText(codeType, maskedPhone) ?: if (maskedPhone.isNullOrBlank()) {
                     "Nhập mã Telegram đã gửi đến tài khoản của bạn."
                 } else {
                     "Nhập mã Telegram đã gửi đến $maskedPhone."
@@ -146,6 +149,25 @@ internal object TelegramLoginStepPolicy {
     /** "Gửi lại mã (45s)" while Telegram's resend timer runs, plain label afterwards. */
     fun resendLabel(secondsLeft: Int): String =
         if (secondsLeft > 0) "Gửi lại mã (${secondsLeft}s)" else "Gửi lại mã"
+
+    /**
+     * 2026-10-30 D10: tells the user where the code was sent, mirroring the iOS app's
+     * "Code sent in Telegram" line. [typeName] is `code_info.type.@type` from TDLib's
+     * `authorizationStateWaitCode`; names below were cross-checked against the bundled
+     * `libtdjsonjava.so` (strings scan, 2026-10-30), not guessed. An unrecognized or null
+     * type returns null so the caller keeps its existing fixed sentence.
+     */
+    fun codeSentText(typeName: String?, maskedPhone: String?): String? = when (typeName) {
+        "authenticationCodeTypeTelegramMessage" ->
+            "Mã đã gửi trong ứng dụng Telegram trên thiết bị khác của bạn."
+        "authenticationCodeTypeSms", "authenticationCodeTypeSmsWord", "authenticationCodeTypeSmsPhrase" ->
+            if (maskedPhone.isNullOrBlank()) "Mã đã gửi qua SMS." else "Mã đã gửi qua SMS đến $maskedPhone."
+        "authenticationCodeTypeCall", "authenticationCodeTypeFlashCall", "authenticationCodeTypeMissedCall" ->
+            if (maskedPhone.isNullOrBlank()) null else "Telegram sẽ gọi đến $maskedPhone để báo mã."
+        "authenticationCodeTypeFragment" ->
+            "Mã đã gửi qua Fragment."
+        else -> null
+    }
 
     /**
      * Fixed Vietnamese sentence for a failed sign-in request. The raw TDLib message is only

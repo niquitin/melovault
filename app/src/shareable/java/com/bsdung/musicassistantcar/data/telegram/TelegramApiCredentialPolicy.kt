@@ -16,6 +16,13 @@ internal object TelegramApiCredentialPolicy {
         val ok: Boolean get() = credentials != null
     }
 
+    /** 2026-10-30 D7: shown when the open build's embedded pair is rejected; offers the E104 fallback. */
+    const val OFFER_OWN_API_MESSAGE =
+        "Mã kết nối chung của ứng dụng đang bị Telegram từ chối. Bạn có thể dùng API ID/hash của riêng mình."
+
+    /** 2026-10-30 D2/D7: which recovery path a rejected login should offer, if any. */
+    enum class RejectAction { NONE, REENTER_USER, OFFER_OWN_API }
+
     fun parseId(raw: String): Int? = raw.trim().takeIf { it.matches(Regex("[0-9]{1,10}")) }
         ?.toIntOrNull()?.takeIf { it > 0 }
 
@@ -30,10 +37,27 @@ internal object TelegramApiCredentialPolicy {
         return Result(if (id != null && hash != null) Credentials(id, hash, Source.USER) else null, idError, hashError)
     }
 
-    fun resolve(embeddedId: Int, embeddedHash: String, stored: Credentials?): Credentials? {
+    /**
+     * 2026-10-30 D6: [preferStored] lets the open build keep a user's already-saved credentials
+     * instead of switching them back to the embedded open pair. The private build always calls
+     * this with the default (embedded wins), unchanged from before.
+     */
+    fun resolve(embeddedId: Int, embeddedHash: String, stored: Credentials?, preferStored: Boolean = false): Credentials? {
+        val storedValid = stored?.let { validate(it.apiId.toString(), it.apiHash).credentials }
+        if (preferStored && storedValid != null) return storedValid
         val embedded = validate(embeddedId.toString(), embeddedHash).credentials
         if (embedded != null) return embedded.copy(source = Source.EMBEDDED)
-        return stored?.let { validate(it.apiId.toString(), it.apiHash).credentials }
+        return storedValid
+    }
+
+    /** 2026-10-30 D7: NONE unless [message] matches a known API-rejection error. */
+    fun rejectionAction(source: Source?, openBuild: Boolean, message: String?): RejectAction {
+        if (loginErrorFor(message) == null) return RejectAction.NONE
+        return when {
+            source == Source.USER -> RejectAction.REENTER_USER
+            source == Source.EMBEDDED && openBuild -> RejectAction.OFFER_OWN_API
+            else -> RejectAction.NONE
+        }
     }
 
     fun maskId(id: Int): String = "•••• " + id.toString().takeLast(2)
