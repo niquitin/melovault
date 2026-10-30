@@ -34,12 +34,15 @@ internal object MeloThemePolicy {
     fun effective(theme: ColorTheme, layer: NewLayer?, profile: Profile): ColorTheme =
         if (appliesTo(theme, layer, profile)) ColorTheme.TEAL_BRIGHT else ColorTheme.CURRENT
 
-    /** E99: whether a screen shows row covers. The teal layers do; Gọn always does (any theme) but keeps its own colours. Car Mode never. */
+    /**
+     * E99/P2-A: whether a screen shows row covers, for either colour theme. The Phone/Tablet new
+     * library layers and Gọn always do (any theme, independent of [theme]); Car Mode never.
+     */
     fun rowArtLayer(theme: ColorTheme, layer: NewLayer?, profile: Profile): Boolean =
-        appliesTo(theme, layer, profile) || profile == Profile.COMPACT
+        (layer != null && (profile == Profile.PHONE || profile == Profile.TABLET)) || profile == Profile.COMPACT
 
-    /** Row covers are fetched from Telegram only with the teal theme on and the switch (default on) not turned off. */
-    fun rowArtActive(theme: ColorTheme, switchOn: Boolean): Boolean = theme == ColorTheme.TEAL_BRIGHT && switchOn
+    /** P2-A: row covers are fetched only where [rowArtLayer] shows them and the switch (default on) is not turned off. */
+    fun rowArtActive(layerShown: Boolean, switchOn: Boolean): Boolean = layerShown && switchOn
 
     /** Colour of the dot after "Đồng bộ: N bài". */
     enum class SyncDot { OK, SYNCING, OFFLINE }
