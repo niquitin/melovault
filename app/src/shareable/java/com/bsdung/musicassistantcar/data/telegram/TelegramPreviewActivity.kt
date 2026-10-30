@@ -120,13 +120,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private val thumbnailCache = android.util.LruCache<Long, Bitmap>(60)
 
-    // E98: row covers of the teal theme. The loader exists only after a teal screen asked for it.
-    private var rowArtThemeActive = false
+    // E98/P2-A: row covers of the current screen, any colour theme. The loader exists only after such a screen asked for it.
+    private var rowArtLayerShown = false
     private var rowArtLoaderLazy: MeloRowArtLoader? = null
     private var rowArtOffReset = false
 
-    private fun rowArtOn(): Boolean = rowArtThemeActive &&
-        MeloThemePolicy.rowArtSwitch(getSharedPreferences(MeloScreenPolicy.PREFS_NAME, Context.MODE_PRIVATE))
+    private fun rowArtOn(): Boolean = MeloThemePolicy.rowArtActive(rowArtLayerShown,
+        MeloThemePolicy.rowArtSwitch(getSharedPreferences(MeloScreenPolicy.PREFS_NAME, Context.MODE_PRIVATE)))
 
     private fun rowArtLoader(): MeloRowArtLoader = rowArtLoaderLazy ?: MeloRowArtLoader(
         context = this,
@@ -5340,7 +5340,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         detachMeloLayer()
         // After detachMeloLayer(), which clears the flag.
-        rowArtThemeActive = rowArt
+        rowArtLayerShown = rowArt
         if (MeloCompactPolicy.needsDefaultDownloadedFilter(MeloCompactPolicy.defaultApplied(prefs))) {
             MeloCompactPolicy.markDefaultApplied(prefs)
             playlistMode = false
@@ -5404,7 +5404,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             return
         }
         detachMeloLayer()
-        rowArtThemeActive = MeloThemePolicy.rowArtLayer(theme, layer, profile)
+        rowArtLayerShown = MeloThemePolicy.rowArtLayer(theme, layer, profile)
         val sizes = MeloDesignTokens.sizes(profile, display.density, display.fontScale, display.physicalPpi)
         val view: View
         if (layer == MeloLibraryPolicy.NewLayer.TWO_PANE) {
@@ -5490,7 +5490,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         tabletScreen = null
         meloLayer = null
         meloLayerKey = null
-        rowArtThemeActive = false
+        rowArtLayerShown = false
         if (wasCar) setCarFullscreen(false)
         if (::mainRoot.isInitialized) mainRoot.visibility = View.VISIBLE
     }
@@ -5789,7 +5789,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
         override fun requestRowArt(rows: List<MeloScreenHost.Row>, rowArtPx: Int) {
             if (!rowArtOn()) {
-                // Switched off (or another theme): stop asking and let go of what was loaded.
+                // Switched off (or no row-art layer shown): stop asking and let go of what was loaded.
                 if (!rowArtOffReset) {
                     rowArtOffReset = true
                     rowArtLoaderLazy?.reset()

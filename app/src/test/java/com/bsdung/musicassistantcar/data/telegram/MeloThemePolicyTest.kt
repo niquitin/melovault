@@ -45,23 +45,17 @@ class MeloThemePolicyTest {
         }
         assertTrue(MeloThemePolicy.rowArtLayer(ColorTheme.CURRENT, null, Profile.COMPACT))
         assertTrue(MeloThemePolicy.rowArtLayer(ColorTheme.TEAL_BRIGHT, null, Profile.COMPACT))
+        // No new layer (signed-out / legacy library) never shows row covers, whatever the profile or theme.
         assertFalse(MeloThemePolicy.rowArtLayer(ColorTheme.TEAL_BRIGHT, null, Profile.PHONE))
+        assertFalse(MeloThemePolicy.rowArtLayer(ColorTheme.CURRENT, null, Profile.PHONE))
     }
 
+    /** P2-A (30/10/2026): row covers on Phone/Tablet no longer depend on the colour theme; only the switch does. */
     @Test
-    fun rowArtLayerKeepsTheE98BehaviourForPhoneAndTablet() {
+    fun rowArtLayerCoversPhoneAndTabletOnEveryColourTheme() {
         for (theme in ColorTheme.entries) for (layer in NewLayer.entries) {
-            for (profile in listOf(Profile.PHONE, Profile.TABLET)) {
-                assertEquals(
-                    MeloThemePolicy.appliesTo(theme, layer, profile),
-                    MeloThemePolicy.rowArtLayer(theme, layer, profile),
-                )
-            }
-        }
-        NewLayer.entries.forEach {
-            assertTrue(MeloThemePolicy.rowArtLayer(ColorTheme.TEAL_BRIGHT, it, Profile.PHONE))
-            assertTrue(MeloThemePolicy.rowArtLayer(ColorTheme.TEAL_BRIGHT, it, Profile.TABLET))
-            assertFalse(MeloThemePolicy.rowArtLayer(ColorTheme.CURRENT, it, Profile.PHONE))
+            assertTrue(MeloThemePolicy.rowArtLayer(theme, layer, Profile.PHONE))
+            assertTrue(MeloThemePolicy.rowArtLayer(theme, layer, Profile.TABLET))
         }
     }
 
@@ -88,12 +82,22 @@ class MeloThemePolicyTest {
         assertEquals(ColorTheme.CURRENT, MeloThemePolicy.effective(ColorTheme.TEAL_BRIGHT, NewLayer.TWO_PANE, Profile.CAR))
     }
 
+    /** P2-A: fetching needs the layer shown (any colour theme) AND the switch; either alone is not enough. */
     @Test
-    fun rowArtNeedsTealAndTheSwitch() {
-        assertTrue(MeloThemePolicy.rowArtActive(ColorTheme.TEAL_BRIGHT, true))
-        assertFalse(MeloThemePolicy.rowArtActive(ColorTheme.TEAL_BRIGHT, false))
-        assertFalse(MeloThemePolicy.rowArtActive(ColorTheme.CURRENT, true))
-        assertFalse(MeloThemePolicy.rowArtActive(ColorTheme.CURRENT, false))
+    fun rowArtActiveNeedsTheLayerShownAndTheSwitch() {
+        assertTrue(MeloThemePolicy.rowArtActive(true, true))
+        assertFalse(MeloThemePolicy.rowArtActive(true, false))
+        assertFalse(MeloThemePolicy.rowArtActive(false, true))
+        assertFalse(MeloThemePolicy.rowArtActive(false, false))
+    }
+
+    /** Wired through [MeloThemePolicy.rowArtLayer]: Phone/Tablet CURRENT now fetches too, only the switch gates it. */
+    @Test
+    fun rowArtActiveFollowsRowArtLayerNotTheColourTheme() {
+        for (theme in ColorTheme.entries) for (layer in NewLayer.entries) for (switchOn in listOf(true, false)) {
+            val layerShown = MeloThemePolicy.rowArtLayer(theme, layer, Profile.PHONE)
+            assertEquals(switchOn, MeloThemePolicy.rowArtActive(layerShown, switchOn))
+        }
     }
 
     @Test
