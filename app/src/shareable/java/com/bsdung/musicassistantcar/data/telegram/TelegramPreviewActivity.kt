@@ -770,7 +770,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
         ShareablePlaybackService.clearTelegramQueue()
         queueSongOrder = emptyList()
         val window = MeloLocalSourcePolicy.queueWindow(songs.size, index)
-        enqueueItems(songs.slice(window).map(::localMediaItem), index - window.first)
+        val items = songs.slice(window).map(::localMediaItem)
+        val startAt = index - window.first
+        // The service gives the play order (source order while Shuffle is off; chosen song first when it is on).
+        val anchorId = items[startAt].mediaId
+        val order = ShareablePlaybackService.orderLocalQueue(items.map { it.mediaId }, anchorId)
+        val byId = items.associateBy { it.mediaId }
+        val ordered = order.mapNotNull { byId[it] }
+        val orderedStart = order.indexOf(anchorId)
+        if (ordered.size == items.size && orderedStart >= 0) enqueueItems(ordered, orderedStart)
+        else enqueueItems(items, startAt)
     }
 
     private fun localSnapshot(): MeloScreenHost.Snapshot {
