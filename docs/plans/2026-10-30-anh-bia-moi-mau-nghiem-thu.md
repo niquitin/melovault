@@ -18,6 +18,6 @@ APK Debug candidate: SHA-256 `7F51A1B460402949F19886D887359BBB657494512EB0740485
 - APK Release: chỉ build xanh, chưa cài/QA trên thiết bị.
 - Tablet, Shanling: ngoài phạm vi theo quyết định chủ dự án 30/10/2026 17:01.
 
-## Bước kế tiếp
+## Merge
 
-Chưa có chỉ thị merge/push/public riêng — theo CLAUDE.md mục 0, merge nhánh `dot/2026-10-30-anh-bia-moi-mau` vào nhánh tích hợp chỉ thực hiện khi chủ dự án ra chỉ thị merge riêng (tách khỏi quyết định ĐẠT này). Không tự chọn/mở nhiệm vụ kế.
+Chủ dự án ra chỉ thị merge riêng ("Merge luôn") ngay sau ĐẠT, cùng ngày 30/10/2026. Đã merge `--no-ff` nhánh `dot/2026-10-30-anh-bia-moi-mau` vào nhánh tích hợp `feature/e93-03d-y700-offline-cockpit`, commit merge `d1da309`. Không xung đột (`git diff --check` sạch); chạy lại `testShareableDebugUnitTest` trên nhánh tích hợp sau merge: **2290 passed / 21 skipped / 0 failed** — khớp kết quả trước merge, không hồi quy. Chưa push (repo không có remote). Không tự chọn/mở nhiệm vụ kế.
