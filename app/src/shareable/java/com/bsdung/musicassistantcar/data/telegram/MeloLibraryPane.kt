@@ -116,6 +116,8 @@ internal class MeloLibraryPane(
         set(value) { queryDraft.sync(value) }
     private var pendingQuery: Runnable? = null
     private var collapsed = false
+    /** Folds or shows the owner's title row and the source cards for the current [collapsed]. */
+    private val applyCollapse = Runnable { onHeaderCollapse(collapsed); applySourceCardsVisibility() }
     private var lastScrollKey = 0
     private var playAllWhenLoaded: MeloBrowseUiPolicy.Request? = null
     private var groupKey: String? = null
@@ -218,8 +220,10 @@ internal class MeloLibraryPane(
                     lastScrollKey = key
                     if (next != collapsed) {
                         collapsed = next
-                        onHeaderCollapse(next)
-                        applySourceCardsVisibility()
+                        // A restore (setSelectionFromTop) or a refresh calls this inside the list's layout pass;
+                        // hiding a view there leaves its space behind (D3), so the change runs after that pass.
+                        list.removeCallbacks(applyCollapse)
+                        if (list.isInLayout) list.post(applyCollapse) else applyCollapse.run()
                     }
                 }
             })
@@ -307,6 +311,7 @@ internal class MeloLibraryPane(
         playFeedbackView.stop()
         flushAndSave()
         endSongRestore()
+        list.removeCallbacks(applyCollapse)
         host.setBrowseCapture(null)
         if (c.teal) host.setRowArtListener(null)
         pendingJump?.let(handler::removeCallbacks)
