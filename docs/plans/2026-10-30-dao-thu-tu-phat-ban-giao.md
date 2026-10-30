@@ -86,6 +86,7 @@ S6 theo thứ tự:
 6) Drive Ni N owner-only: APK QA hợp lệ + 5–10 ảnh quan trọng, kiểm SHA-256/bytes, shared=false; ghi *-apk-test.md (nhãn QA CANDIDATE — CHƯA NGHIỆM THU),
    *-hinh-nghiem-thu.md, *-nghiem-thu.md theo PROMPT_CHU_DU_AN_NGHIEM_THU.md; thao tác chủ dự án = kế hoạch mục 9. Drive chặn tải/thiếu gate → BLOCKED — CHƯA BÀN GIAO, không bịa link.
 7) Cập nhật bao-cao (≤ ~250 dòng) và ban-giao; commit hồ sơ trên nhánh; không merge/push/public; không chọn việc tiếp.
-Kết thúc, trả lời 3 phần Đã làm / Chưa kiểm chứng / Rủi ro hoặc điểm dừng, rồi câu "Đã dừng, chờ chủ dự án nghiệm thu." kèm
-cách phản hồi `ĐẠT 2026-10-30-dao-thu-tu-phat — <commit/APK>` hoặc `Yêu cầu sửa 2026-10-30-dao-thu-tu-phat: <lỗi>`.
+Kết thúc: ghi prompt phiên nghiệm thu sơ bộ mới (theo docs/workflow/PROMPT_NGHIEM_THU_SO_BO.md) vào file bàn giao; không tự chạy sơ bộ.
+Trả lời 3 phần Đã làm / Chưa kiểm chứng / Rủi ro hoặc điểm dừng, rồi câu "Đã dừng. Mở phiên mới để nghiệm thu sơ bộ nhanh."
+Desktop Commander: repo/Gradle/bundle dùng thiết bị "Ni"; build/QA Sony dùng "DESKTOP-HNP4GVR". KHÔNG dùng "Bs-Dung.local".
 ```
