@@ -42,6 +42,17 @@ internal class MeloLocalLibrary(
 
     var loading: Boolean = false
         private set
+    private var rebuilding = false
+    private var loadFailed = false
+    var browseGeneration: Long = 0L
+        private set
+
+    val browseLoadState: MeloBrowseUiPolicy.LoadState get() = when {
+        loading || rebuilding -> MeloBrowseUiPolicy.loading(view.songs.isNotEmpty())
+        loadFailed -> MeloBrowseUiPolicy.LoadState.ERROR
+        !hasLoaded -> MeloBrowseUiPolicy.LoadState.INITIAL_LOADING
+        else -> MeloBrowseUiPolicy.LoadState.READY
+    }
 
     /** Clock value when the last load was applied; -1 = never loaded. */
     var loadedAt: Long = -1L
@@ -103,7 +114,9 @@ internal class MeloLocalLibrary(
         if (closed) return
         val stamp = epoch.get()
         val seq = ++loadSeq
+        browseGeneration++
         loading = true
+        loadFailed = false
         val startQuery = query
         val startSort = sort
         submit {
@@ -113,7 +126,8 @@ internal class MeloLocalLibrary(
             try {
                 if (force) repository.invalidateCache()
                 granted = repository.hasPermission()
-                songs = if (!granted) emptyList() else repository.getAllTracks().mapNotNull {
+                val tracks = if (granted) repository.getAllTracks() else emptyList()
+                songs = tracks.takeUnless { granted && repository.lastTrackReadFailed }?.mapNotNull {
                     MeloLocalSourcePolicy.songOf(
                         it.id, it.title, it.artist, it.album, it.relativePath, it.durationMs, it.sizeBytes, it.mimeType
                     )
@@ -131,6 +145,7 @@ internal class MeloLocalLibrary(
             post(Runnable {
                 if (closed || stamp != epoch.get() || seq != loadSeq) return@Runnable
                 loading = false
+                loadFailed = !granted || loaded == null
                 if (loaded != null && computed != null) {
                     all = loaded
                     byId = loaded.associateBy { it.mediaStoreId }
@@ -194,6 +209,9 @@ internal class MeloLocalLibrary(
         loadSeq++
         viewSeq++
         loading = false
+        rebuilding = false
+        loadFailed = false
+        browseGeneration++
         all = emptyList()
         byId = emptyMap()
         countValue = null
@@ -213,6 +231,8 @@ internal class MeloLocalLibrary(
     }
 
     private fun rebuild(onDone: () -> Unit) {
+        browseGeneration++
+        rebuilding = true
         val stamp = epoch.get()
         val seq = ++viewSeq
         val source = all
@@ -222,6 +242,7 @@ internal class MeloLocalLibrary(
             val computed = Shown(computeView(source, wantedQuery, wantedSort))
             post(Runnable {
                 if (closed || stamp != epoch.get() || seq != viewSeq) return@Runnable
+                rebuilding = false
                 // A load that finished in between replaced [all]; recompute from the fresh data.
                 applyView(if (source === all) computed else Shown(computeView(all, query, sort)))
                 onDone()
@@ -244,6 +265,8 @@ internal class MeloLocalLibrary(
             executor.execute(Runnable { block() })
         } catch (e: RejectedExecutionException) {
             loading = false
+            rebuilding = false
+            loadFailed = true
         }
     }
 

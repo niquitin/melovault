@@ -61,6 +61,11 @@ class LocalMediaRepository(
         context?.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     },
 ) {
+    /** Result fact for the last uncached track read; cached reads retain that result. */
+    @Volatile
+    var lastTrackReadFailed: Boolean = false
+        private set
+
     companion object {
         private const val TAG = "LocalMediaRepository"
         const val DEVICE_PREFIX = "device:"
@@ -219,10 +224,12 @@ class LocalMediaRepository(
         cachedTracks?.let { return it }
         synchronized(this) {
             cachedTracks?.let { return it }
-            val tracks = if (tracksProvider != null) {
-                tracksProvider.invoke()
-            } else {
-                queryAllLocalTracks()
+            lastTrackReadFailed = false
+            val tracks = try {
+                if (tracksProvider != null) tracksProvider.invoke() else queryAllLocalTracks()
+            } catch (e: Exception) {
+                lastTrackReadFailed = true
+                throw e
             }
             cachedTracks = tracks
             cachedHierarchy = buildFolderHierarchy(tracks) { vol -> getVolumeDisplayName(vol) }
@@ -524,8 +531,14 @@ class LocalMediaRepository(
     }
 
     private fun queryAllLocalTracks(): List<LocalMediaTrack> {
-        if (!hasPermission()) return emptyList()
-        val resolver = contentResolverSupplier() ?: return emptyList()
+        if (!hasPermission()) {
+            lastTrackReadFailed = true
+            return emptyList()
+        }
+        val resolver = contentResolverSupplier() ?: run {
+            lastTrackReadFailed = true
+            return emptyList()
+        }
         val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         val hasSdk29 = Build.VERSION.SDK_INT >= 29
 
@@ -607,8 +620,9 @@ class LocalMediaRepository(
                         )
                     )
                 }
-            }
+            } ?: run { lastTrackReadFailed = true }
         } catch (e: Exception) {
+            lastTrackReadFailed = true
             Log.e(TAG, "Failed querying MediaStore: ${e.message}", e)
         }
 

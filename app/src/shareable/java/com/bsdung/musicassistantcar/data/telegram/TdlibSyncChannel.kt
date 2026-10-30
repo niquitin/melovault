@@ -23,10 +23,12 @@ internal data class SyncConsent(
     val acceptedWarningVersion: Int = 0,
 ) {
     companion object {
-        const val WARNING_VERSION = 1
+        const val WARNING_VERSION = 3
     }
 
     val warningAccepted: Boolean get() = acceptedWarningVersion == WARNING_VERSION
+    /** V2 manual consent never silently authorizes foreground automation. */
+    val automatic: Boolean get() = enabled && warningAccepted && mayTransmitInitial
 }
 
 internal interface SyncConsentStore {
@@ -109,7 +111,7 @@ internal class SyncConsentActions(private val store: SyncConsentStore) {
     /** Needs the person to have SEEN and accepted the warning in the same action. */
     fun enable(account: TelegramUserId, warningShownAndAccepted: Boolean): Boolean {
         if (!warningShownAndAccepted) return false
-        return store.save(account, store.load(account).copy(enabled = true, acceptedWarningVersion = SyncConsent.WARNING_VERSION))
+        return store.save(account, SyncConsent(enabled = true, acceptedWarningVersion = SyncConsent.WARNING_VERSION))
     }
 
     fun allowChannelCreation(account: TelegramUserId): Boolean {

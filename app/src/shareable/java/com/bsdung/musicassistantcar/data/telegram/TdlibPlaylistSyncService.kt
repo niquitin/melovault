@@ -2,6 +2,7 @@ package com.bsdung.musicassistantcar.data.telegram
 
 import java.util.concurrent.Executor
 import java.util.concurrent.locks.ReentrantLock
+import java.util.concurrent.atomic.AtomicLong
 
 internal sealed class Gated<out T> {
     data class Denied(val reason: SyncDenied) : Gated<Nothing>()
@@ -32,12 +33,14 @@ internal class TdlibPlaylistSyncService(
     private val sendBudgetCap: Int = SyncSendBudget.PRODUCTION_MAX,
     /** Creating a Telegram channel is LOCKED unless the build explicitly unlocks it (never in Release, off by default in QA). */
     private val channelCreationUnlocked: Boolean = false,
+    private val isActive: () -> Boolean = { true },
 ) {
     private val hub = TdlibSyncHub(owner, metrics, alerts)
     private val lock = ReentrantLock()
     private val backoffs = HashMap<Long, SyncBackoff>()
     @Volatile private var activeReader: TdlibHistoryReader? = null
     private var attached = false
+    private val cancellation = AtomicLong()
 
     /** Keeps the sink bound between calls (for a P4 screen that stays open). It never keeps the client alive. */
     fun attach(account: TelegramUserId): Gated<Boolean> {
@@ -56,6 +59,7 @@ internal class TdlibPlaylistSyncService(
 
     /** Stops the unfinished work at its next step (a scan, a wait). */
     fun cancel() {
+        cancellation.incrementAndGet()
         activeReader?.cancel()
         hub.abortAll()
     }
@@ -72,6 +76,7 @@ internal class TdlibPlaylistSyncService(
 
     private inline fun <T> session(account: TelegramUserId, denyIf: () -> SyncDenied?, body: (epoch: Long) -> T): Gated<T> {
         denyIf()?.let { return denied(it) }
+        if (!isActive()) return denied(SyncDenied.NOT_OPEN)
         if (!lock.tryLock()) return Gated.Denied(SyncDenied.BUSY)
         var openedHere = false
         try {
@@ -105,10 +110,28 @@ internal class TdlibPlaylistSyncService(
             directory(account, epoch).create(boundChannel(account))
         }
 
-    fun bindChannel(account: TelegramUserId, chatId: Long): Gated<BindResult> =
-        session(account, { gate.mayRun(account) }) { epoch ->
-            directory(account, epoch).bind(host, account, chatId)
+    fun bindChannel(account: TelegramUserId, chatId: Long): Gated<BindResult> {
+        val token = cancellation.get()
+        return session(account, { gate.mayRun(account) }) { epoch ->
+            directory(account, epoch).bind(guardedHost { activeScope(account, epoch, token) }, account, chatId)
         }
+    }
+
+    private fun activeScope(account: TelegramUserId, epoch: Long, token: Long) =
+        isActive() && cancellation.get() == token && owner.authorizedAccount() == account.value &&
+            owner.authEpoch() == epoch && gate.mayRun(account) == null
+
+    /** Late network answers cannot commit after foreground, consent or auth ownership ended. */
+    private fun guardedHost(valid: () -> Boolean) = object : PlaylistSyncHost {
+        override fun view(account: TelegramUserId): SyncView? = if (valid()) host.view(account) else null
+        override fun update(account: TelegramUserId, epoch: Long, transform: (PlaylistState) -> PlaylistState): UpdateResult {
+            if (!valid()) return UpdateResult.Stale
+            return host.update(account, epoch) { state ->
+                check(valid()) { "Sync scope ended" }
+                transform(state)
+            }
+        }
+    }
 
     /**
      * One synchronisation run of the P2 coordinator over TDLib. Manual: [SyncMode.FULL_REPLAY] is the hook for the
@@ -117,6 +140,7 @@ internal class TdlibPlaylistSyncService(
      * and a bound channel; it reads the history and acknowledges what is already there.
      */
     fun runSync(account: TelegramUserId, mode: SyncMode = SyncMode.INCREMENTAL, sendBudget: Int = 0): Gated<SyncReport> {
+        val cancellationAtStart = cancellation.get()
         gate.mayRun(account)?.let { return denied(it) }
         // Never unlimited: no number, zero or a negative number is a read-and-acknowledge run; a big number is cut to the cap.
         val budget = SyncSendBudget.clamp(sendBudget, sendBudgetCap)
@@ -129,6 +153,8 @@ internal class TdlibPlaylistSyncService(
         // never switched on by this, and the transport checks it again on every dispatch.
         if (waiting && budget > 0 && gate.mayTransmit(account) != null) return denied(SyncDenied.TRANSMIT_NOT_ALLOWED)
         return session(account, { null }) { epoch ->
+            fun valid() = activeScope(account, epoch, cancellationAtStart)
+            val scopedHost = guardedHost(::valid)
             metrics.count(SyncMetrics.Event.RUN_STARTED)
             val started = clock()
             val backoff = backoffs.getOrPut(account.value) { SyncBackoff() }
@@ -138,9 +164,9 @@ internal class TdlibPlaylistSyncService(
             try {
                 val transport = TdlibPlaylistSyncTransport(
                     hub, account.value, epoch, channel, reader, timeouts,
-                    sendAllowed = { gate.mayTransmit(account) == null },
+                    sendAllowed = { valid() && gate.mayTransmit(account) == null },
                 )
-                val report = PlaylistSyncCoordinator(host, transport, clock, config, backoff).runOnce(account, mode, budget)
+                val report = PlaylistSyncCoordinator(scopedHost, transport, clock, config, backoff).runOnce(account, mode, budget)
                 metrics.runFinished(clock() - started, backoff.failures)
                 metrics.count(SyncMetrics.Event.RUN_FINISHED)
                 report

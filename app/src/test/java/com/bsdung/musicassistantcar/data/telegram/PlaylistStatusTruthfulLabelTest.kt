@@ -25,14 +25,15 @@ class PlaylistStatusTruthfulLabelTest {
         assertEquals(Kind.NEVER_SYNCED, l.kind) // the kind keeps its name; only the words change
         assertFalse("must not say never synced: ${l.text}", l.text.contains("Chưa đồng bộ lần nào"))
         assertFalse(l.detail.contains("Chưa có lần đồng bộ nào"))
-        assertEquals("Đã lưu trên máy · Chưa kiểm tra đồng bộ trong phiên này", l.text)
+        assertEquals("Đã lưu trên máy · Chờ kiểm tra đồng bộ", l.text)
+        assertTrue(l.detail.contains("Chưa có kết quả xác nhận trong phiên này"))
     }
 
     @Test fun r3_andItNeverClaimsSyncedEither() {
         val l = line(run = null)
         assertNotEquals(Kind.SYNCED, l.kind)
         assertFalse(l.text.contains("Đã đồng bộ"))
-        assertTrue("it still tells the person what to do", l.detail.contains("Đồng bộ ngay"))
+        assertTrue("it explains the foreground and opt-in requirement", l.detail.contains("đang mở và đã bật tự đồng bộ"))
     }
 
     @Test fun r3_aRealRunInThisSessionStillSpeaksForItself() {

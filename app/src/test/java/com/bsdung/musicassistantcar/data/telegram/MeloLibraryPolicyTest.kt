@@ -14,6 +14,55 @@ import org.junit.Test
 class MeloLibraryPolicyTest {
 
     @Test
+    fun globalTabsNameCompleteScopesWithoutChannelOrDownloadedFlagLeak() {
+        val scopes = MeloLibraryPolicy.TabKind.entries.map(MeloLibraryPolicy::tabScope)
+        assertEquals(listOf(MeloBrowseUiPolicy.Kind.LIBRARY, MeloBrowseUiPolicy.Kind.DOWNLOADED,
+            MeloBrowseUiPolicy.Kind.PLAYLIST, MeloBrowseUiPolicy.Kind.SOURCES), scopes.map { it.kind })
+        assertTrue(scopes.all { it.chatId == null && !it.downloadedOnly })
+        for (scope in scopes) {
+            val tabs = MeloLibraryPolicy.themeTabs(null, 300, Mode.DOWNLOADED, false, scope)
+            assertEquals(1, tabs.count { it.selected })
+            assertEquals(scope, MeloLibraryPolicy.tabScope(tabs.first { it.selected }.kind))
+        }
+    }
+
+    @Test
+    fun channelAndSavedMessagesDoNotPretendToBeGlobalTabs() {
+        for (scope in listOf(MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.CHANNEL, -1),
+            MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.DOWNLOADED, -1),
+            MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.SAVED_MESSAGES))) {
+            assertTrue(MeloLibraryPolicy.themeTabs(null, 600, Mode.ALL, false, scope).none { it.selected })
+        }
+    }
+
+    @Test
+    fun sourceSelectionIsBrowseIdentityAndUnknownCountIsNotZero() {
+        val a = MeloScreenHost.SourceRow(-1, "Cùng tên", 10)
+        val b = MeloScreenHost.SourceRow(-2, "Cùng tên", -1)
+        assertTrue(MeloLibraryPolicy.sourcePresentation(a, -1).selected)
+        assertFalse(MeloLibraryPolicy.sourcePresentation(b, -1).selected)
+        assertTrue(MeloLibraryPolicy.sourcePresentation(a, -1).detail.contains("Đang duyệt"))
+        assertEquals("Chưa rõ số bài", MeloLibraryPolicy.sourcePresentation(b, null).detail)
+        assertEquals(listOf(a), MeloLibraryPolicy.quickSwitchRows(listOf(a, b, a.copy(chatId = -3, count = 0))))
+    }
+
+    @Test
+    fun browsingAnotherScopeCancelsExplicitPlayThatIsStillWaitingForData() {
+        val scope = MeloLibraryPolicy.tabScope(MeloLibraryPolicy.TabKind.ALL)
+        val request = MeloBrowseUiPolicy.Request(1, 10, scope)
+        val row = MeloScreenHost.Row("A", null, "a.mp3", 1, 7, false, null, null)
+        val snapshot = MeloScreenHost.Snapshot(false, Mode.ALL, listOf(row), emptyList(), 1, null, null,
+            query = "", note = null, browseScope = scope, browseOwnerId = 1, browseGeneration = 10)
+        assertEquals(MeloLibraryPolicy.BrowsePlayDecision.PLAY, MeloLibraryPolicy.pendingBrowsePlay(request, snapshot))
+        assertEquals(MeloLibraryPolicy.BrowsePlayDecision.WAIT, MeloLibraryPolicy.pendingBrowsePlay(request,
+            snapshot.copy(browseLoadState = MeloBrowseUiPolicy.LoadState.UPDATING)))
+        assertEquals(MeloLibraryPolicy.BrowsePlayDecision.CANCEL, MeloLibraryPolicy.pendingBrowsePlay(request,
+            snapshot.copy(browseScope = MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.CHANNEL, -2), browseGeneration = 11)))
+        assertEquals(MeloLibraryPolicy.BrowsePlayDecision.CANCEL, MeloLibraryPolicy.pendingBrowsePlay(request,
+            snapshot.copy(rows = emptyList())))
+    }
+
+    @Test
     fun newIsDefaultAndKeysRoundTrip() {
         assertEquals(LibraryStyle.NEW, LibraryStyle.fromKey(null))
         assertEquals(LibraryStyle.NEW, LibraryStyle.fromKey("bogus"))

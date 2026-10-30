@@ -237,11 +237,11 @@ class PlaylistStatusFactsTest {
         assertEquals(0, r.tdlib.gateway.count("createNewSupergroupChat"))
     }
 
-    @Test fun f13_theKillSwitchIsStillOffAndNothingInTheAppWiresTheRealServiceYet() {
-        assertFalse(TelegramPlaylistFlags.SYNC_ENABLED)
+    @Test fun f13_productFeatureRequiresConsentAndExplicitKillSwitchStillWorks() {
+        assertTrue(TelegramPlaylistFlags.SYNC_ENABLED)
         assertTrue(TelegramPlaylistFlags.V2_ENABLED)
         assertEquals(Gated.Denied(SyncDenied.BUILD_OFF), DisabledSyncActions.run(acct, SyncMode.INCREMENTAL))
-        assertEquals(SyncDenied.BUILD_OFF, SyncGate(store = InMemorySyncConsentStore()).mayRun(acct))
+        assertEquals(SyncDenied.BUILD_OFF, SyncGate(buildEnabled = false, store = InMemorySyncConsentStore()).mayRun(acct))
     }
 
     @Test fun f14_v1OnlySessionsHaveNoStatusFactsAndNeverCrashTheLine() {

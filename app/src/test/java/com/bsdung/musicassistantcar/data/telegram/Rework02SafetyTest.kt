@@ -330,7 +330,7 @@ class Rework02SafetyTest {
     private class EpochActions(val onRun: () -> Unit) : SyncActionsPort {
         val budgets = ArrayList<Int>()
         var answer: Gated<SyncReport> = Gated.Done(SyncReport(SyncStatus.SEND_LIMIT_REACHED, opsDispatched = 1))
-        override fun discover(account: TelegramUserId): Gated<ChannelDiscovery> = Gated.Done(ChannelDiscovery.NotFound)
+        override fun discover(account: TelegramUserId): Gated<ChannelDiscovery> = Gated.Done(ChannelDiscovery.Found(-77L))
         override fun create(account: TelegramUserId): Gated<CreateOutcome> = Gated.Done(CreateOutcome.Created(-1L))
         override fun bind(account: TelegramUserId, chatId: Long): Gated<BindResult> = Gated.Done(BindResult.Bound)
         override fun run(account: TelegramUserId, mode: SyncMode, sendBudget: Int): Gated<SyncReport> {
@@ -346,6 +346,7 @@ class Rework02SafetyTest {
         val c = SyncSettingsController(store, true, port, { acct }, { facts }, epoch = epoch)
         assertEquals(ActionResult.Done, c.enable(true))
         assertEquals(ActionResult.Done, c.setAllowTransmit(true))
+        assertEquals(ActionResult.Done, c.discover())
         return c
     }
 
@@ -358,6 +359,8 @@ class Rework02SafetyTest {
         assertEquals(3, port.budgets.single())
         assertEquals("one was dispatched, two were left - and they are gone with the old epoch", 0, c.sendGrant())
         assertEquals(0, c.screen().sendGrant)
+        assertEquals(ActionResult.Refused(ActionResult.Reason.NEEDS_DISCOVERY), c.syncNow())
+        assertEquals(ActionResult.Done, c.discover())
         c.syncNow()
         assertEquals("the next run is read-only", 0, port.budgets.last())
     }

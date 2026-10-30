@@ -152,6 +152,9 @@ class MeloNowPlayingPolicyTest {
     @Test
     fun queueStatusPriority() {
         assertEquals(Status.PLAYING, MeloNowPlayingPolicy.queueStatus(true, true, null))
+        assertEquals(Status.PAUSED, MeloNowPlayingPolicy.queueStatus(true, true, null, paused = true))
+        assertEquals(Status.OPENING, MeloNowPlayingPolicy.queueStatus(true, false, 25, buffering = true))
+        assertEquals(Status.PAUSED, MeloNowPlayingPolicy.queueStatus(true, false, 25, paused = true, buffering = true))
         assertEquals(Status.DOWNLOADING, MeloNowPlayingPolicy.queueStatus(false, false, 30))
         assertEquals(Status.DOWNLOADED, MeloNowPlayingPolicy.queueStatus(false, true, null))
         assertEquals(Status.TELEGRAM, MeloNowPlayingPolicy.queueStatus(false, false, null))

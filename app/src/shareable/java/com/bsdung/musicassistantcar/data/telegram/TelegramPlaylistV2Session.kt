@@ -8,17 +8,18 @@ internal object TelegramPlaylistFlags {
     const val V2_ENABLED = true
 
     /**
-     * E96 P5B3: false for EVERY standard Debug/Release build. Only the separately requested
-     * -PmeloSyncQa=true Debug QA build may reach the user-consent and TDLib sync gates.
-     * Release BuildConfig hardcodes false; this flag alone NEVER grants per-account consent.
+     * E105: product feature gate for private/open Debug and Release. Never grants per-account consent.
      */
-    val SYNC_ENABLED: Boolean get() = com.bsdung.musicassistantcar.BuildConfig.MELO_SYNC_QA_BUILD
+    val SYNC_ENABLED: Boolean get() = com.bsdung.musicassistantcar.BuildConfig.MELO_PLAYLIST_SYNC_ENABLED
+
+    /** Synthetic fixtures and simulation are available only in explicitly requested Debug QA builds. */
+    val SYNC_QA_ENABLED: Boolean get() = com.bsdung.musicassistantcar.BuildConfig.DEBUG && com.bsdung.musicassistantcar.BuildConfig.MELO_SYNC_QA_BUILD
 
     /**
      * E96 P5B3 REWORK-01: creating a Telegram channel is locked in EVERY build, QA included. Only a Debug build started with
      * both -PmeloSyncQa=true and -PmeloSyncQaAllowCreate=true can unlock it; Release hardcodes false. Needs [SYNC_ENABLED] too.
      */
-    val SYNC_CREATE_ALLOWED: Boolean get() = SYNC_ENABLED && com.bsdung.musicassistantcar.BuildConfig.MELO_SYNC_QA_ALLOW_CREATE
+    val SYNC_CREATE_ALLOWED: Boolean get() = SYNC_ENABLED && SYNC_QA_ENABLED && com.bsdung.musicassistantcar.BuildConfig.MELO_SYNC_QA_ALLOW_CREATE
 }
 
 /** What the UI knows about the song the user taps. [chatId]/[rawMessageId] are 0 when unknown. */

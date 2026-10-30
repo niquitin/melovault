@@ -176,9 +176,10 @@ class TdlibOwnerFanOutTest {
         s.stop()
     }
 
-    @Test fun f12_theDefaultBuildSwitchIsOff() {
-        assertFalse(TelegramPlaylistFlags.SYNC_ENABLED)
+    @Test fun f12_productFeatureStillRequiresAccountConsent() {
+        assertTrue(TelegramPlaylistFlags.SYNC_ENABLED)
         val denied = SyncGate(store = InMemorySyncConsentStore()).mayRun(TelegramUserId(1L))
-        assertEquals(SyncDenied.BUILD_OFF, denied)
+        assertEquals(SyncDenied.NOT_ENABLED, denied)
+        assertEquals(SyncDenied.BUILD_OFF, SyncGate(false, InMemorySyncConsentStore()).mayRun(TelegramUserId(1L)))
     }
 }

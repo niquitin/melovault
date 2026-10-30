@@ -14,17 +14,25 @@ internal interface MeloScreenHost {
     fun setMode(mode: Mode)
     fun showSources()
     fun openSource(chatId: Long?)
+    fun openBrowseScope(scope: MeloBrowseUiPolicy.Scope) = Unit
+    fun filterInSource(mode: Mode) = setMode(mode)
+    fun closeSources() = openSource(null)
+    fun selectedBrowseSource(): Long? = null
 
     /** "Nhạc trên máy": opens the device music list; asks for audio access only here (the owner tapped it). */
     fun openLocal()
     /** Leaves "Nhạc trên máy" back to the Telegram screen the owner came from. */
     fun closeLocal()
     fun setQuery(query: String)
+    /** Retry only the list currently being browsed; never starts a sync or changes playback. */
+    fun retryBrowse() = Unit
     fun loadMore()
     fun playAt(index: Int)
 
     /** The song just tapped while it is still being opened ("Đang mở…"), null otherwise. */
     fun playStatus(): TelegramPlayFeedbackPolicy.PlayStatus?
+    fun playUiFeedback(): MeloPlayUiState.Presentation? = null
+    fun retryPlay(attempt: MeloPlayUiState.Attempt) = Unit
     fun openSongMenu(index: Int, anchor: View)
     fun nowPlaying(): NowPlaying?
     fun playPause()
@@ -32,6 +40,7 @@ internal interface MeloScreenHost {
     fun previous()
     fun seekTo(positionMs: Long)
     fun toggleFavorite()
+    fun toggleRowFavorite(songKey: Long) = Unit
 
     /**
      * E96 P4: the honest one-line state of the saved Playlist (saved on this device / waiting / synced / why not),
@@ -58,6 +67,12 @@ internal interface MeloScreenHost {
      */
     fun saveListAnchor(groupKey: String, songKey: Long?, offsetPx: Int)
     fun listAnchor(): ListAnchor?
+    fun setBrowseCapture(listener: (() -> Unit)?) = Unit
+    fun browseContext(): MeloBrowseState.Context? = null
+    fun saveBrowsePosition(generation: Long, songKey: Long?, offsetPx: Int, sourceScrollY: Int) = Unit
+    fun saveSourcePosition(generation: Long, chatId: Long?, offsetPx: Int) = Unit
+    fun deckState(): MeloBrowseState.Deck = MeloBrowseState.Deck()
+    fun saveDeckState(state: MeloBrowseState.Deck) = Unit
 
     // ---- Library screens (Điện thoại / Tablet / Hai khung) ---------------------------------
 
@@ -115,7 +130,7 @@ internal interface MeloScreenHost {
 
     // ---- Studio Deck (Now Playing) --------------------------------------------------------
 
-    /** Current playback queue in play order (the service's authoritative order). */
+    /** Actual play order (already shuffled while Đảo is on), kept by ShareablePlaybackService. */
     fun queue(): List<QueueItem>
     fun playQueueAt(index: Int)
     /** Same song menu as the library rows, for the queue song at [index]. */
@@ -144,7 +159,8 @@ internal interface MeloScreenHost {
         val downloaded: Boolean,
         val downloadingPercent: Int?,
         /** A "Nhạc trên máy" song: its row says "Trên máy", not "Đã tải". */
-        val local: Boolean = false
+        val local: Boolean = false,
+        val download: MeloDownloadUiPolicy.Presentation? = null
     )
 
     data class Row(
@@ -168,7 +184,13 @@ internal interface MeloScreenHost {
         val rawMessageId: Long = 0L,
         /** Path of the downloaded file, when the song is on the device; the loader checks it is the account's own. */
         val localFile: String? = null,
-        val mediaStoreId: Long = 0L
+        val mediaStoreId: Long = 0L,
+        val performer: String? = null,
+        val sourceIsFolder: Boolean = false,
+        val saved: Boolean = false,
+        val saveBusy: Boolean = false,
+        val saveAvailability: MeloSavePolicy.Availability = MeloSavePolicy.Availability.NOT_IDENTIFIED,
+        val download: MeloDownloadUiPolicy.Presentation? = null
     )
 
     data class SourceRow(val chatId: Long, val title: String, val count: Int)
@@ -196,7 +218,15 @@ internal interface MeloScreenHost {
         /** The channel open in the list, null for all sources, Saved Messages or Playlist. */
         val selectedChatId: Long? = null,
         /** The list on screen is "Nhạc trên máy" (not Telegram). */
-        val local: Boolean = false
+        val local: Boolean = false,
+        val browseScope: MeloBrowseUiPolicy.Scope = MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.LIBRARY),
+        val browseLoadState: MeloBrowseUiPolicy.LoadState = MeloBrowseUiPolicy.LoadState.READY,
+        val browseOwnerId: Long = 0L,
+        val browseGeneration: Long = 0L,
+        /** True only when the current query has no further page. */
+        val browseComplete: Boolean = true,
+        val playing: Boolean = false,
+        val buffering: Boolean = false
     )
 
     data class NowPlaying(
@@ -221,6 +251,8 @@ internal interface MeloScreenHost {
         /** E96 P4: whether and how the Save button may act on this song (see [MeloSavePolicy]). */
         val saveAvailability: MeloSavePolicy.Availability = MeloSavePolicy.Availability.READY,
         /** A Save write for this song is running; [favorite] still shows what is committed. */
-        val saveBusy: Boolean = false
+        val saveBusy: Boolean = false,
+        val download: MeloDownloadUiPolicy.Presentation? = null,
+        val buffering: Boolean = false
     )
 }

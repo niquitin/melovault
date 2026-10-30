@@ -45,6 +45,7 @@ import kotlin.math.sin
 
 /** Tag on the ⋮ button of a song row, so a ListView host can keep just that button clickable. */
 internal const val MELO_SONG_ROW_MORE_TAG = "melo.songrow.more"
+internal const val MELO_SONG_ROW_SAVE_TAG = "melo.songrow.save"
 
 /** Tag on the cover frame of a teal-theme song row: which cover ([MeloRowArtPolicy] key) belongs there. */
 internal class MeloArtTag(val key: String)
@@ -84,7 +85,12 @@ internal class MeloComponents(
         /** A "Nhạc trên máy" song: the status line says "Trên máy" instead of "Đã tải". */
         val local: Boolean = false,
         /** E98 teal theme: identity of the row's cover, so a cover that arrives later finds its row. */
-        val artKey: String? = null
+        val artKey: String? = null,
+        /** Library opt-in; null keeps the existing Compact/Car/queue metadata. Empty means no tags. */
+        val browseMetadata: String? = null,
+        /** Explicit list opt-in only; Compact, Car and queue callers keep null. */
+        val rowSave: MeloSavePolicy.ButtonState? = null,
+        val statusTextOverride: String? = null
     )
 
     data class MiniPlayerModel(
@@ -95,6 +101,10 @@ internal class MeloComponents(
         val playing: Boolean,
         val art: Bitmap? = null
     )
+
+    private fun accessibleRowPalette(model: SongRowModel, highlighted: Boolean): MeloDesignTokens.Palette =
+        if ((model.browseMetadata != null || model.statusTextOverride != null) && highlighted && !isCar && !isCompact)
+            MeloDesignTokens.libraryHighlightedPalette(palette) else palette
 
     private val isCar get() = sizes.profile == Profile.CAR
     private val isCompact get() = sizes.profile == Profile.COMPACT
@@ -240,13 +250,16 @@ internal class MeloComponents(
         model: SongRowModel,
         onClick: (() -> Unit)? = null,
         onLongClick: (() -> Unit)? = null,
-        onMore: (() -> Unit)? = null
+        onMore: (() -> Unit)? = null,
+        onSave: (() -> Unit)? = null
     ): View {
-        if (teal && !isCompact && !isCar) return tealSongRow(model, onClick, onLongClick, onMore)
-        val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local)
+        if (teal && !isCompact && !isCar) return tealSongRow(model, onClick, onLongClick, onMore, onSave)
+        val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local).let { it.copy(label = model.statusTextOverride ?: it.label) }
+        val palette = accessibleRowPalette(model, status.highlightRow)
         // E96 P5B3: lookalike/combining characters in channel names are drawn by a fallback font; show their plain form.
         val shownTitle = DisplayTextPolicy.clean(model.title)
         val shownSource = DisplayTextPolicy.cleanOrNull(model.sourceTitle)
+        val metadata = model.browseMetadata?.let(DisplayTextPolicy::clean) ?: shownSource
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -258,7 +271,7 @@ internal class MeloComponents(
             )
             isClickable = true
             isFocusable = true
-            contentDescription = listOfNotNull(shownTitle, status.label, shownSource).joinToString(", ")
+            contentDescription = listOfNotNull(shownTitle, status.label, metadata).filter { it.isNotBlank() }.joinToString(", ")
             if (onClick != null) setOnClickListener { onClick() }
             if (onLongClick != null) setOnLongClickListener { onLongClick(); true }
         }
@@ -303,7 +316,7 @@ internal class MeloComponents(
             statusLine.addView(MeloStatusIconView(context, model.status, color(status.color), model.progressPercent, palette.onAccent).apply {
                 layoutParams = LinearLayout.LayoutParams(iconSize, iconSize).apply { marginEnd = sizes.gap / 2 }
             })
-            val detail = listOfNotNull(status.label, shownSource?.takeIf { it.isNotBlank() }).joinToString(" · ")
+            val detail = listOfNotNull(status.label, metadata?.takeIf { it.isNotBlank() }).joinToString(" · ")
             statusLine.addView(text(detail, sizes.secondaryText, color(status.color)).apply {
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
             })
@@ -312,11 +325,15 @@ internal class MeloComponents(
         row.addView(body)
 
         TelegramSongDisplayPolicy.formatDuration(model.durationSeconds)?.let { duration ->
-            row.addView(text(duration, sizes.secondaryText, palette.textSecondary).apply {
+            val below = (model.browseMetadata != null || model.statusTextOverride != null) &&
+                context.resources.configuration.fontScale > 1.3f && !isCompact && !isCar
+            val durationView = text(duration, sizes.secondaryText, palette.textSecondary).apply {
                 setPadding(0, 0, sizes.gap / 2, 0)
-            })
+            }
+            if (below) body.addView(durationView) else row.addView(durationView)
         }
         if (!isCar) {
+            rowSaveButton(model, onSave)?.let(row::addView)
             row.addView(TextView(context).apply {
                 text = "⋮"
                 gravity = Gravity.CENTER
@@ -394,7 +411,8 @@ internal class MeloComponents(
             view.setOnLongClickListener { onLongClick(); true }
             if (model == bound) return
             bound = model
-            val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local)
+            val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local).let { it.copy(label = model.statusTextOverride ?: it.label) }
+        val palette = accessibleRowPalette(model, status.highlightRow)
             view.background = roundedBackground(
                 if (status.highlightRow) palette.accentSoft else palette.surface,
                 stroke = if (status.highlightRow) palette.accent else null
@@ -522,11 +540,14 @@ internal class MeloComponents(
         model: SongRowModel,
         onClick: (() -> Unit)?,
         onLongClick: (() -> Unit)?,
-        onMore: (() -> Unit)?
+        onMore: (() -> Unit)?,
+        onSave: (() -> Unit)?
     ): View {
-        val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local)
+        val status = MeloComponentPolicy.presentStatus(model.status, model.qualityLabel, model.progressPercent, model.local).let { it.copy(label = model.statusTextOverride ?: it.label) }
+        val palette = accessibleRowPalette(model, status.highlightRow)
         val shownTitle = DisplayTextPolicy.clean(model.title)
         val shownSource = DisplayTextPolicy.cleanOrNull(model.sourceTitle)
+        val metadata = model.browseMetadata?.let(DisplayTextPolicy::clean) ?: shownSource
         val playing = status.highlightRow
         val radius = sizes.corner * 7 / 8
         val row = LinearLayout(context).apply {
@@ -536,7 +557,8 @@ internal class MeloComponents(
             setPadding(sizes.gap, sizes.gap / 2, sizes.gap / 2, sizes.gap / 2)
             background = if (playing) {
                 gradient(
-                    palette.accentSoft, MeloComponentPolicy.blend(palette.accentSoft, palette.accent, 0.35f), radius,
+                    palette.accentSoft, if (model.browseMetadata != null || model.statusTextOverride != null) palette.accentSoft
+                    else MeloComponentPolicy.blend(palette.accentSoft, palette.accent, 0.35f), radius,
                     GradientDrawable.Orientation.LEFT_RIGHT, stroke = palette.accent
                 )
             } else {
@@ -544,7 +566,7 @@ internal class MeloComponents(
             }
             isClickable = true
             isFocusable = true
-            contentDescription = listOfNotNull(shownTitle, status.label, shownSource).joinToString(", ")
+            contentDescription = listOfNotNull(shownTitle, status.label, metadata).filter { it.isNotBlank() }.joinToString(", ")
             if (onClick != null) setOnClickListener { onClick() }
             if (onLongClick != null) setOnLongClickListener { onLongClick(); true }
         }
@@ -558,7 +580,7 @@ internal class MeloComponents(
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         }
         body.addView(text(shownTitle, sizes.titleText, if (playing) palette.accent else palette.text, bold = true, maxLines = 2))
-        body.addView(text(MeloComponentPolicy.themedSecondLine(model.status, status.label, shownSource), sizes.secondaryText,
+        body.addView(text((model.statusTextOverride?.let { listOfNotNull(it, metadata).filter { part -> part.isNotBlank() }.joinToString(" · ") } ?: MeloComponentPolicy.themedSecondLine(model.status, status.label, metadata)), sizes.secondaryText,
             if (model.status == Status.ERROR) palette.warning else palette.textSecondary).apply {
             setPadding(0, sizes.gap / 2, 0, 0)
         })
@@ -576,10 +598,14 @@ internal class MeloComponents(
             contentDescription = status.label
         })
         TelegramSongDisplayPolicy.formatDuration(model.durationSeconds)?.let { duration ->
-            row.addView(text(duration, sizes.secondaryText, palette.textSecondary).apply {
+            val below = (model.browseMetadata != null || model.statusTextOverride != null) &&
+                context.resources.configuration.fontScale > 1.3f && !isCompact && !isCar
+            val durationView = text(duration, sizes.secondaryText, palette.textSecondary).apply {
                 setPadding(0, 0, sizes.gap / 2, 0)
-            })
+            }
+            if (below) body.addView(durationView) else row.addView(durationView)
         }
+        rowSaveButton(model, onSave)?.let(row::addView)
         row.addView(TextView(context).apply {
             text = "⋮"
             gravity = Gravity.CENTER
@@ -593,6 +619,20 @@ internal class MeloComponents(
             setOnClickListener { (onMore ?: onLongClick)?.invoke() }
         })
         return row
+    }
+
+    private fun rowSaveButton(model: SongRowModel, onSave: (() -> Unit)?): View? {
+        val state = model.rowSave ?: return null
+        if (isCompact || isCar) return null
+        return text(state.label, sizes.titleText, if (state.saved) palette.accent else palette.textSecondary).apply {
+            tag = MELO_SONG_ROW_SAVE_TAG
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(sizes.minTouch, sizes.minTouch)
+            isFocusable = true
+            contentDescription = state.contentDescription
+            androidx.core.view.ViewCompat.setStateDescription(this, state.stateDescription)
+            setOnClickListener { onSave?.invoke() }
+        }
     }
 
     /** The "☁ Đồng bộ: 27.971 bài ●" line with the ⚙ button at its end. */

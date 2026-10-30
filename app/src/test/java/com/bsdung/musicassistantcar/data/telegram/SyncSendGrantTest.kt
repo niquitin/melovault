@@ -25,7 +25,8 @@ class SyncSendGrantTest {
         var creates = 0
         var answer: Gated<SyncReport> = Gated.Done(SyncReport(SyncStatus.OK))
         var boom: Throwable? = null
-        override fun discover(account: TelegramUserId): Gated<ChannelDiscovery> = Gated.Done(ChannelDiscovery.NotFound)
+        var discovery: ChannelDiscovery = ChannelDiscovery.Found(-77L)
+        override fun discover(account: TelegramUserId): Gated<ChannelDiscovery> = Gated.Done(discovery)
         override fun create(account: TelegramUserId): Gated<CreateOutcome> { creates++; return Gated.Done(CreateOutcome.Created(-1_000L)) }
         override fun bind(account: TelegramUserId, chatId: Long): Gated<BindResult> = Gated.Done(BindResult.Bound)
         override fun run(account: TelegramUserId, mode: SyncMode, sendBudget: Int): Gated<SyncReport> {
@@ -48,6 +49,7 @@ class SyncSendGrantTest {
         assertEquals(ActionResult.Done, enable(true))
         if (create) assertEquals(ActionResult.Done, setAllowCreate(true))
         if (transmit) assertEquals(ActionResult.Done, setAllowTransmit(true))
+        assertEquals(ActionResult.Done, discover())
     }
 
     private fun report(dispatched: Int, status: SyncStatus = SyncStatus.SEND_LIMIT_REACHED) = Gated.Done(SyncReport(status, opsDispatched = dispatched))
@@ -188,7 +190,10 @@ class SyncSendGrantTest {
         c.grantSend(3, true)
         assertEquals(3, c.sendGrant())
         epoch = 8L // A, then B, then A again: a fresh epoch
-        c.syncNow()
+        assertEquals(ActionResult.Refused(ActionResult.Reason.NEEDS_DISCOVERY), c.syncNow())
+        assertTrue(port.budgets.isEmpty())
+        assertEquals(ActionResult.Done, c.discover())
+        assertEquals(ActionResult.Done, c.syncNow())
         assertEquals("the run is given nothing", 0, port.budgets.last())
         assertEquals(0, c.sendGrant())
         c.grantSend(2, true)
@@ -243,13 +248,15 @@ class SyncSendGrantTest {
     @Test fun t16_withoutConsentToTransmitTheServiceDeniesBeforeAnyRequestAndTheControllerChargesNothing() {
         val r = rig(bound = true, songs = 2)
         val c = SyncSettingsController(r.consentStore, true, TdlibSyncActions(r.service), { acct }, { r.device.session.statusFacts(acct) })
+        assertEquals(ActionResult.Done, c.discover())
+        val historyBefore = r.tdlib.gateway.count("getChatHistory")
         assertEquals(ActionResult.Done, c.grantSend(3, true))
         // consent (c) is withdrawn behind the screen, with operations waiting
         r.consentStore.save(acct, r.consentStore.load(acct).copy(mayTransmitInitial = false))
         assertEquals(ActionResult.Denied(SyncDenied.TRANSMIT_NOT_ALLOWED), c.syncNow())
         assertEquals("nothing was charged and nothing is left to spend", 0, c.sendGrant())
         assertEquals(0, r.tdlib.gateway.count("sendMessage"))
-        assertEquals("the service refused before it asked TDLib anything", 0, r.tdlib.gateway.count("getChatHistory"))
+        assertEquals("the service refused before it asked TDLib anything", historyBefore, r.tdlib.gateway.count("getChatHistory"))
     }
 
     // ---- (f) channel creation is locked ---------------------------------------------------------------------------------------
@@ -260,7 +267,13 @@ class SyncSendGrantTest {
         assertEquals(Gated.Denied(SyncDenied.CREATE_LOCKED), gate)
         assertEquals(0, r.tdlib.gateway.count("createNewSupergroupChat"))
         // the controller says the same, before it even asks the service
-        val c = controller(unlocked = false).also { it.optIn(create = true) }
+        val c = controller(unlocked = false).also {
+            it.optIn()
+            // Simulate a previously persisted QA create permission; product gates must still reject it.
+            store.save(acct, store.load(acct).copy(mayCreateChannel = true))
+            assertEquals(ActionResult.Denied(SyncDenied.CREATE_LOCKED), it.setAllowCreate(true))
+        }
+        port.discovery = ChannelDiscovery.NotFound
         c.discover()
         assertEquals(ControlState.LOCKED, c.screen().createNow)
         assertEquals(ActionResult.Denied(SyncDenied.CREATE_LOCKED), c.createChannel(true))
@@ -293,7 +306,12 @@ class SyncSendGrantTest {
         assertEquals(Gated.Denied(SyncDenied.CREATE_LOCKED), two.service.createChannel(acct))
         assertEquals(0, two.tdlib.gateway.count("createNewSupergroupChat"))
         // the controller only ever offers "find and bind" for what it found
-        assertFalse(ControlState.AVAILABLE == controller(unlocked = false).also { it.optIn(create = true) }.screen().createNow)
+        assertFalse(ControlState.AVAILABLE == controller(unlocked = false).also {
+            it.optIn()
+            // Simulate a previously persisted QA create permission; product gates must still reject it.
+            store.save(acct, store.load(acct).copy(mayCreateChannel = true))
+            assertEquals(ActionResult.Denied(SyncDenied.CREATE_LOCKED), it.setAllowCreate(true))
+        }.screen().createNow)
     }
 
     @Test fun anExistingBoundChannelIsNeverReplacedEvenWhenCreationIsUnlocked() {

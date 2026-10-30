@@ -163,6 +163,30 @@ internal object MeloLibraryPolicy {
 
     enum class TabKind { ALL, DOWNLOADED, PLAYLIST, SOURCES }
 
+    /** Each global tab names a full scope, so flags from the previous channel cannot leak. */
+    fun tabScope(tab: TabKind): MeloBrowseUiPolicy.Scope = MeloBrowseUiPolicy.Scope(when (tab) {
+        TabKind.ALL -> MeloBrowseUiPolicy.Kind.LIBRARY
+        TabKind.DOWNLOADED -> MeloBrowseUiPolicy.Kind.DOWNLOADED
+        TabKind.PLAYLIST -> MeloBrowseUiPolicy.Kind.PLAYLIST
+        TabKind.SOURCES -> MeloBrowseUiPolicy.Kind.SOURCES
+    })
+
+    data class SourcePresentation(val selected: Boolean, val detail: String)
+    fun sourcePresentation(source: MeloScreenHost.SourceRow, selectedChatId: Long?): SourcePresentation =
+        SourcePresentation(source.chatId == selectedChatId,
+            (if (source.count >= 0) "${MeloComponentPolicy.formatCount(source.count)} bài" else "Chưa rõ số bài") +
+                if (source.chatId == selectedChatId) " · Đang duyệt" else "")
+
+    enum class BrowsePlayDecision { WAIT, PLAY, CANCEL }
+    fun pendingBrowsePlay(request: MeloBrowseUiPolicy.Request, snapshot: MeloScreenHost.Snapshot): BrowsePlayDecision = when {
+        request.ownerId != snapshot.browseOwnerId || request.generation != snapshot.browseGeneration ||
+            request.scope != snapshot.browseScope -> BrowsePlayDecision.CANCEL
+        snapshot.browseLoadState == MeloBrowseUiPolicy.LoadState.ERROR -> BrowsePlayDecision.CANCEL
+        snapshot.browseLoadState != MeloBrowseUiPolicy.LoadState.READY -> BrowsePlayDecision.WAIT
+        snapshot.rows.isEmpty() -> BrowsePlayDecision.CANCEL
+        else -> BrowsePlayDecision.PLAY
+    }
+
     data class ThemeTab(val kind: TabKind, val label: String, val selected: Boolean)
 
     /** Below this pane width the tab labels shrink to one word. */
@@ -173,16 +197,18 @@ internal object MeloLibraryPolicy {
      * narrower than [NARROW_TABS_DP] the labels are "Tất cả", "Đã tải", "Playlist", "Nguồn".
      * [totalSongs] is the whole library; an unknown count shows no brackets.
      */
-    fun themeTabs(totalSongs: Int?, widthDp: Int, mode: Mode, showingSources: Boolean): List<ThemeTab> {
+    fun themeTabs(totalSongs: Int?, widthDp: Int, mode: Mode, showingSources: Boolean,
+        scope: MeloBrowseUiPolicy.Scope? = null): List<ThemeTab> {
         val narrow = widthDp in 1 until NARROW_TABS_DP
         val short = MeloComponentPolicy.shortCount(totalSongs)
         val all = if (short != null && !narrow) "Tất cả ($short)" else "Tất cả"
-        return listOf(
+        val tabs = listOf(
             ThemeTab(TabKind.ALL, all, !showingSources && mode == Mode.ALL),
             ThemeTab(TabKind.DOWNLOADED, if (narrow) "Đã tải" else "Đã tải về máy", !showingSources && mode == Mode.DOWNLOADED),
             ThemeTab(TabKind.PLAYLIST, "Playlist", !showingSources && mode == Mode.PLAYLIST),
             ThemeTab(TabKind.SOURCES, if (narrow) "Nguồn" else "Nguồn Telegram", showingSources)
         )
+        return if (scope == null) tabs else tabs.map { it.copy(selected = tabScope(it.kind) == scope) }
     }
 
     /** The genre the search box currently filters by (its keyword), or null. */

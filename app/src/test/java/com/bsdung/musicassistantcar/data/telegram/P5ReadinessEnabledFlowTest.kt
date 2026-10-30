@@ -58,6 +58,7 @@ class P5ReadinessEnabledFlowTest {
         val channel = world.createSyncChannel(acct.value)
         rig.device.bindChannel(channel.id)
         for (i in 1..songs) rig.device.toggle(chat, songId(i))
+        assertEquals(ActionResult.Done, ui.discover())
         return channel
     }
 
@@ -177,7 +178,9 @@ class P5ReadinessEnabledFlowTest {
         assertFalse("a call alone binds only for its duration", s.rig.tdlib.core.syncIsBound())
         s.ui.close()
         assertFalse(s.rig.tdlib.core.syncIsBound())
-        assertEquals("the screen can be opened again after it was closed", ActionResult.Done, s.ui.syncNow())
+        assertEquals(ActionResult.Refused(ActionResult.Reason.NEEDS_DISCOVERY), s.ui.syncNow())
+        assertEquals(ActionResult.Done, s.ui.discover())
+        assertEquals("the screen can be opened again after verification", ActionResult.Done, s.ui.syncNow())
     }
 
     @Test fun f02_closingTheSyncDoesNotAffectTheUiOrPlaybackEventStreams() {
@@ -206,6 +209,8 @@ class P5ReadinessEnabledFlowTest {
         s.ui.close()
         val reopened = stackOn(s.rig, SyncConfig(), s.log, s.provider) // the same process, a new Settings screen
         assertSame("one service for the process", s.provider.actions(), s.provider.actions())
+        assertEquals(ActionResult.Refused(ActionResult.Reason.NEEDS_DISCOVERY), reopened.ui.syncNow())
+        assertEquals(ActionResult.Done, reopened.ui.discover())
         assertEquals(ActionResult.Done, reopened.ui.syncNow())
         assertEquals("a reopened screen cannot skip the wait", SyncStatus.BACKOFF_ACTIVE, reopened.lastStatus())
         assertEquals(sends, s.requests("sendMessage"))

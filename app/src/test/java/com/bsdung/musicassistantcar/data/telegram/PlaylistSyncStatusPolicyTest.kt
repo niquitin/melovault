@@ -12,6 +12,25 @@ import org.junit.Test
 class PlaylistSyncStatusPolicyTest {
     private val acct = 1001L
 
+    @Test fun e105_invalidAccountNeedsLoginEvenWithMissingOrStaleFacts() {
+        for (who in listOf(0L, -1L)) for (snapshot in listOf(null, facts(), facts().copy(accountId = who))) {
+            val line = eval(snapshot, ctx(running = true, run = run()), who)
+            assertEquals(Kind.NEEDS_LOGIN, line.kind)
+            assertEquals("Cần đăng nhập Telegram", line.text)
+            assertTrue(line.detail.contains("đăng nhập Telegram trước"))
+            assertTrue(line.notes.isEmpty())
+        }
+    }
+
+    @Test fun e105_signedInAccountWaitsForItsOwnFactsOnly() {
+        for (snapshot in listOf(null, facts().copy(accountId = 2002L))) {
+            val line = eval(snapshot)
+            assertEquals(Kind.LOADING, line.kind)
+            assertTrue(line.notes.isEmpty())
+        }
+        assertEquals(Kind.SYNCED, eval(facts(), ctx(run = run())).kind)
+    }
+
     private fun facts(
         saved: Int = 3, pending: Int = 0, retry: Int = 0, legacy: Int = 0, bound: Boolean = true, ops: Long = 5L,
         truncated: Boolean = false, stale: Boolean = false, warning: PlaylistWarning? = null,
@@ -116,7 +135,8 @@ class PlaylistSyncStatusPolicyTest {
         val needsSend = eval(facts(pending = 2), ctx(consent = optedIn.copy(mayTransmitInitial = false)))
         assertEquals(Kind.NEEDS_TRANSMIT_CONSENT, needsSend.kind)
         val needsCreate = eval(facts(bound = false), ctx(consent = optedIn.copy(mayCreateChannel = false)))
-        assertTrue(needsCreate.detail.contains("cho phép tạo kênh"))
+        assertTrue(needsCreate.detail.contains("kiểm tra kênh có sẵn"))
+        assertFalse(needsCreate.detail.contains("cho phép tạo kênh"))
     }
 
     @Test fun s13_everyRecoveryReasonHasItsOwnPlainMessageAndNeverSuggestsDeletingAnything() {

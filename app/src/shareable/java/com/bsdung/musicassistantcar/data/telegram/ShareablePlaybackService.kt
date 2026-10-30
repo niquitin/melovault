@@ -6,13 +6,17 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.util.Log
+import com.bsdung.musicassistantcar.BuildConfig
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.ShuffleOrder
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import org.json.JSONObject
@@ -44,16 +48,35 @@ class ShareablePlaybackService : MediaSessionService() {
 
         // Internal same-process API; never expose these details via an Intent.
         internal fun configureTelegramQueue(
-            accountId: Long, ownerRoot: File, ordered: List<QueueTrack>
+            accountId: Long, ownerRoot: File, ordered: List<QueueTrack>, anchorMessageId: Long
         ) {
-            serviceRef?.get()?.setQueue(accountId, ownerRoot, ordered)
+            serviceRef?.get()?.setQueue(accountId, ownerRoot, ordered, anchorMessageId)
         }
 
         internal fun clearTelegramQueue() {
             serviceRef?.get()?.clearQueue()
         }
 
-        /** Main-thread, authorized snapshot; never exposes another account's queue. */
+        /** "Phát tiếp theo": right after the playing song in both the source order and the play order. */
+        internal fun queueTelegramNext(accountId: Long, track: QueueTrack) {
+            serviceRef?.get()?.queueNext(accountId, track)
+        }
+
+        /** Local music: source media ids in, play order out (anchor first and the rest permuted while Shuffle is on). */
+        internal fun orderLocalQueue(baseIds: List<String>, anchorId: String): List<String> =
+            serviceRef?.get()?.orderLocal(baseIds, anchorId) ?: baseIds
+
+        /** Main-thread, authorized snapshot of the source order (Shuffle off); [currentTelegramQueue] is the play order. */
+        internal fun currentTelegramBase(accountId: Long): List<QueueTrack> {
+            if (accountId <= 0L ||
+                ShareableTdlibOwner.authorizedAccount() != accountId ||
+                Looper.myLooper() != Looper.getMainLooper()) return emptyList()
+            val service = serviceRef?.get() ?: return emptyList()
+            if (service.expectedAccount != accountId) return emptyList()
+            return service.telegramBase.toList()
+        }
+
+        /** Main-thread, authorized snapshot of the play order; never exposes another account's queue. */
         internal fun currentTelegramQueue(accountId: Long): List<QueueTrack> {
             if (accountId <= 0L ||
                 ShareableTdlibOwner.authorizedAccount() != accountId ||
@@ -84,7 +107,15 @@ class ShareablePlaybackService : MediaSessionService() {
     private var exoPlayer: ExoPlayer? = null
     private var expectedAccount: Long? = null
     private var allowedRoot: File? = null
+    /**
+     * Play order. Media3 never shuffles: its flag is only on/off ([ShuffleOrder.UnshuffledShuffleOrder]),
+     * this service decides which song is next. Identical to [telegramBase] while Shuffle is off.
+     */
     private var queueTracks = emptyList<QueueTrack>()
+    private var telegramBase = emptyList<QueueTrack>()
+    private var shuffleSeed = 0L
+    private var localBaseIds = emptyList<String>()
+    private var reorderingLocal = false
     private var pendingDownloadId: Int? = null
     private var pendingMessageId: Long? = null
     private var pendingAttempt = 0
@@ -219,10 +250,19 @@ class ShareablePlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true)
             .build()
         exoPlayer = player
+        // Shuffle only flips the flag: Media3 keeps the list order, this service decides the play order.
+        player.setShuffleOrder(ShuffleOrder.UnshuffledShuffleOrder(0))
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 requestNextIfMissing()
                 sessionPlayer?.refreshCommands()
+            }
+            override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+                // Any controller (app, Deck, lock screen, Bluetooth) lands here: one authority for the order.
+                applyShuffleMode(shuffleModeEnabled)
+            }
+            override fun onTimelineChanged(timeline: Timeline, reason: Int) {
+                if (reason == Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED) keepIdentityShuffleOrder()
             }
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 // "Hết bài này" is a one-shot: after pausing at the end, normal play resumes.
@@ -284,7 +324,11 @@ class ShareablePlaybackService : MediaSessionService() {
         }
     }
 
-    private fun setQueue(accountId: Long, root: File, ordered: List<QueueTrack>) {
+    /** [ordered] is the source order; [anchorMessageId] is the song the user chose (first in the play order of a new shuffle). */
+    private fun setQueue(accountId: Long, root: File, ordered: List<QueueTrack>, anchorMessageId: Long) {
+        val sameOwner = expectedAccount == accountId
+        val oldBaseIds = if (sameOwner) telegramBase.map { it.messageId } else emptyList()
+        val oldPlayIds = if (sameOwner) queueTracks.map { it.messageId } else emptyList()
         if (Looper.myLooper() != Looper.getMainLooper()) return
         if (accountId <= 0L || ShareableTdlibOwner.authorizedAccount() != accountId) {
             clearQueue()
@@ -297,8 +341,160 @@ class ShareablePlaybackService : MediaSessionService() {
         clearQueue()
         expectedAccount = accountId
         allowedRoot = root.canonicalFile
-        queueTracks = ordered.toList()
+        telegramBase = ordered.toList()
+        shuffleSeed = nextSeed()
+        val byId = ordered.associateBy { it.messageId }
+        val shuffleOn = exoPlayer?.shuffleModeEnabled == true
+        val playIds = MeloShuffleOrderPolicy.rebase(
+            oldBaseIds, oldPlayIds, ordered.map { it.messageId },
+            anchorMessageId.takeIf { it > 0L }, shuffleOn, shuffleSeed)
+        queueTracks = playIds.mapNotNull { byId[it] }
+        shuffleLog("configure", shuffleOn, queueTracks.size)
         sessionPlayer?.refreshCommands()
+    }
+
+    private fun nextSeed(): Long = SystemClock.elapsedRealtimeNanos() xor System.nanoTime()
+
+    /** Debug builds only, tag MeloShuffle; sizes and indexes only, never titles, ids or paths. */
+    private fun shuffleLog(stage: String, on: Boolean, size: Int, extra: String = "") {
+        if (!BuildConfig.DEBUG) return
+        val player = exoPlayer
+        Log.d("MeloShuffle", "stage=$stage on=$on size=$size cur=${player?.currentMediaItemIndex ?: -1} " +
+            "next=${player?.nextMediaItemIndex ?: -1}$extra")
+    }
+
+    private fun currentTelegramId(): Long? {
+        val id = exoPlayer?.currentMediaItem?.mediaId.orEmpty()
+        return if (id.startsWith("telegram:")) id.removePrefix("telegram:").toLongOrNull() else null
+    }
+
+    private fun insertNextTrack(order: List<QueueTrack>, current: Long?, track: QueueTrack): List<QueueTrack> {
+        val byId = order.associateBy { it.messageId } + (track.messageId to track)
+        return MeloShuffleOrderPolicy.insertNext(order.map { it.messageId }, current, track.messageId)
+            .mapNotNull { byId[it] }
+    }
+
+    /** "Phát tiếp theo": the user's intent wins over Shuffle, so the song goes right after the playing one. */
+    private fun queueNext(accountId: Long, track: QueueTrack) {
+        if (Looper.myLooper() != Looper.getMainLooper()) return
+        if (accountId <= 0L || expectedAccount != accountId ||
+            ShareableTdlibOwner.authorizedAccount() != accountId) return
+        if (track.messageId <= 0L || track.fileId <= 0) return
+        if (telegramBase.size >= 2000 && telegramBase.none { it.messageId == track.messageId }) return
+        val current = currentTelegramId()
+        telegramBase = insertNextTrack(telegramBase, current, track)
+        queueTracks = insertNextTrack(queueTracks, current, track)
+        alignTelegramWindow()
+        sessionPlayer?.refreshCommands()
+        requestNextIfMissing()
+        shuffleLog("next_inserted", exoPlayer?.shuffleModeEnabled == true, queueTracks.size)
+    }
+
+    /**
+     * Keeps only the Media3 items around the playing song that still follow the play order, so a
+     * track ending (or a controller's Next) never moves to a song the order did not choose.
+     * Never touches the playing item, never stops or prepares the player.
+     */
+    private fun alignTelegramWindow() {
+        val player = exoPlayer ?: return
+        val currentId = currentTelegramId() ?: return
+        val cur = player.currentMediaItemIndex
+        val count = player.mediaItemCount
+        if (cur < 0 || cur >= count) return
+        val ids = queueTracks.map { it.messageId }
+        val at = ids.indexOf(currentId)
+        if (at < 0) return
+        fun idAt(index: Int): Long? =
+            player.getMediaItemAt(index).mediaId.removePrefix("telegram:").toLongOrNull()
+        var after = 0
+        while (cur + 1 + after < count && at + 1 + after < ids.size &&
+            idAt(cur + 1 + after) == ids[at + 1 + after]) after++
+        if (cur + 1 + after < count) player.removeMediaItems(cur + 1 + after, count)
+        var before = 0
+        while (cur - 1 - before >= 0 && at - 1 - before >= 0 &&
+            idAt(cur - 1 - before) == ids[at - 1 - before]) before++
+        if (cur - before > 0) player.removeMediaItems(0, cur - before)
+    }
+
+    /** Shuffle was switched by any controller: recompute the play order around the playing song. */
+    private fun applyShuffleMode(enabled: Boolean) {
+        val player = exoPlayer ?: return
+        val mediaId = player.currentMediaItem?.mediaId.orEmpty()
+        if (mediaId.startsWith("telegram:")) {
+            if (expectedAccount == null || telegramBase.isEmpty()) return
+            shuffleSeed = nextSeed()
+            val byId = telegramBase.associateBy { it.messageId }
+            queueTracks = MeloShuffleOrderPolicy.toggled(
+                telegramBase.map { it.messageId }, currentTelegramId(), enabled, shuffleSeed
+            ).mapNotNull { byId[it] }
+            alignTelegramWindow()
+            sessionPlayer?.refreshCommands()
+            requestNextIfMissing()
+            shuffleLog("toggle", enabled, queueTracks.size)
+        } else if (MeloLocalSourcePolicy.idOfMediaId(mediaId) != null) {
+            reorderLocal(enabled)
+        } else {
+            shuffleLog("toggle_idle", enabled, 0)
+        }
+    }
+
+    /** Local music: base media ids in, play order out; the Activity builds the Media3 list in that order. */
+    private fun orderLocal(baseIds: List<String>, anchorId: String): List<String> {
+        if (Looper.myLooper() != Looper.getMainLooper()) return baseIds
+        if (baseIds.any { MeloLocalSourcePolicy.idOfMediaId(it) == null }) return baseIds
+        localBaseIds = baseIds.toList()
+        if (exoPlayer?.shuffleModeEnabled != true) return baseIds
+        shuffleSeed = nextSeed()
+        return MeloShuffleOrderPolicy.shuffled(baseIds, anchorId, shuffleSeed)
+    }
+
+    /** Re-lays the playing local list around the playing song (shuffled on, source order off) without a stop. */
+    private fun reorderLocal(enabled: Boolean) {
+        val player = exoPlayer ?: return
+        val count = player.mediaItemCount
+        val cur = player.currentMediaItemIndex
+        if (count < 2 || cur !in 0 until count) return
+        val items = (0 until count).map { player.getMediaItemAt(it) }
+        val present = items.map { it.mediaId }
+        if (present.any { MeloLocalSourcePolicy.idOfMediaId(it) == null }) return
+        val started = SystemClock.elapsedRealtime()
+        if (localBaseIds.isEmpty()) localBaseIds = present
+        shuffleSeed = nextSeed()
+        val currentId = present[cur]
+        val target = MeloShuffleOrderPolicy.toggled(
+            MeloShuffleOrderPolicy.restore(localBaseIds, present), currentId, enabled, shuffleSeed)
+        val byId = items.associateBy { it.mediaId }
+        val ordered = target.mapNotNull { byId[it] }
+        val at = target.indexOf(currentId)
+        if (at < 0 || ordered.size != count) return
+        reorderingLocal = true
+        try {
+            if (cur + 1 < count) player.removeMediaItems(cur + 1, count)
+            if (cur > 0) player.removeMediaItems(0, cur)
+            if (at > 0) player.addMediaItems(0, ordered.subList(0, at))
+            if (at + 1 < ordered.size) {
+                player.addMediaItems(player.currentMediaItemIndex + 1, ordered.subList(at + 1, ordered.size))
+            }
+        } finally {
+            reorderingLocal = false
+        }
+        player.setShuffleOrder(ShuffleOrder.UnshuffledShuffleOrder(player.mediaItemCount))
+        sessionPlayer?.refreshCommands()
+        shuffleLog("local_reorder", enabled, count, " ms=${SystemClock.elapsedRealtime() - started}")
+    }
+
+    /**
+     * Safety net: the list order must stay the play order. If Media3 ever swaps the identity
+     * shuffle order for a random one, its Next would no longer be the next list item: restore it.
+     */
+    private fun keepIdentityShuffleOrder() {
+        val player = exoPlayer ?: return
+        if (reorderingLocal || !player.shuffleModeEnabled) return
+        val cur = player.currentMediaItemIndex
+        val count = player.mediaItemCount
+        if (cur < 0 || cur + 1 >= count || player.nextMediaItemIndex == cur + 1) return
+        player.setShuffleOrder(ShuffleOrder.UnshuffledShuffleOrder(count))
+        shuffleLog("order_reset", true, count)
     }
 
     private fun clearPending() {
@@ -314,6 +510,9 @@ class ShareablePlaybackService : MediaSessionService() {
         expectedAccount = null
         allowedRoot = null
         queueTracks = emptyList()
+        telegramBase = emptyList()
+        localBaseIds = emptyList()
+        shuffleSeed = 0L
         sessionPlayer?.refreshCommands()
     }
 

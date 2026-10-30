@@ -35,13 +35,18 @@ class MeloLocalLibraryTest {
     ) {
         val pending = ArrayDeque<Runnable>()
         val logs = mutableListOf<String>()
+        var failRead = false
         var invalidations = 0
         var providerCalls = 0
         var permission = granted
         var now = 1_000L
         val repository = LocalMediaRepository(
             permissionChecker = { permission },
-            tracksProvider = { providerCalls++; tracks }
+            tracksProvider = {
+                providerCalls++
+                if (failRead) throw IllegalStateException("fake read failure")
+                tracks
+            }
         )
         val executor = Executor { if (deferExecutor) pending.add(it) else it.run() }
         val library = MeloLocalLibrary(
@@ -288,5 +293,107 @@ class MeloLocalLibraryTest {
         assertFalse(joined.contains("Thư mục"))
         assertFalse(joined.contains("content://"))
         assertFalse(joined.contains("Ca sĩ"))
+    }
+
+    @Test
+    fun browseStateDistinguishesInitialUpdateAndAuthoritativeEmpty() {
+        val h = Harness(emptyList(), deferExecutor = true)
+        assertEquals(MeloBrowseUiPolicy.LoadState.INITIAL_LOADING, h.library.browseLoadState)
+        h.library.load(force = true)
+        assertEquals(MeloBrowseUiPolicy.LoadState.INITIAL_LOADING, h.library.browseLoadState)
+        h.runPending()
+        assertEquals(MeloBrowseUiPolicy.LoadState.READY, h.library.browseLoadState)
+        assertEquals(0, h.library.count())
+        val populated = Harness(many(3), deferExecutor = true)
+        populated.library.load(force = true)
+        populated.runPending()
+        val generation = populated.library.browseGeneration
+        populated.library.load(force = true)
+        assertEquals(MeloBrowseUiPolicy.LoadState.UPDATING, populated.library.browseLoadState)
+        assertEquals(3, populated.library.shown().size)
+        assertTrue(populated.library.browseGeneration > generation)
+    }
+
+    @Test
+    fun refreshFailureRetainsRowsAndRetryRepairsState() {
+        val h = Harness(many(3))
+        h.library.load(force = true)
+        val keys = h.library.shown().map { it.key }
+        val loadedAt = h.library.loadedAt
+        h.failRead = true
+        h.library.load(force = true)
+        assertEquals(MeloBrowseUiPolicy.LoadState.ERROR, h.library.browseLoadState)
+        assertEquals(keys, h.library.shown().map { it.key })
+        assertEquals(loadedAt, h.library.loadedAt)
+        h.library.setQuery("missing")
+        assertEquals(MeloBrowseUiPolicy.LoadState.ERROR, h.library.browseLoadState)
+        h.failRead = false
+        h.library.load(force = true)
+        assertEquals(MeloBrowseUiPolicy.LoadState.READY, h.library.browseLoadState)
+        assertTrue(h.library.shown().isEmpty())
+        assertEquals("missing", h.library.query)
+    }
+
+    @Test
+    fun initialReadFailureIsErrorRatherThanEmptyReady() {
+        val h = Harness(many(3))
+        h.failRead = true
+        h.library.load(force = true)
+        assertEquals(MeloBrowseUiPolicy.LoadState.ERROR, h.library.browseLoadState)
+        assertFalse(h.library.hasLoaded)
+        assertNull(h.library.count())
+    }
+
+    @Test
+    fun localQueryRebuildIsUpdatingUntilItsOwnCallback() {
+        val h = Harness(many(3), deferExecutor = true)
+        h.library.load(force = true)
+        h.runPending()
+        h.library.setQuery("missing")
+        assertEquals(MeloBrowseUiPolicy.LoadState.UPDATING, h.library.browseLoadState)
+        assertEquals(3, h.library.shown().size)
+        h.runPending()
+        assertEquals(MeloBrowseUiPolicy.LoadState.READY, h.library.browseLoadState)
+        assertTrue(h.library.shown().isEmpty())
+    }
+
+    @Test
+    fun clearDropsLateLoadErrorAndResetsOwnerState() {
+        val h = Harness(many(3), deferExecutor = true)
+        h.failRead = true
+        h.library.load(force = true)
+        h.library.clear()
+        h.runPending()
+        assertEquals(MeloBrowseUiPolicy.LoadState.INITIAL_LOADING, h.library.browseLoadState)
+        assertTrue(h.library.shown().isEmpty())
+    }
+
+    @Test
+    fun missingMediaStoreResultIsErrorWithoutThrowing() {
+        val repository = LocalMediaRepository(permissionChecker = { true }, contentResolverSupplier = { null })
+        val library = MeloLocalLibrary(repository, { null }, Executor { it.run() }, { it.run() }, { 1_000L }, {})
+        library.load(force = true)
+        assertTrue(repository.lastTrackReadFailed)
+        assertEquals(MeloBrowseUiPolicy.LoadState.ERROR, library.browseLoadState)
+        assertFalse(library.hasLoaded)
+    }
+
+    @Test
+    fun oldLoadErrorArrivingAfterNewSuccessDoesNotReplaceItsState() {
+        var fail = true
+        val callbacks = ArrayDeque<Runnable>()
+        val repository = LocalMediaRepository(permissionChecker = { true }, tracksProvider = {
+            if (fail) throw IllegalStateException("old fake read failure")
+            listOf(track(7, "Bài mới"))
+        })
+        val library = MeloLocalLibrary(repository, { 1 }, Executor { it.run() }, { callbacks.add(it) }, { 1_000L }, {})
+        library.load(force = true)
+        fail = false
+        library.load(force = true)
+        callbacks.removeLast().run()
+        assertEquals(MeloBrowseUiPolicy.LoadState.READY, library.browseLoadState)
+        callbacks.removeFirst().run()
+        assertEquals(MeloBrowseUiPolicy.LoadState.READY, library.browseLoadState)
+        assertEquals(listOf(7L), library.shown().map { it.mediaStoreId })
     }
 }

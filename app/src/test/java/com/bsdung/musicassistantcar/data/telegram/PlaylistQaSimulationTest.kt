@@ -75,8 +75,9 @@ class PlaylistQaSimulationTest {
             assertFalse("simulation must not use $forbidden", sim.contains(forbidden))
         }
         val activity = text("TelegramPreviewActivity.kt")
+        assertTrue(activity.contains("if (!TelegramPlaylistFlags.SYNC_QA_ENABLED) ids else PlaylistQaSimulation.apply("))
         assertTrue(activity.contains("java.io.File(cacheDir, PlaylistQaSimulation.MARKER_FILE).exists()"))
-        assertTrue("only a Sync-QA build can switch it on", activity.contains("ids, TelegramPlaylistFlags.SYNC_ENABLED, java.io.File(cacheDir"))
+        assertTrue("only a Sync-QA build can switch it on", activity.contains("ids, TelegramPlaylistFlags.SYNC_QA_ENABLED, java.io.File(cacheDir"))
     }
 
     @Test fun r4_theCompactStatusLineMayUseTwoLines_soTheLongTruthfulLabelIsNotCut() {
