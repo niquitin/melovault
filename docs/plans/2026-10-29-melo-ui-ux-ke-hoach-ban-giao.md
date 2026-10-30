@@ -6,7 +6,7 @@ TASK_ID: **2026-10-29-melo-ui-ux-ke-hoach**.
 
 - Chủ dự án giao REWORK SB-01 + SB-02 (30/10). Codex dừng vì hết quota sau `3d3165c`; Claude Code tiếp nhận cùng nhánh/worktree. Commit: `91e6f19` (R1), `0634d47` (R1b log + requeue), `b599e80` (R1c kiểm sau layout) + commit hồ sơ này. **Source APK candidate: `b599e805533e212dd4b6f5cde352c98f29057828`.**
 - Kết quả Sony R1c: **SB-01 đạt kỹ thuật** (3 vòng ngang/dọc, cùng hàng neo, query/scope/player giữ); **SB-02 đạt kỹ thuật** (Next/Previous hết “Tạm dừng” cũ; pause mới hiện đúng bài). Ni full test 2247/21/0 mỗi biến thể. Chi tiết mục R1 [báo cáo](2026-10-29-melo-ui-ux-ke-hoach-bao-cao.md), [APK-index](2026-10-29-melo-ui-ux-ke-hoach-apk-test.md), [ảnh-index](2026-10-29-melo-ui-ux-ke-hoach-hinh-nghiem-thu.md).
-- Giữ BLOCKED: Đảo, Drive (connector Claude Code không thuộc Ni N; APK gửi trực tiếp trong chat), QA1 tablet, QA6 Shanling. Âm thanh thật chưa xác nhận; Teal chưa QA lại. Phát hiện mới chưa sửa: lưu vị trí bị từ chối ngay sau mở app (`activeOk=false`), khoảng trống header sau xoay.
+- Giữ BLOCKED: Đảo, Drive (connector Claude Code không thuộc Ni N; APK gửi qua chat chỉ hiện trên app desktop Ni vì vượt 30 MB), QA1 tablet, QA6 Shanling. Âm thanh thật chưa xác nhận; Teal chưa QA lại. Phát hiện mới chưa sửa: lưu vị trí bị từ chối ngay sau mở app (`activeOk=false`), khoảng trống header sau xoay.
 - Log `MeloAnchor` (warn, chỉ số/khóa) giữ trong code để kiểm sau; bỏ đi cần một lượt thực thi + build mới.
 - Màn: SONY_SCREEN_END=OFF 10:04:15; SHANLING_SCREEN_END=KHÔNG THAO TÁC. Không còn tiến trình QA/build. Không merge/push.
 - **Bước tiếp:** chủ dự án mở phiên mới giao nghiệm thu sơ bộ vòng 2 bằng prompt dưới; không tự chạy vai sơ bộ trong phiên thực thi.

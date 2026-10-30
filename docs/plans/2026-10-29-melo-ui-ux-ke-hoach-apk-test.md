@@ -17,7 +17,7 @@ TASK_ID: `2026-10-29-melo-ui-ux-ke-hoach`.
 
 - Sony `QV725WEQ54` XQ-AS52/Sony: trước cài vc121, cert khớp, media không phát; chỉ `install -r` Debug → Success; vc121; APK kéo lại từ máy cùng hash Debug. Không downgrade/uninstall/xóa data.
 - Bản nội bộ (không phải link Internet): [Debug Ni](C:/Users/ntdun/.codex/worktrees/melo-ui-ux-plan/MeloVault-E91-Shareable/docs/plans/artifacts/2026-10-29-melo-ui-ux-ke-hoach/R1-20261030_093104/MeloVault-R1-QA-CANDIDATE-CHUA-NGHIEM-THU-vc121-b599e80-debug-20261030_093104.apk), [Release Ni](C:/Users/ntdun/.codex/worktrees/melo-ui-ux-plan/MeloVault-E91-Shareable/docs/plans/artifacts/2026-10-29-melo-ui-ux-ke-hoach/R1-20261030_093104/MeloVault-R1-QA-CANDIDATE-CHUA-NGHIEM-THU-vc121-b599e80-release-20261030_093104.apk); Tiny `C:\Bots\_qa_temp\MeloVault-R1-20261030_093104\`.
-- Drive: connector của Claude Code không thuộc tài khoản Ni N (không đọc được thư mục S7), nên không upload và kiểm owner-only được; APK S7 trên Ni N từng bị 403 `cannotDownloadAbusiveFile`. Không public, không đường vòng. Debug đã gửi trực tiếp cho chủ dự án trong chat Claude Code ngày 30/10.
+- Drive: connector của Claude Code không thuộc tài khoản Ni N (không đọc được thư mục S7), nên không upload và kiểm owner-only được; APK S7 trên Ni N từng bị 403 `cannotDownloadAbusiveFile`. Không public, không đường vòng. Gửi Debug qua chat Claude Code ngày 30/10 chỉ hiện trong app desktop trên Ni (33 MB vượt giới hạn 30 MB của điện thoại/web); chưa có đường tải từ xa.
 - Bản trung gian R1 `91e6f19` (Debug `40A65539…48AD`) và R1b `0634d47` (Debug `A9A2BFAA…5D0E`) chỉ dùng chẩn đoán trên Sony, không bàn giao.
 - Rollback: cài lại candidate S7 (`278f0d2`, cùng vc121/cert) bằng `install -r` sau gate; không xóa data.
 
