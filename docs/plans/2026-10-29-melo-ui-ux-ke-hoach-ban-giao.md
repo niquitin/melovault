@@ -2,6 +2,12 @@
 
 TASK_ID: **2026-10-29-melo-ui-ux-ke-hoach**.
 
+## REWORK R1 — 30/10/2026, Claude Code thực thi (checkpoint code)
+
+- Chủ dự án giao REWORK SB-01 + SB-02 (30/10); giữ BLOCKED Đảo, Drive403, QA1 tablet thật, QA6 Shanling. Codex đã dừng vì hết quota sau commit `3d3165c`; Claude Code tiếp nhận cùng nhánh/worktree.
+- Xong code + test Ni: `MeloPlayUiState.kt` (SB-02), `MeloBrowseState.kt` + `MeloLibraryPane.kt` (SB-01), 7 test mới. Full test mỗi biến thể 2247 passed/21 skipped/0 failed; assemble Ni xanh. Chi tiết ở mục R1 của [báo cáo](2026-10-29-melo-ui-ux-ke-hoach-bao-cao.md). Commit code tra bằng `git log -1 --format=%H -- app/src/shareable/java/com/bsdung/musicassistantcar/data/telegram/MeloPlayUiState.kt`.
+- **Bước tiếp chưa làm:** bundle SHA256 → Tiny clone cô lập build có config → verify package/vc121/cert → Sony `QV725WEQ54` install -r Debug → QA lại xoay 3 vòng (Current/Teal) và paused → Next/Previous → ảnh + tổng hợp → cập nhật APK/ảnh-index → prompt sơ bộ mới. Màn Sony/Shanling: chưa thao tác trong R1 tới mốc này.
+
 ## Sơ bộ vòng 1 — 29/10/2026, sau hồ sơ d89459e
 
 - Chủ dự án giao riêng kiểm sơ bộ nhanh, không code/build mới. Đã làm theo prompt sơ bộ S7 bên dưới; kết luận **SƠ BỘ: CẦN SỬA** tại [biên bản](2026-10-29-melo-ui-ux-ke-hoach-nghiem-thu-so-bo.md). Các mục bên dưới là lịch sử thực thi, không ghi đè kết quả cũ.

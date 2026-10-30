@@ -15,6 +15,8 @@ internal class MeloPlayUiState(private val clock: () -> Long) {
         private set
     private var phase: Phase? = null
     private var feedback: Feedback? = null
+    /** The player has shown [current] at least once; only then can transport move away from it. */
+    private var settled = false
 
     fun begin(owner: Long, songKey: Long): Attempt? {
         if (owner <= 0L) return null
@@ -27,7 +29,7 @@ internal class MeloPlayUiState(private val clock: () -> Long) {
             return null
         }
         return Attempt(owner, ++generation, songKey).also {
-            current = it; phase = Phase.RESOLVING
+            current = it; phase = Phase.RESOLVING; settled = false
             feedback = Feedback(it, Phase.RESOLVING, TelegramPlayFeedbackPolicy.RESOLVING_TEXT)
         }
     }
@@ -50,10 +52,21 @@ internal class MeloPlayUiState(private val clock: () -> Long) {
         if (deadline != null) waits[Identity(attempt.ownerId, attempt.songKey)] = feedback!!
     }
 
-    /** A still-playing A never clears the feedback for an attempt to open B. */
+    /**
+     * A still-playing A never clears the feedback for an attempt to open B. Once the player has shown the
+     * attempt, a move to another item without [begin] (cached Next/Previous, auto-advance) adopts that item.
+     */
     fun observe(owner: Long, playerKey: Long?, hasCurrent: Boolean, playing: Boolean, playWhenReady: Boolean, buffering: Boolean) {
-        val attempt = current ?: return
-        if (attempt.ownerId != owner || attempt.songKey != playerKey || !hasCurrent || phase == Phase.RESOLVING) return
+        var attempt = current ?: return
+        if (attempt.ownerId != owner || playerKey == null || !hasCurrent || phase == Phase.RESOLVING) return
+        if (attempt.songKey != playerKey) {
+            if (!settled) return
+            val left = attempt
+            attempt = Attempt(owner, ++generation, playerKey)
+            current = attempt; phase = Phase.PLAYING
+            if (feedback?.attempt == left) feedback = null
+        }
+        settled = true
         if (phase == Phase.ERROR) {
             if (playing && feedback?.recoverWhenPlaying == true) { phase = Phase.PLAYING; feedback = null }
             return
@@ -80,7 +93,7 @@ internal class MeloPlayUiState(private val clock: () -> Long) {
     } == true
 
     /** Local play invalidates callbacks, while cooldowns survive a detour through local music. */
-    fun cancel() { generation++; current = null; phase = null; feedback = null }
+    fun cancel() { generation++; current = null; phase = null; feedback = null; settled = false }
     fun clear() { cancel(); waits.clear() }
 
     class CountdownTicker(private val post: (Runnable, Long) -> Unit,

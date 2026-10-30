@@ -166,6 +166,87 @@ class MeloPlayUiStateTest {
         ticker.update(true, true, true, 0); assertTrue(pending.isEmpty())
     }
 
+    @Test fun pausedAThenCachedNextToPlayingBWithoutBeginDropsPausedLabel() {
+        val state = MeloPlayUiState { 1_000L }
+        val a = state.begin(1, 10)!!
+        state.buffering(a)
+        state.observe(1, 10, true, true, true, false)
+        state.observe(1, 10, true, false, false, false)
+        assertEquals(MeloPlayUiState.Phase.PAUSED, state.presentation(1)?.phase)
+        state.observe(1, 20, true, false, true, true)
+        assertEquals(MeloPlayUiState.Phase.BUFFERING, state.presentation(1)?.phase)
+        assertEquals(20L, state.presentation(1)?.attempt?.songKey)
+        state.observe(1, 20, true, true, true, false)
+        assertNull(state.presentation(1))
+        assertEquals(20L, state.current?.songKey)
+        assertFalse(state.accepts(a, 1, true))
+        state.observe(1, 20, true, false, false, false)
+        assertEquals(20L, state.presentation(1)?.attempt?.songKey)
+        assertEquals(MeloPlayUiState.Phase.PAUSED, state.presentation(1)?.phase)
+    }
+
+    @Test fun autoAdvanceAndPreviousFollowThePlayerItem() {
+        val state = MeloPlayUiState { 1_000L }
+        state.buffering(state.begin(1, 10)!!)
+        state.observe(1, 10, true, true, true, false)
+        state.observe(1, 20, true, true, true, false)
+        assertEquals(20L, state.current?.songKey)
+        assertNull(state.presentation(1))
+        state.observe(1, 10, true, false, false, false)
+        assertEquals(10L, state.presentation(1)?.attempt?.songKey)
+        assertEquals(MeloPlayUiState.Phase.PAUSED, state.presentation(1)?.phase)
+        state.observe(1, 10, true, true, true, false)
+        assertNull(state.presentation(1))
+    }
+
+    @Test fun requestForBBufferingBeforeThePlayerSwitchesIsKeptWhileAPlays() {
+        val state = MeloPlayUiState { 1_000L }
+        state.buffering(state.begin(1, 10)!!)
+        state.observe(1, 10, true, true, true, false)
+        val b = state.begin(1, 20)!!
+        state.observe(1, 10, true, true, true, false)
+        assertEquals(MeloPlayUiState.Phase.RESOLVING, state.presentation(1)?.phase)
+        state.buffering(b)
+        state.observe(1, 10, true, true, true, false)
+        assertEquals(b, state.current)
+        assertEquals(MeloPlayUiState.Phase.BUFFERING, state.presentation(1)?.phase)
+        state.observe(1, 20, true, true, true, false)
+        assertEquals(b, state.current)
+        assertNull(state.presentation(1))
+    }
+
+    @Test fun settledAErrorIsDroppedWhenThePlayerMovesButUnsettledBErrorStays() {
+        val state = MeloPlayUiState { 1_000L }
+        val a = state.begin(1, 10)!!
+        state.buffering(a)
+        state.observe(1, 10, true, true, true, false)
+        state.fail(a, TelegramPlayFeedbackPolicy.Failure("Không phát được tệp âm thanh. Thử lại.", true))
+        state.observe(1, 20, true, true, true, false)
+        assertNull(state.presentation(1))
+        val b = state.begin(1, 30)!!
+        state.fail(b, TelegramPlayFeedbackPolicy.failure(TelegramPlayFeedbackPolicy.TIMEOUT_MESSAGE, null))
+        state.observe(1, 40, true, true, true, false)
+        assertEquals(b, state.presentation(1)?.attempt)
+        assertEquals(MeloPlayUiState.Phase.ERROR, state.presentation(1)?.phase)
+    }
+
+    @Test fun transportMoveKeepsAnotherSongsCooldownAndIgnoresOtherOwners() {
+        val state = MeloPlayUiState { 1_000L }
+        val a = state.begin(1, 10)!!
+        state.fail(a, TelegramPlayFeedbackPolicy.failure("FLOOD_WAIT_60", 420))
+        state.buffering(state.begin(1, 20)!!)
+        state.observe(1, 20, true, true, true, false)
+        assertNull(state.begin(1, 10))
+        state.observe(1, 30, true, true, true, false)
+        assertEquals(a, state.presentation(1)?.attempt)
+        assertNull(state.begin(1, 10))
+        state.observe(2, 40, true, false, false, false)
+        assertEquals(30L, state.current?.songKey)
+        state.cancel()
+        state.observe(1, 50, true, true, true, false)
+        assertNull(state.current)
+    }
+
     @Test fun stallFeedbackCanClearWhenActualPlaybackRecovers() {
         val state = MeloPlayUiState { 1_000L }
         val attempt = state.begin(1, 10)!!

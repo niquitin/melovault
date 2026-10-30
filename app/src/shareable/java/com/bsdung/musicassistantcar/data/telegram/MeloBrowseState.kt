@@ -30,6 +30,28 @@ internal class MeloBrowseState(private val capacity: Int = 16) {
         object Drop : Anchor()
     }
 
+    /**
+     * A found anchor is a request until a layout shows it: a row refresh before that layout re-syncs a
+     * ListView to its old first row, so the selection is re-applied after each refresh and positions are
+     * not saved meanwhile. A touch, a letter jump or a new context ends the request.
+     */
+    class SongRestore {
+        data class Selection(val index: Int, val offsetPx: Int)
+        var pending: Selection? = null
+            private set
+        fun start(index: Int, offsetPx: Int): Selection = Selection(index.coerceAtLeast(0), offsetPx).also { pending = it }
+        fun afterRefresh(): Selection? = pending
+        /** True once the anchor is the first row, or is visible with the list clamped at its end. */
+        fun onScrolled(first: Int, visible: Int, total: Int): Boolean {
+            val wanted = pending ?: return true
+            val atEnd = visible > 0 && first + visible >= total && wanted.index in first until total
+            if (first != wanted.index && !atEnd) return false
+            pending = null
+            return true
+        }
+        fun cancel() { pending = null }
+    }
+
     private val contexts = LinkedHashMap<Key, Context>(16, 0.75f, true)
     var active: Key? = null
         private set

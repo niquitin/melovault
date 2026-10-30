@@ -1,9 +1,18 @@
-Thực thi: Codex model/effort không xác định từ metadata, S0–S1, phiên tiếp tục S2–S6 và phiên S7 có điều kiện ngày 29/10/2026.
+Thực thi: Codex model/effort không xác định từ metadata, S0–S1, phiên tiếp tục S2–S6 và phiên S7 có điều kiện ngày 29/10/2026. REWORK R1 ngày 30/10/2026: Claude Code.
 
 # Báo cáo thực thi Melo UI/UX
 
 TASK_ID: `2026-10-29-melo-ui-ux-ke-hoach`.
-Trạng thái chính thức: **CHỜ CHỦ DỰ ÁN NGHIỆM THU**. Các mục S0–S6 dưới đây giữ lịch sử; S7 hiện hành ở mục này.
+Trạng thái chính thức: **CHỜ CHỦ DỰ ÁN NGHIỆM THU**. Các mục S0–S7 dưới đây giữ lịch sử; REWORK R1 hiện hành ở mục đầu.
+
+## REWORK R1 — SB-01 + SB-02, 30/10/2026 (Claude Code, phiên thực thi)
+
+- Chủ dự án giao 30/10/2026 trong chat Claude Code: “Giao REWORK SB-01 + SB-02”, giữ mọi BLOCKED (Đảo, Drive403, QA1 tablet thật, QA6 Shanling). Nền: HEAD `3d3165c` (sơ bộ vòng 1), source APK cũ `278f0d2`. Git đầu phiên sạch, Codex đã dừng (hết quota), không Java/Gradle chạy.
+- **SB-02** (`MeloPlayUiState.kt`): thêm cờ `settled` = player đã hiện attempt ít nhất một lần. Khi player chuyển sang bài khác mà không qua `begin` (Next/Previous có sẵn trong controller, tự chuyển bài), `observe` nhận bài mới thành attempt mới (generation tăng) và bỏ feedback cũ của bài vừa rời; sau đó Tạm dừng/Đang đệm tính theo bài mới. Attempt chưa `settled` (RESOLVING/BUFFERING/ERROR của yêu cầu B khi A còn phát) giữ nguyên như cũ; cooldown `waits` và feedback của bài khác không bị xóa. Phụ: callback tải xong của A sau khi đã Next không còn `acceptsPlay` nên không giành lại player.
+- **SB-01** (`MeloBrowseState.kt`, `MeloLibraryPane.kt`): cơ chế xác định trong mã: `setSelectionFromTop(anchor)` được post, nhưng trước khi ListView layout có `notifyDataSetChanged()` (đổi bề rộng khi xoay, refresh playback/library) → `rememberSyncState` đồng bộ lại về hàng đầu cũ; đồng thời `restoringSongScroll` tắt ngay sau post nên `onScroll` lưu đè hàng sai làm neo → các vòng xoay sau lặp đúng hàng sai. Sửa: `SongRestore` giữ yêu cầu neo tới khi layout thật hiện bài neo (hoặc list kẹp ở cuối); mọi refresh hàng đi qua `refreshRows()` áp lại neo; không lưu vị trí trong lúc chờ; chạm/fling, nhảy chữ cái, đổi ngữ cảnh, detach kết thúc yêu cầu.
+- Test mới: `MeloPlayUiStateTest` +5 (paused A → Next B không `begin`; tự chuyển/Previous; B đang đệm khi A còn phát; lỗi A đã hiện bị bỏ nhưng lỗi B chưa hiện giữ; cooldown bài khác + owner khác + cancel). `MeloBrowseStateTest` +2 (mô phỏng ListView: refresh trước layout làm mất neo nếu không áp lại; 3 vòng xoay giữ neo/offset/query; `SongRestore` chờ đúng hàng, chấp nhận kẹp cuối, cancel). Đây là mô hình JVM, không thay QA xoay thật.
+- Ni full test `R1/R1-full-test-20261030_092213.log`: BUILD SUCCESSFUL; mỗi Debug/Release 178 suites, 2268 tổng = **2247 passed / 21 skipped / 0 failed / 0 errors**. Ni assemble Debug+Release BUILD SUCCESSFUL (APK Ni không dùng để cài). `git diff --check` sạch.
+- Production đổi 3 file; không đổi service/queue/Media3/DB/sync/cache/timeout/versionCode/signing.
 
 ## S7 có điều kiện — kết thúc phần đã kiểm 29/10/2026
 

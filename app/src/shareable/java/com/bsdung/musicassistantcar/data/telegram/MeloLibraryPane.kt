@@ -126,6 +126,7 @@ internal class MeloLibraryPane(
     private var restoringAnchor: MeloBrowseState.Pending? = null
     private var restoringSourceScroll = false
     private var restoringSongScroll = false
+    private val songRestore = MeloBrowseState.SongRestore()
     /** E98 row covers: the list's scroll state (nothing is requested while it is flung) and the first row asked for. */
     private var scrollState = AbsListView.OnScrollListener.SCROLL_STATE_IDLE
     private var lastArtFirst = -1
@@ -190,12 +191,14 @@ internal class MeloLibraryPane(
             setOnScrollListener(object : AbsListView.OnScrollListener {
                 override fun onScrollStateChanged(v: AbsListView?, state: Int) {
                     scrollState = state
+                    if (state != AbsListView.OnScrollListener.SCROLL_STATE_IDLE) endSongRestore()
                     // The covers of a fast scroll are fetched once the list slows down.
                     if (c.teal && state != AbsListView.OnScrollListener.SCROLL_STATE_FLING) requestVisibleArt()
                 }
                 override fun onScroll(v: AbsListView?, first: Int, visible: Int, total: Int) {
                     val snap = snapshot ?: return
                     if (snap.showingSources) return
+                    if (restoringSongScroll && songRestore.onScrolled(first, visible, total)) restoringSongScroll = false
                     if (snap.browseLoadState == MeloBrowseUiPolicy.LoadState.READY && restoringAnchor == null &&
                         !restoringSongScroll && !pendingTopReset) {
                         snap.rows.getOrNull(first)?.let { row ->
@@ -219,7 +222,7 @@ internal class MeloLibraryPane(
             })
         }
         list.addOnLayoutChangeListener { _, l, _, r, _, oldL, _, oldR, _ ->
-            if (r - l != oldR - oldL) list.post { adapter.notifyDataSetChanged() }
+            if (r - l != oldR - oldL) list.post { refreshRows() }
         }
         sourcesScroll.addView(sourcesBox, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         sourcesScroll.setOnScrollChangeListener { _, _, y, _, _ ->
@@ -253,9 +256,21 @@ internal class MeloLibraryPane(
         } else view.addView(sourcesScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
     }
 
+    /** A pending anchor survives a row refresh; without this the list re-syncs to the row it showed before. */
+    private fun refreshRows() {
+        adapter.notifyDataSetChanged()
+        songRestore.afterRefresh()?.let { list.setSelectionFromTop(it.index, it.offsetPx) }
+    }
+
+    private fun endSongRestore() {
+        songRestore.cancel()
+        restoringSongScroll = false
+    }
+
     fun detach() {
         playFeedbackView.stop()
         flushAndSave()
+        endSongRestore()
         host.setBrowseCapture(null)
         if (c.teal) host.setRowArtListener(null)
         pendingJump?.let(handler::removeCallbacks)
@@ -318,6 +333,7 @@ internal class MeloLibraryPane(
         val contextChanged = key != groupKey
         if (contextChanged) {
             groupKey = key
+            endSongRestore()
             val state = host.browseContext()
             restoringAnchor = if (browseKey != null && state?.anchorSongKey != null) {
                 MeloBrowseState.Pending(browseKey, snap.browseGeneration, state)
@@ -391,7 +407,7 @@ internal class MeloLibraryPane(
             bar.visibility = if (showBar) View.VISIBLE else View.GONE
             list.setPadding(0, 0, if (showBar) bar.barWidthPx else 0, 0)
             if (!showBar) bar.setActive(null)
-            adapter.notifyDataSetChanged()
+            refreshRows()
             if (c.teal) {
                 lastArtFirst = -1
                 list.post { requestVisibleArt() }
@@ -405,11 +421,12 @@ internal class MeloLibraryPane(
                     is MeloBrowseState.Anchor.Found -> {
                         restoringAnchor = null
                         restoringSongScroll = true
+                        val selection = songRestore.start(decision.index, decision.offsetPx)
                         list.post {
+                            if (songRestore.pending != selection) return@post
                             if (groupKey == key && snapshot?.browseGeneration == snap.browseGeneration) {
-                                list.setSelectionFromTop(decision.index, decision.offsetPx)
-                            }
-                            restoringSongScroll = false
+                                list.setSelectionFromTop(selection.index, selection.offsetPx)
+                            } else endSongRestore()
                         }
                     }
                     MeloBrowseState.Anchor.Drop -> { restoringAnchor = null; pendingTopReset = true }
@@ -473,6 +490,7 @@ internal class MeloLibraryPane(
             val index = host.jumpToLetter(MeloAlphabetPolicy.lowerBound(letter))
             bar.setActive(letter)
             if (index != null) {
+                endSongRestore()
                 onLibraryChanged()
                 android.util.Log.i("MeloVaultAz", "jump $letter -> index $index of ${snapshot?.rows?.size}")
                 list.post { list.setSelectionFromTop(index, 0) }

@@ -126,6 +126,58 @@ class MeloBrowseStateTest {
         }
     }
 
+    /** The part of ListView that matters here: a data change before layout re-syncs to the old first row. */
+    private class FakeList(var first: Int = 0, val total: Int = 200, val visible: Int = 8) {
+        private var wanted: Int? = null
+        fun setSelectionFromTop(index: Int) { wanted = index }
+        fun notifyDataSetChanged() { wanted = null }
+        fun layout() { wanted?.let { first = minOf(it, total - visible) }; wanted = null }
+    }
+
+    /** capture → detach → attach → refresh → layout, as on one Sony rotation; returns the saved anchor. */
+    private fun rotate(memory: MeloBrowseState, key: MeloBrowseState.Key, rows: List<Long>, reapply: Boolean): Long? {
+        val decision = MeloBrowseState.locate(memory.pending(key, 1)!!, key, 1, "q", SongSort.NEWEST, null, rows, false)
+        val found = decision as MeloBrowseState.Anchor.Found
+        val list = FakeList()
+        val restore = MeloBrowseState.SongRestore()
+        val selection = restore.start(found.index, found.offsetPx)
+        list.setSelectionFromTop(selection.index)
+        list.notifyDataSetChanged()
+        if (reapply) restore.afterRefresh()?.let { list.setSelectionFromTop(it.index) }
+        list.layout()
+        val restored = reapply && restore.onScrolled(list.first, list.visible, list.total)
+        if (!reapply || restored) memory.position(key, rows[list.first], found.offsetPx, 0)
+        return memory.get(key)!!.anchorSongKey
+    }
+
+    @Test fun rowRefreshBeforeLayoutLosesAnchorUnlessTheSelectionIsReapplied() {
+        val rows = (1000L until 1200L).toList()
+        val memory = MeloBrowseState(); val key = key(-1)
+        memory.activate(key, SongSort.NEWEST); memory.query(key, "q"); memory.position(key, 1040, -12, 0)
+        assertEquals(1000L, rotate(memory, key, rows, reapply = false))
+        memory.position(key, 1040, -12, 0)
+        repeat(3) { assertEquals(1040L, rotate(memory, key, rows, reapply = true)) }
+        assertEquals("q", memory.get(key)!!.query)
+        assertEquals(-12, memory.get(key)!!.offsetPx)
+    }
+
+    @Test fun songRestoreWaitsForTheAnchorRowAndAcceptsAClampedEnd() {
+        val restore = MeloBrowseState.SongRestore()
+        assertTrue(restore.onScrolled(0, 8, 200))
+        restore.start(40, -12)
+        assertFalse(restore.onScrolled(0, 8, 200))
+        assertFalse(restore.onScrolled(39, 8, 200))
+        assertEquals(MeloBrowseState.SongRestore.Selection(40, -12), restore.afterRefresh())
+        assertTrue(restore.onScrolled(40, 8, 200))
+        assertNull(restore.pending)
+        restore.start(198, 0)
+        assertFalse(restore.onScrolled(0, 8, 200))
+        assertTrue(restore.onScrolled(192, 8, 200))
+        restore.start(5, 0); restore.cancel()
+        assertNull(restore.afterRefresh())
+        assertEquals(0, restore.start(-3, 0).index)
+    }
+
     @Test fun clearForgetsEveryOwnerContextAndDeck() {
         val memory = MeloBrowseState(); val key = key(-1)
         memory.activate(key, SongSort.NEWEST)
