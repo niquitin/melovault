@@ -199,7 +199,7 @@ internal class MeloLibraryPane(
                     val snap = snapshot ?: return
                     if (snap.showingSources) return
                     if (restoringSongScroll && songRestore.onScrolled(first, visible, total)) {
-                        restoringSongScroll = false
+                        endSongRestore()
                         android.util.Log.w("MeloAnchor", "stage=settled layer=$layer first=$first")
                     }
                     if (snap.browseLoadState == MeloBrowseUiPolicy.LoadState.READY && restoringAnchor == null &&
@@ -268,6 +268,34 @@ internal class MeloLibraryPane(
     private fun endSongRestore() {
         songRestore.cancel()
         restoringSongScroll = false
+        list.viewTreeObserver.removeOnGlobalLayoutListener(restoreLayoutCheck)
+    }
+
+    /**
+     * Checked after every real layout while an anchor is pending: something between the request and the
+     * layout (a key event leaving touch mode, a refresh) can still put the old first row back.
+     */
+    private var restoreAttempts = 0
+    private val maxRestoreAttempts = 5
+    private val restoreLayoutCheck = android.view.ViewTreeObserver.OnGlobalLayoutListener {
+        val wanted = songRestore.pending ?: return@OnGlobalLayoutListener
+        val first = list.firstVisiblePosition
+        android.util.Log.w("MeloAnchor", "stage=layout layer=$layer first=$first want=${wanted.index} children=${list.childCount} " +
+            "touch=${list.isInTouchMode} selected=${list.selectedItemPosition} attempt=$restoreAttempts")
+        if (songRestore.onScrolled(first, list.childCount, adapter.count)) {
+            endSongRestore()
+            android.util.Log.w("MeloAnchor", "stage=settled layer=$layer first=$first")
+        } else if (list.childCount > 0) {
+            if (restoreAttempts++ < maxRestoreAttempts) list.post { songRestore.pending?.let { list.setSelectionFromTop(it.index, it.offsetPx) } }
+            else { endSongRestore(); android.util.Log.w("MeloAnchor", "stage=gave_up layer=$layer first=$first") }
+        }
+    }
+
+    private fun startSongRestore(index: Int, offsetPx: Int): MeloBrowseState.SongRestore.Selection {
+        restoreAttempts = 0
+        list.viewTreeObserver.removeOnGlobalLayoutListener(restoreLayoutCheck)
+        list.viewTreeObserver.addOnGlobalLayoutListener(restoreLayoutCheck)
+        return songRestore.start(index, offsetPx)
     }
 
     fun detach() {
@@ -433,7 +461,7 @@ internal class MeloLibraryPane(
                     is MeloBrowseState.Anchor.Found -> {
                         restoringAnchor = null
                         restoringSongScroll = true
-                        val selection = songRestore.start(decision.index, decision.offsetPx)
+                        val selection = startSongRestore(decision.index, decision.offsetPx)
                         list.post {
                             if (songRestore.pending != selection) return@post
                             if (groupKey == key && snapshot?.browseGeneration == snap.browseGeneration) {
