@@ -5,6 +5,7 @@ Worktree `D:\Bots\_worktrees\MeloVault-dang-nhap-chi-so-dien-thoai`; nhánh `dot
 
 ## Checkpoint chặng B — 30/10/2026, Claude Code claude-sonnet-5 — BLOCKED tại S5/S6
 
+- **Tái kiểm 23:07 (+07) cùng ngày:** chạy lại đúng 2 lệnh `reportTelegramConfig` sau khi copy lại `local.properties` — **kết quả không đổi**, `telegram.open.config.valid=false`. Vẫn BLOCKED. Chi tiết: [`-bao-cao.md`](2026-10-30-dang-nhap-chi-so-dien-thoai-bao-cao.md) mục "Tái kiểm".
 - **Trạng thái: BLOCKED.** S5 (cổng chủ dự án) chưa xong theo kiểm tra kỹ thuật thực tế: trên Tiny, trong clone cô lập mới, `-PmeloOpen=true :app:reportTelegramConfig` → `telegram.open.config.valid=false` (cặp `telegram.open.api.id`/`telegram.open.api.hash` trong `C:\Bots\MeloVault-E99-IsolatedQA\local.properties` chưa có hoặc chưa đúng định dạng — **không đọc giá trị để biết chắc**, đúng luật cấm). Không build APK nào. Không có APK mới để bàn giao.
 - HEAD không đổi so với cuối chặng A: `a2f0a88` (Ni). Không có commit mới trên nhánh ở phiên này (chỉ thao tác trên Tiny, không sửa code).
 - Bundle + clone cô lập đã dựng xong trên Tiny, SHA-256 đối chứng hai đầu khớp — **giữ lại để tái dùng** khi S5 xong (xem chi tiết SHA/đường dẫn ở [`-bao-cao.md`](2026-10-30-dang-nhap-chi-so-dien-thoai-bao-cao.md) mục "Phiên chặng B"):

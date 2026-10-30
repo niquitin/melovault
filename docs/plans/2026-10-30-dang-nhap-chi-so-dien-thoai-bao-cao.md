@@ -192,3 +192,14 @@ Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Nếu q
 thu sơ bộ nhanh." kèm prompt sơ bộ đã điền HEAD/APK thật. Nếu vẫn BLOCKED ở S5: "Đã dừng, bàn giao phiên thực
 thi tiếp theo." kèm đúng phần còn thiếu.
 ```
+
+### Tái kiểm — 30/10/2026 23:07 (+07), cùng phiên tiếp nối
+
+HEAD Ni không đổi (`d3a9be2`, không có commit mới). Tiny online. Copy lại `local.properties` (`-Force`, đè bản cũ, phòng trường hợp chủ dự án vừa sửa) vào clone cô lập đã có, rồi chạy lại cả hai lệnh `reportTelegramConfig`:
+
+- `:app:reportTelegramConfig` (thường) → `telegram.config.valid=true`, `telegram.open.config.valid=false`, `telegram.open.distinct=true`.
+- `-PmeloOpen=true :app:reportTelegramConfig` → `telegram.config.valid=false`, **`telegram.open.config.valid=false`**, `telegram.open.distinct=true`.
+
+Kết quả **không đổi** so với lần kiểm trước: `telegram.open.config.valid=false` → **vẫn BLOCKED, S5 chưa xong**. Không đọc nội dung `local.properties`. Không build, không QA thiết bị. Dừng lại đúng chỗ, không lặp thao tác thêm (clone/bundle giữ nguyên, không cần dựng lại vì HEAD Ni không đổi).
+
+Đã dừng, bàn giao phiên thực thi tiếp theo.
