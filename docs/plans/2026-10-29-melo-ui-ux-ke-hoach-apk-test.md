@@ -1,6 +1,27 @@
-# S7 — hồ sơ APK QA có điều kiện
+# Hồ sơ APK QA — Melo UI/UX
 
 TASK_ID: `2026-10-29-melo-ui-ux-ke-hoach`.
+
+## REWORK R1c — hiện hành, 30/10/2026
+
+**QA CANDIDATE — CHƯA NGHIỆM THU; giữ BLOCKED Đảo/QA1 tablet/QA6 Shanling. BLOCKED — CHƯA BÀN GIAO QUA DRIVE.**
+
+| Mục | Giá trị |
+|---|---|
+| Source | `b599e805533e212dd4b6f5cde352c98f29057828` (tree từ `R1c-prepare.json` trên Tiny) |
+| Bundle | `MeloVault-R1c.bundle`, SHA-256 hai đầu `F47D88182B660BF4D478308A26A78471B536A8D7C63C6D16400443CE9EA5EB0F` |
+| Tiny clone | `C:\Bots\MeloVault-R1-IsolatedQA-20261030_093104` (fetch bundle, checkout detached, sạch); config copy file-to-file tại Tiny từ clone S7, không đọc/in/mang về Ni |
+| Gate | `reportTelegramConfig` → `telegram.config.valid=true`; aapt `app.melovault.player` vc121 `0.6.96-beta`; apksigner cert `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8`; APK fresh |
+| Debug | 34.570.449 bytes, `138688175DC02450467381F49CF4FB61CF1361B9EDA87EC39CE56ABE3D063482` |
+| Release | 30.769.518 bytes, `0CBE222F2B8948A97922A80B77DC78746A9038A41D3EC99E8A548F238CFA0A72` — chưa cài/QA UI |
+
+- Sony `QV725WEQ54` XQ-AS52/Sony: trước cài vc121, cert khớp, media không phát; chỉ `install -r` Debug → Success; vc121; APK kéo lại từ máy cùng hash Debug. Không downgrade/uninstall/xóa data.
+- Bản nội bộ (không phải link Internet): [Debug Ni](C:/Users/ntdun/.codex/worktrees/melo-ui-ux-plan/MeloVault-E91-Shareable/docs/plans/artifacts/2026-10-29-melo-ui-ux-ke-hoach/R1-20261030_093104/MeloVault-R1-QA-CANDIDATE-CHUA-NGHIEM-THU-vc121-b599e80-debug-20261030_093104.apk), [Release Ni](C:/Users/ntdun/.codex/worktrees/melo-ui-ux-plan/MeloVault-E91-Shareable/docs/plans/artifacts/2026-10-29-melo-ui-ux-ke-hoach/R1-20261030_093104/MeloVault-R1-QA-CANDIDATE-CHUA-NGHIEM-THU-vc121-b599e80-release-20261030_093104.apk); Tiny `C:\Bots\_qa_temp\MeloVault-R1-20261030_093104\`.
+- Drive: connector của Claude Code không thuộc tài khoản Ni N (không đọc được thư mục S7), nên không upload và kiểm owner-only được; APK S7 trên Ni N từng bị 403 `cannotDownloadAbusiveFile`. Không public, không đường vòng. Debug đã gửi trực tiếp cho chủ dự án trong chat Claude Code ngày 30/10.
+- Bản trung gian R1 `91e6f19` (Debug `40A65539…48AD`) và R1b `0634d47` (Debug `A9A2BFAA…5D0E`) chỉ dùng chẩn đoán trên Sony, không bàn giao.
+- Rollback: cài lại candidate S7 (`278f0d2`, cùng vc121/cert) bằng `install -r` sau gate; không xóa data.
+
+## S7 — lịch sử
 
 **QA CANDIDATE — CHƯA NGHIỆM THU; còn điểm chặn thứ tự khi bật Đảo.**
 

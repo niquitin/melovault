@@ -14,6 +14,24 @@ Trạng thái chính thức: **CHỜ CHỦ DỰ ÁN NGHIỆM THU**. Các mục S
 - Ni full test `R1/R1-full-test-20261030_092213.log`: BUILD SUCCESSFUL; mỗi Debug/Release 178 suites, 2268 tổng = **2247 passed / 21 skipped / 0 failed / 0 errors**. Ni assemble Debug+Release BUILD SUCCESSFUL (APK Ni không dùng để cài). `git diff --check` sạch.
 - Production đổi 3 file; không đổi service/queue/Media3/DB/sync/cache/timeout/versionCode/signing.
 
+### R1 → R1b → R1c trên Sony (Tiny), 30/10/2026
+
+| Bản | Source | Kết quả Sony `QV725WEQ54` |
+|---|---|---|
+| R1 | `91e6f19` | Cài OK. **SB-01 FAIL**: cả 3 vòng xoay đều về đầu danh sách (giả thuyết `notifyDataSetChanged` chen ngang chưa đủ). SB-02 chưa chạy được do script chọn sai nút pause. |
+| R1b | `0634d47` | Thêm log `MeloAnchor` (chỉ số/khóa, không tên bài) + xếp lại neo khi generation đổi. Log: capture → `locate=Found` → `apply index=1` nhưng không bao giờ `settled`; ảnh vẫn ở hàng 0. |
+| R1c | `b599e80` | Kiểm sau **mỗi global layout** khi còn neo chờ; chưa tới neo thì áp lại (tối đa 5 lần). Log: `apply index=11` → layout `first=0` (bị ghi đè) → áp lại → `settled first=11`, ở cả `TWO_PANE` (ngang) và `PHONE_PORTRAIT` (dọc), `touch=true`. **SB-01 đạt kỹ thuật, SB-02 đạt kỹ thuật.** |
+
+- Nguyên nhân SB-01 thực tế: khi xoay, màn bị dựng lại (dọc `PHONE_PORTRAIT` ↔ ngang `TWO_PANE`); một lần layout ngay sau `setSelectionFromTop` đặt danh sách về hàng 0 và `restoringSongScroll` cũ tắt ngay sau post nên `onScroll` lưu đè hàng 0 làm neo. Chưa chốt chính xác callback nào gây layout ghi đè; cách sửa không phụ thuộc vào nó (kiểm sau layout thật). Giả thuyết touch mode đã bị log bác bỏ.
+- **SB-01 R1c** (`r1-sb01-current-result.json`): query “an”, Thư viện, A–Z, cuộn tới hàng 11 (offset −171). 3 vòng ngang/dọc: digest hàng đầu `91F7…851C` **giống trước xoay ở cả 6 lần**; query giữ “an”; MediaSession state0, cùng digest, không tự phát/seek.
+- **SB-02 R1c** (`r1-sb02-result.json`, tab Đã tải): A phát → MEDIA_PAUSE → Deck “Tạm dừng” (đúng) → **Bài kế**: +3s/+15s B state3, **không còn “Tạm dừng”** → pause B: nhãn của B (đúng) → **Bài trước**: +12s A state3, không nhãn → pause cuối state2. Pause dùng phím MEDIA_PAUSE thay nút UI (script không tìm được nút pause theo nhãn); Next/Previous là nút Deck thật.
+- Ni full test cuối cho `b599e80` (`R1/R1c-full-test-build.log`): mỗi Debug/Release **2247 passed / 21 skipped / 0 failed / 0 errors**, assemble Debug+Release BUILD SUCCESSFUL. Không thêm test JVM cho lớp kiểm sau layout (cần View thật); bằng chứng là log + ảnh Sony.
+- APK R1c (Tiny, config=true, vc121 `0.6.96-beta`, cert `eecd3df7…fce8`): Debug 34.570.449 bytes `138688175DC02450467381F49CF4FB61CF1361B9EDA87EC39CE56ABE3D063482` (đã cài Sony, kéo lại cùng hash); Release 30.769.518 bytes `0CBE222F2B8948A97922A80B77DC78746A9038A41D3EC99E8A548F238CFA0A72` (chưa cài/QA UI). Chi tiết [APK-index](2026-10-29-melo-ui-ux-ke-hoach-apk-test.md).
+- **Phát hiện mới, chưa sửa (ngoài phạm vi SB-01/SB-02):** (1) ngay sau mở app, `saveBrowsePosition` bị từ chối `activeOk=false` cho tới lần làm mới danh sách kế tiếp → mở app, cuộn, xoay ngay mà chưa tìm/đổi mục có thể vẫn mất vị trí; chưa tái hiện riêng trên máy. (2) Sau xoay về dọc, header để lại khoảng trống (tiêu đề/thẻ nguồn ẩn nhưng chưa co), hàng neo vẫn đúng — ô 3 ảnh tổng hợp.
+- Sự cố phiên: ADB Sony rớt/kết nối lại sau cài và khi đánh thức (transport 9946→9950); script đã chờ ổn định và chỉ thử lại lệnh chưa tới máy. Hai lượt QA đầu BLOCKED vì lỗi script (hàm `Adb` trùng tên `adb.exe`, chạm hàng bị cắt) — không có thao tác ngoài app. Log `MeloAnchor` lượt R1b bị trôi khỏi buffer.
+- Màn hình: **SONY_SCREEN_END=OFF 10:04:15** (`dumpsys display` OFF); xoay trả `user_rotation=1`, `accelerometer=1`; media cuối state2. **SHANLING_SCREEN_END=KHÔNG THAO TÁC** — `adb devices -l` trên Ni trống, QA6 vẫn BLOCKED.
+- Giữ nguyên BLOCKED: Đảo, Drive (connector Claude Code không phải tài khoản Ni N nên không upload/kiểm owner-only được; APK S7 từng bị 403), QA1 tablet thật, QA6 Shanling. Âm thanh thật **CHƯA XÁC NHẬN**. Teal chưa QA lại trong R1.
+
 ## S7 có điều kiện — kết thúc phần đã kiểm 29/10/2026
 
 - Chủ dự án cho phép build/QA phần độc lập, giữ **BLOCKED S6 thứ tự khi bật Đảo**; không sửa service/playback hoặc tự mở rộng kế hoạch. S6/P1 chưa hoàn tất toàn bộ. Nhãn: **QA CANDIDATE — CHƯA NGHIỆM THU; còn điểm chặn thứ tự khi bật Đảo.**

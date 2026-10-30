@@ -2,11 +2,29 @@
 
 TASK_ID: **2026-10-29-melo-ui-ux-ke-hoach**.
 
-## REWORK R1 — 30/10/2026, Claude Code thực thi (checkpoint code)
+## REWORK R1 — 30/10/2026, Claude Code thực thi — XONG, chờ sơ bộ vòng 2
 
-- Chủ dự án giao REWORK SB-01 + SB-02 (30/10); giữ BLOCKED Đảo, Drive403, QA1 tablet thật, QA6 Shanling. Codex đã dừng vì hết quota sau commit `3d3165c`; Claude Code tiếp nhận cùng nhánh/worktree.
-- Xong code + test Ni: `MeloPlayUiState.kt` (SB-02), `MeloBrowseState.kt` + `MeloLibraryPane.kt` (SB-01), 7 test mới. Full test mỗi biến thể 2247 passed/21 skipped/0 failed; assemble Ni xanh. Chi tiết ở mục R1 của [báo cáo](2026-10-29-melo-ui-ux-ke-hoach-bao-cao.md). Commit code tra bằng `git log -1 --format=%H -- app/src/shareable/java/com/bsdung/musicassistantcar/data/telegram/MeloPlayUiState.kt`.
-- **Bước tiếp chưa làm:** bundle SHA256 → Tiny clone cô lập build có config → verify package/vc121/cert → Sony `QV725WEQ54` install -r Debug → QA lại xoay 3 vòng (Current/Teal) và paused → Next/Previous → ảnh + tổng hợp → cập nhật APK/ảnh-index → prompt sơ bộ mới. Màn Sony/Shanling: chưa thao tác trong R1 tới mốc này.
+- Chủ dự án giao REWORK SB-01 + SB-02 (30/10). Codex dừng vì hết quota sau `3d3165c`; Claude Code tiếp nhận cùng nhánh/worktree. Commit: `91e6f19` (R1), `0634d47` (R1b log + requeue), `b599e80` (R1c kiểm sau layout) + commit hồ sơ này. **Source APK candidate: `b599e805533e212dd4b6f5cde352c98f29057828`.**
+- Kết quả Sony R1c: **SB-01 đạt kỹ thuật** (3 vòng ngang/dọc, cùng hàng neo, query/scope/player giữ); **SB-02 đạt kỹ thuật** (Next/Previous hết “Tạm dừng” cũ; pause mới hiện đúng bài). Ni full test 2247/21/0 mỗi biến thể. Chi tiết mục R1 [báo cáo](2026-10-29-melo-ui-ux-ke-hoach-bao-cao.md), [APK-index](2026-10-29-melo-ui-ux-ke-hoach-apk-test.md), [ảnh-index](2026-10-29-melo-ui-ux-ke-hoach-hinh-nghiem-thu.md).
+- Giữ BLOCKED: Đảo, Drive (connector Claude Code không thuộc Ni N; APK gửi trực tiếp trong chat), QA1 tablet, QA6 Shanling. Âm thanh thật chưa xác nhận; Teal chưa QA lại. Phát hiện mới chưa sửa: lưu vị trí bị từ chối ngay sau mở app (`activeOk=false`), khoảng trống header sau xoay.
+- Log `MeloAnchor` (warn, chỉ số/khóa) giữ trong code để kiểm sau; bỏ đi cần một lượt thực thi + build mới.
+- Màn: SONY_SCREEN_END=OFF 10:04:15; SHANLING_SCREEN_END=KHÔNG THAO TÁC. Không còn tiến trình QA/build. Không merge/push.
+- **Bước tiếp:** chủ dự án mở phiên mới giao nghiệm thu sơ bộ vòng 2 bằng prompt dưới; không tự chạy vai sơ bộ trong phiên thực thi.
+
+### Prompt cho phiên nghiệm thu sơ bộ vòng 2
+
+```text
+MELOVAULT — NGHIỆM THU SƠ BỘ NHANH, KHÔNG CODE
+TASK_ID: 2026-10-29-melo-ui-ux-ke-hoach; nhánh dot/2026-10-29-melo-ui-ux-ke-hoach; worktree: C:\Users\ntdun\.codex\worktrees\melo-ui-ux-plan\MeloVault-E91-Shareable.
+Baseline: 3d3165c (sơ bộ vòng 1); HEAD dự kiến: commit hồ sơ R1 ngay sau b599e80; source APK: b599e805533e212dd4b6f5cde352c98f29057828.
+Kế hoạch: docs/plans/2026-10-29-melo-ui-ux-ke-hoach.md (+ -chi-tiet.md).
+Báo cáo: docs/plans/2026-10-29-melo-ui-ux-ke-hoach-bao-cao.md (mục REWORK R1).
+Bàn giao: docs/plans/2026-10-29-melo-ui-ux-ke-hoach-ban-giao.md.
+APK và SHA-256: Debug 138688175DC02450467381F49CF4FB61CF1361B9EDA87EC39CE56ABE3D063482 (đã cài Sony), Release 0CBE222F2B8948A97922A80B77DC78746A9038A41D3EC99E8A548F238CFA0A72; hồ sơ: 2026-10-29-melo-ui-ux-ke-hoach-apk-test.md.
+Phạm vi cần kiểm nhanh: SB-01 (MeloLibraryPane restore/layout check, MeloBrowseState.SongRestore) và SB-02 (MeloPlayUiState.observe settled/adopt), test mới, bằng chứng Sony R1c (ảnh tổng hợp + JSON + log MeloAnchor); có thể xoay/Next lại trên Sony nếu cần. Giữ mọi BLOCKED; không sửa code/build, không PASS chính thức, không merge/push.
+```
+
+Phiên sơ bộ làm theo `docs/workflow/PROMPT_NGHIEM_THU_SO_BO.md` (bản ở nhánh tích hợp nếu nhánh này chưa có), ghi vòng 2 vào `*-nghiem-thu-so-bo.md`.
 
 ## Sơ bộ vòng 1 — 29/10/2026, sau hồ sơ d89459e
 

@@ -1,4 +1,14 @@
-# S7 — chỉ mục bằng chứng QA có điều kiện
+# Chỉ mục bằng chứng QA — Melo UI/UX
+
+## REWORK R1c — 30/10/2026, source `b599e805533e212dd4b6f5cde352c98f29057828`
+
+Ảnh private, local Ni (chứa tên bài Telegram, không commit/không public). Drive BLOCKED như APK-index. Ảnh tổng hợp đã gửi chủ dự án trong chat.
+
+- [00_tong_hop.png — 8 ô](artifacts/2026-10-29-melo-ui-ux-ke-hoach/R1-20261030_093104/00_tong_hop.png): 1–3 SB-01 trước xoay / xoay 1 ngang / xoay 3 dọc cùng neo; 4–8 SB-02 A pause → Next +3s/+15s hết nhãn → pause B → Previous +12s.
+- Ảnh/XML/JSON gốc: [thư mục sony](artifacts/2026-10-29-melo-ui-ux-ke-hoach/R1-20261030_093104/sony/) — `r1-sb01-current-*` (6 lần xoay), `r1-sb01-current-result.json`, `r1-sb02-*`, `r1-sb02-result.json`, `qa-steps.log`, `R1c-meloanchor-stream.log`, `build-result.json`, `sony-install-gates.json`.
+- Chưa kiểm: Teal, tablet thật (QA1), Shanling (QA6), âm thanh thật, process recreation.
+
+## S7 — lịch sử
 
 TASK_ID: `2026-10-29-melo-ui-ux-ke-hoach`; source `278f0d277aeb077bb938cf76f0e055c5058dd996`.
 
