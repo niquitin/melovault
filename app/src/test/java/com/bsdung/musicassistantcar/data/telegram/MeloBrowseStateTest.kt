@@ -178,6 +178,41 @@ class MeloBrowseStateTest {
         assertEquals(0, restore.start(-3, 0).index)
     }
 
+    /**
+     * D2: after app open the first list is drawn, then the sync start turns on all-chats mode without a new
+     * query, so the key on screen is Thư viện while the remembered key is still the first one.
+     */
+    @Test fun firstListSavesItsPlaceWhenScopeTurnsLibraryWithoutRefresh() {
+        val memory = MeloBrowseState()
+        val first = MeloBrowseState.Key(1, Scope(Kind.SAVED_MESSAGES))
+        val library = MeloBrowseState.Key(1, Scope(Kind.LIBRARY))
+        memory.activate(first, SongSort.NEWEST)
+        val shown = { old: MeloBrowseState.Context -> old.copy(query = "an", sort = SongSort.NAME) }
+        assertTrue(memory.savePosition(library, true, SongSort.NEWEST, shown, 4242L, -171, 0))
+        assertEquals(library, memory.active)
+        val saved = requireNotNull(memory.get(library))
+        assertEquals(4242L, saved.anchorSongKey)
+        assertEquals(-171, saved.offsetPx)
+        assertEquals("an", saved.query)
+        assertEquals(SongSort.NAME, saved.sort)
+        assertEquals(4242L, memory.pending(library, 2)?.context?.anchorSongKey)
+        assertNull(memory.get(first)?.anchorSongKey)
+    }
+
+    @Test fun rowsOfAnOlderQueryStillNeverSaveOrSwitchTheKey() {
+        val memory = MeloBrowseState()
+        val library = MeloBrowseState.Key(1, Scope(Kind.LIBRARY))
+        val channel = key(-5)
+        memory.activate(library, SongSort.NEWEST)
+        assertFalse(memory.savePosition(library, false, SongSort.NEWEST, { it }, 7L, 3, 0))
+        assertNull(memory.get(library)?.anchorSongKey)
+        assertFalse(memory.savePosition(channel, false, SongSort.NEWEST, { it }, 7L, 3, 0))
+        assertEquals(library, memory.active)
+        assertNull(memory.get(channel))
+        assertTrue(memory.savePosition(library, true, SongSort.NEWEST, { it }, 7L, 3, 0))
+        assertEquals(7L, memory.get(library)?.anchorSongKey)
+    }
+
     @Test fun clearForgetsEveryOwnerContextAndDeck() {
         val memory = MeloBrowseState(); val key = key(-1)
         memory.activate(key, SongSort.NEWEST)

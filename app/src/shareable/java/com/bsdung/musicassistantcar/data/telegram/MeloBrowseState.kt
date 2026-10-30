@@ -88,6 +88,19 @@ internal class MeloBrowseState(private val capacity: Int = 16) {
             offsetPx = if (songKey == null) old.offsetPx else offsetPx,
             sourceScrollY = sourceScrollY.coerceAtLeast(0)))
     }
+    /**
+     * Saves the place of the rows on screen. [generationOk]: the rows come from the newest query; rows of an
+     * older query never save. The key on screen can still change without a new query (right after app open the
+     * sync start turns on all-chats mode once the first list is drawn), so that key is activated here with the
+     * list's own query/sort ([shown]) instead of every save being dropped until the next refresh (D2).
+     */
+    fun savePosition(key: Key, generationOk: Boolean, defaultSort: SongSort, shown: (Context) -> Context,
+        songKey: Long?, offsetPx: Int, sourceScrollY: Int): Boolean {
+        if (!generationOk) return false
+        if (active != key) put(key, shown(activate(key, defaultSort)))
+        position(key, songKey, offsetPx, sourceScrollY)
+        return true
+    }
     fun pending(key: Key, generation: Long): Pending? = contexts[key]?.takeIf { it.anchorSongKey != null }
         ?.let { Pending(key, generation, it) }
     fun sourcePosition(key: Key, chatId: Long?, offsetPx: Int) {

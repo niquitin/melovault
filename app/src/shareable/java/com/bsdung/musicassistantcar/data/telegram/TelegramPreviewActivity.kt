@@ -429,11 +429,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
         return MeloBrowseState.Key(owner, scope)
     }
 
+    /** The query, sort and letter floor of the list on screen, over [previous] for that key. */
+    private fun shownBrowseContext(previous: MeloBrowseState.Context): MeloBrowseState.Context {
+        val query = if (localMode) localMusic.query else songFilter.text?.toString().orEmpty()
+        return previous.copy(query = query, sort = activeSort(), letterFloor = if (localMode) null else letterFloor)
+    }
+
     private fun rememberBrowseContext() {
         val key = browseKey() ?: return
-        val previous = meloBrowse.activate(key, librarySort())
-        val query = if (localMode) localMusic.query else songFilter.text?.toString().orEmpty()
-        meloBrowse.put(key, previous.copy(query = query, sort = activeSort(), letterFloor = if (localMode) null else letterFloor))
+        meloBrowse.put(key, shownBrowseContext(meloBrowse.activate(key, librarySort())))
     }
 
     /** UI navigation only: this never restores or mutates the player's timeline. */
@@ -6070,8 +6074,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
         override fun saveBrowsePosition(generation: Long, songKey: Long?, offsetPx: Int, sourceScrollY: Int) {
             val key = browseKey() ?: return
             val current = if (localMode) localMusic.browseGeneration else uiQueryGeneration.get()
-            if (generation == current && meloBrowse.active == key) meloBrowse.position(key, songKey, offsetPx, sourceScrollY)
-            else if (songKey != null && BuildConfig.DEBUG) android.util.Log.w("MeloAnchor", "stage=save_rejected genOk=${generation == current} activeOk=${meloBrowse.active == key}")
+            val activeOk = meloBrowse.active == key
+            val saved = meloBrowse.savePosition(key, generation == current, librarySort(), { shownBrowseContext(it) },
+                songKey, offsetPx, sourceScrollY)
+            if (!saved && songKey != null && BuildConfig.DEBUG) android.util.Log.w("MeloAnchor", "stage=save_rejected genOk=${generation == current} activeOk=$activeOk")
         }
         override fun saveSourcePosition(generation: Long, chatId: Long?, offsetPx: Int) {
             val key = browseKey() ?: return
