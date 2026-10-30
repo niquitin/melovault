@@ -198,7 +198,10 @@ internal class MeloLibraryPane(
                 override fun onScroll(v: AbsListView?, first: Int, visible: Int, total: Int) {
                     val snap = snapshot ?: return
                     if (snap.showingSources) return
-                    if (restoringSongScroll && songRestore.onScrolled(first, visible, total)) restoringSongScroll = false
+                    if (restoringSongScroll && songRestore.onScrolled(first, visible, total)) {
+                        restoringSongScroll = false
+                        android.util.Log.w("MeloAnchor", "stage=settled layer=$layer first=$first")
+                    }
                     if (snap.browseLoadState == MeloBrowseUiPolicy.LoadState.READY && restoringAnchor == null &&
                         !restoringSongScroll && !pendingTopReset) {
                         snap.rows.getOrNull(first)?.let { row ->
@@ -292,9 +295,13 @@ internal class MeloLibraryPane(
             } else host.saveBrowsePosition(snap.browseGeneration, null, 0, sourcesScroll.scrollY)
             return
         }
-        if (restoringAnchor != null || restoringSongScroll || snap.rows.isEmpty() || listFrame.visibility != View.VISIBLE) return
+        if (restoringAnchor != null || restoringSongScroll || snap.rows.isEmpty() || listFrame.visibility != View.VISIBLE) {
+            android.util.Log.w("MeloAnchor", "stage=capture_skip layer=$layer restoring=${restoringAnchor != null}/$restoringSongScroll rows=${snap.rows.size}")
+            return
+        }
         val first = list.firstVisiblePosition
         val row = snap.rows.getOrNull(first) ?: return
+        android.util.Log.w("MeloAnchor", "stage=capture layer=$layer first=$first key=${row.songKey} top=${list.getChildAt(0)?.top} gen=${snap.browseGeneration}")
         host.saveListAnchor(key, row.songKey, list.getChildAt(0)?.top ?: 0)
         host.saveBrowsePosition(snap.browseGeneration, row.songKey, list.getChildAt(0)?.top ?: 0, 0)
     }
@@ -338,6 +345,7 @@ internal class MeloLibraryPane(
             restoringAnchor = if (browseKey != null && state?.anchorSongKey != null) {
                 MeloBrowseState.Pending(browseKey, snap.browseGeneration, state)
             } else null
+            android.util.Log.w("MeloAnchor", "stage=context layer=$layer anchor=${state?.anchorSongKey} gen=${snap.browseGeneration} rows=${snap.rows.size}")
             if (restoringAnchor == null) resetScroll() else pendingTopReset = false
         }
         if (contextChanged || browseKey != lastBrowseKey || (pendingQuery == null && snap.query != lastQuery)) {
@@ -416,8 +424,12 @@ internal class MeloLibraryPane(
             if (restore != null && browseKey != null) {
                 val current = restore.copy(generation = snap.browseGeneration)
                 restoringAnchor = current
-                when (val decision = MeloBrowseState.locate(current, browseKey, snap.browseGeneration,
-                    snap.query, snap.sort, snap.letterFloor, snap.rows.map { it.songKey }, snap.browseComplete)) {
+                val decision = MeloBrowseState.locate(current, browseKey, snap.browseGeneration,
+                    snap.query, snap.sort, snap.letterFloor, snap.rows.map { it.songKey }, snap.browseComplete)
+                android.util.Log.w("MeloAnchor", "stage=locate layer=$layer decision=${decision.javaClass.simpleName} " +
+                    "rows=${snap.rows.size} complete=${snap.browseComplete} gen=${snap.browseGeneration} " +
+                    "sortOk=${current.context.sort == snap.sort} floorOk=${current.context.letterFloor == snap.letterFloor} queryOk=${current.context.query == snap.query}")
+                when (decision) {
                     is MeloBrowseState.Anchor.Found -> {
                         restoringAnchor = null
                         restoringSongScroll = true
@@ -426,7 +438,13 @@ internal class MeloLibraryPane(
                             if (songRestore.pending != selection) return@post
                             if (groupKey == key && snapshot?.browseGeneration == snap.browseGeneration) {
                                 list.setSelectionFromTop(selection.index, selection.offsetPx)
-                            } else endSongRestore()
+                                android.util.Log.w("MeloAnchor", "stage=apply layer=$layer index=${selection.index}")
+                            } else {
+                                // Rows were re-queried before the selection ran: locate the same song again.
+                                endSongRestore()
+                                if (groupKey == key) restoringAnchor = current
+                                android.util.Log.w("MeloAnchor", "stage=apply_requeue layer=$layer same=${groupKey == key}")
+                            }
                         }
                     }
                     MeloBrowseState.Anchor.Drop -> { restoringAnchor = null; pendingTopReset = true }

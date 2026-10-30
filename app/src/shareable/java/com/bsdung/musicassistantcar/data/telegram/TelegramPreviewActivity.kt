@@ -6024,6 +6024,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val key = browseKey() ?: return
             val current = if (localMode) localMusic.browseGeneration else uiQueryGeneration.get()
             if (generation == current && meloBrowse.active == key) meloBrowse.position(key, songKey, offsetPx, sourceScrollY)
+            else if (songKey != null) android.util.Log.w("MeloAnchor", "stage=save_rejected genOk=${generation == current} activeOk=${meloBrowse.active == key}")
         }
         override fun saveSourcePosition(generation: Long, chatId: Long?, offsetPx: Int) {
             val key = browseKey() ?: return
