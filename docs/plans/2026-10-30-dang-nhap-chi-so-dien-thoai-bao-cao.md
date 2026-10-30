@@ -107,3 +107,88 @@ Baseline test gần nhất theo kế hoạch mục 2 là 2268/21/0; kết quả 
 - `useOwnApi`/`useOwnApiLink` là UI mới chưa qua QA thiết bị — rủi ro UX (chồng nút, vị trí) chỉ phát hiện được ở S7 (ảnh QA thật).
 
 Đã dừng, bàn giao phiên thực thi tiếp theo.
+
+---
+
+# Phiên chặng B — 30/10/2026, Claude Code claude-sonnet-5
+
+Tiếp tục từ HEAD `a2f0a88` (chặng A). S0 kiểm Git: nhánh đúng, HEAD khớp, cây sạch, không agent khác đang sửa code trên nhánh này (commit HEAD cách lúc bắt đầu phiên ~18 phút, không có commit mới hơn).
+
+## S5 — cổng chủ dự án: **BLOCKED — chưa xác nhận xong**
+
+Không nhận được xác nhận bằng lời của chủ dự án trong phiên này rằng đã đăng ký app mới trên my.telegram.org và đã điền `telegram.open.api.id` / `telegram.open.api.hash` vào `C:\Bots\MeloVault-E99-IsolatedQA\local.properties` trên Tiny. Theo đúng kế hoạch S5/S6.5 ("Xác nhận chỉ qua `reportTelegramConfig`"), đã kiểm kỹ thuật thay vì hỏi lại/đoán — xem mục S6 dưới. **Không đọc/in/copy giá trị `local.properties` ở bất kỳ bước nào.**
+
+## S6 — Tiny: bundle + clone cô lập + gate config → **BLOCKED tại bước kiểm config**
+
+1. **Bundle nguồn:** tạo từ worktree Ni tại HEAD `a2f0a88`, nhánh `dot/2026-10-30-dang-nhap-chi-so-dien-thoai`, `git bundle create ... dot/2026-10-30-dang-nhap-chi-so-dien-thoai` → `git bundle verify` báo "contains complete history" cho đúng ref/SHA.
+   - File: `MeloVault_dang-nhap-chi-so-dien-thoai_full_a2f0a88_20261030.bundle`, 13.308.010 bytes.
+   - SHA-256 **hai đầu khớp**: Ni (sau khi copy vào `T:\_MeloVault_Git_Transfer\`) = Tiny (`Get-FileHash` chạy trực tiếp trên Tiny qua Desktop Commander) = `84c6d6d97a969596bdcf7f2c35e4404a3f0b523b7c86b116d3a569f26404e4c6` (13.308.010 bytes cả hai phía).
+   - Sidecar `*.bundle.sha256` đã ghi tại `T:\_MeloVault_Git_Transfer\` theo đúng quy ước các bundle trước.
+2. **Clone cô lập MỚI:** `C:\Bots\MeloVault-dang-nhap-IsolatedQA-20261030-a2f0a88` (không có trước đó, kiểm bằng `list_directory` trên Tiny trước khi tạo). Clone từ file bundle, checkout nhánh `dot/2026-10-30-dang-nhap-chi-so-dien-thoai`. Kiểm trong clone: `git status --short` sạch, `git branch --show-current` = đúng nhánh, `git rev-parse HEAD` = `a2f0a8837917380475b375e24d99187ec119fde3` (khớp Ni).
+3. **`local.properties`:** `git check-ignore -v local.properties` trong clone mới xác nhận bị ignore (`.gitignore:8:local.properties`) **trước khi** copy. Sau đó **một lệnh** `Copy-Item 'C:\Bots\MeloVault-E99-IsolatedQA\local.properties' '...\local.properties'` từ đúng nguồn được phép (ngoại lệ E104 S11). Không đọc/in/hash nội dung tệp ở bất kỳ bước nào.
+4. **`reportTelegramConfig` (bản thường, không cờ):** `telegram.config.valid=true`, `telegram.open.config.valid=false`, `telegram.open.distinct=true`.
+5. **`-PmeloOpen=true reportTelegramConfig`:** `telegram.config.valid=false`, **`telegram.open.config.valid=false`**, `telegram.open.distinct=true`.
+   - Theo đúng tiêu chí S6.5 của kế hoạch ("Sai thì BLOCKED"): **`telegram.open.config.valid` phải là `true` để tiếp tục build; ở đây là `false`.** Nghĩa là cặp `telegram.open.api.id` / `telegram.open.api.hash` trên Tiny **chưa có hoặc chưa đúng định dạng** (`[0-9]{1,10}` / `[a-fA-F0-9]{32}`) — không thể phân biệt "chưa thêm" hay "thêm sai định dạng" mà không đọc giá trị, và việc đó bị cấm.
+   - **Dừng tại đây theo đúng chỉ dẫn.** Không build bất kỳ APK nào (bản thường cũng không build thêm ở bước này vì mục tiêu S6 là bản open; không có lý do build bản thường trong clone cô lập khi cổng chính đang BLOCKED). Không chạy `verifyOpenApkHasOpenTelegramHash`/aapt/apksigner vì chưa có APK open để kiểm.
+
+Clone `C:\Bots\MeloVault-dang-nhap-IsolatedQA-20261030-a2f0a88` **giữ lại trên Tiny** làm bằng chứng/để tiếp tục ngay khi S5 xong (không cần dựng lại bundle/clone nếu HEAD Ni không đổi) — không xoá.
+
+## S7 — QA thiết bị: không thực hiện (phụ thuộc APK open từ S6, đang BLOCKED)
+
+Không có thao tác ADB/thiết bị nào trong phiên này.
+
+## Đã làm (chặng B)
+
+- Kiểm Git đầu phiên, xác nhận không có agent khác đang sửa code.
+- Tạo + xác minh git bundle SHA-256 hai đầu (Ni ⟷ Tiny) cho HEAD `a2f0a88`.
+- Tạo clone cô lập mới trên Tiny, xác nhận nhánh/HEAD/cây sạch khớp Ni.
+- Xác nhận `local.properties` bị `.gitignore`, copy đúng một lệnh từ nguồn được phép.
+- Chạy `reportTelegramConfig` (cả hai biến thể) để xác nhận cổng S5 — **kết quả: `telegram.open.config.valid=false` → BLOCKED**, dừng đúng lúc, không build/không đoán.
+
+## Chưa kiểm chứng
+
+- Toàn bộ S6 bước 6–7 (build APK open, verify hash/cert/package) và S7 (QA thiết bị Q1–Q6) — chưa chạy vì chặn ở cổng cấu hình.
+- Giá trị thật của `telegram.open.api.*` trên Tiny — không được đọc, nên không biết đang thiếu hay sai định dạng.
+
+## Rủi ro / điểm dừng
+
+- Không có rủi ro kỹ thuật mới. Điểm dừng đúng theo kế hoạch mục 7 ("report false hoặc distinct false... → BLOCKED").
+- Clone cô lập đã tạo trên Tiny (`MeloVault-dang-nhap-IsolatedQA-20261030-a2f0a88`) có thể tái sử dụng cho lần chạy S6 tiếp theo sau khi chủ dự án hoàn tất S5, miễn HEAD Ni không đổi; nếu Ni có commit mới, phiên sau nên dựng clone mới theo đúng quy trình (không ghi đè clone cũ).
+
+Đã dừng, bàn giao phiên thực thi tiếp theo.
+
+```text
+MELOVAULT — PHIÊN THỰC THI CHẶNG B (TIẾP TỤC — S5 CẦN XONG TRƯỚC)
+
+Repo/worktree: D:\Bots\_worktrees\MeloVault-dang-nhap-chi-so-dien-thoai (repo chuẩn D:\Bots\MeloVault-E91-Shareable)
+TASK_ID: 2026-10-30-dang-nhap-chi-so-dien-thoai
+Nhánh: dot/2026-10-30-dang-nhap-chi-so-dien-thoai
+HEAD: a2f0a88 (không đổi so với lần trước)
+Bàn giao: docs/plans/2026-10-30-dang-nhap-chi-so-dien-thoai-ban-giao.md
+Báo cáo: docs/plans/2026-10-30-dang-nhap-chi-so-dien-thoai-bao-cao.md (đọc mục "Phiên chặng B" cuối file)
+
+Tình trạng: S6 đã BLOCKED tại bước kiểm config — `-PmeloOpen=true reportTelegramConfig` trên Tiny cho
+`telegram.open.config.valid=false` (cặp telegram.open.api.id/hash trên
+C:\Bots\MeloVault-E99-IsolatedQA\local.properties chưa có hoặc chưa đúng định dạng; KHÔNG được đọc giá trị để
+biết chính xác lý do). Clone cô lập đã sẵn: C:\Bots\MeloVault-dang-nhap-IsolatedQA-20261030-a2f0a88
+(nhánh/HEAD đã khớp a2f0a88, local.properties đã copy từ nguồn cũ — SẼ CẦN COPY LẠI nếu chủ dự án vừa sửa file).
+
+Việc cần làm:
+1. Hỏi/xác nhận chủ dự án đã hoàn tất S5 chưa (đăng ký app my.telegram.org + điền 2 dòng telegram.open.api.*
+   vào local.properties trên Tiny, KHÔNG phải trên Ni). Chưa xong → tiếp tục ghi BLOCKED, dừng, không đoán.
+2. Nếu xong: trong clone C:\Bots\MeloVault-dang-nhap-IsolatedQA-20261030-a2f0a88 (hoặc clone mới nếu Ni đã có
+   commit mới hơn a2f0a88 — khi đó dựng lại bundle/clone theo đúng S6.1-S6.2, không tái dùng clone cũ với
+   source lệch HEAD), copy lại local.properties (1 lệnh Copy-Item, đè file cũ) rồi chạy lại
+   reportTelegramConfig thường + -PmeloOpen=true reportTelegramConfig. Chỉ tiếp tục nếu
+   telegram.open.config.valid=true VÀ telegram.open.distinct=true; sai thì BLOCKED tiếp, báo đúng dòng nào sai.
+3. Đạt cổng → build bản thường Debug + bản open Debug/Release (S6.6), verify
+   verifyOpenApkHasNoTelegramHash/verifyOpenApkHasOpenTelegramHash + aapt + apksigner (S6.7).
+4. S7: QA thiết bị theo mục 5 kế hoạch (Q1–Q6). Agent KHÔNG tự gõ số điện thoại/mã/mật khẩu cấp 2. Kiểm
+   serial/model/cert/vc trước khi install -r; màn hình chỉ bật khi cần, tắt lại trong finally.
+5. Hồ sơ: tiếp tục -bao-cao.md (phiên mới), tạo -apk-test.md/-hinh-nghiem-thu.md/00_tong_hop.png nếu có APK,
+   cập nhật -ban-giao.md sau mỗi mốc. Không merge/push/public, không ghi PASS.
+
+Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Nếu qua được S6-S7: "Đã dừng. Mở phiên mới để nghiệm
+thu sơ bộ nhanh." kèm prompt sơ bộ đã điền HEAD/APK thật. Nếu vẫn BLOCKED ở S5: "Đã dừng, bàn giao phiên thực
+thi tiếp theo." kèm đúng phần còn thiếu.
+```

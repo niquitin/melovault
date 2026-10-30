@@ -3,6 +3,20 @@
 TASK_ID: **2026-10-30-dang-nhap-chi-so-dien-thoai**.
 Worktree `D:\Bots\_worktrees\MeloVault-dang-nhap-chi-so-dien-thoai`; nhánh `dot/2026-10-30-dang-nhap-chi-so-dien-thoai`.
 
+## Checkpoint chặng B — 30/10/2026, Claude Code claude-sonnet-5 — BLOCKED tại S5/S6
+
+- **Trạng thái: BLOCKED.** S5 (cổng chủ dự án) chưa xong theo kiểm tra kỹ thuật thực tế: trên Tiny, trong clone cô lập mới, `-PmeloOpen=true :app:reportTelegramConfig` → `telegram.open.config.valid=false` (cặp `telegram.open.api.id`/`telegram.open.api.hash` trong `C:\Bots\MeloVault-E99-IsolatedQA\local.properties` chưa có hoặc chưa đúng định dạng — **không đọc giá trị để biết chắc**, đúng luật cấm). Không build APK nào. Không có APK mới để bàn giao.
+- HEAD không đổi so với cuối chặng A: `a2f0a88` (Ni). Không có commit mới trên nhánh ở phiên này (chỉ thao tác trên Tiny, không sửa code).
+- Bundle + clone cô lập đã dựng xong trên Tiny, SHA-256 đối chứng hai đầu khớp — **giữ lại để tái dùng** khi S5 xong (xem chi tiết SHA/đường dẫn ở [`-bao-cao.md`](2026-10-30-dang-nhap-chi-so-dien-thoai-bao-cao.md) mục "Phiên chặng B"):
+  - Bundle: `T:\_MeloVault_Git_Transfer\MeloVault_dang-nhap-chi-so-dien-thoai_full_a2f0a88_20261030.bundle` (= `C:\Bots\_MeloVault_Git_Transfer\...` trên Tiny), SHA-256 `84c6d6d97a969596bdcf7f2c35e4404a3f0b523b7c86b116d3a569f26404e4c6`, 13.308.010 bytes.
+  - Clone: `C:\Bots\MeloVault-dang-nhap-IsolatedQA-20261030-a2f0a88` trên Tiny, nhánh/HEAD khớp `a2f0a88`, `local.properties` đã copy một lần từ nguồn E99 (sẽ cần copy lại nếu chủ dự án vừa sửa file sau checkpoint này).
+- **Phiên tiếp theo:** nếu Ni không có commit mới, DÙNG LẠI clone trên — chỉ cần copy lại `local.properties` rồi chạy lại `reportTelegramConfig` hai biến thể để xác nhận trước khi build. Nếu Ni đã có commit mới hơn `a2f0a88`, dựng bundle/clone MỚI theo đúng S6.1–S6.2 (không tái dùng clone cũ với source lệch HEAD).
+- Không merge/push, không ghi PASS, không chọn việc khác. Không ADB/thiết bị (S7 phụ thuộc APK open từ S6, chưa build được).
+
+### Prompt tiếp tục chặng B (dán nguyên văn vào phiên mới, sau khi chủ dự án xác nhận xong S5)
+
+Xem khối `text` ở cuối mục "Phiên chặng B" trong [`-bao-cao.md`](2026-10-30-dang-nhap-chi-so-dien-thoai-bao-cao.md) — đã điền sẵn đường dẫn clone/bundle thật, không cần viết lại.
+
 ## Checkpoint thực thi chặng A — 30/10/2026, Claude Code claude-sonnet-5
 
 - **Trạng thái: CHẶNG A XONG (S0–S4). Chờ chủ dự án mở phiên chặng B** (S5 cần chủ dự án tự đăng ký app + điền `local.properties` trên Tiny trước).
