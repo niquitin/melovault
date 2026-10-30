@@ -1,4 +1,57 @@
-# Nghiệm thu sơ bộ — Melo UI/UX, vòng 1
+# Nghiệm thu sơ bộ — Melo UI/UX
+
+## Vòng 2 — REWORK R1c, 30/10/2026
+
+**SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN** — phạm vi: SB-01 và SB-02 trên Sony XQ-AS52, giao diện Current, APK Debug R1c. Giữ nguyên mọi BLOCKED (Đảo, Drive, QA1 tablet thật, QA6 Shanling); âm thanh thật chưa xác nhận. Không PASS chính thức.
+
+- Người kiểm: Claude Code, phiên sơ bộ mới do chủ dự án giao, 30/10/2026 khoảng 10:35–10:50 +07. Không sửa code/build, không ADB/Tiny/Drive.
+- Worktree `C:\Users\ntdun\.codex\worktrees\melo-ui-ux-plan\MeloVault-E91-Shareable`, nhánh `dot/2026-10-29-melo-ui-ux-ke-hoach`. Đầu phiên: cây sạch, HEAD `680cce055569732a1cb20cbfa0e0f4e2117a3000` đúng dự kiến, `git diff --check` sạch, commit cuối 10:12 (22 phút trước, phiên thực thi đã dừng theo bàn giao).
+- Baseline `3d3165c` (sơ bộ vòng 1); source APK `b599e805533e212dd4b6f5cde352c98f29057828`. `b599e80..680cce0` chỉ đổi Markdown.
+- `PROMPT_NGHIEM_THU_SO_BO.md` không có trong nhánh này và repo không có ref `main`; làm theo CLAUDE.md mục 0/2C và khuôn vòng 1.
+
+### Tự kiểm trong phiên
+
+| Mục | Kết quả |
+|---|---|
+| Diff `3d3165c..b599e80` | Production đúng 4 file: `MeloPlayUiState.kt`, `MeloBrowseState.kt`, `MeloLibraryPane.kt`, `TelegramPreviewActivity.kt` (+1 dòng log). Không đổi service/queue/Media3/DB/sync/cache/versionCode/signing |
+| SHA-256/bytes APK nội bộ Ni | Debug 34570449 `138688175DC02450467381F49CF4FB61CF1361B9EDA87EC39CE56ABE3D063482`, Release 30769518 `0CBE222F2B8948A97922A80B77DC78746A9038A41D3EC99E8A548F238CFA0A72` — **khớp** hồ sơ |
+| Cộng XML `app/build/test-results` (10:04–10:05) | Mỗi Debug/Release: 178 suites, 2268 tổng = **2247 passed / 21 skipped / 0 failed / 0 errors**; có XML của `MeloBrowseStateTest`, `MeloPlayUiStateTest`. Log `R1c-full-test-build.log`: BUILD SUCCESSFUL |
+| Test mới | `MeloPlayUiStateTest` +5 (paused A → cached Next B không `begin`; tự chuyển/Previous; B đang đệm khi A phát; lỗi A đã hiện bị bỏ / lỗi B chưa hiện giữ; cooldown + owner khác). `MeloBrowseStateTest` +2 (mô hình ListView refresh-trước-layout; `SongRestore` chờ đúng hàng/kẹp cuối/cancel). Đúng các ca vòng 1 yêu cầu cho SB-02; lớp kiểm-sau-layout của SB-01 không có test JVM (cần View thật) |
+| Ảnh tổng hợp `00_tong_hop.png` (xem ảnh thật) | Ô 1/3: cùng hàng đầu trước và sau xoay, query “an” giữ. Ô 4: A paused có “Tạm dừng”. Ô 5–6: sau Next B phát, **không còn nhãn**. Ô 7: pause B có nhãn. Ô 8: Previous A phát, không nhãn |
+| `r1-sb01-current-result.json` | 3 vòng, digest hàng đầu `91F792610170851C` giống trước xoay ở cả 6 lần (ngang+dọc), query “an”, media state0 cùng digest đầu/cuối, `PlayerUnchanged=true` |
+| `r1-sb02-result.json` | A state2 nhãn=true → Next +3s/+15s state3 nhãn=false → B state2 nhãn=true → Previous +12s A state3 nhãn=false → cuối state2. Khớp báo cáo |
+| `R1c-meloanchor-stream.log` | Mỗi lần xoay: `context anchor=…` → `locate=Found` → `layout first=0` → `apply index=11` → `layout first=0 attempt=1` → `settled first=11`, ở cả `TWO_PANE` và `PHONE_PORTRAIT`; capture lại cùng key/top −171. Khớp cơ chế sửa |
+
+### Đọc mã có chọn lọc
+
+- **SB-02** (`MeloPlayUiState.observe`): chỉ nhận bài mới của player khi attempt đã `settled` và pha không phải RESOLVING; tạo attempt mới (generation tăng) nên callback tải cũ của A bị `accepts` từ chối; chỉ xóa feedback của attempt vừa rời, giữ cooldown `waits`. `begin`/`cancel` đặt lại `settled`. RESOLVING → BUFFERING đi qua `setPlayFeedback` (`TelegramPreviewActivity.kt:6597`), không đổi. Không thấy lỗi chặn.
+- **SB-01** (`MeloLibraryPane`): `SongRestore` giữ yêu cầu neo tới khi `onScroll`/global layout thấy đúng hàng (hoặc kẹp cuối); `refreshRows()` áp lại sau `notifyDataSetChanged`; tối đa 5 lần áp lại rồi `gave_up`; chạm/fling, nhảy chữ cái, đổi ngữ cảnh, detach đều kết thúc. Không lưu vị trí khi đang chờ. Không thấy lỗi chặn.
+
+### Nhận xét không chặn (chủ dự án quyết có giao sửa hay không)
+
+1. **Log chẩn đoán `MeloAnchor` (Log.w) còn trong mã production, cả Release:** in `songKey` dạng số và ghi mỗi lần capture/layout chờ/`save_rejected` (7 dòng liên tiếp lúc mở app). Không lộ tên bài, nhưng là log debug; bỏ/giảm cần một lượt thực thi + build mới. Nên làm trước merge.
+2. **Phát hiện của phiên thực thi, đã thấy trong bằng chứng:** (a) khoảng trống header sau xoay về dọc — ô 3, hàng neo cùng bài nhưng hạ từ y=685 xuống y=1124 px; (b) `save_rejected activeOk=false` ngay sau mở app — có thể mất vị trí nếu xoay ngay sau mở app mà chưa đổi mục; chưa tái hiện riêng. Cả hai ngoài phạm vi SB-01/SB-02.
+3. **Rủi ro lý thuyết, chưa thấy trên máy:** nếu neo đang chờ mà danh sách không còn layout (ví dụ bị ẩn), `restoringSongScroll` giữ true nên không lưu vị trí tới khi chạm/đổi ngữ cảnh; listener global layout gỡ trong `detach()` nếu list đã rời window trước đó có thể sót (chỉ no-op, giữ tham chiếu pane).
+
+### Giới hạn
+
+- Chỉ kiểm giao diện **Current**; Teal chưa QA lại (vòng 1 đề nghị cả hai; mã restore dùng chung, khác ở tải ảnh bìa). Luồng SB-01 R1c là query → cuộn → xoay, **không có bước Deck → Back** như S7 (vòng 1 đã thấy Back giữ neo).
+- SB-02: pause dùng phím `MEDIA_PAUSE`, không phải nút UI; Next/Previous là nút Deck thật. Tự chuyển bài khi hết bài chỉ có test JVM.
+- Release chưa cài/QA UI; không tự kiểm cert/package trực tiếp từ APK (dùng gate `sony-install-gates.json`/`build-result.json` gắn với APK đã kiểm hash). Process recreation, offline, tablet thật, Shanling, âm thanh thật: chưa kiểm.
+- `qa-steps.log`: hai lượt BLOCKED do lỗi script kết thúc với `Display State=ON` (09:42, 09:44); lượt sau tắt lúc 09:47 và cuối cùng OFF 10:04:15.
+- **SONY_SCREEN_END=KHÔNG THAO TÁC trong sơ bộ** (mốc thực thi OFF 10:04:15). **SHANLING_SCREEN_END=KHÔNG THAO TÁC.**
+
+### Bằng chứng cho chủ dự án
+
+[Ảnh tổng hợp R1c](artifacts/2026-10-29-melo-ui-ux-ke-hoach/R1-20261030_093104/00_tong_hop.png) (local Ni, private) · [ảnh-index](2026-10-29-melo-ui-ux-ke-hoach-hinh-nghiem-thu.md) · [APK-index — Drive BLOCKED](2026-10-29-melo-ui-ux-ke-hoach-apk-test.md) · [báo cáo mục R1](2026-10-29-melo-ui-ux-ke-hoach-bao-cao.md).
+
+Gợi ý thử khi nghiệm thu chính thức trên Sony (Debug R1c đã cài): (1) Thư viện, gõ tìm, cuộn xuống, xoay ngang/dọc 3 lần → cùng bài đầu; (2) lặp lại ở Teal, có thêm mở Deck → Back trước khi xoay; (3) Deck: tạm dừng bằng nút → Bài kế → không còn “Tạm dừng”; (4) Bài trước, rồi để một bài hết tự chuyển → nhãn theo bài đang phát; (5) xem khoảng trống header sau xoay về dọc (nhận xét 2a).
+
+Phản hồi: `ĐẠT 2026-10-29-melo-ui-ux-ke-hoach — b599e80 / Debug 138688175DC0…3482` hoặc `Yêu cầu sửa 2026-10-29-melo-ui-ux-ke-hoach: <lỗi>`.
+
+---
+
+## Vòng 1 — 29/10/2026 (lịch sử)
 
 **SƠ BỘ: CẦN SỬA.** Hai lỗi UI trong S7 có bằng chứng phù hợp với source; giữ nguyên mọi BLOCKED. Không kết luận S6/P1 hoàn tất, không PASS chính thức.
 

@@ -2,7 +2,13 @@
 
 TASK_ID: **2026-10-29-melo-ui-ux-ke-hoach**.
 
-## REWORK R1 — 30/10/2026, Claude Code thực thi — XONG, chờ sơ bộ vòng 2
+## Sơ bộ vòng 2 — 30/10/2026, Claude Code — SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN
+
+- Phạm vi SB-01/SB-02, Sony giao diện Current, Debug R1c `b599e80`. Tự kiểm: HEAD `680cce0` sạch, diff production 4 file, SHA-256/bytes hai APK khớp, XML test 2247/21/0 mỗi biến thể, ảnh tổng hợp + JSON + log `MeloAnchor` nhất quán. Không chạy Gradle/ADB/Tiny/Drive. Chi tiết: [biên bản sơ bộ](2026-10-29-melo-ui-ux-ke-hoach-nghiem-thu-so-bo.md) mục Vòng 2.
+- Nhận xét không chặn: log `MeloAnchor` còn trong Release; khoảng trống header sau xoay; `activeOk=false` sau mở app. Chưa kiểm: Teal, Deck→Back trước xoay, pause bằng nút UI, Release UI. Giữ mọi BLOCKED.
+- Trạng thái: **CHỜ CHỦ DỰ ÁN NGHIỆM THU.** Không merge/push.
+
+## REWORK R1 — 30/10/2026, Claude Code thực thi — XONG, đã sơ bộ vòng 2
 
 - Chủ dự án giao REWORK SB-01 + SB-02 (30/10). Codex dừng vì hết quota sau `3d3165c`; Claude Code tiếp nhận cùng nhánh/worktree. Commit: `91e6f19` (R1), `0634d47` (R1b log + requeue), `b599e80` (R1c kiểm sau layout) + commit hồ sơ này. **Source APK candidate: `b599e805533e212dd4b6f5cde352c98f29057828`.**
 - Kết quả Sony R1c: **SB-01 đạt kỹ thuật** (3 vòng ngang/dọc, cùng hàng neo, query/scope/player giữ); **SB-02 đạt kỹ thuật** (Next/Previous hết “Tạm dừng” cũ; pause mới hiện đúng bài). Ni full test 2247/21/0 mỗi biến thể. Chi tiết mục R1 [báo cáo](2026-10-29-melo-ui-ux-ke-hoach-bao-cao.md), [APK-index](2026-10-29-melo-ui-ux-ke-hoach-apk-test.md), [ảnh-index](2026-10-29-melo-ui-ux-ke-hoach-hinh-nghiem-thu.md).
