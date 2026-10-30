@@ -48,7 +48,7 @@ class ShareablePlaybackService : MediaSessionService() {
 
         // Internal same-process API; never expose these details via an Intent.
         internal fun configureTelegramQueue(
-            accountId: Long, ownerRoot: File, ordered: List<QueueTrack>, anchorMessageId: Long = 0L
+            accountId: Long, ownerRoot: File, ordered: List<QueueTrack>, anchorMessageId: Long
         ) {
             serviceRef?.get()?.setQueue(accountId, ownerRoot, ordered, anchorMessageId)
         }

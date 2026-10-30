@@ -1316,6 +1316,18 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
             notifyMeloPlayback()
         }
+        override fun onShuffleModeEnabledChanged(shuffleModeEnabled: Boolean) {
+            // Any controller may have switched it. The service recomputes the play order first; read it back
+            // afterwards (post) so Next/Previous, the queue pane and the prefetch all follow the same order.
+            if (!::mainRoot.isInitialized) return
+            mainRoot.post {
+                if (isDestroyed) return@post
+                library.authorizedUser()?.value?.let { restorePlayingQueueIfAny(it) }
+                prefetchNextCachedNeighbor()
+                updateCockpitPlayer()
+                notifyMeloPlayback()
+            }
+        }
         override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
             notifyMeloPlayback()
         }
@@ -1373,22 +1385,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         cachedSongPaths[song.messageId] = target.canonicalPath
         // Playback queue follows only the selected source (and visible title
         // filter), never silently jumps into a different Telegram channel.
-        queueSongOrder = TelegramQueueRetentionPolicy.forSelected(
-            if (filterOnlyDownloaded) offlineQueueSongs(song.messageId) else shownSongs.filterNot { it.placeholder },
-            queueSongOrder, song.messageId
-        ) { it.messageId }.ifEmpty { listOf(song) }
-        library.authorizedUser()?.let { owner ->
-            ShareablePlaybackService.configureTelegramQueue(
-                owner.value, filesRoot, queueSongOrder.map { entry ->
-                    ShareablePlaybackService.QueueTrack(
-                        entry.messageId, entry.fileId, entry.title,
-                        cachedSongPaths[entry.messageId], entry.filename,
-                        entry.chatId, entry.expectedSize, entry.genuineMessageId,
-                        MeloMediaControlPolicy.fallbackArtist(entry.sourceTitle ?: sourceNames[entry.chatId])
-                    )
-                }
-            )
-        }
+        // The service owns the order: it gets the source order and gives back the play order (Shuffle).
+        configureTelegramQueueFor(song)
         // Only contiguous cached neighbors may enter Media3's transport queue:
         // skipping a missing file to jump to a distant cached song is incorrect.
         val selected = queueSongOrder.indexOfFirst { it.messageId == song.messageId }
@@ -1427,22 +1425,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // This is a growing private TDLib file, not a public Telegram URL.
         // The Media3 source waits only for missing bytes; do not wait for the
         // full mix or silently pretend the file is fully cached.
-        queueSongOrder = TelegramQueueRetentionPolicy.forSelected(
-            if (filterOnlyDownloaded) offlineQueueSongs(song.messageId) else shownSongs.filterNot { it.placeholder },
-            queueSongOrder, song.messageId
-        ) { it.messageId }.ifEmpty { listOf(song) }
-        library.authorizedUser()?.let { owner ->
-            ShareablePlaybackService.configureTelegramQueue(
-                owner.value, filesRoot, queueSongOrder.map { entry ->
-                    ShareablePlaybackService.QueueTrack(
-                        entry.messageId, entry.fileId, entry.title,
-                        cachedSongPaths[entry.messageId], entry.filename,
-                        entry.chatId, entry.expectedSize, entry.genuineMessageId,
-                        MeloMediaControlPolicy.fallbackArtist(entry.sourceTitle ?: sourceNames[entry.chatId])
-                    )
-                }
-            )
-        }
+        // The service owns the order: it gets the source order and gives back the play order (Shuffle).
+        configureTelegramQueueFor(song)
         val ext = song.filename.substringAfterLast('.', "mp3")
             .lowercase().takeIf { it in setOf(
                 "mp3", "flac", "wav", "m4a", "ogg", "opus", "aac"
@@ -4050,14 +4034,68 @@ class TelegramPreviewActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    private fun queueTracksOf(list: List<Song>): List<ShareablePlaybackService.QueueTrack> = list.map { entry ->
+        ShareablePlaybackService.QueueTrack(
+            entry.messageId, entry.fileId, entry.title,
+            cachedSongPaths[entry.messageId], entry.filename,
+            entry.chatId, entry.expectedSize, entry.genuineMessageId,
+            MeloMediaControlPolicy.fallbackArtist(entry.sourceTitle ?: sourceNames[entry.chatId])
+        )
+    }
+
+    /** The Song the UI already knows for a service track (duration, source); otherwise one built from the track. */
+    private fun songOfTrack(track: ShareablePlaybackService.QueueTrack, known: Map<Long, Song>): Song =
+        known[track.messageId] ?: Song(track.fileId, track.title, track.filename.ifBlank { track.title },
+            track.messageId, track.chatId, track.expectedSize, rawMessageId = track.genuineMessageId)
+
+    /** Source order of the queue the service holds; [queueSongOrder] is the play order (they differ while Shuffle is on). */
+    private fun serviceBaseSongs(): List<Song> {
+        val owner = library.authorizedUser()?.value ?: return queueSongOrder
+        val base = ShareablePlaybackService.currentTelegramBase(owner)
+        if (base.isEmpty()) return queueSongOrder
+        val known = queueSongOrder.associateBy { it.messageId }
+        return base.map { songOfTrack(it, known) }
+    }
+
+    /**
+     * Gives the service the source order for [song] (the visible list, or the queue's own source order when [song]
+     * is not in it) and reads the play order back. The UI never computes the order itself.
+     */
+    private fun configureTelegramQueueFor(song: Song) {
+        val base = TelegramQueueRetentionPolicy.forSelected(
+            if (filterOnlyDownloaded) offlineQueueSongs(song.messageId) else shownSongs.filterNot { it.placeholder },
+            serviceBaseSongs(), song.messageId
+        ) { it.messageId }.ifEmpty { listOf(song) }
+        queueSongOrder = base
+        library.authorizedUser()?.let { owner ->
+            ShareablePlaybackService.configureTelegramQueue(owner.value, filesRoot, queueTracksOf(base), song.messageId)
+        }
+        syncTelegramQueueFromService(base)
+    }
+
+    /** Reads the play order from the service (Shuffle already applied) into [queueSongOrder]; [pool] holds fresher Songs. */
+    private fun syncTelegramQueueFromService(pool: List<Song>) {
+        val owner = library.authorizedUser()?.value ?: return
+        val play = ShareablePlaybackService.currentTelegramQueue(owner)
+        if (play.isEmpty()) return
+        val known = HashMap<Long, Song>(queueSongOrder.size + pool.size)
+        queueSongOrder.forEach { known[it.messageId] = it }
+        pool.forEach { known[it.messageId] = it }
+        queueSongOrder = play.map { songOfTrack(it, known) }
+    }
+
     private fun restorePlayingQueueIfAny(accountId: Long) {
         if (!auth.isReady() || accountId <= 0L) return
         val restored = ShareablePlaybackService.currentTelegramQueue(accountId)
         if (restored.isEmpty()) return
-        queueSongOrder = restored.map { track ->
-            Song(track.fileId, track.title, track.filename.ifBlank { track.title },
-                track.messageId, track.chatId, track.expectedSize, rawMessageId = track.genuineMessageId)
+        // Keep the Songs the UI already has (duration, source) instead of rebuilding bare ones.
+        val known = HashMap<Long, Song>(queueSongOrder.size)
+        queueSongOrder.forEach { known[it.messageId] = it }
+        val missing = restored.mapNotNull { it.messageId.takeIf { id -> id !in known } }.toHashSet()
+        if (missing.isNotEmpty()) {
+            shownSongs.forEach { if (it.messageId in missing && !it.placeholder) known[it.messageId] = it }
         }
+        queueSongOrder = restored.map { songOfTrack(it, known) }
         restored.forEach { track ->
             val path = track.cachedPath ?: return@forEach
             if (downloadUi.evidence(track.messageId) == null) {
@@ -6045,15 +6083,20 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
         override fun playAll(shuffle: Boolean) {
             if (localMode) {
-                if (localMusic.shown().isEmpty()) return
+                val shown = localMusic.shown()
+                if (shown.isEmpty()) return
+                // "Phát ngẫu nhiên": Shuffle on, starting from a random song of the list on screen.
                 if (shuffle) player?.shuffleModeEnabled = true
-                playLocal(0)
+                playLocal(if (shuffle) kotlin.random.Random.nextInt(shown.size) else 0)
                 return
             }
             if (shownSongs.isEmpty()) return
-            // Same path as tapping the first row: the queue is the list on screen.
+            // Same path as tapping a row: the queue is the list on screen.
             if (shuffle) player?.shuffleModeEnabled = true
-            playShownSong(0)
+            val start = if (shuffle) {
+                shownSongs.indices.filter { !shownSongs[it].placeholder }.randomOrNull() ?: 0
+            } else 0
+            playShownSong(start)
         }
 
         override fun resumeCard(): MeloScreenHost.Resume? {
@@ -6398,27 +6441,22 @@ class TelegramPreviewActivity : AppCompatActivity() {
             return
         }
         val currentId = currentTelegramMessageId()
-        val mutable = queueSongOrder.toMutableList()
-        val currentIndex = if (currentId != null) mutable.indexOfFirst { it.messageId == currentId } else -1
-        mutable.removeAll { it.messageId == song.messageId }
-        val insertIndex = if (currentIndex >= 0 && currentIndex < mutable.size) {
-            currentIndex + 1
+        val owner = library.authorizedUser()?.value
+        if (owner != null && ShareablePlaybackService.currentTelegramQueue(owner).isNotEmpty()) {
+            // The service holds the queue: it puts the song right after the playing one, in the source order
+            // and in the play order (the user's intent wins over Shuffle).
+            ShareablePlaybackService.queueTelegramNext(owner, queueTracksOf(listOf(song)).first())
+            syncTelegramQueueFromService(queueSongOrder + song)
         } else {
-            mutable.size
-        }
-        mutable.add(insertIndex, song)
-        queueSongOrder = mutable
-        library.authorizedUser()?.let { owner ->
-            ShareablePlaybackService.configureTelegramQueue(
-                owner.value, filesRoot, queueSongOrder.map { entry ->
-                    ShareablePlaybackService.QueueTrack(
-                        entry.messageId, entry.fileId, entry.title,
-                        cachedSongPaths[entry.messageId], entry.filename,
-                        entry.chatId, entry.expectedSize, entry.genuineMessageId,
-                        MeloMediaControlPolicy.fallbackArtist(entry.sourceTitle ?: sourceNames[entry.chatId])
-                    )
-                }
-            )
+            // Nothing is playing yet: build the queue here and hand it over.
+            val byId = (queueSongOrder + song).associateBy { it.messageId }
+            queueSongOrder = MeloShuffleOrderPolicy.insertNext(
+                queueSongOrder.map { it.messageId }, currentId, song.messageId
+            ).mapNotNull { byId[it] }
+            if (owner != null) {
+                ShareablePlaybackService.configureTelegramQueue(
+                    owner, filesRoot, queueTracksOf(queueSongOrder), currentId ?: 0L)
+            }
         }
         showMessage("Đã thêm '${song.title}' vào hàng đợi phát tiếp theo.")
     }
