@@ -6,7 +6,8 @@ TASK_ID: **2026-10-29-melo-ui-ux-ke-hoach**.
 
 - Phạm vi SB-01/SB-02, Sony giao diện Current, Debug R1c `b599e80`. Tự kiểm: HEAD `680cce0` sạch, diff production 4 file, SHA-256/bytes hai APK khớp, XML test 2247/21/0 mỗi biến thể, ảnh tổng hợp + JSON + log `MeloAnchor` nhất quán. Không chạy Gradle/ADB/Tiny/Drive. Chi tiết: [biên bản sơ bộ](2026-10-29-melo-ui-ux-ke-hoach-nghiem-thu-so-bo.md) mục Vòng 2.
 - Nhận xét không chặn: log `MeloAnchor` còn trong Release; khoảng trống header sau xoay; `activeOk=false` sau mở app. Chưa kiểm: Teal, Deck→Back trước xoay, pause bằng nút UI, Release UI. Giữ mọi BLOCKED.
-- Trạng thái: **CHỜ CHỦ DỰ ÁN NGHIỆM THU.** Không merge/push.
+- Trạng thái: chủ dự án trả lời **“Đạt”** cùng ngày → ghi **PASS có giới hạn** cho R1c `b599e80` / Debug `138688175DC0…3482` tại [nghiệm thu](2026-10-29-melo-ui-ux-ke-hoach-nghiem-thu.md); BLOCKED giữ nguyên. Không merge/push.
+- Việc còn lại, mỗi việc cần chủ dự án giao riêng: (1) bổ sung kế hoạch hợp đồng thứ tự khi Đảo bật (gỡ BLOCKED S6, có thể phải sửa service); (2) dọn nhận xét không chặn (log `MeloAnchor`, header sau xoay, `activeOk=false`); (3) QA6 Shanling / QA1 tablet khi có thiết bị; (4) merge nhánh dot; (5) P2-A ảnh bìa (đã có phương án ở phụ lục); (6) P2-B lời nhạc (phải chốt dịch vụ trước).
 
 ## REWORK R1 — 30/10/2026, Claude Code thực thi — XONG, đã sơ bộ vòng 2
 
