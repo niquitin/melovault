@@ -42,6 +42,8 @@ internal class MeloLibraryPane(
     private val s = c.sizes
     private val p = c.palette
     private val handler = Handler(Looper.getMainLooper())
+    /** P2-A: whether this pane's rows show a row cover, for either colour theme (not just teal). */
+    private val rowArtEnabled = MeloThemePolicy.rowArtLayer(c.theme, layer, c.sizes.profile)
 
     val view: LinearLayout = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
 
@@ -135,8 +137,8 @@ internal class MeloLibraryPane(
 
     init {
         host.setBrowseCapture(::flushAndSave)
+        if (rowArtEnabled) host.setRowArtListener(::refreshVisibleArt)
         if (c.teal) {
-            host.setRowArtListener(::refreshVisibleArt)
             // The tab labels shorten on a narrow pane: render them again once the width is known or changes.
             view.addOnLayoutChangeListener { _, l, _, r, _, ol, _, or_, _ ->
                 if (r - l != or_ - ol) view.post { snapshot?.let(::renderThemeTabs) }
@@ -195,7 +197,7 @@ internal class MeloLibraryPane(
                     scrollState = state
                     if (state != AbsListView.OnScrollListener.SCROLL_STATE_IDLE) endSongRestore()
                     // The covers of a fast scroll are fetched once the list slows down.
-                    if (c.teal && state != AbsListView.OnScrollListener.SCROLL_STATE_FLING) requestVisibleArt()
+                    if (rowArtEnabled && state != AbsListView.OnScrollListener.SCROLL_STATE_FLING) requestVisibleArt()
                 }
                 override fun onScroll(v: AbsListView?, first: Int, visible: Int, total: Int) {
                     val snap = snapshot ?: return
@@ -210,7 +212,7 @@ internal class MeloLibraryPane(
                             host.saveBrowsePosition(snap.browseGeneration, row.songKey, getChildAt(0)?.top ?: 0, 0)
                         }
                     }
-                    if (c.teal && first != lastArtFirst) requestVisibleArt()
+                    if (rowArtEnabled && first != lastArtFirst) requestVisibleArt()
                     if (MeloCompactPolicy.shouldLoadMore(first, visible, total)) host.loadMore()
                     if (bar.visibility == View.VISIBLE) {
                         snap.rows.getOrNull(first)?.sortKey?.let { bar.setActive(MeloAlphabetPolicy.letterOf(it)) }
@@ -313,7 +315,7 @@ internal class MeloLibraryPane(
         endSongRestore()
         list.removeCallbacks(applyCollapse)
         host.setBrowseCapture(null)
-        if (c.teal) host.setRowArtListener(null)
+        if (rowArtEnabled) host.setRowArtListener(null)
         pendingJump?.let(handler::removeCallbacks)
         pendingQuery?.let(handler::removeCallbacks)
         handler.removeCallbacksAndMessages(null)
@@ -454,7 +456,7 @@ internal class MeloLibraryPane(
             list.setPadding(0, 0, if (showBar) bar.barWidthPx else 0, 0)
             if (!showBar) bar.setActive(null)
             refreshRows()
-            if (c.teal) {
+            if (rowArtEnabled) {
                 lastArtFirst = -1
                 list.post { requestVisibleArt() }
             }
@@ -786,9 +788,9 @@ internal class MeloLibraryPane(
             return c.songRow(
                 SongRowModel(
                     row.title, row.sourceTitle, row.durationSeconds, status, quality, row.downloadingPercent,
-                    if (c.teal) MeloRowArtPolicy.rowPicture(host.peekRowArt(row.artKey), row.art) else row.art,
+                    if (rowArtEnabled) MeloRowArtPolicy.rowPicture(host.peekRowArt(row.artKey), row.art) else row.art,
                     local = snap.local || row.local,
-                    artKey = if (c.teal) row.artKey else null,
+                    artKey = if (rowArtEnabled) row.artKey else null,
                     browseMetadata = MeloBrowseUiPolicy.rowMetadata(row.performer, row.sourceTitle,
                         snap.local || row.local, row.sourceIsFolder).orEmpty(),
                     statusTextOverride = (row.download ?: if (snap.local || row.local)
@@ -811,7 +813,7 @@ internal class MeloLibraryPane(
         }
     }
 
-    // ---- E98 row covers (teal theme) ------------------------------------------------------------------
+    // ---- E98/P2-A row covers (Phone/Tablet, any colour theme) ------------------------------------------
 
     /** Asks the host for the covers of the rows on screen and the few below (never while the list is flung). */
     private fun requestVisibleArt() {

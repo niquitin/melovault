@@ -281,7 +281,8 @@ internal class MeloComponents(
                 layoutParams = LinearLayout.LayoutParams(sizes.minTouch * 6 / 10, ViewGroup.LayoutParams.WRAP_CONTENT)
             })
         }
-        if ((teal || isCompact) && model.artKey != null) {
+        // P2-A: artKey is already the row-art gate (null when the caller has it switched off); any theme follows it.
+        if (model.artKey != null) {
             row.addView(rowArtView(model.art, shownSource, shownTitle, sizes.rowArt, model.artKey))
         } else {
             row.addView(artView(model.art, shownSource, shownTitle, sizes.rowArt))
