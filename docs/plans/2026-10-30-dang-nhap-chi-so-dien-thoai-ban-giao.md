@@ -3,6 +3,59 @@
 TASK_ID: **2026-10-30-dang-nhap-chi-so-dien-thoai**.
 Worktree `D:\Bots\_worktrees\MeloVault-dang-nhap-chi-so-dien-thoai`; nhánh `dot/2026-10-30-dang-nhap-chi-so-dien-thoai`.
 
+## Checkpoint thực thi chặng A — 30/10/2026, Claude Code claude-sonnet-5
+
+- **Trạng thái: CHẶNG A XONG (S0–S4). Chờ chủ dự án mở phiên chặng B** (S5 cần chủ dự án tự đăng ký app + điền `local.properties` trên Tiny trước).
+- HEAD nhận việc: `5ef716f` (khớp dự kiến). HEAD hiện tại sau chặng A: xem `git log -1 -- docs/plans/2026-10-30-dang-nhap-chi-so-dien-thoai-ban-giao.md` ở phiên sau để lấy đúng SHA (tránh tự tham chiếu); tại lúc ghi checkpoint này, 3 commit code là `ee709f1` (S1), `800117a` (S2), `152fe51` (S3).
+- Chi tiết đầy đủ: [`-bao-cao.md`](2026-10-30-dang-nhap-chi-so-dien-thoai-bao-cao.md). Gate S4: `BUILD SUCCESSFUL` ở cả 4 lệnh Gradle (test Debug/Release 2310/21/0/0 mỗi biến thể; assemble thường, open, Personal); `git diff --check` sạch. Log đầy đủ (gitignored, chỉ trên Ni): `docs/plans/artifacts/2026-10-30-dang-nhap-chi-so-dien-thoai/S4-20261030T152509Z/`.
+- Không ADB/thiết bị trong chặng A. `SHANLING_SCREEN_END` = KHÔNG THAO TÁC. `SONY_SCREEN_END` = KHÔNG THAO TÁC. Không đọc/in/copy `local.properties`. Không có APK nào được build cho mục đích cài máy (assemble chỉ để kiểm gate; APK Ni không cài theo đúng chỉ định).
+- **Chưa làm/chưa kiểm chứng:** S5 (chủ dự án đăng ký my.telegram.org + điền `telegram.open.api.*` trên Tiny) — **BLOCKED chờ chủ dự án**; S6 (build Tiny + verify hash/cert/package); S7 (QA thiết bị Q1–Q6 + hồ sơ APK/ảnh). Chưa thử mã open thật bị Telegram từ chối. Chưa có người dùng E104 thật (mã riêng đã lưu) để kiểm D6 trên máy.
+- **Không merge/push/public, không ghi PASS.** Mọi quyết định D1–D10 giữ như kế hoạch; D6 áp dụng mặc định (preferStored=true cho bản open) vì chủ dự án chưa trả lời khác.
+
+### Prompt phiên thực thi — chặng B (dán nguyên văn vào phiên mới, sau khi chủ dự án xong S5)
+
+```text
+MELOVAULT — PHIÊN THỰC THI CHẶNG B (TIẾP TỤC CHẶNG A)
+
+Repo/worktree: D:\Bots\_worktrees\MeloVault-dang-nhap-chi-so-dien-thoai (repo chuẩn D:\Bots\MeloVault-E91-Shareable)
+TASK_ID: 2026-10-30-dang-nhap-chi-so-dien-thoai
+Nhánh: dot/2026-10-30-dang-nhap-chi-so-dien-thoai
+Kế hoạch: docs/plans/2026-10-30-dang-nhap-chi-so-dien-thoai.md (bước S5–S7, mục 5 QA, mục 6 tiêu chí)
+Bàn giao: docs/plans/2026-10-30-dang-nhap-chi-so-dien-thoai-ban-giao.md
+Báo cáo chặng A: docs/plans/2026-10-30-dang-nhap-chi-so-dien-thoai-bao-cao.md
+HEAD chặng A hoàn tất: 152fe51 (commit S3; sau đó còn commit hồ sơ bao-cao/ban-giao — kiểm git log để lấy SHA mới nhất trước khi làm)
+PHIÊN: 2 = chặng B, S5 (cổng chủ dự án) → S6 (build Tiny) → S7 (QA thiết bị + hồ sơ)
+
+Lưu ý riêng:
+- S5 là điều kiện tiên quyết: chủ dự án phải xác nhận đã đăng ký app mới trên my.telegram.org (tên không chứa "Telegram")
+  và đã thêm hai dòng telegram.open.api.id= / telegram.open.api.hash= vào C:\Bots\MeloVault-E99-IsolatedQA\local.properties
+  trên Tiny. KHÔNG tự tạo tài khoản, KHÔNG đọc/in/hash giá trị. Chưa xác nhận → ghi BLOCKED và dừng, không đoán.
+- S6: bundle source đã commit (SHA-256 hai đầu khớp), clone cô lập MỚI trên Tiny, 1 lệnh Copy-Item local.properties
+  (kiểm git check-ignore trước), chạy reportTelegramConfig thường + -PmeloOpen=true reportTelegramConfig để xác nhận
+  telegram.open.config.valid=true và telegram.open.distinct=true trước khi build APK. Build cả bản thường Debug
+  và bản open Debug+Release. Kiểm verifyOpenApkHasNoTelegramHash (found=false cho APK open) VÀ
+  verifyOpenApkHasOpenTelegramHash (found=true cho APK open) cho cả hai APK open, đối chứng found=true trên APK
+  thường ở verifyOpenApkHasNoTelegramHash. Kiểm aapt package/versionCode/versionName và apksigner cert khớp.
+- S7: theo mục 5 kế hoạch (Q1–Q6). Agent KHÔNG tự gõ số điện thoại/mã/mật khẩu cấp 2 — chỉ chủ dự án nhập (Q3–Q4).
+  Thiết bị đích bản open: Shanling đã có app.melovault.player.open vc120 → install -r hợp lệ (xác nhận lại
+  serial 30313860180939 + getprop trước khi cài). Sony: kiểm pm list packages app.melovault.player.open trước;
+  CHƯA có gói open thì KHÔNG tự cài mới — hỏi chủ dự án [CẦN XÁC NHẬN mục 8.3 kế hoạch]. Nếu không thiết bị nào
+  hợp lệ → BLOCKED phần QA trên máy (vẫn làm được Q6 JVM).
+  Màn hình: chỉ bật khi cần thao tác UI; cleanup trong finally, tắt và kiểm dumpsys display Display State=OFF;
+  ghi SHANLING_SCREEN_END/SONY_SCREEN_END đúng thực tế.
+  Ảnh/video riêng tư tại docs/plans/artifacts/2026-10-30-dang-nhap-chi-so-dien-thoai/; không commit/đăng PII.
+- Hồ sơ cần tạo/bổ sung ở chặng B: -bao-cao.md (tiếp nối, ghi rõ "phiên chặng B"), -apk-test.md, -hinh-nghiem-thu.md,
+  00_tong_hop.png (theo CLAUDE.md mục 10), và cập nhật -ban-giao.md sau mỗi mốc S5/S6/S7.
+- APK QA candidate (nếu build được): upload Google Drive Ni N owner-only theo CLAUDE.md mục 8–9, nhãn
+  "QA CANDIDATE — CHƯA NGHIỆM THU". Không tự public, không tự nâng versionCode, không đổi signing.
+- Không merge/push. Không ghi PASS — hồ sơ nghiệm thu ghi CHỜ CHỦ DỰ ÁN NGHIỆM THU (hoặc BLOCKED đúng phần).
+- Kết thúc chặng B: đưa prompt phiên nghiệm thu sơ bộ (theo PROMPT_NGHIEM_THU_SO_BO.md), không tự làm vai đó.
+
+Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Dòng cuối: "Đã dừng. Mở phiên mới để nghiệm thu sơ bộ nhanh."
+kèm prompt sơ bộ đã điền HEAD/APK thật — HOẶC nếu BLOCKED ở S5/S6: "Đã dừng, bàn giao phiên thực thi tiếp theo."
+kèm đúng phần còn thiếu.
+```
+
 ## Checkpoint lập kế hoạch — 30/10/2026, Claude Code
 
 - Baseline `baaead77ac60cbd6c752bd0dbe9c575ed30954fc` (nhánh tích hợp sạch lúc 21:51). Kế hoạch [`2026-10-30-dang-nhap-chi-so-dien-thoai.md`](2026-10-30-dang-nhap-chi-so-dien-thoai.md), commit `f1e97f2d9eccf659cf784a40b1dd68e9d8a7cd0f`. HEAD dự kiến khi bắt đầu thực thi: commit chứa file bàn giao này (ngay sau `f1e97f2`).
