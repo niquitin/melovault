@@ -1,6 +1,10 @@
 # Bàn giao — 2026-10-30-dao-thu-tu-phat
 
-## Checkpoint hiện tại (sau phiên thực thi 1, S0–S5)
+## Checkpoint hiện tại (sau phiên thực thi 2, S6 — 30/10/2026 ~16:40 +07, Claude Code Sonnet 5.5)
+
+**CHỜ CHỦ DỰ ÁN NGHIỆM THU / QA CANDIDATE — CHƯA NGHIỆM THU.** S0–S6 đã xong; Q-1…Q-8 PASS trên Sony (Q-6, Q-7 có giới hạn); không BLOCKED. Hồ sơ phiên 2: [apk-test](2026-10-30-dao-thu-tu-phat-apk-test.md) · [hình](2026-10-30-dao-thu-tu-phat-hinh-nghiem-thu.md) · [nghiệm thu](2026-10-30-dao-thu-tu-phat-nghiem-thu.md) · báo cáo mục 8. HEAD source đã build/QA = `798b254`; APK Debug vc121 `0.6.96-beta` SHA-256 `1D61F67F2B08F525986ED4067EA43E270A28B15E05AE806A9E4E412B5902D485` (33.576.900 byte), build từ HEAD `3296b05` trên Tiny; Drive owner-only: https://drive.google.com/drive/folders/1EbxLWY-3ZjrLQOhBuzpEVPIkDTAbB3Bs (tài khoản connector kiểm được `ntdung.md@gmail.com`, có thể khác "Drive Ni N"). Sony: màn OFF, **SONY_SCREEN_END**, đang tạm dừng, chạy đúng APK này (không `install -r` vì SHA đã trùng). Shanling: KHÔNG THAO TÁC (ADB Ni rỗng). Trên Tiny còn một clone/log của lần chạy S6 chưa ghi hồ sơ lúc 12:50 (không dùng, không đụng). Quyết định chờ chủ dự án: ĐẠT/REWORK; hành vi "Đảo bật sẵn + chọn bài từ thư viện giữ thứ tự cũ"; R-1 (>2000 bài). Chi tiết phiên 1 bên dưới giữ nguyên.
+
+## Checkpoint phiên thực thi 1 (S0–S5)
 
 1. **TASK_ID** `2026-10-30-dao-thu-tu-phat`; 30/10/2026 ~11:45 +07; Claude Code (Sonnet 5.5), vai **thực thi phiên 1**. Nhiệm vụ: gỡ BLOCKED thứ tự khi bật Đảo của S6 (`2026-10-29-melo-ui-ux-ke-hoach`).
 2. **Worktree** `D:\Bots\_worktrees\MeloVault-dao-thu-tu-phat`; nhánh `dot/2026-10-30-dao-thu-tu-phat`; baseline source `c6c7970`; commit kế hoạch `72e456d`. **HEAD source đã test = `798b254`** (`798b25465b5fe2773ecb5dc8119e73ce73250f7f`). Commit sau đó chỉ là hồ sơ: `git log -1 --format=%h -- docs/plans/2026-10-30-dao-thu-tu-phat-ban-giao.md`.
@@ -15,7 +19,7 @@
 | S3 Activity Telegram | Xong | `31a6098`; biên dịch 2 biến thể | Chưa chạy trên máy |
 | S4 Nhạc trên máy | Xong (Q2 mặc định: cả Telegram và Local) | `7da4620` | Chưa chạy trên máy; đo `ms=` local_reorder |
 | S5 UI chữ + full test/build Ni | Xong | `798b254`; 2287 test, 21 skipped, 0 failed (Debug = Release); assemble 2 biến thể xanh; `diff --check` sạch | — |
-| S6 Tiny build, QA, Drive | Chưa làm | — | **Phiên thực thi 2** |
+| S6 Tiny build, QA, Drive | **Xong (phiên 2)** | build Tiny từ `3296b05`; APK `1D61F67F…D485`; QA Sony Q-1…Q-8 | Chủ dự án nghiệm thu; Shanling/âm thanh thật chưa |
 
 4. **File chưa commit:** không còn sau commit hồ sơ. Thư mục chính `D:\Bots\MeloVault-E91-Shareable` có `?? .codex-remote-attachments/` và `?? docs/plans/2026-10-29-hoc-hoi-ui-ux-telegram-music.md` — **không thuộc nhiệm vụ này**, không động vào. `docs/plans/artifacts/` bị `.gitignore` toàn bộ (log/ảnh không thể bị commit).
 5. **Test/build:** chạy trên Ni một lần ở S5 (báo cáo mục 5). Chỉ chứng minh JVM + biên dịch, không chứng minh ADB/TDLib/UI/âm thanh thật.
@@ -58,7 +62,7 @@ Kết thúc: commit hồ sơ, ghi prompt phiên thực thi 2 (S6) vào file bàn
 Đã làm / Chưa kiểm chứng / Rủi ro hoặc điểm dừng, và câu "Đã dừng, bàn giao phiên thực thi tiếp theo."
 ```
 
-## Prompt phiên thực thi 2 (S6) — dán nguyên văn
+## Prompt phiên thực thi 2 (S6) — ĐÃ CHẠY 30/10/2026, KHÔNG chạy lại (nguyên văn để tham chiếu)
 
 ```text
 Thực thi TASK_ID 2026-10-30-dao-thu-tu-phat, phiên thực thi 2, chặng S6 (Tiny build + QA thiết bị + hồ sơ bàn giao).
@@ -89,4 +93,22 @@ S6 theo thứ tự:
 Kết thúc: ghi prompt phiên nghiệm thu sơ bộ mới (theo docs/workflow/PROMPT_NGHIEM_THU_SO_BO.md) vào file bàn giao; không tự chạy sơ bộ.
 Trả lời 3 phần Đã làm / Chưa kiểm chứng / Rủi ro hoặc điểm dừng, rồi câu "Đã dừng. Mở phiên mới để nghiệm thu sơ bộ nhanh."
 Desktop Commander: repo/Gradle/bundle dùng thiết bị "Ni"; build/QA Sony dùng "DESKTOP-HNP4GVR". KHÔNG dùng "Bs-Dung.local".
+```
+
+
+## Prompt phiên thực thi 2 (S6) — đã chạy 30/10/2026, giữ để tham chiếu
+
+Kết quả: xem checkpoint đầu file và báo cáo mục 8. (Prompt nguyên văn nằm ở mục trên.)
+
+## Prompt phiên nghiệm thu sơ bộ nhanh — dán nguyên văn vào PHIÊN MỚI (không tự chạy)
+
+```text
+MELOVAULT — NGHIỆM THU SƠ BỘ NHANH, KHÔNG CODE
+TASK_ID: 2026-10-30-dao-thu-tu-phat; nhánh dot/2026-10-30-dao-thu-tu-phat; worktree: D:\Bots\_worktrees\MeloVault-dao-thu-tu-phat (thiết bị Desktop Commander "Ni", ID ce028736-e757-4c6f-863b-a86a4ea3c9a4; Tiny/Sony qua "DESKTOP-HNP4GVR" ID 9c7f081b-6e1c-4221-ac78-da470bab1e5d; KHÔNG dùng "Bs-Dung.local").
+Baseline: c6c7970; HEAD dự kiến: commit hồ sơ phiên 2 (git log -1 --format=%h -- docs/plans/2026-10-30-dao-thu-tu-phat-ban-giao.md); source APK: 798b254 (798b25465b5fe2773ecb5dc8119e73ce73250f7f); build APK từ HEAD 3296b05.
+Kế hoạch: docs/plans/2026-10-30-dao-thu-tu-phat.md.
+Báo cáo: docs/plans/2026-10-30-dao-thu-tu-phat-bao-cao.md (mục 8).
+Bàn giao: docs/plans/2026-10-30-dao-thu-tu-phat-ban-giao.md.
+APK và SHA-256: Tiny C:\Bots\_qa_temp\dao-3296b05-20261030-s6\MeloVault-dao-3296b05-vc121-debug.apk, SHA-256 1D61F67F2B08F525986ED4067EA43E270A28B15E05AE806A9E4E412B5902D485, 33.576.900 byte; Drive owner-only https://drive.google.com/drive/folders/1EbxLWY-3ZjrLQOhBuzpEVPIkDTAbB3Bs; hồ sơ: 2026-10-30-dao-thu-tu-phat-apk-test.md.
+Phạm vi cần kiểm nhanh: (1) diff source 798b254 vs c6c7970 ở ShareablePlaybackService.kt (thứ tự đồng nhất, onShuffleModeEnabledChanged Telegram/Local, API configureTelegramQueue/queueTelegramNext/orderLocalQueue/currentTelegramBase), TelegramPreviewActivity.kt (syncTelegramQueueFromService, enqueue*, addToUpcomingQueue, playAll, playLocal), MeloShuffleOrderPolicy + test; (2) nghi vấn: hàng chờ Đảo "chọn bài từ thư viện giữ thứ tự cũ" (rebase cùng base), giới hạn 2000 bài (R-1), cắt cửa sổ Media3 còn 1 mục khi bật/tắt Đảo, local 500 bài (R-3); (3) đối chiếu bằng chứng QA Q-1…Q-8 trong *-nghiem-thu.md và *-hinh-nghiem-thu.md. Sony QV725WEQ54 hiện đang chạy đúng APK này, màn OFF; Shanling chưa thử (ADB Ni không thấy).
 ```

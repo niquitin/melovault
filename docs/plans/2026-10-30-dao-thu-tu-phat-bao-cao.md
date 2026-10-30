@@ -12,9 +12,9 @@ TASK_ID `2026-10-30-dao-thu-tu-phat` · nhánh `dot/2026-10-30-dao-thu-tu-phat` 
 | S3 Activity Telegram | Xong | `31a6098` | Biên dịch Debug và Release |
 | S4 Nhạc trên máy | Xong | `7da4620` | Biên dịch Debug và Release |
 | S5 UI chữ + full test/build | Xong | `798b254` (HEAD source đã test) | Test + assemble Debug/Release xanh, mục 5 |
-| S6 Tiny build, QA, Drive | Chưa làm (phiên 2) | — | — |
+| S6 Tiny build, QA, Drive | Xong ở phiên thực thi 2 (mục 8) | HEAD `3296b05`, APK `1D61F67F…D485` | Q-1…Q-8 PASS trên Sony, có giới hạn |
 
-Chưa chạy trên thiết bị sau khi sửa code: mọi hành vi mới (thứ tự phát thật, ⏭ khớp hàng chờ, tắt Đảo) **chưa được kiểm chứng trên Sony/Shanling**. Test JVM chỉ chứng minh policy thuần và chữ nhãn.
+(Cập nhật phiên 2) Hành vi mới đã được QA trên Sony ở mục 8; Shanling và âm thanh thật vẫn chưa kiểm chứng. Test JVM chỉ chứng minh policy thuần và chữ nhãn.
 
 ## 2. Phạm vi file
 
@@ -73,3 +73,41 @@ Log đầy đủ (không commit, `docs/plans/artifacts/2026-10-30-dao-thu-tu-pha
 ## 7. Điểm dừng
 
 Không gặp điều kiện dừng mục 10 kế hoạch (không đổi schema/DB/TDLib/songKey/signer/package; HEAD, nhánh, cây sạch đúng; test cũ không hỏng). Đã dừng sau S5, bàn giao S6.
+
+
+## 8. Phiên thực thi 2 — S6 (Claude Code Sonnet 5.5, 30/10/2026 ~16:00–16:35 +07)
+
+Thiết bị: Ni (repo/Gradle/bundle), DESKTOP-HNP4GVR = Tiny (build + Sony). Không dùng Bs-Dung.local. Không sửa source. Đầu phiên: HEAD `3296b05`, nhánh đúng, cây sạch, `git diff --check` sạch, `git diff --stat 798b254..HEAD` chỉ `docs/`, không agent khác đang chạy.
+
+| Bước | Kết quả | Bằng chứng |
+|---|---|---|
+| Bundle + SHA | Xong | 13.167.767 byte, SHA-256 `4313A028…F2AE`, `git bundle verify` ok; chuyển qua Drive owner-only, Tiny đối chiếu khớp |
+| Clone cô lập Tiny | Xong | `C:\Bots\MeloVault-DAO-S6-IsolatedQA-20261030-3296b05`, HEAD `3296b05`, cây sạch, `798b254` có mặt |
+| Build Debug Tiny | BUILD SUCCESSFUL 2m41s | `reportTelegramConfig` = `true` (không in giá trị) |
+| Gate APK | Đạt | `app.melovault.player`, vc121 `0.6.96-beta`, cert `eecd3df7…ce8`, 33.576.900 byte, SHA `1D61F67F…D485`, debuggable, arm64 |
+| Gate Sony | Đạt | `QV725WEQ54` XQ-AS52 Sony Android 12; vc121 đang cài, cert khớp; APK đang cài **trùng SHA/bytes** với APK vừa build → **không cần `install -r`** (không chạy lệnh cài nào) |
+| QA Q-1…Q-8 | PASS (có giới hạn Q-6, Q-7) | [nghiem-thu](2026-10-30-dao-thu-tu-phat-nghiem-thu.md); ảnh [hinh-nghiem-thu](2026-10-30-dao-thu-tu-phat-hinh-nghiem-thu.md) |
+| Shanling | KHÔNG THAO TÁC | `adb devices -l` trên Ni rỗng |
+| Cleanup Sony | Xong | tạm dừng, `Display State=OFF`, `mScreenState=OFF`; **SONY_SCREEN_END** |
+| Drive | Xong, nhãn QA CANDIDATE | thư mục + 11 file, quyền chỉ owner (xem apk-test) |
+
+### Kết quả quan trọng
+
+- Q-1…Q-5, Q-8: khớp kỳ vọng kế hoạch. Q-6: phím media NEXT ×2 khi `Display State=OFF` ra hàng 2, 3 của thứ tự phát; kéo thanh tua tới gần cuối bài, tắt màn, bài tự chuyển sang đúng hàng 2 (cửa sổ Media3 lúc đó chỉ 1 mục) → R-2 và lưới an toàn không bị kích hoạt. Q-7: xem giới hạn trong nghiem-thu.
+- Log Debug `MeloShuffle`: toggle 25, configure 7, next_inserted 1, local_reorder 5 (`ms=1…3`, 3 bài), **order_reset 0**; không FATAL/ANR trong bộ đệm lỗi.
+- Media3 `size` dao động 1→17 theo thao tác: bật/tắt Đảo cắt cửa sổ còn 1 mục như thiết kế; bài kế được nạp lại khi ⏭ hoặc prefetch.
+- **Ghi nhận (không chặn):** Đảo bật sẵn + chọn bài từ danh sách thư viện cùng nguồn → giữ thứ tự xáo cũ (bài vừa chọn ở hạng 50 thay vì đầu). Đúng quy tắc `rebase` "cùng base giữ thứ tự" nhưng có thể gây bất ngờ; cần chủ dự án quyết.
+- R-1 chỉ ghi nhận: chưa mở được danh sách > 2000 bài trên máy (thử 67 và 200 bài). R-3: local chỉ đo trên 3 bài.
+
+### Sự cố / việc ngoài kế hoạch (minh bạch)
+
+1. Trên Tiny đã có **một lần chạy S6 chưa ghi hồ sơ** (clone `MeloVault-DAO-IsolatedQA-20261030-1305`, log `C:\Bots\_qa_temp\dao-d0076c1-20261030-1250`, ~12:50–13:09, từ `d0076c1`). Không dùng làm chứng cứ, không sửa/xóa. Nó để Sony sáng màn, MeloVault đang phát suốt ~3 giờ (không ai chạm); tôi tạm dừng phát (phím media PAUSE) rồi dọn dẹp cuối phiên. APK nó đã cài trên Sony chính là bản trùng SHA nói trên.
+2. Một lệnh PowerShell cổng APK lặp vô hạn, ghi ~38 MB vào `apk-gate.log`; đã dừng tiến trình và thay log bằng bản tóm tắt sạch (cùng giá trị). Không ảnh hưởng thiết bị/repo.
+3. `local.properties` (Telegram) chép từ clone cô lập `…DAO-IsolatedQA-20261030-1305` sang clone mới, chỉ trên Tiny, không in giá trị; không mang về Ni.
+4. Chuyển bundle qua thư mục Drive `MeloVault_QA\_transfer_dao-3296b05` (owner-only); tôi không thể xóa — để chủ dự án dọn nếu muốn.
+5. Khi tìm đường chuyển bundle, tôi liệt kê gốc các Drive mount và vô tình in tên file cá nhân của chủ dự án vào kết quả lệnh; không lưu, không dùng, không đưa vào hồ sơ.
+6. Tile 3 của `00_tong_hop.png` lỗi dấu tiếng Việt ở nhãn (không ảnh hưởng ảnh).
+
+### Chưa kiểm chứng
+
+CHƯA XÁC NHẬN ÂM THANH THỰC; Shanling; nút ⏭ thật trên thông báo/khóa màn; R-1; local 500 bài; tải APK từ Drive bằng trình duyệt; tài khoản "Drive Ni N" (connector chỉ thấy `ntdung.md@gmail.com`).
