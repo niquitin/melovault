@@ -2,6 +2,8 @@
 
 ## Checkpoint hiện tại
 
+**CẬP NHẬT 30/10/2026 18:11 +07: chủ dự án trả lời "Đạt" → PASS có giới hạn (xem [nghiệm thu](2026-10-30-don-ui-sau-xoay-nghiem-thu.md)); chưa merge/push/public — cần chỉ thị riêng.** Nội dung dưới là trạng thái lúc bàn giao.
+
 - 30/10/2026 ~18:10 +07, Claude Code (Opus 5.5), thực thi nhỏ một phiên. **S0–S6 xong. Đã dừng, chờ chủ dự án nghiệm thu.** Trạng thái: QA CANDIDATE — CHƯA NGHIỆM THU.
 - Worktree `D:\Bots\_worktrees\MeloVault-don-ui-sau-xoay`, nhánh `dot/2026-10-30-don-ui-sau-xoay`, base `805a800`. **HEAD source đã build/QA = `8bf9d03`**; commit sau đó chỉ là hồ sơ. Git trên Ni chưa có identity: commit bằng `git -c user.name/user.email`, không đổi config global. Không merge/push.
 - Hồ sơ: [Kế hoạch](2026-10-30-don-ui-sau-xoay.md) · [Báo cáo](2026-10-30-don-ui-sau-xoay-bao-cao.md) · [APK](2026-10-30-don-ui-sau-xoay-apk-test.md) · [Hình](2026-10-30-don-ui-sau-xoay-hinh-nghiem-thu.md) · [Nghiệm thu](2026-10-30-don-ui-sau-xoay-nghiem-thu.md).
@@ -22,4 +24,4 @@
 
 ## Quyết định chủ dự án
 
-- (chưa có) — `ĐẠT 2026-10-30-don-ui-sau-xoay — 8bf9d03 / E6EC8773` hoặc `Yêu cầu sửa 2026-10-30-don-ui-sau-xoay: <lỗi>`.
+- 30/10/2026 18:11 +07 — **ĐẠT** (tin nhắn "Đạt"), cho `8bf9d03` / APK `E6EC8773…E92C`. Giới hạn giữ nguyên như hồ sơ nghiệm thu. Merge/push chờ chỉ thị riêng.
