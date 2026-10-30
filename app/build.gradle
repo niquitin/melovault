@@ -26,13 +26,39 @@ if (!(telegramApiId ==~ /[0-9]{1,10}/) || !(telegramApiHash ==~ /[a-fA-F0-9]{32}
     telegramApiId = '0'
     telegramApiHash = ''
 }
+// 2026-10-30 D1: a second, distinct Telegram developer pair used only by the public "open" build.
+// Lets the open build embed its own ID/hash instead of asking every user to register one.
+// Values come from untracked local.properties on Tiny; never shared with telegram.api.*.
+def telegramOpenApiId = localProps.getProperty('telegram.open.api.id', '0').trim()
+def telegramOpenApiHash = localProps.getProperty('telegram.open.api.hash', '').trim()
+if (!(telegramOpenApiId ==~ /[0-9]{1,10}/) || !(telegramOpenApiHash ==~ /[a-fA-F0-9]{32}/)) {
+    telegramOpenApiId = '0'
+    telegramOpenApiHash = ''
+}
 // E96 P5-A: lets a build machine answer "is the Telegram developer config usable?" without ever showing it.
 // Prints only true/false; the ID and hash are never written to the console, a log or an artifact.
 def meloOpen = (project.findProperty('meloOpen') ?: 'false').toString().trim() == 'true'
+// 2026-10-30 D3: the open pair must never collide with the private pair. Checked eagerly so a
+// misconfigured Tiny machine fails the build instead of silently shipping a shared credential.
+def privatePairValid = (telegramApiId != '0' && telegramApiHash != '')
+def openPairValid = (telegramOpenApiId != '0' && telegramOpenApiHash != '')
+def openCollision = openPairValid && privatePairValid &&
+    (telegramOpenApiId == telegramApiId || telegramOpenApiHash == telegramApiHash)
+def openDistinct = !openCollision
+if (meloOpen && openCollision) {
+    // Never print telegramApiId/telegramOpenApiId or the hashes here.
+    throw new GradleException('telegram.open.* must differ from telegram.api.*')
+}
 tasks.register('reportTelegramConfig') {
     description = 'Prints telegram.config.valid=true|false (never the values).'
     def valid = (!meloOpen && telegramApiId != '0' && telegramApiHash != '')
-    doLast { println 'telegram.config.valid=' + valid }
+    def openValid = (meloOpen && openPairValid)
+    doLast {
+        println 'telegram.config.valid=' + valid
+        // 2026-10-30 D4: open-build-only diagnostics, booleans only.
+        println 'telegram.open.config.valid=' + openValid
+        println 'telegram.open.distinct=' + openDistinct
+    }
 }
 
 // E105: product Playlist sync is separate from the opt-in Debug QA fixtures.
@@ -65,6 +91,39 @@ tasks.register('reportOpenBuild') {
     doLast { println 'melo.open=' + meloOpen }
 }
 
+// 2026-10-30 D5: shared zip-scanning body for both hash-presence checks below.
+// Never prints the entry name, the hash, or the underlying exception.
+def apkContainsHash = { path, hash ->
+    boolean found = false
+    try {
+        if (path == null) throw new IllegalArgumentException()
+        def lower = hash.toLowerCase(java.util.Locale.ROOT)
+        def upper = hash.toUpperCase(java.util.Locale.ROOT)
+        new java.util.zip.ZipFile(project.file(path)).withCloseable { zip ->
+            def entries = zip.entries()
+            byte[] buffer = new byte[65536]
+            while (entries.hasMoreElements() && !found) {
+                def entry = entries.nextElement()
+                if (entry.isDirectory()) continue
+                zip.getInputStream(entry).withCloseable { stream ->
+                    String tail = ''
+                    int count
+                    while (!found && (count = stream.read(buffer)) != -1) {
+                        // ISO-8859-1 maps each byte directly, preserving ASCII matches across chunks.
+                        String chunk = tail + new String(buffer, 0, count, java.nio.charset.StandardCharsets.ISO_8859_1)
+                        found = chunk.contains(lower) || chunk.contains(upper)
+                        tail = chunk.substring(Math.max(0, chunk.length() - 31))
+                    }
+                }
+            }
+        }
+    } catch (Exception ignored) {
+        // Never attach the underlying exception: it can contain an entry name.
+        throw new GradleException('Unable to verify APK Telegram hash contents.')
+    }
+    return found
+}
+
 tasks.register('verifyOpenApkHasNoTelegramHash') {
     description = 'Checks APK contents without printing credentials or entry names.'
     doLast {
@@ -72,36 +131,22 @@ tasks.register('verifyOpenApkHasNoTelegramHash') {
             println 'open.apk.telegram.hash.check=SKIPPED_NO_LOCAL_HASH'
             return
         }
-        boolean found = false
-        try {
-            def path = project.findProperty('openApk')
-            if (path == null) throw new IllegalArgumentException()
-            def lower = telegramApiHash.toLowerCase(java.util.Locale.ROOT)
-            def upper = telegramApiHash.toUpperCase(java.util.Locale.ROOT)
-            new java.util.zip.ZipFile(project.file(path)).withCloseable { zip ->
-                def entries = zip.entries()
-                byte[] buffer = new byte[65536]
-                while (entries.hasMoreElements() && !found) {
-                    def entry = entries.nextElement()
-                    if (entry.isDirectory()) continue
-                    zip.getInputStream(entry).withCloseable { stream ->
-                        String tail = ''
-                        int count
-                        while (!found && (count = stream.read(buffer)) != -1) {
-                            // ISO-8859-1 maps each byte directly, preserving ASCII matches across chunks.
-                            String chunk = tail + new String(buffer, 0, count, java.nio.charset.StandardCharsets.ISO_8859_1)
-                            found = chunk.contains(lower) || chunk.contains(upper)
-                            tail = chunk.substring(Math.max(0, chunk.length() - 31))
-                        }
-                    }
-                }
-            }
-        } catch (Exception ignored) {
-            // Never attach the underlying exception: it can contain an entry name.
-            throw new GradleException('Unable to verify APK Telegram hash contents.')
-        }
+        def found = apkContainsHash(project.findProperty('openApk'), telegramApiHash)
         println 'open.apk.telegram.hash.found=' + found
         if (found) throw new GradleException('APK contains the local Telegram hash.')
+    }
+}
+
+tasks.register('verifyOpenApkHasOpenTelegramHash') {
+    description = 'Checks the open APK contains the open-build Telegram hash (never prints it).'
+    doLast {
+        if (!(telegramOpenApiHash ==~ /[a-fA-F0-9]{32}/)) {
+            println 'open.apk.open.hash.check=SKIPPED_NO_LOCAL_HASH'
+            return
+        }
+        def found = apkContainsHash(project.findProperty('openApk'), telegramOpenApiHash)
+        println 'open.apk.open.hash.found=' + found
+        if (!found) throw new GradleException('Open APK does not contain the open Telegram hash.')
     }
 }
 
@@ -144,8 +189,8 @@ android {
             buildConfigField 'boolean', 'PERSONAL_BACKEND_ENABLED', 'false'
             buildConfigField 'String', 'CAR_API_PRIMARY', '""'
             buildConfigField 'String', 'CAR_API_SECONDARY', '""'
-            buildConfigField 'int', 'TELEGRAM_APP_API_ID', meloOpen ? '0' : telegramApiId
-            buildConfigField 'String', 'TELEGRAM_APP_API_HASH', meloOpen ? '""' : ('"' + telegramApiHash + '"')
+            buildConfigField 'int', 'TELEGRAM_APP_API_ID', meloOpen ? telegramOpenApiId : telegramApiId
+            buildConfigField 'String', 'TELEGRAM_APP_API_HASH', meloOpen ? ('"' + telegramOpenApiHash + '"') : ('"' + telegramApiHash + '"')
             buildConfigField 'boolean', 'MELO_OPEN_BUILD', meloOpen ? 'true' : 'false'
             buildConfigField 'boolean', 'MELO_PLAYLIST_SYNC_ENABLED', 'true'
         }
