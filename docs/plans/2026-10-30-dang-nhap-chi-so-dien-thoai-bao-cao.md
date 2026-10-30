@@ -203,3 +203,7 @@ HEAD Ni không đổi (`d3a9be2`, không có commit mới). Tiny online. Copy l�
 Kết quả **không đổi** so với lần kiểm trước: `telegram.open.config.valid=false` → **vẫn BLOCKED, S5 chưa xong**. Không đọc nội dung `local.properties`. Không build, không QA thiết bị. Dừng lại đúng chỗ, không lặp thao tác thêm (clone/bundle giữ nguyên, không cần dựng lại vì HEAD Ni không đổi).
 
 Đã dừng, bàn giao phiên thực thi tiếp theo.
+
+### Tái kiểm lần 3 — 30/10/2026, cùng ngày (phiên "Tiếp phiên thực thi tiếp theo")
+
+HEAD Ni không đổi (`60f5c1d`). Copy lại `local.properties` (`-Force`) + chạy lại `reportTelegramConfig` cả hai biến thể lần thứ ba: **kết quả vẫn không đổi**, `telegram.open.config.valid=false`. Ba lần kiểm liên tiếp cùng kết quả — dừng vòng kiểm kỹ thuật ở đây, hỏi trực tiếp chủ dự án thay vì tiếp tục đoán/chạy lại Gradle vô ích trên Tiny.
