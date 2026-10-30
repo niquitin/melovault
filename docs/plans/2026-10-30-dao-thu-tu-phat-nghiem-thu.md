@@ -1,6 +1,6 @@
 # Nghiệm thu — 2026-10-30-dao-thu-tu-phat
 
-**Trạng thái: CHỜ CHỦ DỰ ÁN NGHIỆM THU** (QA CANDIDATE — CHƯA NGHIỆM THU). Chưa ghi PASS; chỉ ghi PASS sau khi chủ dự án xác nhận ĐẠT đúng TASK_ID, commit/APK và phạm vi.
+**Trạng thái: PASS có giới hạn — chủ dự án xác nhận ĐẠT ngày 30/10/2026 16:54 +07** (tin nhắn "Đạt" trong chat, ngay sau bàn giao `992b9f5`; ngữ cảnh chỉ có một bản: APK `1D61F67F…D485`, source `798b254`, HEAD build `3296b05`). Phạm vi PASS: hành vi thứ tự phát khi bật Đảo đúng kế hoạch, QA Sony Q-1…Q-8 như bảng dưới. Không bao gồm các giới hạn ở mục "Chưa kiểm chứng / giới hạn" — chủ dự án chưa quyết riêng R-1 và ghi nhận hành vi "Đảo bật sẵn + chọn từ thư viện", nên các mục đó vẫn mở. Không kèm quyền merge/push/public.
 
 | Mục | Giá trị |
 |---|---|
@@ -45,5 +45,6 @@ Tổng log `MeloShuffle`: toggle 25, configure 7, next_inserted 1, local_reorder
 
 ## Quyết định chủ dự án
 
-- (chưa có) Phản hồi: `ĐẠT 2026-10-30-dao-thu-tu-phat — 3296b05 / APK 1D61F67F…D485` hoặc `Yêu cầu sửa 2026-10-30-dao-thu-tu-phat: <lỗi>`.
-- ĐẠT không tự cấp quyền merge/push/public.
+- 30/10/2026 16:54 +07, chat: "Đạt" → ghi PASS theo phạm vi trên (giữ nguyên giới hạn chưa kiểm chứng). Phiên nghiệm thu sơ bộ nhanh chưa chạy; chủ dự án chọn nghiệm thu thẳng.
+- Còn mở, chưa có quyết định: R-1 (> 2000 bài), hành vi chọn bài từ thư viện khi Đảo đang bật, Shanling, âm thanh thật, tài khoản Drive Ni N.
+- ĐẠT không tự cấp quyền merge/push/public; merge cần chỉ thị riêng.
