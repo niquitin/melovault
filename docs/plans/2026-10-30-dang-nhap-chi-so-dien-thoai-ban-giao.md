@@ -3,6 +3,18 @@
 TASK_ID: **2026-10-30-dang-nhap-chi-so-dien-thoai**.
 Worktree `D:\Bots\_worktrees\MeloVault-dang-nhap-chi-so-dien-thoai`; nhánh `dot/2026-10-30-dang-nhap-chi-so-dien-thoai`.
 
+## Checkpoint chặng B — 31/10/2026 (tiếp), Claude Code claude-sonnet-5 — S7 Sony: Q1/Q2/Q5 PASS, chờ Q3–Q4 chủ dự án
+
+- Theo yêu cầu trực tiếp của chủ dự án ("thực thi cài trên Sony" → chọn "cả hai"): đã cài cả bản thường (ghi đè, Q5 hồi quy) và bản open (mới) lên Sony (`QV725WEQ54`).
+- **Q5 PASS:** bản thường vẫn đăng nhập, vào thẳng thư viện 25.470 bài sau khi cài đè cùng vc121.
+- **Q1 PASS:** bản open lần đầu mở vào thẳng "Nhập số điện thoại", không panel API.
+- **Q2 PASS:** link "Dùng mã API riêng (nâng cao)" → panel E104 đúng; "Quay lại" → về màn số, không lưu gì.
+- **Q3–Q4 CHƯA LÀM** — cần chính chủ dự án tự nhập số điện thoại + mã (+2FA nếu có); agent không được gõ các giá trị này. App open đang để sẵn ở màn nhập số trên Sony, màn hình hiện đã tắt (`SONY_SCREEN_END=OFF`, đã xác minh `dumpsys display`).
+- Ảnh bằng chứng (riêng tư, không commit) tại `docs/plans/artifacts/2026-10-30-dang-nhap-chi-so-dien-thoai/S7-sony-20261031/` — 5 ảnh, đã gửi các ảnh chính trong hội thoại chat cho chủ dự án xem.
+- Chi tiết đầy đủ từng bước, lệnh, đối chứng an toàn (cert/vc/playback) ở [`-bao-cao.md`](2026-10-30-dang-nhap-chi-so-dien-thoai-bao-cao.md) mục "S7 — QA thiết bị Sony".
+- **Còn thiếu để hoàn tất S7:** Q3–Q4 (chủ dự án), Q6 (JVM, chưa chạy ở phiên này), hồ sơ `-apk-test.md`/`-hinh-nghiem-thu.md`/`00_tong_hop.png`, upload Drive owner-only, QA Shanling (chưa đụng tới trong phiên này).
+- Không merge/push, không ghi PASS chính thức (toàn bộ vẫn ở mức kỹ thuật, chờ chủ dự án nghiệm thu).
+
 ## Checkpoint chặng B — 31/10/2026, Claude Code claude-sonnet-5 — S5+S6 XONG (PASS), chờ S7
 
 - **S5 xong** (ngoại lệ một lần, chủ dự án tự yêu cầu qua chat — chi tiết/lý do ở [`-bao-cao.md`](2026-10-30-dang-nhap-chi-so-dien-thoai-bao-cao.md) mục "Tái kiểm chặng B — 31/10/2026"). Chủ dự án đăng ký app Telegram thứ hai, riêng biệt, gửi `api_id`/`api_hash` qua chat; agent ghi trực tiếp vào `local.properties` trên Tiny, không đọc lại/in giá trị.

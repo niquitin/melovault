@@ -190,6 +190,39 @@ Không có thao tác ADB/thiết bị nào trong phiên này.
 - `-apk-test.md`, `-hinh-nghiem-thu.md`, `00_tong_hop.png`, upload Drive owner-only — chưa làm.
 - Âm thanh thật, luồng đăng nhập thật (nhập số/mã/2FA) trên thiết bị — chưa thử, theo đúng giới hạn "agent không tự gõ số/mã/mật khẩu cấp 2".
 
+## S7 — QA thiết bị Sony (31/10/2026, cùng phiên, theo yêu cầu trực tiếp của chủ dự án "cài trên Sony" → "cả hai")
+
+Thiết bị: Sony Xperia 5 II, serial `QV725WEQ54`, model `XQ-AS52`, manufacturer `Sony` (xác nhận lại bằng `adb devices -l` + `getprop` đầu phiên thao tác thiết bị — khớp hồ sơ đã biết).
+
+**Kiểm trước khi cài (cả hai gói):**
+- `app.melovault.player` (thường) đã cài sẵn, `versionCode=121`, `versionName=0.6.96-beta` — **không hạ version** so với APK mới (cùng vc121).
+- Pull APK đang cài (`pm path` → `adb pull`), `apksigner verify --print-certs` → cert `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8` — **khớp hệt** cert APK mới build ở S6.7. Xoá file APK pull tạm ngay sau khi so khớp.
+- `app.melovault.player.open` **chưa có gói nào** trên Sony (xác nhận bằng `pm list packages`) → cài mới hoàn toàn, không phải downgrade/ghi đè.
+- `dumpsys media_session`: cả hai phiên nhạc đều `state=2` (PAUSED, speed=0.0) hoặc lỗi mất kết nối Bluetooth — **không có phát nhạc đang chạy**, an toàn để cài `-r`.
+- Màn hình trước thao tác: `Display State=OFF` (đúng vòng đời mục 7).
+
+**Q5 — hồi quy bản riêng (PASS).** `adb install -r app-shareable-debug.apk` (thường) → `Success`. Bật màn (`keyevent 224`), mở app bằng `monkey -p app.melovault.player -c android.intent.category.LAUNCHER 1` (không chạm UI thật). Kết quả: vẫn đăng nhập, vào thẳng thư viện "Tất cả · 25.470 bài", không có màn số điện thoại/panel API nào xuất hiện — đúng kỳ vọng hồi quy. Ảnh: `docs/plans/artifacts/2026-10-30-dang-nhap-chi-so-dien-thoai/S7-sony-20261031/02_sony_binh_thuong_sau_cai_lai_Q5.png`.
+
+**Cài bản open (mới):** `adb install -r app-shareable-debug.apk` (open) → `Success`. Mở bằng `monkey -p app.melovault.player.open ...`.
+
+**Q1 (PASS).** Lần mở đầu tiên vào thẳng màn "Nhập số điện thoại" — **không** thấy panel "Kết nối Telegram của bạn". Có đủ ba lối: "Đăng nhập bằng QR", "Nhập lại mã API", "Dùng mã API riêng (nâng cao)". Ảnh: `.../03_sony_open_lan_dau_mo_Q1.png`.
+
+**Q2 (PASS).** Chạm "Dùng mã API riêng (nâng cao)" (toạ độ ước lượng từ ảnh, `input tap`) → panel "Kết nối Telegram của bạn" hiện đúng (E104), hai ô API ID/hash **để trống, không gõ gì**. Ảnh: `.../04_sony_open_panel_nang_cao_Q2.png`. Chạm "Quay lại" → quay về đúng màn nhập số, ô số điện thoại vẫn trống, không có dấu hiệu lưu hay khởi động lại ứng dụng. Ảnh: `.../05_sony_open_sau_quay_lai_Q2.png`.
+
+**Q3–Q4: CHƯA LÀM — đúng giới hạn "agent không gõ số điện thoại/mã/mật khẩu cấp 2".** App open hiện đang để ở màn "Nhập số điện thoại" (chưa đóng), chờ chính chủ dự án tự nhập khi sẵn sàng. Không có bước nào trong S7 Sony cần chủ dự án gõ thêm cho tới lúc đó.
+
+**Cleanup:** không phát nhạc ở hai ứng dụng trong lúc thao tác (chỉ xem UI). Tắt màn bằng `keyevent 223`, xác nhận lại `dumpsys display` → `Display State=OFF`. **`SONY_SCREEN_END = OFF (đã xác minh dumpsys)`.** File ảnh tạm trên Tiny (`C:\Bots\_sony_screen_*.png`) đã xoá sau khi copy bản chính thức về worktree Ni; không để lại rác trên Tiny.
+
+Không ADB nào khác ngoài các lệnh liệt kê trên (không uninstall/pm clear/xoá data/đổi tài khoản).
+
+## Chưa kiểm chứng (cập nhật sau S7 Sony)
+
+- Q3–Q4 (nhập số/mã/2FA thật, xem phiên mới trong Telegram → Thiết bị) — cần chính chủ dự án thao tác.
+- Q6 (JVM, test mã open bị Telegram từ chối / D6 / D7 / D8 trên thiết bị thật) — chưa chạy ở phiên này.
+- Shanling chưa động tới trong phiên này (chỉ làm Sony theo đúng yêu cầu).
+- Âm thanh thật, Release UI thật trên máy, Y700/S25/FYT — ngoài phạm vi/chưa thử.
+- `-apk-test.md`, `-hinh-nghiem-thu.md`, `00_tong_hop.png`, upload Drive owner-only — chưa làm.
+
 Đã dừng, bàn giao phiên thực thi tiếp theo.
 
 ```text
