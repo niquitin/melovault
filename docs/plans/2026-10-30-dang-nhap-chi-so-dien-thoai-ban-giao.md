@@ -3,9 +3,9 @@
 TASK_ID: **2026-10-30-dang-nhap-chi-so-dien-thoai**.
 Worktree `D:\Bots\_worktrees\MeloVault-dang-nhap-chi-so-dien-thoai`; nhánh `dot/2026-10-30-dang-nhap-chi-so-dien-thoai`.
 
-## ĐẠT — 31/10/2026
+## ĐẠT TOÀN BỘ — 31/10/2026
 
-Chủ dự án xác nhận **ĐẠT** qua chat sau khi tự thử đăng nhập trên điện thoại khác bằng APK open Debug đã gửi. Chi tiết phạm vi, commit/SHA-256 và giới hạn còn lại: [`-nghiem-thu.md`](2026-10-30-dang-nhap-chi-so-dien-thoai-nghiem-thu.md). **Chưa có chỉ thị merge/push riêng — giữ nguyên nhánh, không tự merge.**
+Chủ dự án xác nhận **ĐẠT TOÀN BỘ** qua chat ("Đạt" rồi "Đạt toàn bộ") sau khi tự thử đăng nhập trên điện thoại khác bằng APK open Debug đã gửi. Phạm vi ĐẠT: cả 3 APK candidate (thường Debug, open Debug, open Release) cùng commit nguồn `a2f0a88`. Chi tiết đầy đủ và các việc chưa từng được thực hiện (Q6 JVM, Shanling, âm thanh thật, D7): [`-nghiem-thu.md`](2026-10-30-dang-nhap-chi-so-dien-thoai-nghiem-thu.md). **Chưa có chỉ thị merge/push riêng — giữ nguyên nhánh, không tự merge.**
 
 ## Checkpoint chặng B — 31/10/2026 (tiếp), Claude Code claude-sonnet-5 — S7 Sony: Q1/Q2/Q5 PASS, chờ Q3–Q4 chủ dự án
 
