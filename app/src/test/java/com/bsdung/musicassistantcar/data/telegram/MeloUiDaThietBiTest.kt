@@ -52,4 +52,18 @@ class MeloUiDaThietBiTest {
         assertFalse(MeloBottomBarPolicy.hiddenForKeyboard(800, 900))
         assertFalse(MeloBottomBarPolicy.hiddenForKeyboard(800, 1128)) // M7 portrait tablet
     }
+
+    // ---- UI-03: the full-screen queue gets the screen's side margin ----------------------------------
+
+    @Test
+    fun ui03_queueKeepsSideMarginAndTopGapOnTopOfTheSystemBars() {
+        assertEquals(listOf(40, 98, 40, 120), MeloQueueUiPolicy.fullScreenPadding(0, 90, 0, 120, 0, 40, 8))
+        // A display cutout on the left adds to the margin instead of replacing it.
+        assertEquals(listOf(112, 98, 40, 120), MeloQueueUiPolicy.fullScreenPadding(72, 90, 0, 120, 0, 40, 8))
+    }
+
+    @Test
+    fun ui03_keyboardWinsOverTheNavigationBarAtTheBottom() {
+        assertEquals(900, MeloQueueUiPolicy.fullScreenPadding(0, 90, 0, 120, 900, 40, 8)[3])
+    }
 }

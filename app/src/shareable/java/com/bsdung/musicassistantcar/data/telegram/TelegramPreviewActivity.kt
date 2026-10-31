@@ -4189,7 +4189,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
         dialog.setContentView(pane.view)
         ViewCompat.setOnApplyWindowInsetsListener(pane.view) { view, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            view.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, insets.getInsets(WindowInsetsCompat.Type.ime()).bottom))
+            // UI-03: the pane has no margin of its own, so the screen's margin is added here (the two-pane queue gets it from its screen).
+            val padding = MeloQueueUiPolicy.fullScreenPadding(bars.left, bars.top, bars.right, bars.bottom,
+                insets.getInsets(WindowInsetsCompat.Type.ime()).bottom, components.sizes.screenMargin, components.sizes.gap)
+            view.setPadding(padding[0], padding[1], padding[2], padding[3])
             insets
         }
         val tick = object : Runnable {

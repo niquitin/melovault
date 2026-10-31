@@ -22,6 +22,10 @@ internal object MeloQueueUiPolicy {
         val start = (currentIndex - 1).coerceIn(0, size - 1)
         return start until minOf(size, start + 12)
     }
+    /** UI-03: left, top, right, bottom padding of the full-screen queue: system bars and keyboard plus the screen's own margin. */
+    fun fullScreenPadding(barsLeft: Int, barsTop: Int, barsRight: Int, barsBottom: Int, keyboardBottom: Int,
+        marginPx: Int, gapPx: Int): List<Int> =
+        listOf(barsLeft + marginPx, barsTop + gapPx, barsRight + marginPx, maxOf(barsBottom, keyboardBottom))
     fun dockStacked(width: Int, minTouch: Int, playWidth: Int, gap: Int, measuredSide: Int): Boolean =
         width < maxOf(minTouch, measuredSide) * 4 + maxOf(minTouch, playWidth) + gap * 2
 }
