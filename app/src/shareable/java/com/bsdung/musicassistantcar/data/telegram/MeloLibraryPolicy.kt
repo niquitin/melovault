@@ -248,6 +248,24 @@ internal object MeloLibraryPolicy {
     /** "Phát hết" plays from the first loaded song; disabled when the group is empty. */
     fun playAllEnabled(loadedRows: Int): Boolean = loadedRows > 0
 
+    /** UI-01: the song list should keep this many rows before the optional parts above it give way. */
+    const val MIN_LIST_ROWS = 3
+
+    /**
+     * UI-01: how many of the optional parts above the song list ([optionalPx], first = hidden first, 0 for a
+     * part that is not shown anyway) have to be hidden so the list keeps [minListPx] of the pane's height.
+     * Never hides more than needed; all of them when even that is not enough (the list then gets the rest).
+     */
+    fun partsToTrim(paneHeightPx: Int, fixedPx: Int, optionalPx: List<Int>, minListPx: Int): Int {
+        if (paneHeightPx <= 0) return 0
+        var remaining = optionalPx.sum()
+        for (hidden in optionalPx.indices) {
+            if (paneHeightPx - fixedPx - remaining >= minListPx) return hidden
+            remaining -= optionalPx[hidden]
+        }
+        return optionalPx.size
+    }
+
     fun loadStyle(prefs: SharedPreferences): LibraryStyle = LibraryStyle.fromKey(prefs.getString(KEY_STYLE, null))
 
     fun saveStyle(prefs: SharedPreferences, style: LibraryStyle) {
