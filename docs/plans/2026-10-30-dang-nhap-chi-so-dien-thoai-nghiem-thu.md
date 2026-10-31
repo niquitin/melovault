@@ -18,13 +18,17 @@ TASK_ID: `2026-10-30-dang-nhap-chi-so-dien-thoai`.
 ĐẠT TOÀN BỘ 2026-10-30-dang-nhap-chi-so-dien-thoai — a2f0a88 — cả 3 APK (thường Debug, open Debug, open Release)
 ```
 
+## Cập nhật 31/10/2026 (cùng ngày, sau ĐẠT TOÀN BỘ)
+
+- **Âm thanh thật: ĐẠT.** Chủ dự án xác nhận qua chat ("Âm thanh thật đã đạt") sau khi tự nghe trên điện thoại đã thử đăng nhập. Không có chi tiết thiết bị/loa cụ thể — agent không tự kiểm lại, ghi theo đúng lời chủ dự án.
+- **Shanling: NGỪNG DÙNG LÀM THIẾT BỊ QA — chủ dự án cho biết đã bán máy.** Từ nay nghiệm thu phía Ni chỉ còn Sony (qua Tiny) cho các nhiệm vụ cần QA thiết bị thật; không còn thiết bị Shanling nào để kiểm. Đây là thay đổi dữ kiện dự án (không chỉ riêng nhiệm vụ này) — xem ghi chú ở `-ban-giao.md` và đề xuất cập nhật CLAUDE.md mục 3/HANDOFF.md ở phần cuối báo cáo, cần chủ dự án xác nhận riêng vì đó là tài liệu quy trình dùng chung toàn dự án, không sửa trong nhánh tính năng này.
+- **Giao diện/bố cục đa thiết bị:** chủ dự án nêu nguyện vọng chung ("cố gắng làm phù hợp với mọi loại thiết bị") — đây là định hướng cho các nhiệm vụ UI/UX sau này, ngoài phạm vi code của nhiệm vụ đăng nhập số điện thoại này (không đụng UI responsive trong task này).
+
 ## Việc chưa từng được thực hiện trong nhiệm vụ này (không nằm trong "đã làm", nên "đạt toàn bộ" không phủ các mục này — chỉ là thực tế agent chưa làm, không phải lỗi/thiếu sót cần sửa)
 
 - **Q6 (JVM: D6/D7/D8)** — chưa chạy ở phiên này.
-- **Shanling** — bỏ qua hoàn toàn theo chỉ thị chủ dự án ("Bỏ qua thiết bị shanling").
-- **Âm thanh thật** qua loa/tai nghe — chưa xác nhận độc lập.
 - **Mã open thật bị Telegram từ chối** (API_ID_INVALID/API_ID_PUBLISHED_FLOOD, câu D7) — chưa thử.
-- Release UI thực tế trên máy, Y700/S25/FYT — ngoài phạm vi nhiệm vụ này.
+- Release UI thực tế trên máy, Y700/S25/FYT — ngoài phạm vi nhiệm vụ này. (Shanling không còn trong danh sách thiết bị khả dụng — xem mục "Cập nhật 31/10/2026" ở trên, không phải "chưa làm" mà là "không còn thiết bị".)
 
 ## Trạng thái merge/push
 

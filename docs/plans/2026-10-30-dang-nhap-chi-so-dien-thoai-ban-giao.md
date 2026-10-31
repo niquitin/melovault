@@ -3,6 +3,12 @@
 TASK_ID: **2026-10-30-dang-nhap-chi-so-dien-thoai**.
 Worktree `D:\Bots\_worktrees\MeloVault-dang-nhap-chi-so-dien-thoai`; nhánh `dot/2026-10-30-dang-nhap-chi-so-dien-thoai`.
 
+## LƯU Ý DỰ ÁN (31/10/2026) — Shanling đã bán, không còn là thiết bị QA
+
+Chủ dự án báo qua chat: **đã bán Shanling M3 Ultra** (serial `30313860180939` ghi trong CLAUDE.md mục 3 không còn dùng được). Từ nay QA thiết bị thật phía Ni **chỉ còn Sony** (qua Tiny). Đây là thay đổi dữ kiện ảnh hưởng toàn dự án, không riêng nhiệm vụ này — CLAUDE.md mục 3 và các mục nhắc Shanling ở HANDOFF.md hiện đang nói sai thực tế (giả định máy vẫn tồn tại). Agent **không tự sửa CLAUDE.md** từ nhánh tính năng này (đúng quy tắc "chỉ thay đổi quy trình khi chủ dự án yêu cầu" + tài liệu quy trình dùng chung không sửa lẫn vào nhánh code của một nhiệm vụ). Đề xuất: mở một phiên/nhiệm vụ tài liệu riêng (ví dụ nhánh `dot/<ngày>-cap-nhat-thiet-bi-shanling-da-ban`) để sửa CLAUDE.md mục 3 + HANDOFF.md xác nhận Shanling không còn, Sony là thiết bị QA duy nhất phía Ni/Tiny.
+
+Chủ dự án cũng nêu định hướng chung: cố gắng làm giao diện/bố cục phù hợp mọi loại thiết bị — ghi nhận làm kim chỉ nam cho các nhiệm vụ UI/UX sau, không phải việc cần sửa trong nhiệm vụ đăng nhập số điện thoại này.
+
 ## ĐẠT TOÀN BỘ — 31/10/2026
 
 Chủ dự án xác nhận **ĐẠT TOÀN BỘ** qua chat ("Đạt" rồi "Đạt toàn bộ") sau khi tự thử đăng nhập trên điện thoại khác bằng APK open Debug đã gửi. Phạm vi ĐẠT: cả 3 APK candidate (thường Debug, open Debug, open Release) cùng commit nguồn `a2f0a88`. Chi tiết đầy đủ và các việc chưa từng được thực hiện (Q6 JVM, Shanling, âm thanh thật, D7): [`-nghiem-thu.md`](2026-10-30-dang-nhap-chi-so-dien-thoai-nghiem-thu.md). **Chưa có chỉ thị merge/push riêng — giữ nguyên nhánh, không tự merge.**
