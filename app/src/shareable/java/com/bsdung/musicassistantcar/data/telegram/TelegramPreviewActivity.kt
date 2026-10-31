@@ -5471,7 +5471,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             val screen = MeloPhoneScreen(this, sizes, layer, meloHost, onBackPressedDispatcher, theme)
             phoneScreen = screen
             view = screen.view
-            installLayerInsets(view)
+            installLayerInsets(view, screen::onKeyboardChanged)
             addMeloLayer(view, key)
             screen.attach()
         }
@@ -5479,11 +5479,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     /** System bars and keyboard are added to the screen's own padding instead of replacing it. */
-    private fun installLayerInsets(view: View) {
+    private fun installLayerInsets(view: View, onKeyboard: (Int) -> Unit = {}) {
         val base = intArrayOf(view.paddingLeft, view.paddingTop, view.paddingRight, view.paddingBottom)
         ViewCompat.setOnApplyWindowInsetsListener(view) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            onKeyboard(ime.bottom)
             val band = MeloUiLabActivity.handleBandPx(v, insets)
             v.setPadding(base[0] + bars.left, base[1] + bars.top + band, base[2] + bars.right, base[3] + maxOf(bars.bottom, ime.bottom))
             insets

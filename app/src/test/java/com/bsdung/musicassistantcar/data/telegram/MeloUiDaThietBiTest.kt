@@ -36,4 +36,20 @@ class MeloUiDaThietBiTest {
         assertEquals(0, MeloLibraryPolicy.partsToTrim(0, 500, listOf(60, 60), 300))
         assertEquals(0, MeloLibraryPolicy.partsToTrim(500, 100, emptyList(), 300))
     }
+
+    // ---- UI-02: the bar steps aside while the keyboard is up in a window too short for both ------
+
+    @Test
+    fun ui02_keyboardHidesTheBarInShortWindows() {
+        assertTrue(MeloBottomBarPolicy.hiddenForKeyboard(800, 881)) // M3 portrait
+        assertTrue(MeloBottomBarPolicy.hiddenForKeyboard(800, 537)) // M1 portrait
+        assertTrue(MeloBottomBarPolicy.hiddenForKeyboard(1, 899))
+    }
+
+    @Test
+    fun ui02_barStaysWithoutKeyboardOrInTallWindows() {
+        assertFalse(MeloBottomBarPolicy.hiddenForKeyboard(0, 537))
+        assertFalse(MeloBottomBarPolicy.hiddenForKeyboard(800, 900))
+        assertFalse(MeloBottomBarPolicy.hiddenForKeyboard(800, 1128)) // M7 portrait tablet
+    }
 }

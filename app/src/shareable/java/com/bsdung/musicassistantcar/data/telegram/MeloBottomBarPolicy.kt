@@ -177,6 +177,13 @@ internal object MeloBottomBarPolicy {
     fun tabIconOnly(tabWidthDp: Int, fontScale: Float): Boolean =
         tabWidthDp < Math.round(TAB_LABEL_BASE_DP * fontScale.coerceAtLeast(1f))
 
+    /** UI-02: a window shorter than this has no room for the bar and the keyboard together, so typing hides the bar. */
+    const val KEYBOARD_HIDES_BAR_BELOW_DP = 900
+
+    /** UI-02: the mini player and tabs step aside while the keyboard is up in a window too short to keep both. */
+    fun hiddenForKeyboard(keyboardPx: Int, windowHeightDp: Int): Boolean =
+        keyboardPx > 0 && windowHeightDp < KEYBOARD_HIDES_BAR_BELOW_DP
+
     /** Rows that fit between the header and the bar: used to check the Shanling budget (8 rows). */
     fun visibleRows(windowHeightDp: Int, headerDp: Int, barDp: Int, rowDp: Int, dividerDp: Int, reservedDp: Int = 0): Int {
         val free = windowHeightDp - headerDp - barDp - reservedDp
