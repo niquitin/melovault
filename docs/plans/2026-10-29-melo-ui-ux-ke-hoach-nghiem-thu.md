@@ -15,3 +15,11 @@ Phạm vi PASS: P1 phần đã QA trên Sony XQ-AS52 Debug (S1–S5b, S6 phần 
 Không thuộc PASS, vẫn giữ: **BLOCKED** thứ tự khi bật Đảo (S6), Drive (chưa có link tải), QA1 tablet thật, QA6 Shanling; âm thanh thật **CHƯA XÁC NHẬN**; Release UI, Teal sau R1, offline, process recreation chưa kiểm. Nhận xét không chặn còn mở: log `MeloAnchor` trong Release, khoảng trống header sau xoay, `activeOk=false` sau mở app. P2-A/P2-B chưa giao.
 
 PASS không cho phép merge/push/public; cần chỉ thị riêng.
+
+## Cập nhật sau ĐẠT (ghi 31/10/2026, không đổi kết luận trên)
+
+- BLOCKED thứ tự khi bật Đảo: đã xử lý ở nhiệm vụ riêng `2026-10-30-dao-thu-tu-phat` (ĐẠT 30/10 16:54).
+- Ba nhận xét không chặn (log `MeloAnchor`, khoảng trống header, `activeOk=false`): đã sửa ở `2026-10-30-don-ui-sau-xoay` D1–D3 (ĐẠT 30/10 18:11).
+- P2-A: đã làm ở `2026-10-30-anh-bia-moi-mau` (ĐẠT 30/10). P2-B: chưa giao.
+- QA1 tablet thật và QA6 Shanling: **ngoài phạm vi** theo quyết định chủ dự án 30/10 17:01. Shanling đã bán 31/10. Không còn là BLOCKED chờ thiết bị.
+- Merge: nhánh này vào nhánh tích hợp qua merge `b6f61a0` (chuỗi don-ui, chỉ thị merge 30/10 18:12). Chưa push (không có remote). Drive cho R1c vẫn chưa có link tải.

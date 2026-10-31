@@ -33,3 +33,10 @@ TASK_ID: `2026-10-30-dang-nhap-chi-so-dien-thoai`.
 ## Trạng thái merge/push
 
 **Chưa merge, chưa push, chưa public.** Theo CLAUDE.md mục 0/9: merge chỉ thực hiện sau chỉ thị merge riêng của chủ dự án; đây mới là xác nhận ĐẠT, không phải lệnh merge.
+
+## Cập nhật hồ sơ 31/10/2026 (sau merge, không đổi kết luận ĐẠT)
+
+- **Đã merge** `--no-ff` vào `feature/e93-03d-y700-offline-cockpit`: merge commit `1416f1c` ngày 31/10 18:44 (ghi ở HANDOFF `612dbe7`). Dòng “Chưa merge” ở trên là trạng thái lúc nghiệm thu. Vẫn **chưa push** (không có remote) và **chưa public**.
+- Đính chính mục Q6: D6 (`preferStored*`, 5 ca) và D7 (`rejectionAction*`, 5 ca) đã có test JVM trong commit `800117a`, chạy ở gate S4 (2310/21/0/0 mỗi biến thể). Phần thật sự chưa làm:
+  - D8 không có test JVM (logic nằm trong Activity), chưa thử trên máy;
+  - D7 với mã open bị Telegram từ chối thật chưa thử.
