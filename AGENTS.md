@@ -30,7 +30,7 @@ Chạy: `git status --short`, `git branch --show-current`, `git rev-parse HEAD`,
 
 - Chỉ build/QA Sony trong **clone cô lập** mới trên Tiny, nhận code bằng **Git bundle** đã đối chiếu SHA-256 hai đầu. Telegram config chỉ nằm ở Tiny.
 - `start_process` từ xa chỉ chờ ~3 giây: chạy Gradle dài bằng `Start-Process ... -WindowStyle Hidden`, ghi log + file exit code dưới `C:\Bots\_qa_temp\`, rồi đọc kết quả sau (có thể đọc qua `T:` từ Ni, chỉ đọc).
-- Sony serial `QV725WEQ54` trên Tiny; Shanling M3 Ultra serial `30313860180939` trên Ni. Mỗi phiên kiểm lại `adb devices -l` và `getprop ro.product.model` trên đúng máy. Không dùng Sony thay chứng cứ Shanling.
+- Sony serial `QV725WEQ54` trên Tiny — thiết bị QA thật duy nhất (Shanling M3 Ultra trên Ni đã bán 31/10/2026, không còn dùng được). Mỗi phiên kiểm lại `adb devices -l` và `getprop ro.product.model` trên đúng máy.
 - Được chủ động dùng Sony an toàn để khảo sát, kiểm chứng, thử APK hợp lệ trong **lập kế hoạch, thực thi và sơ bộ**, không cần xin lại quyền cho từng bước thuộc nhiệm vụ. Ghi thao tác/kết quả vào hồ sơ; giữ mọi gate cài APK, dữ liệu, bí mật và vòng đời màn hình. Vai lập kế hoạch/sơ bộ không tự sửa code/build mới.
 
 ## Màn hình QA

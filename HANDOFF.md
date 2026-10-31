@@ -1,4 +1,12 @@
 # HANDOFF — MeloVault (Shareable Preview)
+## Cập nhật dữ kiện 31/10/2026 — Shanling M3 Ultra đã bán, chỉ còn Sony QA
+
+- Chủ dự án báo trực tiếp trong chat: **đã bán Shanling M3 Ultra** (serial `30313860180939`, thiết bị chính của Ni trong các hồ sơ cũ). Từ nay QA thiết bị thật phía Ni/Tiny **chỉ còn Sony Xperia 5 II** (serial `QV725WEQ54`, qua Tiny).
+- Đã cập nhật [CLAUDE.md mục 3](CLAUDE.md) (và các dòng liên quan ở mục 0/6/7), `AGENTS.md`, `docs/workflow/QUY_TRINH_3_VAI_TRO.md`, `docs/workflow/SCREEN_LIFECYCLE_QA.md`, `docs/workflow/PROMPT_OPUS.md`, `docs/workflow/PROMPT_SONNET.md`, `docs/workflow/PROMPT_NGHIEM_THU_SO_BO.md` — không còn dòng nào hướng dẫn agent dùng/tìm Shanling như đang hoạt động; các đoạn nhắc Shanling còn lại (ở các file trên) được đánh dấu rõ là lịch sử.
+- **Cố ý không đụng:** `docs/ui-spec.md` (Shanling ở đó là thông số màn hình/layout "Gọn" cho lớp kích thước máy nhỏ, không phải chỉ định thiết bị QA — vẫn đúng dù máy vật lý đã bán) và các mục lịch sử trong HANDOFF.md phía dưới (không sửa kết luận/nghiệm thu cũ theo đúng CLAUDE.md).
+- Chủ dự án cũng nêu định hướng chung cho các việc UI/UX sau này: cố gắng làm giao diện/bố cục phù hợp mọi loại thiết bị (không phải sửa đổi cụ thể nào ngay).
+- Hồ sơ: [kế hoạch/báo cáo/bàn giao](docs/plans/2026-10-31-shanling-da-ban-cap-nhat-quy-trinh-ban-giao.md). Nhánh `dot/2026-10-31-shanling-da-ban-cap-nhat-quy-trinh`, worktree `D:\Bots\_worktrees\MeloVault-shanling-da-ban-cap-nhat-quy-trinh`, baseline `1d9443c`. Merge `--no-ff` vào `feature/e93-03d-y700-offline-cockpit` cùng ngày (xem commit tích hợp); không có remote nên không có bước push riêng.
+
 ## Cập nhật tích hợp 31/10/2026 — ĐĂNG NHẬP SỐ ĐIỆN THOẠI (bản open) MERGED
 
 - **2026-10-30-dang-nhap-chi-so-dien-thoai: ĐẠT TOÀN BỘ** (chủ dự án "Đạt" rồi "Đạt toàn bộ" 31/10 qua chat, sau khi tự thử đăng nhập trên điện thoại khác bằng APK open Debug; nghiệm thu [`-nghiem-thu.md`](docs/plans/2026-10-30-dang-nhap-chi-so-dien-thoai-nghiem-thu.md)). Bản open `app.melovault.player.open` nhúng API ID/hash riêng cho bản công khai (khác bản riêng, không trùng — kiểm `openDistinct`), vào thẳng màn nhập số điện thoại; link "Dùng mã API riêng (nâng cao)" dẫn tới panel E104 làm dự phòng. Câu bước mã theo `code_info.type.@type` (D10); mã người dùng đã lưu thắng mã open nhúng (D6).
@@ -13,7 +21,7 @@
 - Bổ sung cùng ngày: **Codex và Claude Code ngang quyền, ngang trách nhiệm**, đều dùng chung repo/worktree và công cụ phát triển theo vai đã giao; không cần agent kia phê duyệt, không xin lại quyền chỉ vì chuyển công cụ. Giữ bàn giao Markdown, một agent sửa code mỗi lúc và các luật an toàn/merge/push/public.
 - Luật tại [CLAUDE.md mục 0](CLAUDE.md), chi tiết và mẫu tiếp tục Codex ↔ Claude Code tại [quy trình chung](docs/workflow/QUY_TRINH_3_VAI_TRO.md). Mỗi nhiệm vụ cần kế hoạch, báo cáo chi tiết và checkpoint `*-ban-giao.md`; cập nhật sau mỗi mốc để tiếp tục khi đổi phiên hoặc hết quota.
 - Hồ sơ lần sửa quy trình: [kế hoạch](docs/plans/2026-10-29-quy-trinh-md-ban-giao.md), [báo cáo](docs/plans/2026-10-29-quy-trinh-md-ban-giao-bao-cao.md), [bàn giao](docs/plans/2026-10-29-quy-trinh-md-ban-giao-ban-giao.md).
-- **Đã merge quy trình cục bộ** theo yêu cầu “Merge/push vào repo chính đi” ngày 29/10: merge `93c2211` vào `feature/e93-03d-y700-offline-cockpit`, từ nhánh `dot/2026-10-29-quy-trinh-md-ban-giao-merge`. Chỉ chuyển các commit tài liệu; mã ứng dụng giống baseline tích hợp `9adeeba`, không đưa mã E105 vào merge. Hồ sơ kết quả được bổ sung trên nhánh nhiệm vụ rồi fast-forward sang tích hợp.
+- **Đã merge quy trình cục bộ** theo yêu cầu "Merge/push vào repo chính đi" ngày 29/10: merge `93c2211` vào `feature/e93-03d-y700-offline-cockpit`, từ nhánh `dot/2026-10-29-quy-trinh-md-ban-giao-merge`. Chỉ chuyển các commit tài liệu; mã ứng dụng giống baseline tích hợp `9adeeba`, không đưa mã E105 vào merge. Hồ sơ kết quả được bổ sung trên nhánh nhiệm vụ rồi fast-forward sang tích hợp.
 - **Push: BLOCKED — chưa có remote/URL đích**, đã hỏi chủ dự án; chưa push. Worktree thao tác: `C:\Users\ntdun\.codex\worktrees\workflow-md-handoff\MeloVault-E91-Shareable`. Thư mục chính `D:\Bots\MeloVault-E91-Shareable` vẫn ở nhánh UI/UX có file chưa commit của phiên khác, không sửa/chuyển nhánh tại đó. Không có APK mới hoặc thay đổi nghiệm thu tính năng.
 
 ## Cập nhật tích hợp 27/10/2026 — E104 MERGED (ƯU TIÊN CAO NHẤT)

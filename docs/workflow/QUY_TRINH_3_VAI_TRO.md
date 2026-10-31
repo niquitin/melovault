@@ -66,7 +66,7 @@ Chủ dự án mở phiên mới và giao tiếp; chỉ một agent sửa code t
 ## 4. Quyền dùng Sony và phạm vi kiểm tra
 
 - Chủ dự án cho phép dùng Sony đang kết nối ở cả ba vai agent: khảo sát UI/tái hiện khi lập kế hoạch, thử trong thực thi, kiểm luồng chính khi sơ bộ. Không cần xin lại quyền cho thao tác an toàn thuộc nhiệm vụ; ghi mục đích/kết quả vào hồ sơ đúng vai.
-- Kiểm đúng máy/ADB serial/model mỗi phiên. Sony `QV725WEQ54` trên Tiny, Shanling `30313860180939` trên Ni là thông tin tham chiếu, phải xác minh lại. Không dùng Sony thay chứng cứ Shanling/Y700/S25/FYT.
+- Kiểm đúng máy/ADB serial/model mỗi phiên. Sony `QV725WEQ54` trên Tiny là thiết bị QA thật duy nhất (Shanling `30313860180939` trên Ni đã bán 31/10/2026) — thông tin tham chiếu, phải xác minh lại. Y700/S25/FYT vẫn phân biệt kiểm thử chủ dự án với test Sony.
 - Lập kế hoạch và sơ bộ dùng app/bản APK sẵn có đã kiểm; không tự code/build mới. Cài chỉ `install -r` sau package/version/cert/config và trạng thái phát hợp lệ theo luật gốc; bị chặn thì ghi BLOCKED đúng phần. Không uninstall/clear/downgrade/logout/đổi tài khoản/xóa cache/TDLib hay cài FYT.
 - Tiny chỉ build/QA trong clone cô lập từ Git bundle đối chiếu SHA-256; không sửa repo Tiny gốc/qua T:, không chuyển bí mật về Ni. Không tranh thiết bị đang được người/agent khác dùng.
 - Màn chỉ bật trước bước UI; cleanup `finally` tắt và kiểm OFF theo [vòng đời màn hình](SCREEN_LIFECYCLE_QA.md). Không đổi timeout/brightness/AOD/bảo mật. Không bật điện thoại chỉ để sửa tài liệu.
