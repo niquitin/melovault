@@ -196,3 +196,11 @@ Làm theo PROMPT_NGHIEM_THU_SO_BO.md, nhanh và có giới hạn; không sửa c
 
 Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Dòng cuối: "Đã dừng, chờ chủ dự án nghiệm thu." kèm `ĐẠT 2026-10-31-giao-dien-da-thiet-bi — <commit/APK>` hoặc `Yêu cầu sửa 2026-10-31-giao-dien-da-thiet-bi: <lỗi>`.
 ```
+
+## Checkpoint nghiệm thu sơ bộ — 01/11/2026, Claude Code (phiên mới)
+
+- Biên bản: [`-nghiem-thu-so-bo.md`](2026-10-31-giao-dien-da-thiet-bi-nghiem-thu-so-bo.md). Kết luận: **SƠ BỘ: CẦN SỬA** (SB-1 UI-03 chưa có hiệu lực; SB-2 UI-02 cửa sổ thấp có bàn phím vẫn ≈ 0 dòng). Không thấy hồi quy/rủi ro dữ liệu trong diff.
+- Đã kiểm: HEAD `8664915` đúng, cây sạch; APK đang cài trên Sony SHA `367CAA37…F1006`, cert `eecd3df7…fce8`, vc121 (kéo base.apk, không cài lại); Drive thư mục + APK chỉ quyền owner. Không chạy lại test/build (source không đổi).
+- UI-03 nguyên nhân khả dĩ: dialog `showMeloQueue()` (`TelegramPreviewActivity.kt:4183`) không `setDecorFitsSystemWindows(false)` nên listener insets trên `pane.view` có thể không chạy; chi tiết trong biên bản.
+- Sony: không đánh thức, không chạm, không phát/đổi hàng đợi; nhạc tạm dừng ≈ 01:51; `SONY_SCREEN_END`: `Display State=OFF`.
+- Trạng thái: **CHỜ CHỦ DỰ ÁN NGHIỆM THU** (ĐẠT hoặc giao REWORK SB-1/SB-2 ở phiên thực thi mới). Không merge/push/public, không ghi PASS.
