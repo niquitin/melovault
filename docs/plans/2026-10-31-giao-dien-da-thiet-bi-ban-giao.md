@@ -84,12 +84,13 @@ Bàn giao: docs/plans/2026-10-31-giao-dien-da-thiet-bi-ban-giao.md; HEAD dự ki
 Baseline: 94ab6b0 (app/ giống a2f0a88). Chặng A đã có commit test d9ab585.
 PHIÊN: 2 = chặng B, bước G3 (sửa lỗi UI-xx thuộc GD4 + gate Ni; KHÔNG build Tiny, KHÔNG cài APK)
 Lưu ý riêng:
-- Đọc docs/plans/2026-10-31-giao-dien-da-thiet-bi-khao-sat.md. Sửa UI-01…UI-05 theo GD4 trừ lỗi chủ dự án đã gạch trong bàn giao (mục "Chờ chủ dự án"). UI-06 là Đề xuất: KHÔNG sửa.
+- Đọc docs/plans/2026-10-31-giao-dien-da-thiet-bi-khao-sat.md (bảng UI-01…UI-08, đã gồm khảo sát bổ sung). Sửa UI-01…UI-05, UI-07, UI-08 theo GD4 trừ lỗi chủ dự án đã gạch trong bàn giao (mục "Chờ chủ dự án"). UI-06 là Đề xuất: KHÔNG sửa.
+- Ưu tiên: UI-01 và UI-02 (Chặn dùng ở cửa sổ thấp / có bàn phím), rồi UI-03, UI-07; UI-04, UI-05, UI-08 là Nhỏ. Điều kiện đo được bằng hàm thuần (ví dụ chiều cao còn lại cho danh sách) thì thêm test JVM.
 - Mỗi lỗi một commit: `fix(ui-da-thiet-bi): UI-xx …`. Điều kiện tính được bằng hàm thuần thì thêm test JVM (GD6).
 - KHÔNG sửa MeloScreenPolicy.chooseLayout/profileFor hay hằng ngưỡng; MeloLayoutMatrixTest phải vẫn xanh.
 - Không đụng service, DB, TDLib, package, signer, versionCode. Không bố cục mới, không đổi màu/nhận diện.
 - Gate Ni (một lần, log ra file, chỉ đọc dòng tổng kết + cộng XML): test Debug + Release; assembleShareableDebug + Release; -PmeloOpen=true assembleShareableDebug; assemblePersonalDebug; git diff --check.
-- Không dùng Sony trong chặng này (không có APK mới). Chưa kiểm cỡ khác Sony gốc: ghi "chưa kiểm" nếu chủ dự án chưa cho phép đổi wm size/density/font_scale.
+- Không dùng Sony trong chặng này (không có APK mới). Chủ dự án đã cho phép đổi tạm wm size/density/font_scale (xem bàn giao); chặng C dùng lại đúng cấu hình ghi ở khảo sát mục 1 (Sony không nhận wm size rộng hơn ≈ 1096 px: hạ density thay vì tăng size).
 
 1. Đọc CLAUDE.md mục 0, mục cập nhật đầu HANDOFF.md, docs/workflow/QUY_TRINH_3_VAI_TRO.md, file bàn giao, kế hoạch, báo cáo, khảo sát. Kiểm git status, branch, HEAD, diff --check, agent đang chạy. Cây bẩn không rõ nguồn hoặc HEAD lạ → STOP.
 2. G3 theo mục 5 kế hoạch. Sau mỗi lỗi cập nhật docs/plans/2026-10-31-giao-dien-da-thiet-bi-bao-cao.md (mở đầu "Thực thi: <Claude Code/Codex> <model>, phiên chặng B") và file bàn giao.
