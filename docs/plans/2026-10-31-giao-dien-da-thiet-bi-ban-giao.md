@@ -97,3 +97,9 @@ Lưu ý riêng:
 
 Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Dòng cuối: "Đã dừng, bàn giao phiên thực thi tiếp theo." kèm prompt chặng C đã điền HEAD thật.
 ```
+
+## Quyết định chủ dự án — 31/10/2026 (chat, sau chặng A)
+
+- **Câu 1 mục 9 kế hoạch: ĐƯỢC PHÉP.** Chủ dự án viết trong chat: “Cho phép đổi tạm wm size/density/font_scale trên Sony, khôi phục ngay sau mỗi cấu hình. Làm phiên khảo sát bổ sung M1, M2, M4–M8, F1–F3.”
+- Phạm vi: chỉ Sony `QV725WEQ54`. Đổi tạm `wm size`, `wm density`, `font_scale`; **khôi phục ngay sau mỗi cấu hình**. Các luật cấm khác giữ nguyên (không phát bài mới, không đổi hàng đợi, không đăng xuất, không máy bay, không uninstall/clear).
+- Lệnh khôi phục (ghi trước khi bắt đầu): `wm size reset`; `wm density reset`; `settings put system font_scale 1.0`; `settings put system user_rotation 0`; `settings put system accelerometer_rotation 1`; `input keyevent 223`. Giá trị gốc: size Physical 1080x2520 (không Override), density Physical 420, font_scale 1.0, user_rotation 0, accelerometer_rotation 1.
