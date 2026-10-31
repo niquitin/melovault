@@ -1,4 +1,30 @@
 # HANDOFF — MeloVault (Shareable Preview)
+## Cập nhật hồ sơ 31/10/2026 — bổ sung 4 nhiệm vụ ngày 30/10 và danh sách việc còn mở
+
+- Lý do: HANDOFF chưa ghi 4 nhiệm vụ ngày 30/10, dù cả 4 đã ĐẠT và đã merge. Nay ghi ở mục “Cập nhật tích hợp 30/10/2026” bên dưới. Chủ dự án giao trong chat (“Cập nhật HANDOFF”). Đây là tác vụ chỉ sửa tài liệu: [kế hoạch/báo cáo](docs/plans/2026-10-31-cap-nhat-handoff.md), [bàn giao](docs/plans/2026-10-31-cap-nhat-handoff-ban-giao.md).
+- Nhánh tích hợp `feature/e93-03d-y700-offline-cockpit` tại `918107b` (trước hồ sơ này) đã gồm:
+  - UI/UX P1 (`2026-10-29-melo-ui-ux-ke-hoach`);
+  - Đảo (`2026-10-30-dao-thu-tu-phat`);
+  - D1–D3 (`2026-10-30-don-ui-sau-xoay`);
+  - ảnh bìa P2-A (`2026-10-30-anh-bia-moi-mau`);
+  - đăng nhập chỉ bằng số điện thoại cho bản open (`2026-10-30-dang-nhap-chi-so-dien-thoai`);
+  - quy trình “Shanling đã bán”.
+
+  Tất cả vc121 `0.6.96`. Chưa push vì repo không có remote.
+- **Đính chính mục đăng nhập 31/10 bên dưới:**
+  - D6 (`preferStored*`, 5 ca) và D7 (`rejectionAction*`, 5 ca) **đã có test JVM**, chạy trong gate S4 (2310/21/0/0 mỗi biến thể), commit `800117a`.
+  - Chỉ D8 (lưu mã API sau khi đã gửi `setTdlibParameters` thì bắt khởi động lại) chưa có test JVM và chưa thử trên máy.
+  - Mục “Trạng thái merge/push: Chưa merge” trong [nghiệm thu đăng nhập](docs/plans/2026-10-30-dang-nhap-chi-so-dien-thoai-nghiem-thu.md) đã cũ (merge `1416f1c`). File đó đã có thêm ghi chú cập nhật; không sửa kết luận cũ.
+- **Việc còn mở toàn dự án:** xem [BACKLOG mục “Cập nhật 31/10/2026”](docs/plans/BACKLOG.md):
+  - P2-B lời nhạc;
+  - giao diện đa thiết bị;
+  - đăng bản open công khai;
+  - push;
+  - các mục chưa kiểm.
+
+  Chưa chốt việc kế tiếp; chủ dự án chọn rồi mới mở phiên lập kế hoạch.
+- Thư mục chính `D:\Bots\MeloVault-E91-Shareable` vẫn ở nhánh `dot/2026-10-29-hoc-hoi-ui-ux-telegram-music` (`1d9443c`), có 2 tệp chưa track của nhiệm vụ đó. Không phải của phiên này nên không tự dọn. Phiên sau làm việc trong worktree, hoặc chờ chủ dự án quyết định.
+
 ## Cập nhật dữ kiện 31/10/2026 — Shanling M3 Ultra đã bán, chỉ còn Sony QA
 
 - Chủ dự án báo trực tiếp trong chat: **đã bán Shanling M3 Ultra** (serial `30313860180939`, thiết bị chính của Ni trong các hồ sơ cũ). Từ nay QA thiết bị thật phía Ni/Tiny **chỉ còn Sony Xperia 5 II** (serial `QV725WEQ54`, qua Tiny).
@@ -14,6 +40,34 @@
 - Merge `--no-ff` vào `feature/e93-03d-y700-offline-cockpit`: **merge commit `1416f1c`** (parent `baaead7` + `a2f0a88`), làm trong worktree `C:\Users\ntdun\.codex\worktrees\workflow-md-handoff\MeloVault-E91-Shareable`. Merge sạch, không xung đột; `git diff` phần `app/` giữa merge commit và nhánh nguồn rỗng (cây khớp hệt), nên không chạy lại Gradle — test gate đã chạy đủ ở S4 trên nhánh nguồn (2310/21/0/0 mỗi biến thể). Chưa push (repo không có remote — xem mục cập nhật Shanling bên dưới cùng ngày).
 - **Giới hạn còn mở:** Q6 (JVM: D6/D7/D8 trên thiết bị) và toàn bộ QA Shanling chưa chạy (Shanling đã bán — xem mục cập nhật cùng ngày); bản open Release chưa được chủ dự án tự thử (chỉ qua gate kỹ thuật); mã open thật bị Telegram từ chối (D7) chưa thử; Y700/S25/FYT ngoài phạm vi.
 - Việc kế tiếp: **chưa chốt** — chủ dự án chọn rồi mới mở phiên lập kế hoạch mới.
+
+## Cập nhật tích hợp 30/10/2026 — UI/UX P1, Đảo, D1–D3, ảnh bìa P2-A MERGED (ghi bổ sung ngày 31/10)
+
+- **2026-10-29-melo-ui-ux-ke-hoach: PASS có giới hạn** (chủ dự án “Đạt” 30/10, ghi lúc 11:00, commit `c6c7970`).
+  - Bản: R1c `b599e80`, APK Debug `138688175DC0…3482`.
+  - Phạm vi: P1 S1–S7, cộng REWORK R1 — SB-01 giữ vị trí cuộn khi xoay, SB-02 bỏ nhãn “Tạm dừng” cũ sau Bài kế/Bài trước.
+  - Hồ sơ: [kế hoạch](docs/plans/2026-10-29-melo-ui-ux-ke-hoach.md), [nghiệm thu](docs/plans/2026-10-29-melo-ui-ux-ke-hoach-nghiem-thu.md), [sơ bộ vòng 1–2](docs/plans/2026-10-29-melo-ui-ux-ke-hoach-nghiem-thu-so-bo.md).
+- **2026-10-30-dao-thu-tu-phat: PASS có giới hạn** (“Đạt” 30/10 16:54).
+  - Bản: source `798b254`, APK `1D61F67F…D485`.
+  - Service là nguồn thứ tự phát duy nhất khi bật Đảo, cho cả Telegram và nhạc trên máy. Gỡ BLOCKED S6 của UI/UX.
+  - Giới hạn: danh sách > 2000 bài và 500 bài nhạc trên máy chưa thử.
+  - [Nghiệm thu](docs/plans/2026-10-30-dao-thu-tu-phat-nghiem-thu.md).
+- **2026-10-30-don-ui-sau-xoay: PASS có giới hạn** (“Đạt” 30/10 18:11).
+  - Bản: source `8bf9d03`, APK `E6EC8773…E92C`.
+  - D1: log `MeloAnchor` chỉ còn ở Debug. D2: danh sách đầu lưu được vị trí ngay sau khi mở app. D3: hết khoảng trống đầu màn sau khi xoay về dọc.
+  - **Quyết định chủ dự án 30/10 17:01:** bỏ QA1 tablet và QA6 Shanling; QA thiết bị chỉ trên Sony.
+  - [Nghiệm thu](docs/plans/2026-10-30-don-ui-sau-xoay-nghiem-thu.md).
+- Merge `--no-ff` **`b6f61a0`** (chỉ thị merge 30/10 18:12): nhánh don-ui mang theo cả UI/UX R1c và Đảo cùng chuỗi. Các file quy trình xung đột được giữ phía tích hợp theo quyết định chủ dự án; `app/` khớp nhánh nguồn; test Ni 2268/21/0.
+- **2026-10-30-anh-bia-moi-mau (P2-A): PASS** (“Đạt” 30/10).
+  - Bản: source `92e3db9`, APK `7F51A1B4…14A9`.
+  - Ảnh bìa dòng hiện cả CURRENT và TEAL trên Phone/Tablet; quyền tải ảnh (`rowArtSwitch`) tách khỏi màu.
+  - Merge **`d1da309`** theo chỉ thị “Merge luôn”.
+  - Giới hạn: Q5b (Đảo, ⏭ ×2) chưa đối chiếu được; Release chưa QA trên máy.
+  - [Nghiệm thu](docs/plans/2026-10-30-anh-bia-moi-mau-nghiem-thu.md).
+- Chung cho 4 bản trên:
+  - âm thanh thật chưa được xác nhận riêng;
+  - chưa có link Drive tải được cho R1c UI/UX;
+  - không push (không có remote).
 
 ## Cập nhật quy trình 29/10/2026 — bàn giao bằng Markdown
 

@@ -2,6 +2,43 @@
 
 Mỗi phiên làm đúng 1 việc: tạo `docs/plans/<việc>.md` (mục tiêu, phạm vi, file đụng, test, tiêu chí xong), làm, cập nhật `HANDOFF.md`, dừng. Việc đổi schema DB phải được chủ dự án duyệt trước.
 
+## Cập nhật 31/10/2026 — việc còn mở sau chuỗi 30–31/10
+
+Đã ĐẠT và đã merge (chi tiết ở HANDOFF):
+- UI/UX P1 `2026-10-29-melo-ui-ux-ke-hoach`;
+- Đảo `2026-10-30-dao-thu-tu-phat`;
+- D1–D3 `2026-10-30-don-ui-sau-xoay`;
+- P2-A ảnh bìa `2026-10-30-anh-bia-moi-mau`;
+- đăng nhập chỉ bằng số điện thoại cho bản open `2026-10-30-dang-nhap-chi-so-dien-thoai`.
+
+Mỗi việc dưới đây cần chủ dự án giao riêng; quy trình 29/10 (lập kế hoạch → thực thi → sơ bộ → chủ dự án).
+
+- **A. P2-B lời nhạc** — chưa làm.
+  - Trước khi code phải có phiên lập kế hoạch chốt nguồn/dịch vụ lời nhạc, chính sách dữ liệu và cache.
+  - Đã có hợp đồng UI dự kiến: [phụ lục UI/UX mục P2-B](2026-10-29-melo-ui-ux-ke-hoach-chi-tiet.md).
+- **B. Giao diện phù hợp mọi loại thiết bị** — định hướng chủ dự án nêu ngày 31/10; chưa có kế hoạch hay phạm vi cụ thể.
+- **C. Đăng bản open công khai** — cần:
+  - khóa ký phát hành (hiện chỉ có khóa debug của Tiny);
+  - chủ dự án đọc điều khoản API Telegram cho app bên thứ ba;
+  - chỉ thị public riêng.
+- **D. Push** — BLOCKED: repo chưa có remote/URL đích.
+- **E. Chưa kiểm** (ghi trong các hồ sơ ĐẠT; mỗi mục cần giao mới thực hiện):
+  - Đăng nhập:
+    - mã open thật bị Telegram từ chối (câu D7);
+    - D8 (lưu mã API sau khi đã gửi tham số TDLib) chưa có test JVM, chưa thử trên máy;
+    - người dùng E104 đã lưu mã riêng rồi cập nhật lên bản mới.
+  - Đảo: danh sách > 2000 bài; 500 bài nhạc trên máy; Q5b ⏭ ×2 trong QA ảnh bìa.
+  - Chung:
+    - Release UI trên máy;
+    - mất mạng thật;
+    - app bị hệ thống tắt rồi mở lại;
+    - chữ lớn / bàn phím / TalkBack thật;
+    - lỗi FLOOD Telegram thật;
+    - nút trên thông báo/màn khóa;
+    - âm thanh thật của các bản ngày 30/10.
+- **F. Thiết bị** — chỉ còn Sony XQ-AS52 qua Tiny (Shanling đã bán 31/10). Tablet Y700, S25, FYT ngoài phạm vi QA theo quyết định 30/10 17:01, trừ khi chủ dự án giao lại.
+- **G. Chỉ nghiên cứu, chưa giao code** — nhiều Playlist có tên; ghim nguồn.
+
 ## 1. ~~Thanh A–Z (Thư viện)~~ — ĐÃ LÀM ở Beta97 (18/10/2026, `cfaa993` + `5ebd7dd`)
 - Theo `docs/plans/a-z.md`: chip Mới nhất / Tên A–Z, thanh chữ cái, không đổi schema. Sony QA OK; chờ chủ dự án QA Y700 (dọc + Hai khung ngang) và S25. Lưới 3 cột Hai khung trên Y700 vẫn chưa kiểm.
 - Còn lại nếu cần: nhóm "…" cho chữ ngoài Latin; chỉ mục `(account_id, is_deleted, search_key)` chỉ khi đo thấy chậm (đổi schema → phải duyệt).
