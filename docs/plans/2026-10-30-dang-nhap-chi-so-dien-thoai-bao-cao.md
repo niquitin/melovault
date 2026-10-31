@@ -221,7 +221,19 @@ Không ADB nào khác ngoài các lệnh liệt kê trên (không uninstall/pm c
 - Q6 (JVM, test mã open bị Telegram từ chối / D6 / D7 / D8 trên thiết bị thật) — chưa chạy ở phiên này.
 - Shanling chưa động tới trong phiên này (chỉ làm Sony theo đúng yêu cầu).
 - Âm thanh thật, Release UI thật trên máy, Y700/S25/FYT — ngoài phạm vi/chưa thử.
-- `-apk-test.md`, `-hinh-nghiem-thu.md`, `00_tong_hop.png`, upload Drive owner-only — chưa làm.
+## Hồ sơ bàn giao APK + Drive (31/10, sau S7 Sony, theo yêu cầu chủ dự án "làm phần nào cũng được")
+
+- Ảnh tổng hợp `00_tong_hop.png` (lưới 2×2, cạnh dài 1586 px ≤ 1600 px, nhãn Q5/Q1/Q2/Q2) ghép bằng `ffmpeg` (xstack + drawtext) từ 4 ảnh QA chính, lưu tại `docs/plans/artifacts/2026-10-30-dang-nhap-chi-so-dien-thoai/S7-sony-20261031/00_tong_hop.png`.
+- **Chuyển APK Tiny → Ni:** dùng share mạng sẵn có `T:\` (Ni) = `C:\Bots\` (Tiny) — đã xác nhận trước đó đúng là cùng thư mục (ví dụ `T:\MeloVault-dang-nhap-IsolatedQA-20261030-a2f0a88` khớp clone trên Tiny) — copy trực tiếp 3 APK qua share này, **không qua base64/MCP** để tránh tải dữ liệu nhị phân lớn vào ngữ cảnh. Đối chiếu `sha256sum` sau khi copy sang Ni: khớp 100% với giá trị tính trên Tiny ở mục S6.7.
+- **Upload Drive:** copy APK + ảnh + `SHA256.txt` vào `G:\My Drive\MeloVault_QA\2026-10-30-dang-nhap-chi-so-dien-thoai-20261031-vc121-a2f0a88\` (thư mục đồng bộ Google Drive Desktop, tài khoản `ntdung.md@gmail.com` — xác nhận bằng `get_file_metadata`/`get_file_permissions` qua connector Drive). Đợi đồng bộ xong (dùng `search_files` theo `parentId` để xác nhận file đã lên cloud), rồi kiểm `get_file_permissions` từng file: chỉ có owner, không có "Anyone with link" — đúng yêu cầu owner-only.
+- Thư mục tạo mới (`inheritedPermissionsDisabled=true`), là con của `MeloVault_QA` (thư mục gốc QA của dự án, cũng owner-only — đã kiểm permissions trước khi tạo).
+- Ghi `docs/plans/2026-10-30-dang-nhap-chi-so-dien-thoai-apk-test.md` (bảng APK đầy đủ, nhãn **QA CANDIDATE — CHƯA NGHIỆM THU**) và `-hinh-nghiem-thu.md` (link ảnh Drive đã xác minh). Không có giá trị `api_id`/`api_hash` nào trong hai file này hay trong `SHA256.txt`.
+
+## Chưa kiểm chứng (cập nhật cuối)
+
+- Q3–Q4 (nhập số/mã/2FA thật) — cần chính chủ dự án thao tác; agent đã từ chối gõ hộ theo đúng giới hạn S7 mục 5 kế hoạch dù được yêu cầu trực tiếp.
+- Q6 (JVM) và toàn bộ QA Shanling — bỏ qua theo chỉ thị chủ dự án ("Bỏ qua thiết bị shanling").
+- Âm thanh thật, Release UI trên máy, Y700/S25/FYT.
 
 Đã dừng, bàn giao phiên thực thi tiếp theo.
 

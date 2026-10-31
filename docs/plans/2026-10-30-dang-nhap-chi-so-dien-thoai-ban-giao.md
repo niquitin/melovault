@@ -10,9 +10,14 @@ Worktree `D:\Bots\_worktrees\MeloVault-dang-nhap-chi-so-dien-thoai`; nhánh `dot
 - **Q1 PASS:** bản open lần đầu mở vào thẳng "Nhập số điện thoại", không panel API.
 - **Q2 PASS:** link "Dùng mã API riêng (nâng cao)" → panel E104 đúng; "Quay lại" → về màn số, không lưu gì.
 - **Q3–Q4 CHƯA LÀM** — cần chính chủ dự án tự nhập số điện thoại + mã (+2FA nếu có); agent không được gõ các giá trị này. App open đang để sẵn ở màn nhập số trên Sony, màn hình hiện đã tắt (`SONY_SCREEN_END=OFF`, đã xác minh `dumpsys display`).
-- Ảnh bằng chứng (riêng tư, không commit) tại `docs/plans/artifacts/2026-10-30-dang-nhap-chi-so-dien-thoai/S7-sony-20261031/` — 5 ảnh, đã gửi các ảnh chính trong hội thoại chat cho chủ dự án xem.
+- Ảnh bằng chứng (riêng tư, gitignored) tại `docs/plans/artifacts/2026-10-30-dang-nhap-chi-so-dien-thoai/S7-sony-20261031/` — 5 ảnh + 1 ảnh tổng hợp `00_tong_hop.png`; đã gửi các ảnh chính trong hội thoại chat cho chủ dự án xem.
 - Chi tiết đầy đủ từng bước, lệnh, đối chứng an toàn (cert/vc/playback) ở [`-bao-cao.md`](2026-10-30-dang-nhap-chi-so-dien-thoai-bao-cao.md) mục "S7 — QA thiết bị Sony".
-- **Còn thiếu để hoàn tất S7:** Q3–Q4 (chủ dự án), Q6 (JVM, chưa chạy ở phiên này), hồ sơ `-apk-test.md`/`-hinh-nghiem-thu.md`/`00_tong_hop.png`, upload Drive owner-only, QA Shanling (chưa đụng tới trong phiên này).
+- **Theo yêu cầu chủ dự án ("bạn làm phần nào cũng được", bỏ qua Shanling):** đã làm hồ sơ bàn giao APK + upload Drive.
+  - [`-apk-test.md`](2026-10-30-dang-nhap-chi-so-dien-thoai-apk-test.md): 3 APK candidate, SHA-256/bytes/cert/versionCode/versionName đầy đủ.
+  - [`-hinh-nghiem-thu.md`](2026-10-30-dang-nhap-chi-so-dien-thoai-hinh-nghiem-thu.md): link ảnh QA đã xác minh.
+  - Thư mục Drive owner-only: [2026-10-30-dang-nhap-chi-so-dien-thoai-20261031-vc121-a2f0a88](https://drive.google.com/drive/folders/1PqAqNBewgGKHEg5N0OpWzjZVfsw2RK2b) — đã kiểm `get_file_permissions` chỉ có `ntdung.md@gmail.com` (owner), không chia sẻ "Anyone with link". Upload qua copy file trực tiếp vào `G:\My Drive\MeloVault_QA\...` (thư mục đồng bộ Google Drive Desktop trên Ni) rồi đối chiếu SHA-256 sau khi đồng bộ lên cloud — khớp 100% với giá trị tính trên Tiny.
+  - Nhãn đúng: **QA CANDIDATE — CHƯA NGHIỆM THU** trên cả 3 APK.
+- **Còn thiếu để hoàn tất S7:** Q3–Q4 (chủ dự án tự nhập số điện thoại/mã/2FA — agent đã từ chối gõ hộ theo đúng giới hạn an toàn), Q6 (JVM, chưa chạy ở phiên này). Shanling bị bỏ qua theo chỉ thị chủ dự án.
 - Không merge/push, không ghi PASS chính thức (toàn bộ vẫn ở mức kỹ thuật, chờ chủ dự án nghiệm thu).
 
 ## Checkpoint chặng B — 31/10/2026, Claude Code claude-sonnet-5 — S5+S6 XONG (PASS), chờ S7
