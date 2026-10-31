@@ -185,13 +185,15 @@ internal class MeloLibraryPane(
         view.addView(sourceCardsHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = s.gap
         })
+        // UI-05: the status line keeps a full gap from what is under it (the list, the hero card).
         view.addView(note, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            bottomMargin = s.gap / 2
+            bottomMargin = s.gap
         })
         view.addView(scopeNote, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = s.gap / 2
         })
-        if (layer != NewLayer.TWO_PANE) view.addView(playFeedbackView)
+        if (layer != NewLayer.TWO_PANE) view.addView(playFeedbackView, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = s.gap })
         list.apply {
             itemsCanFocus = true
             adapter = this@MeloLibraryPane.adapter
