@@ -50,3 +50,7 @@ Nguyên nhân khả dĩ (đọc mã, chưa thử): `TelegramPreviewActivity.show
 5. Nếu có máy tablet/màn ngang rộng (Hai khung): cột Đang phát bên trái không còn sát mép.
 
 Bài đang ở trên Sony: “#3 Up With Wuan C” tạm dừng ≈ 01:51 (sự cố chặng C); chọn lại #140 nếu muốn.
+
+## Đối chiếu lại — 01/11/2026 06:15, Claude Code (phiên sơ bộ lặp, không làm lại)
+
+Prompt mới giao lại cùng vai sơ bộ với HEAD dự kiến `8664915`; HEAD thực là `7c7602a` (chính biên bản Vòng 1 ở trên, không có commit lạ). Không kiểm lại toàn bộ, chỉ đối chiếu: không có thay đổi `.kt` sau `75375b4`; `showMeloQueue()` (`TelegramPreviewActivity.kt:4183`) vẫn không gọi `setDecorFitsSystemWindows(false)` (chỉ có ở `:4274`, `:4387`) — nguyên nhân khả dĩ SB-1 giữ nguyên; Sony `QV725WEQ54` XQ-AS52, `versionCode=121`, không đánh thức/chạm/phát, **`SONY_SCREEN_END`: `Display State=OFF`**. Kết luận không đổi: **SƠ BỘ: CẦN SỬA** (SB-1 UI-03, SB-2 UI-02).
