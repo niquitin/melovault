@@ -76,6 +76,12 @@ internal class MeloPhoneScreen(
         pane.detach()
     }
 
+    /** UI-02: the keyboard height in px (0 = closed); the bar gives its place to the song list while typing. */
+    fun onKeyboardChanged(keyboardPx: Int) {
+        val hidden = MeloBottomBarPolicy.hiddenForKeyboard(keyboardPx, context.resources.configuration.screenHeightDp)
+        bar.view.visibility = if (hidden) View.GONE else View.VISIBLE
+    }
+
     private fun buildHeader() {
         if (teal) {
             // The ⚙ moves to the sync row; the logo takes the title's place.

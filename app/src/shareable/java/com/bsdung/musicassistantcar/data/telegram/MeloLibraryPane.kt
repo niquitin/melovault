@@ -109,6 +109,12 @@ internal class MeloLibraryPane(
     private val searchField: EditText get() = searchHandle.field
     /** Teal theme: "Chillout ✕" under the search box while a genre filter is on. */
     private val genreHolder = FrameLayout(context)
+    /** UI-01: the genre chip strip under the tabs; the first optional part to give way when the window is short. */
+    private val genreStripHolder = FrameLayout(context)
+    private var genreStripWanted = false
+    private var noteWanted = false
+    /** UI-01: how many of [trimParts] (first = hidden first) are hidden so the song list keeps its rows. */
+    private var trimCount = 0
 
     private var snapshot: Snapshot? = null
     private var chipKey: String? = null
@@ -145,6 +151,7 @@ internal class MeloLibraryPane(
             }
         }
         searchHolder.addView(searchBar)
+        searchField.addOnLayoutChangeListener { _, l, _, r, _, ol, _, or_, _ -> if (r - l != or_ - ol) searchField.post { fitSearchHint() } }
         view.addView(searchHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         genreHolder.visibility = View.GONE
         view.addView(genreHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -153,6 +160,10 @@ internal class MeloLibraryPane(
         view.addView(chipHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = s.gap
         })
+        view.addView(genreStripHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        view.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or_, ob ->
+            if (r - l != or_ - ol || b - t != ob - ot) view.post { applyTrim() }
+        }
         headerChips.apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.END
@@ -174,13 +185,15 @@ internal class MeloLibraryPane(
         view.addView(sourceCardsHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = s.gap
         })
+        // UI-05: the status line keeps a full gap from what is under it (the list, the hero card).
         view.addView(note, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            bottomMargin = s.gap / 2
+            bottomMargin = s.gap
         })
         view.addView(scopeNote, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = s.gap / 2
         })
-        if (layer != NewLayer.TWO_PANE) view.addView(playFeedbackView)
+        if (layer != NewLayer.TWO_PANE) view.addView(playFeedbackView, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = s.gap })
         list.apply {
             itemsCanFocus = true
             adapter = this@MeloLibraryPane.adapter
@@ -400,7 +413,8 @@ internal class MeloLibraryPane(
             snap.browseScope, snap.sourceTitle, snap.browseLoadState,
             if (snap.showingSources) snap.sources.count { it.chatId != 0L } else snap.rows.size, snap.query
         )
-        searchField.hint = presentation.hint
+        fullHint = presentation.hint
+        fitSearchHint()
         scopeNote.text = presentation.scopeLabel
         statusText.text = presentation.message.orEmpty()
         retry.visibility = if (presentation.retry) View.VISIBLE else View.GONE
@@ -417,7 +431,7 @@ internal class MeloLibraryPane(
             } else "Telegram"
             playAll.visibility = View.GONE
             sortChip.visibility = View.GONE
-            note.visibility = View.GONE
+            noteWanted = false
             listContent.visibility = View.GONE
             sourcesScroll.visibility = if (layer == NewLayer.TWO_PANE) View.GONE else View.VISIBLE
             sourceList.visibility = if (layer == NewLayer.TWO_PANE) View.VISIBLE else View.GONE
@@ -441,7 +455,7 @@ internal class MeloLibraryPane(
             playAll.alpha = if (playAll.isEnabled) 1f else 0.4f
             val detailNote = snap.note.takeIf { !snap.local || snap.browseLoadState == MeloBrowseUiPolicy.LoadState.READY }
             note.text = detailNote.orEmpty()
-            note.visibility = if (detailNote.isNullOrBlank()) View.GONE else View.VISIBLE
+            noteWanted = !detailNote.isNullOrBlank()
             sourcesScroll.visibility = View.GONE
             sourceList.visibility = View.GONE
             listContent.visibility = View.VISIBLE
@@ -504,6 +518,69 @@ internal class MeloLibraryPane(
                 playAllWhenLoaded = null
                 host.playAll(true)
             }
+        }
+        applyTrim()
+    }
+
+    // ---- UI-07: the search hint loses whole words, not half a word, when the field is narrow ---------
+
+    private var fullHint = ""
+
+    private fun fitSearchHint() {
+        val available = (searchField.width - searchField.paddingLeft - searchField.paddingRight).toFloat()
+        val fitted = MeloLibraryPolicy.fitHint(fullHint, available) { searchField.paint.measureText(it) }
+        if (searchField.hint?.toString() != fitted) searchField.hint = fitted
+    }
+
+    // ---- UI-01: a short window keeps the song list, the optional parts above it give way ------------
+
+    /** Optional parts above the song list, in the order they give way, each with whether it is wanted now. */
+    private fun trimParts(): List<Pair<View, Boolean>> = listOf(
+        scopeNote to scopeNote.text.isNotBlank(),
+        note to noteWanted,
+        sourceCardsHolder to (sourceRowVisible && !collapsed),
+        genreStripHolder to genreStripWanted
+    )
+
+    private fun naturalHeight(child: View, widthPx: Int): Int {
+        val lp = child.layoutParams as? ViewGroup.MarginLayoutParams
+        val margins = (lp?.leftMargin ?: 0) + (lp?.rightMargin ?: 0)
+        child.measure(
+            View.MeasureSpec.makeMeasureSpec((widthPx - margins).coerceAtLeast(0), View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)
+        )
+        return child.measuredHeight + (lp?.topMargin ?: 0) + (lp?.bottomMargin ?: 0)
+    }
+
+    /** Works from the sizes the parts would have, not the ones they have now, so it never flips back and forth. */
+    private fun applyTrim() {
+        val width = view.width - view.paddingLeft - view.paddingRight
+        val paneHeight = view.height - view.paddingTop - view.paddingBottom
+        val snap = snapshot
+        val parts = trimParts()
+        if (width <= 0 || paneHeight <= 0 || snap == null || snap.showingSources) {
+            setTrim(0, parts)
+            return
+        }
+        val partViews = parts.map { it.first }
+        var fixed = 0
+        for (i in 0 until view.childCount) {
+            val child = view.getChildAt(i)
+            if (child === listContent || child === sourcesScroll || child === sourceList ||
+                child.visibility == View.GONE || partViews.any { it === child }) continue
+            fixed += naturalHeight(child, width)
+        }
+        val optional = parts.map { (part, wanted) -> if (wanted) naturalHeight(part, width) else 0 }
+        val minList = MeloLibraryPolicy.MIN_LIST_ROWS * (s.rowHeight + list.dividerHeight)
+        val needed = MeloLibraryPolicy.partsToTrim(paneHeight, fixed, optional, minList)
+        // Folding the owner's title row on scroll grows this pane; parts that already gave way stay hidden meanwhile.
+        setTrim(if (collapsed) maxOf(needed, trimCount) else needed, parts)
+    }
+
+    private fun setTrim(count: Int, parts: List<Pair<View, Boolean>> = trimParts()) {
+        trimCount = count
+        parts.forEachIndexed { index, (part, wanted) ->
+            part.visibility = if (wanted && index >= count) View.VISIBLE else View.GONE
         }
     }
 
@@ -673,26 +750,31 @@ internal class MeloLibraryPane(
         }
         if (snap.local) {
             chipHolder.visibility = View.GONE
+            genreStripWanted = false
             return
         }
         chipHolder.visibility = View.VISIBLE
         val tabs = MeloLibraryPolicy.themeTabs(null, 1, snap.mode, snap.showingSources, snap.browseScope)
         val key = "${snap.browseScope}|${snap.query}"
-        if (key == chipKey) return
+        if (key == chipKey) {
+            genreStripWanted = genreStripHolder.childCount > 0
+            return
+        }
         chipKey = key
         chipHolder.removeAllViews()
-        val column = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        genreStripHolder.removeAllViews()
         fun strip(build: LinearLayout.() -> Unit) = HorizontalScrollView(context).apply {
             isHorizontalScrollBarEnabled = false
             addView(LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; build() })
         }
-        column.addView(strip {
+        // UI-07: the four tabs move to a second line at a large font instead of being cut at the edge.
+        chipHolder.addView(MeloFlowRow(context, s.gap / 2).apply {
             tabs.forEach { tab ->
                 addView(c.chip(if (tab.kind == MeloLibraryPolicy.TabKind.ALL) "Thư viện" else tab.label,
                     tab.selected) { onThemeTab(tab.kind) })
             }
         })
-        if (!snap.showingSources) column.addView(strip {
+        if (!snap.showingSources) genreStripHolder.addView(strip {
             if (snap.browseScope.chatId != null) {
                 addView(c.chip("Tất cả trong kênh", snap.mode == Mode.ALL) { host.filterInSource(Mode.ALL) })
                 addView(c.chip("Đã tải trong kênh", snap.mode == Mode.DOWNLOADED) { host.filterInSource(Mode.DOWNLOADED) })
@@ -701,7 +783,7 @@ internal class MeloLibraryPane(
                 addView(c.chip(genre.label, MeloLibraryPolicy.activeGenre(snap.query) == genre) { applyGenre(genre) })
             }
         })
-        chipHolder.addView(column)
+        genreStripWanted = genreStripHolder.childCount > 0
     }
 
     // ---- Source cards -------------------------------------------------------------------------
@@ -722,9 +804,7 @@ internal class MeloLibraryPane(
         buildSourceCards()
     }
 
-    private fun applySourceCardsVisibility() {
-        sourceCardsHolder.visibility = if (sourceRowVisible && !collapsed) View.VISIBLE else View.GONE
-    }
+    private fun applySourceCardsVisibility() = applyTrim()
 
     /** Needs the pane width, so it also runs again once the holder has been laid out or resized. */
     private fun buildSourceCards() {
@@ -973,10 +1053,7 @@ internal class MeloLibraryPane(
         val all = snap.sources.firstOrNull { it.chatId == 0L }
         val (channels, emptyChannels) = MeloLibraryPolicy.splitSources(snap.sources)
         sourcesBox.addView(heroCard(all?.count ?: snap.total))
-        val tools = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, s.gap, 0, s.gap)
-        }
+        val tools = MeloFlowRow(context, s.gap / 2).apply { setPadding(0, s.gap, 0, s.gap) }
         tools.addView(c.chip(if (host.hideZeroSources()) "Hiện kênh 0 bài" else "Ẩn kênh 0 bài", host.hideZeroSources()) {
             host.toggleHideZeroSources()
         })
@@ -1045,7 +1122,7 @@ internal class MeloLibraryPane(
             downloaded?.let { "${MeloComponentPolicy.formatCount(it)} đã tải" }
         ).joinToString(" · ")
         if (detail.isNotEmpty()) addView(c.text(detail, s.secondaryText, p.textSecondary).apply { setPadding(0, s.gap / 2, 0, s.gap) })
-        val buttons = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        val buttons = MeloFlowRow(context, s.gap / 2)
         buttons.addView(c.chip("Mở tất cả", false) { host.openBrowseScope(MeloLibraryPolicy.tabScope(MeloLibraryPolicy.TabKind.ALL)) })
         buttons.addView(c.chip("⇄ Phát ngẫu nhiên", true) {
             host.openBrowseScope(MeloLibraryPolicy.tabScope(MeloLibraryPolicy.TabKind.ALL))

@@ -394,8 +394,9 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         column.addView(title, matchWrap().apply { topMargin = s.gap * 2 })
         column.addView(source, matchWrap().apply { topMargin = s.gap / 2 })
         column.addView(qualityChips, matchWrap().apply { topMargin = s.gap })
-        column.addView(qualityNote, matchWrap().apply { topMargin = s.gap / 2 })
-        column.addView(playFeedbackView, matchWrap())
+        // UI-05: a status line ("Tạm dừng", "Đang kiểm tra…") keeps a full gap from the pills above it.
+        column.addView(qualityNote, matchWrap().apply { topMargin = s.gap })
+        column.addView(playFeedbackView, matchWrap().apply { topMargin = s.gap / 2 })
 
         shuffle = c.chip("⇄ Đảo", false) { host.toggleShuffle(); refresh() }
         repeat = c.chip("↻ Lặp", false) { host.cycleRepeat(); refresh() }

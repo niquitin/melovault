@@ -44,7 +44,9 @@ internal class MeloTabletScreen(
     val view: LinearLayout = LinearLayout(context).apply {
         orientation = LinearLayout.HORIZONTAL
         setBackgroundColor(p.background)
-        setPadding(0, s.gap, s.screenMargin, s.gap)
+        // UI-04: the player pane on the left sits inside the same margin as the list pane on the right
+        // (the navigation column that once took the left side is no longer built).
+        setPadding(s.screenMargin, s.gap, s.screenMargin, s.gap)
     }
 
     private val navColumn = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
