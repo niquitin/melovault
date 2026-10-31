@@ -13,7 +13,8 @@ Trạng thái: **chặng A xong; chặng B/C chưa làm. CHƯA phải bản nghi
 | Nhận việc | `git status` sạch, nhánh đúng, HEAD `3cdcefd`, `diff --check` sạch; không có tiến trình/agent khác trên nhánh; Sony `device`, màn OFF, không ai dùng | PASS |
 | G0 | APK trên Sony: `app.melovault.player` `0.6.96-beta` vc121, kéo `base.apk` (33 593 284 byte) về Tiny, SHA-256 `6E3D6B6E…A029` | **KHỚP** bản `a2f0a88` |
 | G1 | Thêm `MeloLayoutMatrixTest` (7 ca) khóa kết quả `chooseLayout` / `profileFor` / `shouldOfferCarMode` / `panelCompact` cho M1–M9 | **PASS** Debug + Release; không dòng nào lệch bảng mục 4; không sửa `MeloScreenPolicy` |
-| G2 | Khảo sát Sony ở cỡ gốc: dọc, ngang, chia đôi | 6 mục UI-xx; M1, M2, M4–M8, F1–F3 **chưa kiểm** (chưa được phép) |
+| G2 lượt 1 | Khảo sát Sony ở cỡ gốc: dọc, ngang, chia đôi | UI-01…UI-06 |
+| G2 bổ sung | Sau khi chủ dự án cho phép đổi tạm `wm size` / `wm density` / `font_scale` (bàn giao): M1, M2, M4–M8, F1–F3 trên M3 và M6 | Bảng lỗi hợp nhất UI-01…UI-08; M8 và F3 M6 ngang chỉ có một phần ảnh (xem khảo sát mục 4). Mục “Phiên khảo sát bổ sung” bên dưới |
 
 ## G0 — chi tiết
 
@@ -62,7 +63,7 @@ Danh sách lỗi đầy đủ và quan sát nằm ở file khảo sát.
 
 ## Việc dở dang / chưa kiểm chứng
 
-- M1, M2, M4–M8 và F1–F3 chưa kiểm (không được phép đổi `wm size` / `wm density` / `font_scale`). Bố cục Tablet dọc / Hai khung cỡ Tablet / máy gập **chỉ được khóa bằng test JVM**, chưa có ảnh thật.
+- (Cập nhật sau phiên bổ sung) Những cấu hình ở dòng này lượt 1 chưa kiểm vì chưa được phép đổi cỡ; **nay đã khảo sát** (xem mục “Phiên khảo sát bổ sung”). Còn thiếu: M8 chỉ có ảnh Thư viện; F3 M6 ngang thiếu menu ⋮ và Cài đặt; hộp thoại mời Car Mode không quan sát được.
 - Âm thanh thật chưa kiểm: nhạc có lúc phát trong phiên nhưng không có nguồn âm độc lập — CHƯA XÁC NHẬN ÂM THANH THỰC.
 - Không có tablet thật, máy gập thật, FYT hay S25 (đã ngoài phạm vi QA).
 - Chưa build, chưa `assemble`, chưa kiểm Personal (chặng B).
@@ -79,3 +80,21 @@ Danh sách lỗi đầy đủ và quan sát nằm ở file khảo sát.
 - Ảnh Sony chứa tên bài/kênh Telegram và vài ảnh có hình thu nhỏ Chrome. Giữ private, không commit.
 - Chưa có chủ dự án duyệt bảng lỗi. Chặng B mặc định sửa UI-01…UI-05 theo GD4; UI-06 là Đề xuất.
 - UI-01/UI-02 sửa phần đầu Thư viện dùng chung có thể làm Gọn/Car xê dịch → hồi quy bằng test sẵn có và ảnh M1/M9.
+
+## Phiên khảo sát bổ sung (21:04–22:09) — cùng phiên chặng A
+
+- **Căn cứ:** chủ dự án trả lời trong chat sau chặng A: “Cho phép đổi tạm wm size/density/font_scale trên Sony, khôi phục ngay sau mỗi cấu hình. Làm phiên khảo sát bổ sung M1, M2, M4–M8, F1–F3.” Đã ghi vào bàn giao (commit `3ceb057`). Chỉ Sony `QV725WEQ54`; các luật cấm khác giữ nguyên.
+- **Cách làm:** script PowerShell trên Tiny (`C:\Bots\_qa_temp\GD-G2\cfg2.ps1`, `survey2.ps1`, `chain*.ps1`). Mỗi cấu hình: đặt cỡ, mở app, tìm phần tử bằng `uiautomator dump` (không đoán tọa độ), chụp, rồi `finally` khôi phục. Mọi thứ nằm ngoài repo, không commit. Ảnh ở `docs/plans/artifacts/…/G2B/`.
+- **Kết quả:** bảng UI-01…UI-08 nằm trong [khảo sát](2026-10-31-giao-dien-da-thiet-bi-khao-sat.md). Mở rộng so với chặng A:
+  - UI-01 và UI-02 xảy ra ở mọi cửa sổ thấp / có bàn phím, nặng nhất ở M2 ngang (≈ 0,5 dòng) và F3 M3 ngang (0 dòng) → **Chặn dùng** ở các ca đó;
+  - UI-04 xảy ra ở mọi cỡ Hai khung;
+  - thêm UI-07 (chữ ≥ 1,5 cắt chip / ô tìm / nút) và UI-08 (nhãn tab cắt ở chữ 2,0 trên 600 dp).
+- **Bài học kỹ thuật (để chặng sau dùng lại):**
+  1. `wm size` của Sony không nhận chiều rộng quá ≈ 1096 px. Muốn ra dp lớn phải hạ `density`: M4 `1080x2340 / 400`, M5 `1080x1298 / 250`, M6 `1080x1728 / 288`, M7 `1080x1728 / 216`.
+  2. App xét “tấm màn nhỏ” theo kích thước **vật lý**, nên `wm size` không ra bố cục Gọn (M1 ra Điện thoại dọc).
+  3. Vuốt theo chiều dọc trong màn Đang phát có thể rơi vào thanh tua và đổi vị trí phát. Chỉ vuốt trong vùng cuộn.
+- **Sự cố, ghi đủ trong khảo sát mục 5:**
+  - hai lần khôi phục `finally` bị cắt do ADB chớp rớt, đã khôi phục thủ công trong ≈ 1–2 phút;
+  - vị trí phát bài #140 bị kéo từ 00:46 lên 02:48 do vuốt trúng thanh tua (luôn tạm dừng, không đổi bài/hàng đợi).
+- **Trạng thái cuối:** không có Override cỡ/mật độ, `font_scale` 1.0, `user_rotation` 0, `accelerometer_rotation` 1; `SONY_SCREEN_END=OFF` lúc 2026-10-31 22:09:10.
+- **Chưa làm:** không có APK mới, không `assemble`, không đụng mã app (chỉ thêm test G1). Chưa có chủ dự án duyệt bảng lỗi.

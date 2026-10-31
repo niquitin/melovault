@@ -103,3 +103,25 @@ Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Dòng c
 - **Câu 1 mục 9 kế hoạch: ĐƯỢC PHÉP.** Chủ dự án viết trong chat: “Cho phép đổi tạm wm size/density/font_scale trên Sony, khôi phục ngay sau mỗi cấu hình. Làm phiên khảo sát bổ sung M1, M2, M4–M8, F1–F3.”
 - Phạm vi: chỉ Sony `QV725WEQ54`. Đổi tạm `wm size`, `wm density`, `font_scale`; **khôi phục ngay sau mỗi cấu hình**. Các luật cấm khác giữ nguyên (không phát bài mới, không đổi hàng đợi, không đăng xuất, không máy bay, không uninstall/clear).
 - Lệnh khôi phục (ghi trước khi bắt đầu): `wm size reset`; `wm density reset`; `settings put system font_scale 1.0`; `settings put system user_rotation 0`; `settings put system accelerometer_rotation 1`; `input keyevent 223`. Giá trị gốc: size Physical 1080x2520 (không Override), density Physical 420, font_scale 1.0, user_rotation 0, accelerometer_rotation 1.
+
+## Checkpoint sau khảo sát bổ sung — 31/10/2026 22:10, Claude Code Sonnet 5.5
+
+- **Khảo sát bổ sung xong** (chủ dự án đã cho phép, xem mục “Quyết định chủ dự án” ở trên). Bảng lỗi đã hợp nhất: [`-khao-sat.md`](2026-10-31-giao-dien-da-thiet-bi-khao-sat.md), báo cáo [`-bao-cao.md`](2026-10-31-giao-dien-da-thiet-bi-bao-cao.md). **Bảng ở checkpoint chặng A phía trên đã cũ, lấy bảng trong file khảo sát.**
+- Lỗi hiện có:
+
+| Mã | Tóm tắt | Nhóm | Mức |
+|---|---|---|---|
+| UI-01 | Cửa sổ thấp: phần đầu Thư viện chiếm gần hết, danh sách 0–2 dòng (M2 ngang ≈ 0,5; F3 M3 ngang 0) | (e) | Chặn dùng / Xấu rõ |
+| UI-02 | Ô tìm mở bàn phím: kết quả 0–2,5 dòng (M1, F3 M3, F3 M6: 0) | (e) | Xấu rõ / Chặn dùng |
+| UI-03 | Hàng đợi toàn màn dọc không có lề ngang | (d) gần đúng | Xấu rõ |
+| UI-04 | Mọi cỡ Hai khung: cột Đang phát bên trái sát mép | (d) gần đúng | Nhỏ |
+| UI-05 | Dòng “Tạm dừng” lẻ đè mép trên danh sách / dính chip | (b) | Nhỏ |
+| UI-06 | Cửa sổ ngang thấp: bàn phím toàn màn che app | Đề xuất | Nhỏ |
+| UI-07 | Chữ ≥ 1,5 trên M3 dọc: chip lọc / ô tìm / nút / menu bị cắt | (a) | Xấu rõ |
+| UI-08 | Chữ 2,0 trên 600 dp: nhãn tab dưới cắt (“Thư”, “Telegra”) | (a) | Nhỏ |
+
+- **Chưa kiểm / thiếu:** M8 chỉ có ảnh Thư viện; F3 M6 ngang thiếu menu ⋮ và Cài đặt; hộp thoại mời Car Mode không quan sát được; Gọn chỉ thấy qua chia đôi M9 (wm size không tái hiện Gọn).
+- **Chờ chủ dự án:** xem bảng lỗi, gạch lỗi không muốn sửa (mặc định chặng B sửa UI-01…UI-05, UI-07, UI-08; UI-06 không sửa). Không trả lời → làm mặc định.
+- Thiết bị đã khôi phục (không Override, font 1.0, xoay 0/1); `SONY_SCREEN_END=OFF` 22:09:10. Hai lần `finally` bị ADB cắt, đã khôi phục thủ công ngay (chi tiết khảo sát mục 5). Vị trí phát bài #140 bị kéo từ 00:46 lên 02:48 (luôn tạm dừng).
+- Prompt chặng B ở mục trên đã cập nhật (UI-07, UI-08, quyền Sony). HEAD chặng B: commit cuối nhánh (xem tin nhắn bàn giao).
+- Trạng thái: **CHẶNG A XONG (gồm khảo sát bổ sung) — chờ chủ dự án xem bảng lỗi, giao chặng B.** Không merge/push/public, không ghi PASS.
