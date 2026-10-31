@@ -3,6 +3,7 @@ package com.bsdung.musicassistantcar.data.telegram
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.util.TypedValue
 import android.view.GestureDetector
@@ -154,7 +155,11 @@ internal class MeloBottomBar(
     private fun updateTabLabels() {
         val cell = tabViews.values.firstOrNull()?.width ?: return
         if (cell <= 0) return
-        val only = MeloBottomBarPolicy.tabIconOnly((cell / density).toInt(), fontScale)
+        // UI-08: besides the width rule, a label that really does not fit its cell (measured bold, as the lit tab is) goes too.
+        val labelPaint = Paint().apply { typeface = Typeface.DEFAULT_BOLD; textSize = s.secondaryText * 0.85f }
+        val widest = tabViews.keys.maxOf { labelPaint.measureText(it.label) }
+        val only = MeloBottomBarPolicy.tabIconOnly((cell / density).toInt(), fontScale) ||
+            MeloBottomBarPolicy.labelOverflows(cell, widest, fontScale)
         if (only == iconOnly) return
         iconOnly = only
         tabViews.forEach { (tab, v) ->

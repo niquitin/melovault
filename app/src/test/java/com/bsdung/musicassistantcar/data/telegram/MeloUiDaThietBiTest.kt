@@ -127,6 +127,28 @@ class MeloUiDaThietBiTest {
         assertEquals(null, MeloLibraryPolicy.songMenuLabels(1.0f, false, null).versions)
     }
 
+    // ---- UI-08: a tab label that does not fit its cell gives way to the icon ----------------------------
+
+    @Test
+    fun ui08_labelWiderThanItsCellDropsToTheIcon() {
+        assertTrue(MeloBottomBarPolicy.labelOverflows(100, 112f, 2.0f)) // "Telegram" at font scale 2 in a 600 dp window
+        assertTrue(MeloBottomBarPolicy.labelOverflows(100, 112f, 1.5f))
+        assertFalse(MeloBottomBarPolicy.labelOverflows(100, 100f, 2.0f))
+        assertFalse(MeloBottomBarPolicy.labelOverflows(100, 60f, 2.0f))
+    }
+
+    @Test
+    fun ui08_unknownCellWidthNeverForcesIconOnly() {
+        assertFalse(MeloBottomBarPolicy.labelOverflows(0, 500f, 2.0f))
+    }
+
+    @Test
+    fun ui08_normalFontKeepsTheLabelsTheOldWidthRuleDecides() {
+        // Sony / S25 at x1.0 and x1.3: not touched by the measured check.
+        assertFalse(MeloBottomBarPolicy.labelOverflows(48, 49f, 1.0f))
+        assertFalse(MeloBottomBarPolicy.labelOverflows(60, 70f, 1.3f))
+    }
+
     @Test
     fun ui07_songMenuUsesShortWordingFromFontScale1_5() {
         val labels = MeloLibraryPolicy.songMenuLabels(1.5f, favorite = false, versions = 3)

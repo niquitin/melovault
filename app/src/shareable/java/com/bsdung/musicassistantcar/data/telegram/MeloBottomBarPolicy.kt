@@ -177,6 +177,17 @@ internal object MeloBottomBarPolicy {
     fun tabIconOnly(tabWidthDp: Int, fontScale: Float): Boolean =
         tabWidthDp < Math.round(TAB_LABEL_BASE_DP * fontScale.coerceAtLeast(1f))
 
+    /**
+     * UI-08: the widest label, measured in the font it is drawn in, is wider than its cell. The label is then
+     * dropped for the icon even where [tabIconOnly]'s width rule says it fits (font scale 2 in a 600 dp window).
+     * Only from [MEASURE_LABELS_FROM_FONT_SCALE]: below it the labels of Sony and S25 at x1.0 fill their cells
+     * almost exactly (checked in Beta106) and stay as they are.
+     */
+    fun labelOverflows(cellPx: Int, widestLabelPx: Float, fontScale: Float): Boolean =
+        fontScale >= MEASURE_LABELS_FROM_FONT_SCALE && cellPx > 0 && widestLabelPx > cellPx
+
+    const val MEASURE_LABELS_FROM_FONT_SCALE = 1.5f
+
     /** UI-02: a window shorter than this has no room for the bar and the keyboard together, so typing hides the bar. */
     const val KEYBOARD_HIDES_BAR_BELOW_DP = 900
 
