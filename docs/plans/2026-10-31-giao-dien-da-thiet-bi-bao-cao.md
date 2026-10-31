@@ -1,10 +1,10 @@
-Thực thi: Claude Code Sonnet 5.5, phiên chặng B (G3, 31/10/2026). Chặng A (G0–G2) cũng do Claude Code Sonnet 5.5; xem phần chặng B ở cuối file.
+Thực thi: Claude Code Sonnet 5.5, phiên chặng C (G4, 31/10/2026). Chặng A (G0–G2) và B (G3) cũng do Claude Code Sonnet 5.5; xem phần chặng B và chặng C ở cuối file.
 
 # Báo cáo thực thi — giao diện phù hợp mọi loại thiết bị
 
 TASK_ID: `2026-10-31-giao-dien-da-thiet-bi`. Nhánh `dot/2026-10-31-giao-dien-da-thiet-bi`; worktree `D:\Bots\_worktrees\MeloVault-giao-dien-da-thiet-bi`. Baseline `94ab6b0`. HEAD lúc nhận: `3cdcefd`.
 Kế hoạch: [`2026-10-31-giao-dien-da-thiet-bi.md`](2026-10-31-giao-dien-da-thiet-bi.md). Bàn giao: [`-ban-giao.md`](2026-10-31-giao-dien-da-thiet-bi-ban-giao.md). Khảo sát: [`-khao-sat.md`](2026-10-31-giao-dien-da-thiet-bi-khao-sat.md).
-Trạng thái: **chặng A xong; chặng B/C chưa làm. CHƯA phải bản nghiệm thu.** Không có APK mới (không build), nên chưa có hồ sơ APK / Drive.
+Trạng thái: **chặng A, B, C xong. CHỜ CHỦ DỰ ÁN NGHIỆM THU** (QA CANDIDATE — CHƯA NGHIỆM THU). APK Debug `20bdf95` đã build ở Tiny, cài lên Sony và chụp lại; **UI-03 chưa sửa được trên máy thật, UI-02 chỉ cải thiện một phần** (xem “Chặng C”). Hồ sơ APK/Drive: [`-apk-test.md`](2026-10-31-giao-dien-da-thiet-bi-apk-test.md).
 
 ## Tóm tắt các bước
 
@@ -137,3 +137,70 @@ UI-06 (bàn phím toàn màn ở cửa sổ ngang thấp): **không sửa**, đ�
 - UI-08 đo bằng bề rộng chữ in đậm; cấu hình biên (chữ 1,5 ở 411 dp) cần xem ảnh.
 - Âm thanh thật vẫn **CHƯA XÁC NHẬN ÂM THANH THỰC** (không liên quan chặng này).
 - Phần thêm ngoài lỗi: `scopeNote` rỗng nay ẩn thay vì chiếm một dòng (văn bản thật luôn khác rỗng nên không đổi hiển thị).
+
+## Chặng C — G4: Tiny build, cài Sony, chụp lại (31/10/2026 22:53–23:56, Claude Code Sonnet 5.5)
+
+Không sửa mã app. Nhận việc: cây sạch, HEAD `20bdf95`, `diff --check` sạch, không có agent khác. Ảnh private: `docs/plans/artifacts/2026-10-31-giao-dien-da-thiet-bi/G4/` (`shots/`, `shots2/`) và các ảnh tổng hợp `tong-hop-*.png`, `00_tong_hop.png` (đều bị `.gitignore`). Ảnh “trước” lấy từ `G2-…` / `G2B/`.
+
+### Build và cài APK
+
+| Bước | Kết quả |
+|---|---|
+| Bundle đầy đủ nhánh | `gdtb-chang-c-20bdf95-full.bundle` 13.411.291 byte, SHA-256 `7751DECE37D0BED72E3E50C03D83F1C2522C02F4D5533874609D55009D1D0C48`, `git bundle verify` ok; bản trên Tiny khớp SHA |
+| Clone Tiny | `C:\Bots\MeloVault-GDTB-IsolatedQA-20261031-20bdf95`, HEAD `20bdf9509464e4fc79f7129875bcc8c9e219564e`, cây sạch; `local.properties` chép từ clone DONUI trên Tiny (ngoại lệ E104 S11, không đọc/in) |
+| `reportTelegramConfig` | `telegram.config.valid=true` (bản `.open` = false, **không cài bản `.open`**) |
+| `:app:assembleShareableDebug` | `BUILD SUCCESSFUL` 2m42s |
+| Gate APK | `app.melovault.player` vc **121** / `0.6.96-beta`, debuggable, cert `eecd3df7…fce8`, 33.593.284 byte, SHA-256 `367CAA37…F1006`, git HEAD đúng, 0 dòng `status` |
+| Cài | `adb -s QV725WEQ54 install -r` (XQ-AS52 / Sony, versionCode không đổi, không hạ cấp, chữ ký trùng, nhạc đang dừng) → `Success` |
+
+Không build Release (không có trong kế hoạch G4); Release/test đã qua ở gate Ni chặng B.
+
+### Cấu hình đã chụp (ghi đúng mục 1 khảo sát)
+
+M3 dọc/ngang; M2 ngang (1080×2340/480); M1 dọc (720×1280/320); M5 dọc (1080×1298/250); M6 dọc/ngang (1080×1728/288); M7 ngang (1080×1728/216); M8 ngang (608×1080/90); F2 M3 dọc; F3 M3 dọc/ngang; F3 M6 dọc/ngang. Dùng lại script chặng A (`survey2.ps1` → bản `survey4.ps1`). Mỗi cấu hình khôi phục trong `finally` và kiểm lại; **cả 10 `POSTCHECK` đều ra Physical 1080×2520 / 420, font 1.0, xoay 0/1**; không lần nào ADB rớt. Giá trị gốc ghi trước: size 1080×2520, density 420, font 1.0, `user_rotation=0`, `accelerometer_rotation=1`. `SONY_SCREEN_END`: `Display State=OFF` lúc 23:15:18 (chuỗi) và lúc 23:53:25 (cuối phiên). Có 3 lần xoay phải đặt lại (`ROTATION MISMATCH`, script tự thử lại, ảnh vẫn đúng).
+
+### Bảng trước / sau theo lỗi
+
+Đọc ảnh bằng mắt trên ảnh tổng hợp; số dòng là ước lượng (±0,5 dòng). Ảnh “sau” có thêm khác biệt do app khởi động lại sau khi cài (mini-player ở thẻ “Nghe tiếp”, khung Đang phát trống “Chọn một bài để phát”): đây là trạng thái, không phải lỗi bố cục.
+
+| Mã | Cấu hình / màn | Trước | Sau | Kết luận | Ảnh tổng hợp |
+|---|---|---|---|---|---|
+| UI-01 | M2 ngang (333 dp) Thư viện | ≈ 0,5 dòng | ≈ 1,5 dòng | Cải thiện rõ, vẫn thấp | `tong-hop-UI-01-ngang` |
+| UI-01 | M3 ngang (381 dp) | ≈ 1,3 | ≈ 2 | Cải thiện | idem |
+| UI-01 | F3 M3 ngang | **0** | ≈ 1,5 | Hết “Chặn dùng” | idem |
+| UI-01 | F3 M6 ngang (486 dp) | ≈ 1 | ≈ 2 | Cải thiện | idem |
+| UI-01 | M1 dọc (537 dp) | ≈ 1 | ≈ 2,5 | Cải thiện rõ | `tong-hop-UI-01-02-doc` |
+| UI-01 | M5 dọc (699 dp) | ≈ 2 | ≈ 4 | Cải thiện rõ | idem |
+| UI-02 | M3 dọc, có bàn phím | ≈ 2,5 | ≈ 3 | Cải thiện nhẹ | idem |
+| UI-02 | M5 dọc | ≈ 0–1 | ≈ 1 | Cải thiện nhẹ | idem |
+| UI-02 | **M1 dọc** | 0 | **0** | **CHƯA HẾT** (vẫn không thấy kết quả) | idem |
+| UI-02 | **F3 M3 dọc** | 0 | ≈ 0,5 | **CHƯA HẾT** | idem |
+| UI-02 | **F3 M6 dọc** | 0 | ≈ 0,5 | **CHƯA HẾT** | `tong-hop-UI-02-F3M6` |
+| UI-03 | M3 dọc, Hàng đợi toàn màn | không lề ngang | **không lề ngang** (tiêu đề `x=0`, thẻ và nút “Thư viện” chạm mép; khoảng trên không đổi) | **CHƯA SỬA ĐƯỢC trên máy thật** | `tong-hop-UI-03-05` |
+| UI-04 | Hai khung M2, M3, M6, M7, M8 | cột Đang phát bắt đầu `x=0` | có lề trái, chữ/nút cách mép | Đã sửa | `tong-hop-UI-04` |
+| UI-05 | M3 dọc, Thư viện | dòng “Tạm dừng” lẻ đè mép trên list | không còn dòng lẻ, “Phạm vi…” cách list rõ | Đã sửa (ở trạng thái “Nghe tiếp”) | `tong-hop-UI-03-05` |
+| UI-05 | M3 dọc, Đang phát khi tạm dừng | “Tạm dừng” sát hàng chip | cách chip thêm ≈ 8 px | Cải thiện nhỏ, **chủ dự án xem** | idem |
+| UI-05 | M3 dọc, Nguồn | dòng “Tạm dừng” lẻ | không còn (nhưng trạng thái thẻ khác nên **chưa so cùng điều kiện**) | Chưa kết luận chặt | idem |
+| UI-07 | F2 M3 dọc | chip “Nguồn” cắt nửa | chip bọc xuống dòng, đủ chữ | Đã sửa | `tong-hop-UI-07-08` |
+| UI-07 | F3 M3 dọc: chip, ô tìm, “Phát ngẫu nhiên”, menu ⋮ | chip mất, “Phát ngẫu”, “Thêm vào Playli…” | chip bọc dòng, “Phát ngẫu nhiên” đủ, menu đủ 5 mục không cắt; ô tìm rút bằng dấu “…” (“Tìm trong thư…”) | Đã sửa; hint ô tìm vẫn rút gọn | idem |
+| UI-08 | F3 M6 dọc, tab dưới | “Thư”, “Telegra” cắt | chỉ còn biểu tượng, không còn nhãn cắt | Đã sửa | idem |
+| UI-06 | M3 ngang, ô tìm | bàn phím toàn màn | **còn nguyên** (ảnh `M3-ngang-4-tim`) | Đề xuất, không sửa theo quyết định | — |
+
+### Hồi quy
+
+- **M3 dọc/ngang** (Thư viện, menu ⋮, Nguồn, Cài đặt): không thấy cắt, chồng hay mất nút; ảnh `tong-hop-hoi-quy-M3`. Cài đặt của M1/M5/M6 dọc và F2/F3 dọc không chụp được lại vì sau khi cuộn, nút bánh răng không còn trong cây UI (script ghi `NOTFOUND cai-dat`); chỉ M3, M2, M6 ngang, M7, M8, F3 M3/M6 ngang có trang Cài đặt.
+- **M9 chia đôi (Gọn): KHÔNG chụp lại.** Mở Recents thấy thẻ của một phiên khác đang ở trạng thái phát (xem sự cố), nên không chia đôi để khỏi chạm bản/phiên khác. Gọn chỉ được kiểm bằng test JVM `MeloLayoutMatrixTest` 7/7 xanh ở chặng B. **Phần UI-01/UI-02 có thể làm Gọn xê dịch chưa được xác nhận bằng ảnh thật.**
+- **M8:** lần này script chụp đủ ≈ 8 ảnh (có cả Nguồn, Cài đặt) nhưng tôi chỉ xem ảnh Thư viện cho UI-04; các ảnh còn lại của M8 chưa được rà, không dùng làm kết luận.
+
+### Sự cố cần chủ dự án biết (Sony)
+
+1. **Nhạc bị phát nhầm ≈ 30 giây khi màn tắt.** Để mở Đang phát/Hàng đợi (UI-03, UI-05) tôi buộc phải chạm “Nghe tiếp” để bài #140 đang dừng tiếp tục, rồi tạm dừng ngay (kế hoạch cấm phát bài mới; đây là cùng bài, như một lần chạm ở chặng A). Sau đó tôi đóng màn Đang phát bằng một lần chạm ở tọa độ cố định (105,142) khi màn đã cuộn xuống, nút “Đảo” rơi vào vị trí đó. Hậu quả quan sát được lúc 23:51 (màn tắt): phiên `app.melovault.player` ở `state=3` (đang phát). Tôi tạm dừng ngay bằng `keyevent 127`. **Bài hiện tại không còn là #140 mà là “#3 Up With Wuan C” (1:00:38), dừng ở 01:51; hàng đợi 200 bài, thứ tự giống lúc trước.** Chưa chắc chắn nguyên nhân chính xác (nghi: lần chạm “Đảo” hoặc phím BACK từ màn Hàng đợi). Không khôi phục được vị trí gốc (#140 ở 02:50, trước đó 01:30) mà không phát thêm nhạc; chủ dự án chọn lại bài #140 nếu muốn.
+2. **Hàng đợi đổi.** Chặng A ghi Hàng đợi 1 bài; sau khi cài lại APK và tiếp tục phát, app tự dựng hàng đợi 200 bài quanh bài #140 (xem ảnh “Hàng đợi SAU”). Đây là hành vi app khi tiếp tục phát từ thư viện, không phải do tôi chọn bài; vẫn ghi là thay đổi trạng thái.
+3. Không đăng xuất, không uninstall/`pm clear`, không máy bay, không đổi tài khoản. Không thao tác trong bản `.open`.
+
+### Việc còn lại / rework đề xuất (chủ dự án giao, không tự sửa)
+
+- **UI-03:** sửa chưa có hiệu lực (JVM test chỉ chứng minh hàm padding). Cần xem lại vì sao `setPadding` trong listener insets không tới màn Hàng đợi toàn màn (vị trí view/containter khác?).
+- **UI-02:** cửa sổ thấp có bàn phím (M1 dọc, F3 M3/M6 dọc) vẫn không thấy kết quả; cần thu nhỏ/cuộn phần đầu hoặc mini-player khi ô tìm đang nhập.
+- **UI-01:** M2 ngang (333 dp) còn ≈ 1,5 dòng; chấp nhận hay muốn thêm.
+- **Chưa kiểm:** Gọn M9 bằng ảnh; Đang phát/Hàng đợi ở M1/M2/M5–M8; hộp thoại mời Car Mode; âm thanh thật (**CHƯA XÁC NHẬN ÂM THANH THỰC**); tablet/máy gập thật (chỉ mô phỏng trên Sony).

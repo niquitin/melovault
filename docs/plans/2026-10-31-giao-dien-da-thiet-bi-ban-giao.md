@@ -164,3 +164,35 @@ Lưu ý riêng:
 
 Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Gửi ảnh tổng hợp và link Drive đã kiểm. Dòng cuối: "Đã dừng. Mở phiên mới để nghiệm thu sơ bộ nhanh." kèm prompt sơ bộ.
 ```
+
+## Checkpoint chặng C — 31/10/2026 23:56, Claude Code Sonnet 5.5
+
+- **Chặng C (G4) xong.** Chi tiết: [`-bao-cao.md`](2026-10-31-giao-dien-da-thiet-bi-bao-cao.md) mục “Chặng C”; APK/Drive: [`-apk-test.md`](2026-10-31-giao-dien-da-thiet-bi-apk-test.md); ảnh: [`-hinh-nghiem-thu.md`](2026-10-31-giao-dien-da-thiet-bi-hinh-nghiem-thu.md); trạng thái: [`-nghiem-thu.md`](2026-10-31-giao-dien-da-thiet-bi-nghiem-thu.md).
+- Build Tiny từ bundle (SHA `7751DECE…0D55`), HEAD `20bdf95`; gate package/vc121/cert/Telegram config đạt; APK `367CAA37…F1006` đã `install -r` lên Sony. QA CANDIDATE — CHƯA NGHIỆM THU. Drive owner-only: thư mục `1MojVY6lBo18qEcd6L1nXmU_KkBT_lEWY` (link trong `-apk-test.md`).
+- Kết quả theo ảnh Sony: **đã sửa** UI-04, UI-05 (Thư viện), UI-07, UI-08; **cải thiện** UI-01 (M2 ngang vẫn chỉ ≈ 1,5 dòng); **cải thiện một phần** UI-02 (M1 dọc, F3 M3/M6 dọc vẫn gần 0 dòng kết quả); **UI-03 CHƯA SỬA ĐƯỢC trên máy thật** (Hàng đợi toàn màn vẫn không lề ngang); UI-06 còn nguyên (không sửa theo quyết định).
+- **Sự cố Sony cần chủ dự án biết:** để mở Đang phát/Hàng đợi phải tiếp tục bài #140 đang dừng; sau đó nhạc phát ≈ 30 giây lúc màn tắt (nghi một lần chạm lệch, đã tạm dừng ngay). Bài hiện tại giờ là “#3 Up With Wuan C” ở 01:51, hàng đợi 200 bài. Chủ dự án chọn lại #140 nếu muốn. Không khôi phục chính xác được.
+- Sony đã khôi phục (size/density/font/xoay đúng gốc, kiểm 10 lần `POSTCHECK` và cuối phiên), `SONY_SCREEN_END`: `Display State=OFF` 23:53:25. Không uninstall/`pm clear`/đăng xuất/máy bay; không thao tác bản `.open`.
+- **Không chụp lại** M9 chia đôi (Gọn): Recents thấy thẻ phiên khác đang ở trạng thái phát nên dừng, chỉ có JVM 7/7 xanh từ chặng B.
+- Việc chủ dự án quyết: ĐẠT / yêu cầu sửa (REWORK đề xuất: UI-03, UI-02, có thể UI-01 M2). Không merge/push/public, không ghi PASS.
+- Trạng thái: **CHẶNG C XONG — CHỜ NGHIỆM THU SƠ BỘ (phiên mới), rồi chủ dự án nghiệm thu chính thức.**
+
+## Prompt phiên nghiệm thu sơ bộ (dán nguyên văn)
+
+```text
+MELOVAULT — NGHIỆM THU SƠ BỘ NHANH (KHÔNG SỬA MÃ)
+
+Repo/worktree: D:\Bots\_worktrees\MeloVault-giao-dien-da-thiet-bi (KHÔNG làm trong thư mục chính)
+TASK_ID: 2026-10-31-giao-dien-da-thiet-bi
+Nhánh: dot/2026-10-31-giao-dien-da-thiet-bi
+Bàn giao: docs/plans/2026-10-31-giao-dien-da-thiet-bi-ban-giao.md; HEAD dự kiến: <HEAD_THAT>
+Baseline: 94ab6b0. Commit mã cuối: 75375b4 (UI-01 fd9720f, UI-02 577e094, UI-03 6b3a507, UI-07 5b971a6, UI-04 e685813, UI-05 b1ca641, UI-08 75375b4).
+APK QA CANDIDATE: Debug vc121, SHA-256 367CAA3738171D4163CAC04844F9E9F4FB2D0BC3C142CDA631F889C2929F1006, cert eecd3df7…fce8, đã cài trên Sony QV725WEQ54 (Tiny). Drive owner-only: xem docs/plans/2026-10-31-giao-dien-da-thiet-bi-apk-test.md.
+
+Làm theo PROMPT_NGHIEM_THU_SO_BO.md, nhanh và có giới hạn; không sửa code, không build mới, không ghi PASS chính thức:
+1. Đọc CLAUDE.md mục 0, mục cập nhật đầu HANDOFF.md, QUY_TRINH_3_VAI_TRO.md, ban-giao, kế hoạch (mục 5 G4), báo cáo mục “Chặng C”, apk-test, hinh-nghiem-thu. git status/branch/HEAD/diff --check; cây bẩn lạ hoặc HEAD lạ → STOP.
+2. Kiểm: (a) `git log --oneline 94ab6b0..HEAD` + `git diff --stat` + đọc kỹ các file rủi ro (MeloQueuePane.kt, TelegramPreviewActivity.kt insets UI-03, hàm ẩn/co phần đầu Thư viện UI-01/UI-02) và MeloUiDaThietBiTest; (b) APK trên Sony đúng SHA/cert/vc121 (`adb -s QV725WEQ54`, kéo base.apk tính SHA, không cài lại); (c) nếu cần, chụp vài ảnh Sony đối chiếu với các ảnh tổng hợp ở docs/plans/artifacts/2026-10-31-giao-dien-da-thiet-bi/ (ưu tiên UI-03 Hàng đợi M3 dọc và UI-02 M1/F3 M3 có bàn phím); (d) kiểm link Drive (thư mục + APK owner-only).
+3. Kiểm đặc biệt: UI-03 trong báo cáo ghi CHƯA SỬA ĐƯỢC trên máy thật — xác nhận bằng ảnh và chỉ ra nguyên nhân khả dĩ trong mã (vị trí view/insets), KHÔNG sửa. Nhắc bài đang phát trên Sony là “#3 Up With Wuan C” (sự cố ghi trong báo cáo); không phát/đổi hàng đợi, màn OFF cuối phiên (keyevent 223, kiểm Display State=OFF, ghi SONY_SCREEN_END), nếu đổi wm size/density/font thì khôi phục ngay trong finally.
+4. Ghi docs/plans/2026-10-31-giao-dien-da-thiet-bi-nghiem-thu-so-bo.md: `SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN` / `SƠ BỘ: CẦN SỬA` / `SƠ BỘ: BLOCKED` kèm phạm vi, lỗi có vị trí/bước tái hiện, giới hạn; cập nhật ban-giao; commit tài liệu trên nhánh. Không merge/push/public.
+
+Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Dòng cuối: "Đã dừng, chờ chủ dự án nghiệm thu." kèm `ĐẠT 2026-10-31-giao-dien-da-thiet-bi — <commit/APK>` hoặc `Yêu cầu sửa 2026-10-31-giao-dien-da-thiet-bi: <lỗi>`.
+```
