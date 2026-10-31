@@ -74,4 +74,74 @@ class TelegramApiCredentialPolicyTest {
         assertFalse(user.toString().contains(hash))
         assertFalse(user.toString().contains("42"))
     }
+
+    // 2026-10-30 D6: resolve(..., preferStored) for the open build's "saved code wins" rule.
+    @Test fun preferStoredWinsOverEmbedded() {
+        assertEquals(user, TelegramApiCredentialPolicy.resolve(123, hash, user, preferStored = true))
+    }
+    @Test fun preferStoredFallsBackToEmbeddedWhenNoStored() {
+        assertEquals(
+            TelegramApiCredentialPolicy.Credentials(123, hash, TelegramApiCredentialPolicy.Source.EMBEDDED),
+            TelegramApiCredentialPolicy.resolve(123, hash, null, preferStored = true)
+        )
+    }
+    @Test fun preferStoredFallsBackToEmbeddedWhenStoredInvalid() {
+        assertEquals(
+            TelegramApiCredentialPolicy.Credentials(123, hash, TelegramApiCredentialPolicy.Source.EMBEDDED),
+            TelegramApiCredentialPolicy.resolve(123, hash, user.copy(apiId = 0), preferStored = true)
+        )
+    }
+    @Test fun preferStoredNullWhenNothingValid() {
+        assertNull(TelegramApiCredentialPolicy.resolve(0, "", null, preferStored = true))
+    }
+    @Test fun preferStoredFalseByDefaultKeepsEmbeddedWins() {
+        assertEquals(
+            TelegramApiCredentialPolicy.Credentials(123, hash, TelegramApiCredentialPolicy.Source.EMBEDDED),
+            TelegramApiCredentialPolicy.resolve(123, hash, user)
+        )
+    }
+
+    // 2026-10-30 D7/D2: rejectionAction's three branches, each against the three known error codes.
+    private val knownApiErrors = listOf("400 API_ID_INVALID", "API_HASH_INVALID", "API_ID_PUBLISHED_FLOOD")
+
+    @Test fun rejectionActionUserSourceAlwaysReenterUser() {
+        for (message in knownApiErrors) {
+            assertEquals(
+                message, TelegramApiCredentialPolicy.RejectAction.REENTER_USER,
+                TelegramApiCredentialPolicy.rejectionAction(TelegramApiCredentialPolicy.Source.USER, openBuild = true, message)
+            )
+            assertEquals(
+                message, TelegramApiCredentialPolicy.RejectAction.REENTER_USER,
+                TelegramApiCredentialPolicy.rejectionAction(TelegramApiCredentialPolicy.Source.USER, openBuild = false, message)
+            )
+        }
+    }
+    @Test fun rejectionActionEmbeddedOpenBuildOffersOwnApi() {
+        for (message in knownApiErrors) {
+            assertEquals(
+                message, TelegramApiCredentialPolicy.RejectAction.OFFER_OWN_API,
+                TelegramApiCredentialPolicy.rejectionAction(TelegramApiCredentialPolicy.Source.EMBEDDED, openBuild = true, message)
+            )
+        }
+    }
+    @Test fun rejectionActionEmbeddedPrivateBuildReturnsNone() {
+        for (message in knownApiErrors) {
+            assertEquals(
+                message, TelegramApiCredentialPolicy.RejectAction.NONE,
+                TelegramApiCredentialPolicy.rejectionAction(TelegramApiCredentialPolicy.Source.EMBEDDED, openBuild = false, message)
+            )
+        }
+    }
+    @Test fun rejectionActionUnmatchedMessageReturnsNone() {
+        assertEquals(
+            TelegramApiCredentialPolicy.RejectAction.NONE,
+            TelegramApiCredentialPolicy.rejectionAction(TelegramApiCredentialPolicy.Source.USER, openBuild = true, "PHONE_NUMBER_INVALID")
+        )
+    }
+    @Test fun rejectionActionNullSourceAndMessageReturnsNone() {
+        assertEquals(
+            TelegramApiCredentialPolicy.RejectAction.NONE,
+            TelegramApiCredentialPolicy.rejectionAction(null, openBuild = true, null)
+        )
+    }
 }

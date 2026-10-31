@@ -1,4 +1,10 @@
 # HANDOFF — MeloVault (Shareable Preview)
+## 30/10/2026 — E106 đăng nhập chỉ bằng số điện thoại (bản open), chặng A xong
+
+- TASK_ID `2026-10-30-dang-nhap-chi-so-dien-thoai`, nhánh `dot/2026-10-30-dang-nhap-chi-so-dien-thoai`, worktree `D:\Bots\_worktrees\MeloVault-dang-nhap-chi-so-dien-thoai`. Mục tiêu: bản open `app.melovault.player.open` nhúng API ID/hash riêng cho bản công khai (khác bản riêng), vào thẳng màn nhập số, D6–D10 theo [kế hoạch](docs/plans/2026-10-30-dang-nhap-chi-so-dien-thoai.md).
+- **Chặng A (S0–S4, code+test Ni) XONG** — Claude Code claude-sonnet-5, commit `ee709f1`/`800117a`/`152fe51`. Gate S4: test Debug/Release 2310/21/0/0 mỗi biến thể, assemble thường/open/Personal đều xanh, `git diff --check` sạch. Chi tiết: [báo cáo](docs/plans/2026-10-30-dang-nhap-chi-so-dien-thoai-bao-cao.md), [bàn giao](docs/plans/2026-10-30-dang-nhap-chi-so-dien-thoai-ban-giao.md).
+- **Chặng B (S5–S7) BLOCKED chờ chủ dự án**: cần tự đăng ký app mới trên my.telegram.org và điền `telegram.open.api.id/hash` vào `local.properties` trên Tiny trước khi build/QA thiết bị. Đã kiểm kỹ thuật trên Tiny (bundle+clone cô lập `MeloVault-dang-nhap-IsolatedQA-20261030-a2f0a88`, giữ lại để tái dùng): `-PmeloOpen=true reportTelegramConfig` → `telegram.open.config.valid=false`, xác nhận cặp khóa trên chưa có/chưa đúng — không đọc giá trị. Chưa build/cài APK nào ra ngoài Ni; chưa merge/push.
+
 ## Cập nhật quy trình 29/10/2026 — bàn giao bằng Markdown
 
 - Quyết định chủ dự án: Codex hoặc Claude lập kế hoạch chi tiết → phiên mới với model tiết kiệm hơn thực thi/code/build APK → phiên mới kiểm sơ bộ nhanh → chủ dự án nghiệm thu chính thức, chi tiết. Được chủ động dùng Sony an toàn trong cả ba vai agent; các gate dữ liệu/cài APK/màn hình vẫn giữ.
