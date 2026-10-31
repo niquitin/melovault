@@ -3,12 +3,14 @@
 TASK_ID: **2026-10-30-dang-nhap-chi-so-dien-thoai**.
 Worktree `D:\Bots\_worktrees\MeloVault-dang-nhap-chi-so-dien-thoai`; nhánh `dot/2026-10-30-dang-nhap-chi-so-dien-thoai`.
 
-## Checkpoint chặng B — 31/10/2026, Claude Code claude-sonnet-5 — S5 ĐÃ XONG, gate config PASS, chờ S6.6-S6.7+S7
+## Checkpoint chặng B — 31/10/2026, Claude Code claude-sonnet-5 — S5+S6 XONG (PASS), chờ S7
 
-- **Trạng thái: S5 xong (ngoại lệ một lần, chủ dự án tự yêu cầu qua chat — xem chi tiết và lý do ở [`-bao-cao.md`](2026-10-30-dang-nhap-chi-so-dien-thoai-bao-cao.md) mục "Tái kiểm chặng B — 31/10/2026").** Chủ dự án đăng ký app Telegram thứ hai, riêng biệt, gửi `api_id`/`api_hash` qua chat; agent ghi trực tiếp vào `local.properties` trên Tiny, không đọc lại/in giá trị.
-- Trên clone cô lập `C:\Bots\MeloVault-dang-nhap-IsolatedQA-20261030-a2f0a88` (HEAD vẫn `a2f0a8837917380475b375e24d99187ec119fde3`, không đổi): `-PmeloOpen=true reportTelegramConfig` → `telegram.open.config.valid=true`, `telegram.open.distinct=true`, `BUILD SUCCESSFUL`.
-- **Chưa làm: S6.6 (build APK thường Debug + open Debug/Release), S6.7 (verify hash/aapt/apksigner), S7 (QA thiết bị + hồ sơ).** Phiên tiếp theo dùng lại đúng clone trên (local.properties đã có cặp open hợp lệ, không cần copy lại nếu Ni không có commit mới hơn `a2f0a88`).
-- Không merge/push, không ghi PASS. Không ADB/thiết bị trong phiên này.
+- **S5 xong** (ngoại lệ một lần, chủ dự án tự yêu cầu qua chat — chi tiết/lý do ở [`-bao-cao.md`](2026-10-30-dang-nhap-chi-so-dien-thoai-bao-cao.md) mục "Tái kiểm chặng B — 31/10/2026"). Chủ dự án đăng ký app Telegram thứ hai, riêng biệt, gửi `api_id`/`api_hash` qua chat; agent ghi trực tiếp vào `local.properties` trên Tiny, không đọc lại/in giá trị.
+- **S6 xong — PASS.** Trên clone cô lập `C:\Bots\MeloVault-dang-nhap-IsolatedQA-20261030-a2f0a88` (HEAD vẫn `a2f0a8837917380475b375e24d99187ec119fde3`, không đổi): build bản thường Debug + bản open Debug/Release đều `BUILD SUCCESSFUL`; `verifyOpenApkHasNoTelegramHash`/`verifyOpenApkHasOpenTelegramHash` đúng kỳ vọng cho cả hai APK open, đối chứng APK thường `found=true`; `aapt2` package/vc121/versionName đúng (`0.6.96-beta` / `0.6.96-open`); `apksigner` cert cả 3 APK đều `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8` (khớp chữ ký debug Tiny đã biết). Chi tiết SHA-256/bytes từng APK ở [`-bao-cao.md`](2026-10-30-dang-nhap-chi-so-dien-thoai-bao-cao.md) mục "S6.7 — Verify APK (Tiny)".
+  - Sự cố phụ: lần build đầu `BUILD FAILED` do BOM UTF-8 lẫn vào `local.properties` (do script sửa cặp open ở bước trước) làm mất khoá `sdk.dir`; đã sửa (ghi lại không BOM), build lại thành công. Không ảnh hưởng tới giá trị `telegram.open.*`.
+- Ba APK candidate (**QA CANDIDATE — CHƯA NGHIỆM THU**, chưa cài máy, chưa upload Drive) tại Tiny: `C:\Bots\MeloVault-dang-nhap-IsolatedQA-20261030-a2f0a88\_qa_artifacts\normal\app-shareable-debug.apk`, `...\open\app-shareable-debug.apk`, `...\open\app-shareable-release.apk`.
+- **Chưa làm: S7** (QA thiết bị Shanling/Sony theo mục 5 kế hoạch, hồ sơ `-apk-test.md`/`-hinh-nghiem-thu.md`/`00_tong_hop.png`, upload Drive owner-only). Đây là bước đụng thiết bị thật — đang hỏi lại chủ dự án trước khi làm, theo đúng giới hạn ADB/an toàn của CLAUDE.md.
+- Không merge/push, không ghi PASS chính thức.
 
 ## Checkpoint chặng B — 30/10/2026, Claude Code claude-sonnet-5 — BLOCKED tại S5/S6 (lịch sử, đã qua)
 

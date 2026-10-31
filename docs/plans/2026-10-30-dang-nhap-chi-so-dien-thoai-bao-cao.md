@@ -165,11 +165,30 @@ Không có thao tác ADB/thiết bị nào trong phiên này.
 - **Kết luận: cổng S5 + bước kiểm config đầu của S6 đã PASS.** Chưa build APK (S6.6), chưa verify hash/aapt/apksigner (S6.7), chưa S7 QA thiết bị — các bước này CHƯA làm trong phiên này, cần xác nhận với chủ dự án trước khi tiếp tục (xem "Chưa kiểm chứng"/"Rủi ro" bên dưới).
 - Giá trị thật của `api_id`/`api_hash` (cả hai lần thử) **không được ghi vào bất kỳ file hồ sơ nào** trong repo; chỉ tồn tại trong lịch sử chat của chủ dự án và trong `local.properties` (đã `.gitignore`) trên Tiny/Ni.
 
-## Chưa kiểm chứng (cập nhật 31/10)
+## S6.6 — Build APK trên Tiny (clone cô lập, HEAD `a2f0a88`)
 
-- S6.6 (build APK thường Debug + bản open Debug/Release trong clone cô lập) — chưa chạy.
-- S6.7 (verify `verifyOpenApkHasNoTelegramHash`/`verifyOpenApkHasOpenTelegramHash`, `aapt` package/versionCode/versionName, `apksigner` cert) — chưa chạy vì chưa có APK.
-- S7 (QA thiết bị Q1–Q6, ADB Shanling/Sony, màn hình, ảnh/video, hồ sơ APK) — chưa thực hiện.
+- **Sự cố BOM phát hiện giữa chừng:** lần build `assembleShareableDebug` (thường) đầu tiên **BUILD FAILED** — `SDK location not found... local.properties`. Nguyên nhân: script PowerShell dùng để sửa cặp open ở bước trước ghi `local.properties` bằng `Set-Content -Encoding UTF8`, vô tình thêm **BOM UTF-8** ở đầu file, làm khoá `sdk.dir` (dòng đầu) không còn được AGP nhận diện đúng tên. Đã sửa bằng cách đọc lại nội dung và ghi lại bằng `UTF8Encoding($false)` (không BOM) trên `C:\Bots\MeloVault-E99-IsolatedQA\local.properties`, copy lại vào clone, chạy lại `reportTelegramConfig` xác nhận `telegram.open.config.valid=true`/`telegram.open.distinct=true` không đổi, rồi build lại — thành công. Không có giá trị bí mật nào bị in ra trong lúc chẩn đoán BOM (chỉ đọc 3 byte đầu file để kiểm EF BB BF).
+- `:app:assembleShareableDebug` (bản thường, không cờ): `BUILD SUCCESSFUL in 2m 44s`, 41 tasks executed. Log: `_qa_artifacts\normal\build.log` (chỉ trên Tiny, không copy giá trị bí mật).
+- `-PmeloOpen=true :app:assembleShareableDebug :app:assembleShareableRelease :app:reportOpenBuild :app:reportTelegramConfig`: `BUILD SUCCESSFUL in 4m 12s`, 97 tasks (70 executed/27 up-to-date). `melo.open=true`, `telegram.config.valid=false` (bình thường, cờ open bật), `telegram.open.config.valid=true`, `telegram.open.distinct=true`. Log: `_qa_artifacts\open\build.log`.
+- APK sao chép ra khỏi `app/build/outputs/apk/...` (tránh bị ghi đè bởi lượt build sau) vào `C:\Bots\MeloVault-dang-nhap-IsolatedQA-20261030-a2f0a88\_qa_artifacts\{normal,open}\`.
+
+## S6.7 — Verify APK (Tiny)
+
+| APK | `verifyOpenApkHasNoTelegramHash` | `verifyOpenApkHasOpenTelegramHash` | package | vc / versionName | apksigner cert SHA-256 | APK SHA-256 | Bytes |
+|---|---|---|---|---|---|---|---:|
+| Thường Debug | `found=true` (đối chứng cơ chế dò hoạt động đúng — **đây là FAIL có chủ đích của task, không phải lỗi**) | — (không chạy, không áp dụng cho bản thường) | `app.melovault.player` | 121 / `0.6.96-beta` | `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8` | `6E3D6B6E98DE9974D399EEA850EC691DF1AB2324172EC3990FBA483E6869A029` | 33.593.284 |
+| Open Debug | `found=false` | `found=true` | `app.melovault.player.open` | 121 / `0.6.96-open` | `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8` | `A241C32363B40BC77E3D7D1509B0E80D2483E262EB1FA2A151E0E0D39C26B0D9` | 33.593.288 |
+| Open Release | `found=false` | `found=true` | `app.melovault.player.open` | 121 / `0.6.96-open` | `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8` | `0CA06484EC53A2F4118C22E17E1936790B52DCB984D792F7911133F17CDFA705` | 30.785.910 |
+
+- Cả ba APK dùng đúng chữ ký debug Tiny đã biết (`eecd3df7…fce8`, khớp các APK Beta trước đó) — không phải chữ ký lạ/mới.
+- `-PopenApk=...` phải là **đường dẫn tuyệt đối** (ví dụ `C:/Bots/.../app-shareable-debug.apk`); đường dẫn tương đối bị `project.file()` của module `:app` hiểu lệch gốc (resolve vào `app/` thay vì gốc project) → lần thử đầu `BUILD FAILED` với thông báo chung "Unable to verify APK Telegram hash contents." (không lộ gì, nhưng dễ hiểu lầm là lỗi hash — đã xác minh lại bằng đường dẫn tuyệt đối).
+- Gate S6 (toàn bộ) **PASS**. Ba APK candidate hiện có tại `C:\Bots\MeloVault-dang-nhap-IsolatedQA-20261030-a2f0a88\_qa_artifacts\{normal,open}\` trên Tiny — **QA CANDIDATE — CHƯA NGHIỆM THU**, chưa cài lên thiết bị nào, chưa upload Drive.
+
+## Chưa kiểm chứng (cập nhật 31/10, sau S6)
+
+- S7 (QA thiết bị Q1–Q6, ADB Shanling/Sony, màn hình, ảnh/video) — chưa thực hiện, cần hỏi lại chủ dự án trước khi đụng thiết bị thật.
+- `-apk-test.md`, `-hinh-nghiem-thu.md`, `00_tong_hop.png`, upload Drive owner-only — chưa làm.
+- Âm thanh thật, luồng đăng nhập thật (nhập số/mã/2FA) trên thiết bị — chưa thử, theo đúng giới hạn "agent không tự gõ số/mã/mật khẩu cấp 2".
 
 Đã dừng, bàn giao phiên thực thi tiếp theo.
 
