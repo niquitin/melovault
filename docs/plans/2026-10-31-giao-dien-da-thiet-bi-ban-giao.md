@@ -204,3 +204,8 @@ Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Dòng c
 - UI-03 nguyên nhân khả dĩ: dialog `showMeloQueue()` (`TelegramPreviewActivity.kt:4183`) không `setDecorFitsSystemWindows(false)` nên listener insets trên `pane.view` có thể không chạy; chi tiết trong biên bản.
 - Sony: không đánh thức, không chạm, không phát/đổi hàng đợi; nhạc tạm dừng ≈ 01:51; `SONY_SCREEN_END`: `Display State=OFF`.
 - Trạng thái: **CHỜ CHỦ DỰ ÁN NGHIỆM THU** (ĐẠT hoặc giao REWORK SB-1/SB-2 ở phiên thực thi mới). Không merge/push/public, không ghi PASS.
+
+## Checkpoint nghiệm thu chính thức — 01/11/2026
+
+- Chủ dự án xác nhận `ĐẠT 2026-10-31-giao-dien-da-thiet-bi — 8664915/367CAA37`. Đã ghi PASS vào [`-nghiem-thu.md`](2026-10-31-giao-dien-da-thiet-bi-nghiem-thu.md) kèm giới hạn còn lại (SB-1 UI-03, SB-2 UI-02, âm thanh thực chưa xác nhận).
+- Chưa merge/push/public (chờ chỉ thị riêng). Không tự chọn nhiệm vụ kế.
