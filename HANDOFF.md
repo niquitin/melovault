@@ -1,4 +1,12 @@
 # HANDOFF — MeloVault (Shareable Preview)
+## Cập nhật dữ kiện 31/10/2026 — Shanling M3 Ultra đã bán, chỉ còn Sony QA
+
+- Chủ dự án báo trực tiếp trong chat: **đã bán Shanling M3 Ultra** (serial `30313860180939`, thiết bị chính của Ni trong các hồ sơ cũ). Từ nay QA thiết bị thật phía Ni/Tiny **chỉ còn Sony Xperia 5 II** (serial `QV725WEQ54`, qua Tiny).
+- Đã cập nhật [CLAUDE.md mục 3](CLAUDE.md) (và các dòng liên quan ở mục 0/6/7) để không còn hướng dẫn agent dùng/tìm Shanling; các đoạn nhắc Shanling còn lại được đánh dấu rõ là lịch sử.
+- **Chưa cập nhật** (ngoài phạm vi nhiệm vụ nhỏ này, cần việc riêng nếu chủ dự án muốn): `docs/workflow/SCREEN_LIFECYCLE_QA.md`, `docs/workflow/QUY_TRINH_3_VAI_TRO.md`, `PROMPT_OPUS.md`, `PROMPT_SONNET.md`, `PROMPT_NGHIEM_THU_SO_BO.md`, `AGENTS.md` — các file này vẫn còn nhắc tới Shanling/serial cũ.
+- Chủ dự án cũng nêu định hướng chung cho các việc UI/UX sau này: cố gắng làm giao diện/bố cục phù hợp mọi loại thiết bị (không phải sửa đổi cụ thể nào ngay).
+- Hồ sơ: [kế hoạch/báo cáo/bàn giao](docs/plans/2026-10-31-shanling-da-ban-cap-nhat-quy-trinh-ban-giao.md). Nhánh `dot/2026-10-31-shanling-da-ban-cap-nhat-quy-trinh`, worktree `D:\Bots\_worktrees\MeloVault-shanling-da-ban-cap-nhat-quy-trinh`, baseline `1d9443c`. Chưa merge/push.
+
 ## Cập nhật quy trình 29/10/2026 — bàn giao bằng Markdown
 
 - Quyết định chủ dự án: Codex hoặc Claude lập kế hoạch chi tiết → phiên mới với model tiết kiệm hơn thực thi/code/build APK → phiên mới kiểm sơ bộ nhanh → chủ dự án nghiệm thu chính thức, chi tiết. Được chủ động dùng Sony an toàn trong cả ba vai agent; các gate dữ liệu/cài APK/màn hình vẫn giữ.
