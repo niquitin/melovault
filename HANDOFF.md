@@ -2,8 +2,8 @@
 ## Cập nhật dữ kiện 31/10/2026 — Shanling M3 Ultra đã bán, chỉ còn Sony QA
 
 - Chủ dự án báo trực tiếp trong chat: **đã bán Shanling M3 Ultra** (serial `30313860180939`, thiết bị chính của Ni trong các hồ sơ cũ). Từ nay QA thiết bị thật phía Ni/Tiny **chỉ còn Sony Xperia 5 II** (serial `QV725WEQ54`, qua Tiny).
-- Đã cập nhật [CLAUDE.md mục 3](CLAUDE.md) (và các dòng liên quan ở mục 0/6/7) để không còn hướng dẫn agent dùng/tìm Shanling; các đoạn nhắc Shanling còn lại được đánh dấu rõ là lịch sử.
-- **Chưa cập nhật** (ngoài phạm vi nhiệm vụ nhỏ này, cần việc riêng nếu chủ dự án muốn): `docs/workflow/SCREEN_LIFECYCLE_QA.md`, `docs/workflow/QUY_TRINH_3_VAI_TRO.md`, `PROMPT_OPUS.md`, `PROMPT_SONNET.md`, `PROMPT_NGHIEM_THU_SO_BO.md`, `AGENTS.md` — các file này vẫn còn nhắc tới Shanling/serial cũ.
+- Đã cập nhật [CLAUDE.md mục 3](CLAUDE.md) (và các dòng liên quan ở mục 0/6/7), `AGENTS.md`, `docs/workflow/QUY_TRINH_3_VAI_TRO.md`, `docs/workflow/SCREEN_LIFECYCLE_QA.md`, `docs/workflow/PROMPT_OPUS.md`, `docs/workflow/PROMPT_SONNET.md`, `docs/workflow/PROMPT_NGHIEM_THU_SO_BO.md` — không còn dòng nào hướng dẫn agent dùng/tìm Shanling như đang hoạt động; các đoạn nhắc Shanling còn lại (ở các file trên) được đánh dấu rõ là lịch sử.
+- **Cố ý không đụng:** `docs/ui-spec.md` (Shanling ở đó là thông số màn hình/layout "Gọn" cho lớp kích thước máy nhỏ, không phải chỉ định thiết bị QA — vẫn đúng dù máy vật lý đã bán) và các mục lịch sử trong HANDOFF.md phía dưới (không sửa kết luận/nghiệm thu cũ theo đúng CLAUDE.md).
 - Chủ dự án cũng nêu định hướng chung cho các việc UI/UX sau này: cố gắng làm giao diện/bố cục phù hợp mọi loại thiết bị (không phải sửa đổi cụ thể nào ngay).
 - Hồ sơ: [kế hoạch/báo cáo/bàn giao](docs/plans/2026-10-31-shanling-da-ban-cap-nhat-quy-trinh-ban-giao.md). Nhánh `dot/2026-10-31-shanling-da-ban-cap-nhat-quy-trinh`, worktree `D:\Bots\_worktrees\MeloVault-shanling-da-ban-cap-nhat-quy-trinh`, baseline `1d9443c`. Chưa merge/push.
 

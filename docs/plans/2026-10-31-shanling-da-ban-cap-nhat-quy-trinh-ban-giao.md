@@ -11,17 +11,13 @@ Sửa CLAUDE.md/HANDOFF.md để không còn hướng dẫn agent dùng "Shanlin
 
 - `CLAUDE.md`: mục 0 (dòng nhắc "không dùng Sony thay chứng cứ Shanling"), mục 3 (toàn bộ đoạn mô tả Shanling là thiết bị chính — thay bằng thông báo đã bán + Sony là thiết bị QA thật duy nhất Ni/Tiny, giữ đoạn lịch sử có đánh dấu rõ), mục 6 (dòng "Thiết bị ADB đã xác minh 19/10"), mục 7 (tiêu đề + nội dung chính sách màn hình — bỏ M3 Ultra, giữ `SONY_SCREEN_END`, ghi chú `SHANLING_SCREEN_END` không còn áp dụng).
 - `HANDOFF.md`: thêm mục cập nhật đầu tiên (trên cả mục 29/10) nêu rõ sự kiện, trỏ tới CLAUDE.md mục 3 và hồ sơ này.
-- Đối chiếu bằng `grep -n "Shanling\|30313860180939" CLAUDE.md` sau khi sửa — chỉ còn các dòng tự nhận là lịch sử/đã retired, không còn dòng nào hướng dẫn agent thao tác với Shanling như đang hoạt động.
+- **Chủ dự án yêu cầu "làm luôn cho gọn gàng"** → dọn tiếp cùng nhánh/phiên: `AGENTS.md` (dòng 33), `docs/workflow/QUY_TRINH_3_VAI_TRO.md` (mục 4), `docs/workflow/SCREEN_LIFECYCLE_QA.md` (mở đầu + danh sách thiết bị + `SHANLING_SCREEN_END`), `docs/workflow/PROMPT_OPUS.md` (bước 4), `docs/workflow/PROMPT_SONNET.md` (bước 3 + đoạn màn hình), `docs/workflow/PROMPT_NGHIEM_THU_SO_BO.md` (bước 3) — cùng kiểu sửa: bỏ hướng dẫn "dùng/so với Shanling" như đang hoạt động, nêu rõ Sony là thiết bị QA thật duy nhất, giữ các chỗ còn nhắc Shanling dưới dạng lịch sử có đánh dấu.
+- Đối chiếu bằng `grep -rn "Shanling\|30313860180939" --include="*.md" .` trên toàn repo (trừ `docs/history/`, `docs/plans/`) sau khi sửa — chỉ còn `docs/ui-spec.md` (cố ý không đụng, xem dưới) và các mục lịch sử trong `HANDOFF.md` (cũng cố ý không đụng).
 
-## Chưa làm (ngoài phạm vi được giao — chỉ "CLAUDE.md/HANDOFF.md")
+## Cố ý không đụng (khác với "chưa làm")
 
-Các file sau vẫn còn nhắc Shanling/serial `30313860180939` như đang hoạt động, **chưa sửa trong nhiệm vụ này**:
-- `docs/workflow/SCREEN_LIFECYCLE_QA.md`
-- `docs/workflow/QUY_TRINH_3_VAI_TRO.md`
-- `docs/workflow/PROMPT_OPUS.md`, `PROMPT_SONNET.md`, `PROMPT_NGHIEM_THU_SO_BO.md`
-- `AGENTS.md`
-
-Nếu chủ dự án muốn dọn tiếp, cần giao riêng (có thể cùng nhánh này, tiếp tục phiên, hoặc nhiệm vụ mới).
+- `docs/ui-spec.md`: Shanling ở đây là **thông số màn hình/layout** cho lớp kích thước "máy nhỏ" (768×1280, chế độ "Gọn") — một đặc tả thiết kế UI, không phải chỉ định thiết bị QA đang hoạt động. Vẫn đúng/còn ý nghĩa dù máy vật lý cụ thể đã bán (ứng dụng vẫn có chế độ "Gọn" cho lớp màn hình đó). Sửa file này là việc khác (cập nhật UI spec), ngoài phạm vi nhiệm vụ dọn quy trình QA.
+- Các mục lịch sử trong `HANDOFF.md` (vd. "Shanling đang cài vc117", các dòng "Giới hạn còn mở... Shanling") — đây là **kết luận/trạng thái lịch sử tại thời điểm nghiệm thu các task cũ**, CLAUDE.md cấm sửa lại kết luận lịch sử. Không đụng.
 
 ## Rủi ro / điểm dừng
 
