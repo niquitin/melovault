@@ -6471,22 +6471,24 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val themed = ContextThemeWrapper(this, R.style.Theme_MeloVault_Dialog)
         val popup = PopupMenu(themed, anchor)
         val isFav = song.messageId in favoriteIds
+        val manyVersions = versions?.takeIf { it.entries.size > 1 }
+        // UI-07: at a large system font the popup cuts long labels, so the short wording is used there.
+        val labels = MeloLibraryPolicy.songMenuLabels(resources.configuration.fontScale, isFav, manyVersions?.entries?.size)
         if (song.placeholder) {
             // Not in this device's library yet: all that can be done is take it off the Playlist.
-            popup.menu.add(0, 3, 1, "★ Xóa khỏi Playlist")
+            popup.menu.add(0, 3, 1, MeloLibraryPolicy.songMenuLabels(resources.configuration.fontScale, true, null).favorite)
             popup.setOnMenuItemClickListener { toggleFavoriteSong(song); true }
             popup.show()
             return
         }
-        val manyVersions = versions?.takeIf { it.entries.size > 1 }
-        popup.menu.add(0, 1, 1, "▶ Phát bài này")
-        if (manyVersions != null) popup.menu.add(0, 6, 1, "☰ Chọn bản khác (${manyVersions.entries.size} bản)")
-        popup.menu.add(0, 2, 2, "⏭ Phát tiếp theo")
-        popup.menu.add(0, 3, 3, if (isFav) "★ Xóa khỏi Playlist" else "☆ Thêm vào Playlist")
+        popup.menu.add(0, 1, 1, labels.play)
+        if (labels.versions != null) popup.menu.add(0, 6, 1, labels.versions)
+        popup.menu.add(0, 2, 2, labels.playNext)
+        popup.menu.add(0, 3, 3, labels.favorite)
         if (!isDownloaded) {
-            popup.menu.add(0, 4, 4, "⬇ Tải về và phát")
+            popup.menu.add(0, 4, 4, labels.download)
         }
-        popup.menu.add(0, 5, 5, "ℹ Thông tin chi tiết")
+        popup.menu.add(0, 5, 5, labels.details)
 
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {

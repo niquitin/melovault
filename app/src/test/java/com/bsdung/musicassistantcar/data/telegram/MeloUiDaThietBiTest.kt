@@ -66,4 +66,73 @@ class MeloUiDaThietBiTest {
     fun ui03_keyboardWinsOverTheNavigationBarAtTheBottom() {
         assertEquals(900, MeloQueueUiPolicy.fullScreenPadding(0, 90, 0, 120, 900, 40, 8)[3])
     }
+
+    // ---- UI-07: chips wrap, the hint loses whole words, the song menu has short labels --------------
+
+    @Test
+    fun ui07_flowRowStaysOneLineWhenEverythingFits() {
+        // Four chips of 100 + 8 margin each in a 440 px row: the last margin does not have to fit.
+        val place = MeloFlowRow.place(intArrayOf(108, 108, 108, 108), intArrayOf(48, 48, 48, 48), intArrayOf(8, 8, 8, 8), 424, 4)
+        assertEquals(listOf(0, 0, 0, 0), place.ys.toList())
+        assertEquals(listOf(0, 108, 216, 324), place.xs.toList())
+        assertEquals(48, place.height)
+    }
+
+    @Test
+    fun ui07_flowRowMovesTheChipThatDoesNotFitToTheNextLine() {
+        val place = MeloFlowRow.place(intArrayOf(108, 108, 108, 108), intArrayOf(48, 48, 48, 48), intArrayOf(8, 8, 8, 8), 300, 4)
+        assertEquals(listOf(0, 0, 52, 52), place.ys.toList())
+        assertEquals(listOf(0, 108, 0, 108), place.xs.toList())
+        assertEquals(100, place.height)
+    }
+
+    @Test
+    fun ui07_flowRowLineHeightIsTheTallestChipAndEmptyRowIsFlat() {
+        val place = MeloFlowRow.place(intArrayOf(200, 200), intArrayOf(48, 72), intArrayOf(0, 0), 300, 4)
+        assertEquals(48 + 4 + 72, place.height)
+        assertEquals(0, MeloFlowRow.place(IntArray(0), IntArray(0), IntArray(0), 300, 4).height)
+    }
+
+    @Test
+    fun ui07_flowRowKeepsAChipWiderThanTheRowOnItsOwnLine() {
+        val place = MeloFlowRow.place(intArrayOf(500, 100), intArrayOf(48, 48), intArrayOf(0, 0), 300, 4)
+        assertEquals(listOf(0, 0), place.xs.toList())
+        assertEquals(listOf(0, 52), place.ys.toList())
+    }
+
+    private val perChar: (String) -> Float = { it.length * 10f }
+
+    @Test
+    fun ui07_hintThatFitsIsUntouched() {
+        assertEquals("Tìm bài hát…", MeloLibraryPolicy.fitHint("Tìm bài hát…", 120f, perChar))
+        assertEquals("Tìm bài hát…", MeloLibraryPolicy.fitHint("Tìm bài hát…", 0f, perChar))
+    }
+
+    @Test
+    fun ui07_longHintLosesWholeWordsFromTheEnd() {
+        val full = "Tìm trong thư viện đã tải…"
+        assertEquals("Tìm trong thư viện đã…", MeloLibraryPolicy.fitHint(full, 220f, perChar))
+        assertEquals("Tìm trong thư viện…", MeloLibraryPolicy.fitHint(full, 190f, perChar))
+        assertEquals("Tìm trong…", MeloLibraryPolicy.fitHint(full, 100f, perChar))
+        // Not even the first word fits: left to the field's own ellipsis.
+        assertEquals(full, MeloLibraryPolicy.fitHint(full, 20f, perChar))
+    }
+
+    @Test
+    fun ui07_songMenuKeepsFullWordingUpToFontScale1_3() {
+        val labels = MeloLibraryPolicy.songMenuLabels(1.3f, favorite = false, versions = 3)
+        assertEquals("☆ Thêm vào Playlist", labels.favorite)
+        assertEquals("☰ Chọn bản khác (3 bản)", labels.versions)
+        assertEquals("ℹ Thông tin chi tiết", labels.details)
+        assertEquals(null, MeloLibraryPolicy.songMenuLabels(1.0f, false, null).versions)
+    }
+
+    @Test
+    fun ui07_songMenuUsesShortWordingFromFontScale1_5() {
+        val labels = MeloLibraryPolicy.songMenuLabels(1.5f, favorite = false, versions = 3)
+        assertEquals("☆ Lưu Playlist", labels.favorite)
+        assertEquals("☰ Bản khác (3)", labels.versions)
+        assertEquals("ℹ Chi tiết", labels.details)
+        assertEquals("★ Bỏ Playlist", MeloLibraryPolicy.songMenuLabels(2.0f, favorite = true, versions = null).favorite)
+    }
 }

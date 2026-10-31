@@ -151,6 +151,7 @@ internal class MeloLibraryPane(
             }
         }
         searchHolder.addView(searchBar)
+        searchField.addOnLayoutChangeListener { _, l, _, r, _, ol, _, or_, _ -> if (r - l != or_ - ol) searchField.post { fitSearchHint() } }
         view.addView(searchHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         genreHolder.visibility = View.GONE
         view.addView(genreHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
@@ -410,7 +411,8 @@ internal class MeloLibraryPane(
             snap.browseScope, snap.sourceTitle, snap.browseLoadState,
             if (snap.showingSources) snap.sources.count { it.chatId != 0L } else snap.rows.size, snap.query
         )
-        searchField.hint = presentation.hint
+        fullHint = presentation.hint
+        fitSearchHint()
         scopeNote.text = presentation.scopeLabel
         statusText.text = presentation.message.orEmpty()
         retry.visibility = if (presentation.retry) View.VISIBLE else View.GONE
@@ -516,6 +518,16 @@ internal class MeloLibraryPane(
             }
         }
         applyTrim()
+    }
+
+    // ---- UI-07: the search hint loses whole words, not half a word, when the field is narrow ---------
+
+    private var fullHint = ""
+
+    private fun fitSearchHint() {
+        val available = (searchField.width - searchField.paddingLeft - searchField.paddingRight).toFloat()
+        val fitted = MeloLibraryPolicy.fitHint(fullHint, available) { searchField.paint.measureText(it) }
+        if (searchField.hint?.toString() != fitted) searchField.hint = fitted
     }
 
     // ---- UI-01: a short window keeps the song list, the optional parts above it give way ------------
@@ -753,7 +765,8 @@ internal class MeloLibraryPane(
             isHorizontalScrollBarEnabled = false
             addView(LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; build() })
         }
-        chipHolder.addView(strip {
+        // UI-07: the four tabs move to a second line at a large font instead of being cut at the edge.
+        chipHolder.addView(MeloFlowRow(context, s.gap / 2).apply {
             tabs.forEach { tab ->
                 addView(c.chip(if (tab.kind == MeloLibraryPolicy.TabKind.ALL) "Thư viện" else tab.label,
                     tab.selected) { onThemeTab(tab.kind) })
@@ -1038,10 +1051,7 @@ internal class MeloLibraryPane(
         val all = snap.sources.firstOrNull { it.chatId == 0L }
         val (channels, emptyChannels) = MeloLibraryPolicy.splitSources(snap.sources)
         sourcesBox.addView(heroCard(all?.count ?: snap.total))
-        val tools = LinearLayout(context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(0, s.gap, 0, s.gap)
-        }
+        val tools = MeloFlowRow(context, s.gap / 2).apply { setPadding(0, s.gap, 0, s.gap) }
         tools.addView(c.chip(if (host.hideZeroSources()) "Hiện kênh 0 bài" else "Ẩn kênh 0 bài", host.hideZeroSources()) {
             host.toggleHideZeroSources()
         })
@@ -1110,7 +1120,7 @@ internal class MeloLibraryPane(
             downloaded?.let { "${MeloComponentPolicy.formatCount(it)} đã tải" }
         ).joinToString(" · ")
         if (detail.isNotEmpty()) addView(c.text(detail, s.secondaryText, p.textSecondary).apply { setPadding(0, s.gap / 2, 0, s.gap) })
-        val buttons = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        val buttons = MeloFlowRow(context, s.gap / 2)
         buttons.addView(c.chip("Mở tất cả", false) { host.openBrowseScope(MeloLibraryPolicy.tabScope(MeloLibraryPolicy.TabKind.ALL)) })
         buttons.addView(c.chip("⇄ Phát ngẫu nhiên", true) {
             host.openBrowseScope(MeloLibraryPolicy.tabScope(MeloLibraryPolicy.TabKind.ALL))
