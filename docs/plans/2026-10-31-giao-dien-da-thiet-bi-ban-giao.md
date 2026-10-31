@@ -126,3 +126,41 @@ Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Dòng c
 - Thiết bị đã khôi phục (không Override, font 1.0, xoay 0/1); `SONY_SCREEN_END=OFF` 22:09:10. Hai lần `finally` bị ADB cắt, đã khôi phục thủ công ngay (chi tiết khảo sát mục 5). Vị trí phát bài #140 bị kéo từ 00:46 lên 02:48 (luôn tạm dừng).
 - Prompt chặng B ở mục trên đã cập nhật (UI-07, UI-08, quyền Sony). HEAD chặng B: commit cuối nhánh (xem tin nhắn bàn giao).
 - Trạng thái: **CHẶNG A XONG (gồm khảo sát bổ sung) — chờ chủ dự án xem bảng lỗi, giao chặng B.** Không merge/push/public, không ghi PASS.
+
+## Checkpoint chặng B — 31/10/2026, Claude Code Sonnet 5.5
+
+- **Chặng B (G3) xong.** Chi tiết, bảng commit và gate: [`-bao-cao.md`](2026-10-31-giao-dien-da-thiet-bi-bao-cao.md) mục "Chặng B".
+- Chủ dự án đã quyết (chat 31/10): sửa UI-01…UI-05, UI-07, UI-08 theo GD4; **UI-06 không sửa**.
+- Commit mã (cũ → mới): UI-01 `fd9720f`, UI-02 `577e094`, UI-03 `6b3a507`, UI-07 `5b971a6`, UI-04 `e685813`, UI-05 `b1ca641`, UI-08 `75375b4` (commit mã cuối). Sau đó chỉ có commit hồ sơ chặng B.
+- Gate Ni: test Debug/Release **2336 tests / 21 skipped / 0 failures / 0 errors** mỗi biến thể (2317 + 19 ca mới `MeloUiDaThietBiTest`); `MeloLayoutMatrixTest` 7/7 xanh; assemble thường Debug+Release, `-PmeloOpen=true` Debug, Personal Debug đều `BUILD SUCCESSFUL`; `git diff --check` sạch. Log: `docs/plans/artifacts/2026-10-31-giao-dien-da-thiet-bi/G3-20261031-223609/` (private).
+- **Chưa làm:** build Tiny, cài APK, chụp lại trên Sony, hồ sơ APK/ảnh/Drive (đều là chặng C). Không dùng Sony, không đổi `wm size`/`density`/`font_scale` ở chặng B (Sony vẫn ở trạng thái đã khôi phục cuối chặng A).
+- Điểm cần xem ảnh ở chặng C: M1 dọc và M2 ngang (UI-01 còn bao nhiêu dòng), F3 M3 dọc/ngang (UI-01, 02, 07), F3 M6 dọc (UI-08), M3 dọc Hàng đợi (UI-03), mọi cỡ Hai khung (UI-04), Thư viện/Nguồn/Đang phát khi có "Tạm dừng" (UI-05), hồi quy M3 dọc/ngang và M9 chia đôi (Gọn).
+- Không merge/push/public, không ghi PASS. Trạng thái: **CHẶNG B XONG — chờ giao chặng C.**
+
+## Prompt phiên thực thi — chặng C (dán nguyên văn)
+
+```text
+MELOVAULT — PHIÊN THỰC THI ĐÚNG KẾ HOẠCH
+
+Repo/worktree: D:\Bots\_worktrees\MeloVault-giao-dien-da-thiet-bi (repo chuẩn D:\Bots\MeloVault-E91-Shareable; KHÔNG làm trong thư mục chính)
+TASK_ID: 2026-10-31-giao-dien-da-thiet-bi
+Nhánh: dot/2026-10-31-giao-dien-da-thiet-bi
+Kế hoạch đã chốt: docs/plans/2026-10-31-giao-dien-da-thiet-bi.md (mục 5, G4)
+Bàn giao: docs/plans/2026-10-31-giao-dien-da-thiet-bi-ban-giao.md; HEAD dự kiến: <HEAD_THAT>
+Baseline: 94ab6b0. Commit mã cuối chặng B: 75375b4 (UI-01 fd9720f, UI-02 577e094, UI-03 6b3a507, UI-07 5b971a6, UI-04 e685813, UI-05 b1ca641, UI-08 75375b4).
+PHIÊN: 3 = chặng C, bước G4 (Tiny build + QA Sony chụp lại + hồ sơ APK/ảnh)
+Lưu ý riêng:
+- Không sửa mã app. Lỗi mới phát hiện hoặc lỗi chưa hết thì ghi vào báo cáo cho chủ dự án (REWORK do chủ dự án giao), không tự sửa.
+- Bundle SHA-256 → clone cô lập trên Tiny → local.properties theo ngoại lệ E104 S11 → reportTelegramConfig=true → build Debug thường; gate package app.melovault.player / versionCode 121 / cert eecd3df7…fce8; đúng commit HEAD. KHÔNG cài bản .open, KHÔNG downgrade, không adb uninstall/pm clear.
+- Sony QV725WEQ54: chủ dự án đã cho phép đổi tạm wm size/density/font_scale và xoay (xem bàn giao). Dùng lại ĐÚNG cấu hình ở khảo sát mục 1 (Sony không nhận wm size rộng hơn ≈ 1096 px: giữ rộng ≤ 1080 và hạ density: M4 1080x2340/400, M5 1080x1298/250, M6 1080x1728/288, M7 1080x1728/216; M1 720x1280/320, M2 1080x2340/480; M8 608x1080/90 xoay ngang). Ghi giá trị gốc trước (size 1080x2520 không Override, density 420, font_scale 1.0, user_rotation 0, accelerometer_rotation 1); MỖI cấu hình khôi phục ngay trong finally; cuối phiên kiểm lại và keyevent 223, Display State=OFF; ghi SONY_SCREEN_END. Kiểm lại sau mỗi lần ADB chớp rớt.
+- Chụp lại ĐÚNG cấu hình và màn của từng lỗi đã sửa (trước = ảnh G2/G2B, sau = ảnh mới) + hồi quy M3 dọc/ngang và M9 chia đôi (Gọn). Ưu tiên: UI-01 (M2 ngang, M3 ngang, F3 M3 ngang, F3 M6 ngang, M1 dọc, M5 dọc), UI-02 (M3, M1, M5, F3 M3, F3 M6 có bàn phím), UI-03 (M3 dọc Hàng đợi), UI-04 (Hai khung M2/M3/M6/M7/M8), UI-05 (Thư viện, Nguồn, Đang phát khi tạm dừng), UI-07 (F2, F3 M3 dọc: tab, ô tìm, "Phát ngẫu nhiên", menu ⋮), UI-08 (F3 M6 dọc). UI-06 không sửa: chỉ ghi lại nó còn nguyên.
+- Không phát bài mới, không đổi hàng đợi; vuốt chỉ trong vùng cuộn (tránh thanh tua, vị trí bài #140 đã bị kéo ở chặng A). Không đăng xuất/máy bay/uninstall/clear.
+- Ảnh private ở docs/plans/artifacts/2026-10-31-giao-dien-da-thiet-bi/ (không commit), mỗi nhóm một ảnh tổng hợp ≤ 1600 px và 00_tong_hop.png; bảng trước/sau trong báo cáo. Hồ sơ: -bao-cao.md, -apk-test.md, -hinh-nghiem-thu.md. Drive Ni N owner-only (CLAUDE.md mục 8–9), ghi QA CANDIDATE — CHƯA NGHIỆM THU; không public.
+- Cuối phiên: prompt nghiệm thu sơ bộ cho phiên mới.
+
+1. Đọc CLAUDE.md mục 0, mục cập nhật đầu HANDOFF.md, docs/workflow/QUY_TRINH_3_VAI_TRO.md, docs/workflow/SCREEN_LIFECYCLE_QA.md, file bàn giao, kế hoạch, báo cáo, khảo sát. Kiểm git status, branch, HEAD, diff --check, agent/thiết bị đang dùng. Cây bẩn không rõ nguồn hoặc HEAD lạ → STOP.
+2. G4 theo mục 5 kế hoạch. Sau mỗi bước cập nhật báo cáo (mở đầu "Thực thi: <Claude Code/Codex> <model>, phiên chặng C") và file bàn giao.
+3. Commit hồ sơ trên dot/2026-10-31-giao-dien-da-thiet-bi. Không merge/push/public, không ghi PASS, không chọn việc khác.
+
+Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Gửi ảnh tổng hợp và link Drive đã kiểm. Dòng cuối: "Đã dừng. Mở phiên mới để nghiệm thu sơ bộ nhanh." kèm prompt sơ bộ.
+```

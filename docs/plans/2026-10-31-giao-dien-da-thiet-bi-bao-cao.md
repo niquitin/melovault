@@ -1,4 +1,4 @@
-Thực thi: Claude Code Sonnet 5.5, phiên chặng A (G0–G2).
+Thực thi: Claude Code Sonnet 5.5, phiên chặng B (G3, 31/10/2026). Chặng A (G0–G2) cũng do Claude Code Sonnet 5.5; xem phần chặng B ở cuối file.
 
 # Báo cáo thực thi — giao diện phù hợp mọi loại thiết bị
 
@@ -98,3 +98,42 @@ Danh sách lỗi đầy đủ và quan sát nằm ở file khảo sát.
   - vị trí phát bài #140 bị kéo từ 00:46 lên 02:48 do vuốt trúng thanh tua (luôn tạm dừng, không đổi bài/hàng đợi).
 - **Trạng thái cuối:** không có Override cỡ/mật độ, `font_scale` 1.0, `user_rotation` 0, `accelerometer_rotation` 1; `SONY_SCREEN_END=OFF` lúc 2026-10-31 22:09:10.
 - **Chưa làm:** không có APK mới, không `assemble`, không đụng mã app (chỉ thêm test G1). Chưa có chủ dự án duyệt bảng lỗi.
+
+## Chặng B — G3 sửa lỗi UI (31/10/2026, Claude Code Sonnet 5.5)
+
+Căn cứ: chủ dự án quyết trong chat 31/10/2026: "Chặng B sửa UI-01…UI-05, UI-07, UI-08 theo GD4; UI-06 không sửa." Nhận việc: cây sạch, HEAD `bdfab43`, `diff --check` sạch, không có agent khác. Không dùng Sony, không build Tiny, không cài APK; không sửa `MeloScreenPolicy` hay ngưỡng. Mỗi lỗi một commit trên `dot/2026-10-31-giao-dien-da-thiet-bi`. Test mới nằm ở `MeloUiDaThietBiTest` (19 ca).
+
+| Lỗi | Commit | Sửa gì (file chính) | Test JVM |
+|---|---|---|---|
+| UI-01 | `fd9720f` | Thư viện hết chỗ thì tự ẩn **phần phụ** theo thứ tự: dòng "Phạm vi" → ghi chú → thẻ nguồn → hàng chip thể loại, cho tới khi danh sách còn ≥ 3 dòng (`MeloLibraryPolicy.partsToTrim`, `MeloLibraryPane.applyTrim`). Không bao giờ ẩn hàng tab, ô tìm, hàng "Tất cả · … bài / Phát hết". Quyết định dựa trên cỡ **tự nhiên** của các phần nên không nhấp nháy; khi tiêu đề chủ cuộn gọn lại, phần đã ẩn giữ nguyên | 4 ca |
+| UI-02 | `577e094` | Cửa sổ cao < 900 dp: khi bàn phím mở, thanh đáy (mini-player + tab) ẩn, đóng bàn phím thì hiện lại (`MeloBottomBarPolicy.hiddenForKeyboard`, `MeloPhoneScreen.onKeyboardChanged`, móc từ `installLayerInsets`) | 2 ca |
+| UI-03 | `6b3a507` | Hàng đợi toàn màn: thêm lề ngang `screenMargin` và khoảng cách trên `gap` (`MeloQueueUiPolicy.fullScreenPadding`, `showMeloQueue`) | 2 ca |
+| UI-07 | `5b971a6` | Chữ lớn: hàng tab, nút "Phát ngẫu nhiên/Mở tất cả", "Ẩn kênh 0 bài/Quét lại" xuống dòng thay vì bị cắt (`MeloFlowRow`); gợi ý ô tìm bỏ từng từ cuối cho vừa (`fitHint`); menu ⋮ dòng bài dùng nhãn ngắn từ chữ ≥ 1,5 (`songMenuLabels`) | 8 ca |
+| UI-04 | `e685813` | Hai khung: cột Đang phát có lề trái `screenMargin` như cột danh sách (`MeloTabletScreen`) | không (hằng số lề, không có điều kiện để tách) |
+| UI-05 | `b1ca641` | Dòng trạng thái ("Tạm dừng", "Đang kiểm tra…") cách danh sách/thẻ "Kho tổng hợp" một `gap` đầy đủ, và cách hàng chip kỹ thuật ở Đang phát một `gap` (`MeloLibraryPane`, `MeloStudioDeck`) | không (hằng số lề) |
+| UI-08 | `75375b4` | Nhãn tab dưới đo bằng font thật; từ chữ ≥ 1,5 nhãn rộng hơn ô thì chỉ còn biểu tượng (`MeloBottomBarPolicy.labelOverflows`). Chữ < 1,5 giữ nguyên luật cũ để không đổi nhãn trên Sony/S25 | 3 ca |
+
+UI-06 (bàn phím toàn màn ở cửa sổ ngang thấp): **không sửa**, đúng quyết định (Đề xuất, ngoài GD4).
+
+### Gate Ni (một lần, log ở `docs/plans/artifacts/2026-10-31-giao-dien-da-thiet-bi/G3-20261031-223609/`, bị `.gitignore`)
+
+| Lệnh | Kết quả |
+|---|---|
+| `:app:testShareableDebugUnitTest :app:testShareableReleaseUnitTest` | `BUILD SUCCESSFUL` 1m54s. Cộng XML: Debug **2336** tests / **21** skipped / **0** failures / **0** errors (181 suites); Release **2336 / 21 / 0 / 0** (181 suites) |
+| `:app:assembleShareableDebug :app:assembleShareableRelease` | `BUILD SUCCESSFUL` 1m58s |
+| `-PmeloOpen=true :app:assembleShareableDebug` | `BUILD SUCCESSFUL` 36s |
+| `:app:assemblePersonalDebug` | `BUILD SUCCESSFUL` 36s |
+| `git diff --check` | sạch (exit 0) |
+
+- 2336 = 2317 (cuối chặng A) + 19 ca mới. `MeloLayoutMatrixTest` 7/7 vẫn xanh (không đụng `MeloScreenPolicy`).
+- Chưa có APK đóng gói cho QA (không build Tiny, cấu hình Telegram không có ở Ni); các APK Ni vừa build chỉ để kiểm biên dịch, **không** dùng để cài/bàn giao.
+
+### Chưa kiểm chứng / giới hạn
+
+- **Chưa có ảnh thiết bị sau sửa** (không cài APK ở chặng này). Chặng C chụp lại đúng các cấu hình ở khảo sát mục 1; JVM test chỉ chứng minh các quy tắc tính toán, không chứng minh bố cục thật.
+- UI-01: chỉ ẩn các phần **trong Thư viện**. Tiêu đề chủ của màn Điện thoại dọc (MeloVault / dòng đồng bộ) vẫn chỉ gọn khi cuộn, nên M1 dọc (537 dp) dự kiến còn ≈ 2 dòng, M2 ngang (333 dp) ≈ 1,5–2 dòng; cần chụp để xác nhận. Hàng tab trong Hai khung cố ý giữ vì là đường vào Nguồn/Playlist.
+- UI-02: chỉ màn Điện thoại/Tablet dọc (nơi khảo sát thấy lỗi). Hai khung ngang vẫn bị bàn phím toàn màn (UI-06, không sửa).
+- UI-07: hàng chip thể loại vẫn là dải cuộn ngang (cố ý, vì đây là bộ lọc cuộn được); menu ⋮ dòng bài là `PopupMenu` hệ thống nên sửa bằng nhãn ngắn chứ không đổi thành menu mới.
+- UI-08 đo bằng bề rộng chữ in đậm; cấu hình biên (chữ 1,5 ở 411 dp) cần xem ảnh.
+- Âm thanh thật vẫn **CHƯA XÁC NHẬN ÂM THANH THỰC** (không liên quan chặng này).
+- Phần thêm ngoài lỗi: `scopeNote` rỗng nay ẩn thay vì chiếm một dòng (văn bản thật luôn khác rỗng nên không đổi hiển thị).
