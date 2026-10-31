@@ -3,7 +3,14 @@
 TASK_ID: **2026-10-30-dang-nhap-chi-so-dien-thoai**.
 Worktree `D:\Bots\_worktrees\MeloVault-dang-nhap-chi-so-dien-thoai`; nhánh `dot/2026-10-30-dang-nhap-chi-so-dien-thoai`.
 
-## Checkpoint chặng B — 30/10/2026, Claude Code claude-sonnet-5 — BLOCKED tại S5/S6
+## Checkpoint chặng B — 31/10/2026, Claude Code claude-sonnet-5 — S5 ĐÃ XONG, gate config PASS, chờ S6.6-S6.7+S7
+
+- **Trạng thái: S5 xong (ngoại lệ một lần, chủ dự án tự yêu cầu qua chat — xem chi tiết và lý do ở [`-bao-cao.md`](2026-10-30-dang-nhap-chi-so-dien-thoai-bao-cao.md) mục "Tái kiểm chặng B — 31/10/2026").** Chủ dự án đăng ký app Telegram thứ hai, riêng biệt, gửi `api_id`/`api_hash` qua chat; agent ghi trực tiếp vào `local.properties` trên Tiny, không đọc lại/in giá trị.
+- Trên clone cô lập `C:\Bots\MeloVault-dang-nhap-IsolatedQA-20261030-a2f0a88` (HEAD vẫn `a2f0a8837917380475b375e24d99187ec119fde3`, không đổi): `-PmeloOpen=true reportTelegramConfig` → `telegram.open.config.valid=true`, `telegram.open.distinct=true`, `BUILD SUCCESSFUL`.
+- **Chưa làm: S6.6 (build APK thường Debug + open Debug/Release), S6.7 (verify hash/aapt/apksigner), S7 (QA thiết bị + hồ sơ).** Phiên tiếp theo dùng lại đúng clone trên (local.properties đã có cặp open hợp lệ, không cần copy lại nếu Ni không có commit mới hơn `a2f0a88`).
+- Không merge/push, không ghi PASS. Không ADB/thiết bị trong phiên này.
+
+## Checkpoint chặng B — 30/10/2026, Claude Code claude-sonnet-5 — BLOCKED tại S5/S6 (lịch sử, đã qua)
 
 - **Tái kiểm 23:07 (+07) cùng ngày:** chạy lại đúng 2 lệnh `reportTelegramConfig` sau khi copy lại `local.properties` — **kết quả không đổi**, `telegram.open.config.valid=false`. Vẫn BLOCKED. Chi tiết: [`-bao-cao.md`](2026-10-30-dang-nhap-chi-so-dien-thoai-bao-cao.md) mục "Tái kiểm".
 - **Trạng thái: BLOCKED.** S5 (cổng chủ dự án) chưa xong theo kiểm tra kỹ thuật thực tế: trên Tiny, trong clone cô lập mới, `-PmeloOpen=true :app:reportTelegramConfig` → `telegram.open.config.valid=false` (cặp `telegram.open.api.id`/`telegram.open.api.hash` trong `C:\Bots\MeloVault-E99-IsolatedQA\local.properties` chưa có hoặc chưa đúng định dạng — **không đọc giá trị để biết chắc**, đúng luật cấm). Không build APK nào. Không có APK mới để bàn giao.

@@ -155,6 +155,22 @@ Không có thao tác ADB/thiết bị nào trong phiên này.
 - Không có rủi ro kỹ thuật mới. Điểm dừng đúng theo kế hoạch mục 7 ("report false hoặc distinct false... → BLOCKED").
 - Clone cô lập đã tạo trên Tiny (`MeloVault-dang-nhap-IsolatedQA-20261030-a2f0a88`) có thể tái sử dụng cho lần chạy S6 tiếp theo sau khi chủ dự án hoàn tất S5, miễn HEAD Ni không đổi; nếu Ni có commit mới, phiên sau nên dựng clone mới theo đúng quy trình (không ghi đè clone cũ).
 
+## Tái kiểm chặng B — 31/10/2026, Claude Code claude-sonnet-5 — S5 ĐÃ XONG, gate config PASS
+
+- **Ngoại lệ quy trình một lần, do chính chủ dự án yêu cầu trực tiếp trong hội thoại** (lý do nêu: đang đi công tác, không ngồi trước Tiny): chủ dự án tự đăng ký app Telegram mới trên my.telegram.org (ảnh màn hình "Create new application" gửi trong chat) rồi gửi cặp `api_id`/`api_hash` mới qua chat; agent được chủ dự án cho phép ghi trực tiếp vào `local.properties` trên Tiny thay vì chủ dự án tự làm. Đây KHÔNG phải agent tự đổi luật cấm đọc/in ở mục 4 CLAUDE.md — agent đã từ chối lần đầu, giải thích rủi ro, chủ dự án xác nhận lại 2 lần rồi mới thực hiện.
+- **Lần thử 1 (giá trị đầu chủ dự án gửi): bị chặn đúng thiết kế.** Ghi vào `local.properties`, `-PmeloOpen=true reportTelegramConfig` báo lỗi cấu hình `telegram.open.* must differ from telegram.api.*` — cặp vừa gửi trùng với cặp private đã có sẵn (chủ dự án dùng lại cùng tài khoản my.telegram.org). Không build gì. Đã báo chủ dự án, hướng dẫn đăng ký app thứ hai bằng tài khoản/số khác.
+- **Lần thử 2 (app thứ hai, tài khoản khác):** chủ dự án gửi cặp mới; agent dùng script PowerShell qua Desktop Commander để thay đúng 2 dòng `telegram.open.api.id` / `telegram.open.api.hash` trong `C:\Bots\MeloVault-E99-IsolatedQA\local.properties`, **không đọc lại/in giá trị ở bất kỳ bước nào sau khi ghi** (chỉ dùng kết quả boolean của Gradle). Copy file sang clone cô lập `C:\Bots\MeloVault-dang-nhap-IsolatedQA-20261030-a2f0a88` (HEAD vẫn `a2f0a8837917380475b375e24d99187ec119fde3`, không đổi so với lần kiểm trước — clone tái dùng đúng theo ghi chú cũ).
+  - `reportTelegramConfig` (không cờ): `telegram.config.valid=true`, `telegram.open.config.valid=false` (bình thường, vì cờ `meloOpen` chưa bật), `telegram.open.distinct=true`.
+  - `-PmeloOpen=true reportTelegramConfig`: `telegram.config.valid=false` (bình thường), **`telegram.open.config.valid=true`**, **`telegram.open.distinct=true`**. `BUILD SUCCESSFUL`.
+- **Kết luận: cổng S5 + bước kiểm config đầu của S6 đã PASS.** Chưa build APK (S6.6), chưa verify hash/aapt/apksigner (S6.7), chưa S7 QA thiết bị — các bước này CHƯA làm trong phiên này, cần xác nhận với chủ dự án trước khi tiếp tục (xem "Chưa kiểm chứng"/"Rủi ro" bên dưới).
+- Giá trị thật của `api_id`/`api_hash` (cả hai lần thử) **không được ghi vào bất kỳ file hồ sơ nào** trong repo; chỉ tồn tại trong lịch sử chat của chủ dự án và trong `local.properties` (đã `.gitignore`) trên Tiny/Ni.
+
+## Chưa kiểm chứng (cập nhật 31/10)
+
+- S6.6 (build APK thường Debug + bản open Debug/Release trong clone cô lập) — chưa chạy.
+- S6.7 (verify `verifyOpenApkHasNoTelegramHash`/`verifyOpenApkHasOpenTelegramHash`, `aapt` package/versionCode/versionName, `apksigner` cert) — chưa chạy vì chưa có APK.
+- S7 (QA thiết bị Q1–Q6, ADB Shanling/Sony, màn hình, ảnh/video, hồ sơ APK) — chưa thực hiện.
+
 Đã dừng, bàn giao phiên thực thi tiếp theo.
 
 ```text
