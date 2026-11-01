@@ -132,6 +132,14 @@ internal object TelegramPlaylistRuntime {
         built.also { session = it }
     }
 
+    private var namedSession: NamedPlaylistSession? = null
+
+    /** The named playlists (Nhiều Playlist có tên): its own session and file, on the same writer thread. */
+    @Synchronized
+    fun namedSession(noBackupDir: File): NamedPlaylistSession = namedSession ?: run {
+        NamedPlaylistSession(NamedPlaylistStore(noBackupDir)) { java.util.UUID.randomUUID().toString() }.also { namedSession = it }
+    }
+
     fun submit(task: () -> Unit) {
         try {
             executor.execute {
