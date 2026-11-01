@@ -2,7 +2,7 @@
 
 Thực thi: Claude Code (Sonnet 5.5), phiên chặng A. TASK_ID `2026-10-31-loi-nhac-p2b`, nhánh `dot/2026-10-31-loi-nhac-p2b`, worktree `D:\Bots\_worktrees\MeloVault-loi-nhac-p2b`, baseline `94ab6b0`.
 Kế hoạch: [`2026-10-31-loi-nhac-p2b.md`](2026-10-31-loi-nhac-p2b.md). Bàn giao: [`-ban-giao.md`](2026-10-31-loi-nhac-p2b-ban-giao.md).
-Trạng thái: **CHẶNG A XONG (L0–L4) và CHẶNG B XONG (L5–L6, mục 9). Chưa build trên Tiny, chưa QA thiết bị, chưa có APK đủ điều kiện cài. Chưa nghiệm thu.**
+Trạng thái: **CHẶNG A, B, C XONG (mục 9 và 10). CHỜ CHỦ DỰ ÁN NGHIỆM THU — QA CANDIDATE — CHƯA NGHIỆM THU, có 1 lỗi đã biết B1 (Q8: xoay màn hình làm pane Lời nhạc kẹt “Đang tìm lời…”).** APK/Drive: [`-apk-test.md`](2026-10-31-loi-nhac-p2b-apk-test.md); ảnh: [`-hinh-nghiem-thu.md`](2026-10-31-loi-nhac-p2b-hinh-nghiem-thu.md).
 Chặng B: Thực thi: Claude Code (Sonnet 5.5), cùng phiên với chặng A theo yêu cầu “Làm ngay ở đây” của chủ dự án.
 
 ## 1. Tóm tắt
@@ -129,3 +129,63 @@ Không dùng ADB hay thiết bị. `SONY_SCREEN_END` = KHÔNG THAO TÁC.
 
 - Rủi ro lớn nhất là bố cục: lỗi chỉ lộ khi chạy thật (chặng C). Lỗi lời nhạc không chạm player/queue theo thiết kế (controller không có tham chiếu tới player).
 - Rollback: tính năng tắt sẵn. Muốn ẩn hẳn mà giữ lõi: `git revert 3447310`.
+
+## 10. Chặng C — Tiny build + QA Sony (01/11/2026 11:23–11:45, Claude Code Sonnet 5.5)
+
+Thực thi: Claude Code (Sonnet 5.5), phiên chặng C, cùng phiên với A và B theo yêu cầu của chủ dự án. **Không sửa mã trong chặng này.** Ảnh và log (bị `.gitignore`): `docs/plans/artifacts/2026-10-31-loi-nhac-p2b/C-20261101/` (37 ảnh, `l7-build.log`, `lyrics-log.txt`) và `00_tong_hop.png`. Hồ sơ APK/Drive: [`-apk-test.md`](2026-10-31-loi-nhac-p2b-apk-test.md); link ảnh: [`-hinh-nghiem-thu.md`](2026-10-31-loi-nhac-p2b-hinh-nghiem-thu.md).
+
+### 10.1 L7 — build và cài
+
+| Bước | Kết quả |
+|---|---|
+| Nhận việc | Cây Ni sạch, HEAD `8d4284e`, `diff --check` sạch; java đang chạy chỉ là daemon Gradle của chính phiên này |
+| Bundle | `MeloVault_loi-nhac-p2b_full_8d4284e_20261101.bundle` 13.411.312 byte, SHA-256 `d3ee9e53db1ba6b5374c81f8c099c62358906290cdb8b55f649be8daece86a90`, `git bundle verify` ok; **khớp SHA hai đầu** (Ni và Tiny `C:\Bots\_MeloVault_Git_Transfer\`) |
+| Clone Tiny | `C:\Bots\MeloVault-LOINHAC-IsolatedQA-20261101-8d4284e`, HEAD `8d4284e24456c37b2ace90b24a14480016de3a7d`, cây sạch; `local.properties` chép từ clone GDTB trên Tiny theo ngoại lệ E104 S11 (không đọc/in) |
+| `reportTelegramConfig` | `telegram.config.valid=true` (chạy KHÔNG có `-PmeloOpen`) |
+| `:app:assembleShareableDebug` | `BUILD SUCCESSFUL` 2m44s |
+| Gate APK | `app.melovault.player`, vc **121** / `0.6.96-beta`, debuggable, cert `eecd3df7…fce8`, 33.642.436 byte, SHA-256 `31609D80389A9E6EAD8F6417719B640FFBAFFEC3D92916083E3611E687821E88` |
+| Chữ ký bản đang cài | pull `base.apk` từ Sony: cert `eecd3df7…fce8` (trùng); bản cũ SHA `367CAA37…F1006` (candidate giao diện đa thiết bị) |
+| Cài | Sony `QV725WEQ54` (`XQ-AS52` / `Sony` / Android 12), nhạc đang tạm dừng (`state=2`), đúng một lệnh `adb -s QV725WEQ54 install -r` → `Success`; SHA bản cài lại khớp APK vừa build |
+
+### 10.2 L8 — kết quả QA trên Sony (`1080×2520`, density 420, font 1.0)
+
+| Bước | Thao tác | Thực tế | Kết quả | Ảnh |
+|---|---|---|---|---|
+| Q1 | Deck → tab Lời nhạc | Hộp đồng ý đúng chữ LD2, nút Bật/Không; logcat 0 dòng `lyrics_request`. Chọn **Không** → “Lời nhạc đang tắt.” + “Bật lời nhạc”, vẫn 0 request | **PASS** | `q1-consent`, `q1-declined` |
+| Q2 | Bật; phát ~11 giây | Câu tô chuyển “Ngăn giọt lệ…” (2:09) → “Phận duyên mong manh…” (2:21), đúng chiều. **Lời này do chọn thủ công cho bài mixset** (xem giới hạn) | **PASS có giới hạn** | `q2-a-before`, `q2-b-after` |
+| Q3 | Tua +60 giây; cuộn tay | Câu tô nhảy theo (3:21); cuộn tay thì hiện “Về dòng đang hát”, bấm thì tự cuộn lại, nút mất | **PASS** | `q2-a-before` (nút hiện), `q3-a-follow-again`, `q3-b-after-seek60` |
+| Q4 | ⏭ sang bài kế | Lời bài cũ biến mất; bài mới “#Bản nháp 1” hiện “Thiếu tên bài hoặc nghệ sĩ”; player sang bài kế bình thường, không crash | **PASS** | `q4-next` |
+| Q5 | Bài thiếu nghệ sĩ/mixset → Tìm lời → gõ từ khóa → chọn | Không tự tìm (0 request); ô tìm điền sẵn tên tệp; bàn phím hiện và bố cục co đúng; danh sách “Lạc Trôi — Sơn Tùng M-TP · 3:53 · đồng bộ”…; chọn kết quả đầu → lời đồng bộ, có “Bỏ lời đã chọn”. **Chưa kiểm “quay lại bài thì còn nhớ”** | **PASS có giới hạn** | `q5-search-open`, `q5-retry1`, `q5-chosen` |
+| Q6 | Xoay ngang → Hai khung | Hai khung: bấm “☰ Hàng đợi” → cột phải có “Tiếp theo \| ♪ Lời nhạc”, “Thư viện” ở cuối; tab Lời nhạc được giữ, hiện “Không tìm thấy lời cho bài này.” + “Tìm lời” (từ cache). Theo bản đã sửa của kế hoạch (bàn giao chặng B) | **PASS** (với thay đổi ghi ở 9.3) | `q6-twopane`, `q6-twopane-queue` |
+| Q7 | Cài đặt → công tắc “Lời nhạc từ LRCLIB” | Có hàng với chữ nêu dữ liệu gửi đi; đang BẬT → bấm → TẮT; mở Deck: “Lời nhạc đang tắt.”, không có request mới | **PASS** | `q7-settings`, `q7-off`, `q7-deck-off` |
+| Q8 | Deck dọc → ngang (Deck ngang) | Tab Lời nhạc được giữ, **nhưng nội dung kẹt ở “Đang tìm lời…” mãi mãi**; log có `stage=lyrics_drop` | **FAIL** (lỗi B1) | `q6-deck-landscape`, `q6-deck-landscape2` |
+
+Bổ sung (không nằm trong bảng kế hoạch):
+- **Đường tự động thật:** phát bài “Nhạc trên máy” có thẻ (“Total Immersion — Akira Inoue”, M4A) → request tự động `get` → 404 → `search`. Lần đầu LRCLIB trả 503 → “Chưa tải được lời. Thử lại sau.” + “Thử lại”; bấm lại → `search` 200, không có kết quả → “Không tìm thấy lời cho bài này.” + “Tìm lời” (`q2l-deck`, `q2l-retry-b1`). Lần sau lấy từ cache (`stage=lyrics_cache hit=true`, không gọi mạng). Ô tìm điền sẵn “Total Immersion Akira Inoue” (title + nghệ sĩ).
+- **Log:** chỉ có `stage=lyrics_request|response|cache|drop` kèm mã HTTP (`kind=get|search`). Tìm trong log đã lưu: 0 lần xuất hiện tên bài/nghệ sĩ/từ khóa. `logcat -c` đã chạy một lần giữa phiên nên `lyrics-log.txt` chỉ giữ phần sau 11:39; các dòng sớm hơn (11:36–11:37: `search` 503 rồi 200 ×3) được ghi lại từ quan sát trực tiếp.
+- Không có `FATAL EXCEPTION`/ANR của app, bộ đệm crash rỗng.
+
+### 10.3 Lỗi và phát hiện
+
+**B1 — LỖI (FAIL Q8): sau khi xoay màn hình, pane Lời nhạc kẹt “Đang tìm lời…”.** Tái hiện: đang ở Deck dọc, tab Lời nhạc, bài đang có, xoay ngang. Nguyên nhân khả dĩ (từ log, chưa sửa): Deck mới tạo pane và gọi `request` (tăng generation), sau đó Deck cũ bị đóng và gọi `setShown(false)` → `controller.cancel()` tăng generation thêm một lần nên kết quả của pane mới bị coi là cũ và bị bỏ (`stage=lyrics_drop`); `requestedKey` của pane mới đã khớp nên không hỏi lại. Hai khung không tái hiện (đường cache khác). Đề xuất sửa cho REWORK: cancel chỉ khi pane hiện hành là pane đang giữ generation, hoặc pane mới tự hỏi lại khi còn `Loading` sau một khoảng; kèm test JVM cho thứ tự “pane mới request → pane cũ cancel”. **Chưa kiểm hướng ngang → dọc ngoài việc khôi phục xoay.**
+
+**F2 — quan sát thiết kế:** hầu hết bài Telegram của tài khoản này không có nghệ sĩ (tên bài là tên tệp, ví dụ “#3 Up With Wuan C”, “#Bản nháp 1”) nên theo LD4 chỉ hiện “Thiếu tên bài hoặc nghệ sĩ” và không tự tìm; lời đồng bộ tự động chỉ có với bài có thẻ nhạc. Chủ dự án cần biết trước khi nghiệm thu kỳ vọng.
+
+**F3 — LRCLIB chập chờn:** `/api/search` đôi lúc trả 503 (cũng tái hiện từ Ni bằng yêu cầu công khai, 5/6 lần ở một đợt thử), `/api/get` ổn định. App xử lý đúng (thông báo + “Thử lại”), không crash.
+
+**F4 — bố cục Deck dọc:** ảnh bìa lớn nên thanh tab và pane lời nằm dưới màn hình đầu, phải vuốt trang mới thấy; pane cao cố định, cuộn trong pane và cuộn trang cùng hoạt động (cuộn tay trong pane tắt tự cuộn như thiết kế). Có thể là điểm chủ dự án cần đánh giá về tiện dùng.
+
+### 10.4 Trạng thái Sony thay đổi do QA (ghi đúng)
+
+- Gói thường `app.melovault.player` nay là bản `8d4284e` (cùng vc121, chữ ký trùng). Màn hình lúc bắt đầu đang ở **gói `.open`** từ phiên QA trước; tôi không thao tác trong bản `.open`.
+- Lệnh `monkey` đầu tiên lỡ mở “Game enhancer” của Sony (không chạm gì ở đó); sau đó mở app bằng `am start` đúng activity.
+- Chạm thẻ “Nghe tiếp” đã **tự phát lại bài #3 ~15 giây** (như các phiên trước); sau đó tôi phát thêm vài giây để QA (mixset ~11 giây, bài kế ~4 giây, bài trên máy ~3 giây) rồi tạm dừng ngay mỗi lần. **Bài hiện tại giờ là “Total Immersion” (nhạc trên máy) tạm dừng ở 0:02**; trước phiên là “#3 Up With Wuan C” dừng ở 1:51. Hàng đợi đã đổi.
+- Lời nhạc trên máy: **đồng ý đang ở trạng thái “tắt”** (chọn Không rồi tắt ở Cài đặt), không còn “chưa quyết định”; cache có 1 lựa chọn thủ công (bài mixset #3) và 1 mục “không có lời” (Total Immersion).
+- Xoay: đặt ngang rồi khôi phục. Cuối phiên `accelerometer_rotation=1`, `user_rotation=0`, `1080×2520`/420, font 1.0. (Lần khôi phục đầu đọc lại là 0 do màn hình đang xoay; đặt lại và kiểm: 1/0.)
+- **`SONY_SCREEN_END`: `Display State=OFF`** (xác minh sau `finally`). Không uninstall, không `pm clear`, không logout, không máy bay.
+
+### 10.5 Chưa kiểm chứng
+
+- **Bài Telegram có tên + nghệ sĩ khớp LRCLIB (đường tự động ra lời đồng bộ)** — không có bài như vậy trong tài khoản; chỉ kiểm bằng lời chọn thủ công.
+- Q5 “quay lại bài thì còn nhớ lựa chọn” và nút “Bỏ lời đã chọn” trên máy (có nút, chưa bấm).
+- Xoay ngang → dọc; chữ lớn 1.3; TalkBack; Release/`.open`/Personal trên máy; lỗi mạng thật, 429, hết hạn cache (chỉ JVM); Y700/S25/FYT. **CHƯA XÁC NHẬN ÂM THANH THỰC.**
