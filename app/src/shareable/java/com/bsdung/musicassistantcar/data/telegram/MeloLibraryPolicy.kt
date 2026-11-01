@@ -237,6 +237,31 @@ internal object MeloLibraryPolicy {
         else -> previouslyCollapsed
     }
 
+    /** How far the list has to run one way, in px, before [HeaderFold] folds or shows the title row: 16 dp. */
+    fun collapseThresholdPx(density: Float): Int = Math.round(HEADER_FOLD_THRESHOLD_DP * density)
+
+    private const val HEADER_FOLD_THRESHOLD_DP = 16f
+
+    /**
+     * How far the list scrolled between two `onScroll` callbacks, positive = down (content moved up).
+     * Measured on one row both times: a row's top moves by exactly what the list moved, whatever the row
+     * heights are, where `first * pitch - top` is off by the difference every time `first` changes.
+     *
+     * [prevFirstTopNow]: where the row that was first before is now, when it is still on screen (scrolled up).
+     * [newFirstTopBefore]: where the row that is first now was at the previous callback, when it was on screen
+     * (scrolled down). With neither (a jump of several rows) the rows in between count as [fallbackPitchPx].
+     */
+    fun scrollDeltaPx(
+        prevFirst: Int, prevTop: Int, first: Int, firstTop: Int,
+        prevFirstTopNow: Int?, fallbackPitchPx: Int, newFirstTopBefore: Int? = null
+    ): Int = when {
+        prevFirst < 0 -> 0
+        first == prevFirst -> prevTop - firstTop
+        prevFirstTopNow != null -> prevTop - prevFirstTopNow
+        newFirstTopBefore != null -> newFirstTopBefore - firstTop
+        else -> (first - prevFirst) * fallbackPitchPx + (prevTop - firstTop)
+    }
+
     /** "27.971 bài · Đã cập nhật thư viện" (catalog index, not the cloud Playlist); text from the existing display policy wins when present. */
     fun syncLine(existing: String?, total: Int?, syncing: Boolean): String = when {
         !existing.isNullOrBlank() -> existing
