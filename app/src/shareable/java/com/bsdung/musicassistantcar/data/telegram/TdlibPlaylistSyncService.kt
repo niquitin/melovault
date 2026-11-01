@@ -34,10 +34,15 @@ internal class TdlibPlaylistSyncService(
     /** Creating a Telegram channel is LOCKED unless the build explicitly unlocks it (never in Release, off by default in QA). */
     private val channelCreationUnlocked: Boolean = false,
     private val isActive: () -> Boolean = { true },
+    /** Nhiều Playlist có tên: the host of the named playlists, or null when they are not wired (then [runNamedSync] is denied). */
+    private val namedHost: NamedPlaylistSyncHost? = null,
 ) {
     private val hub = TdlibSyncHub(owner, metrics, alerts)
     private val lock = ReentrantLock()
     private val backoffs = HashMap<Long, SyncBackoff>()
+
+    /** Its own wait per account: a failure of the named playlists never delays the favourites, except through the scheduler. */
+    private val namedBackoffs = HashMap<Long, SyncBackoff>()
     @Volatile private var activeReader: TdlibHistoryReader? = null
     private var attached = false
     private val cancellation = AtomicLong()
@@ -167,6 +172,67 @@ internal class TdlibPlaylistSyncService(
                     sendAllowed = { valid() && gate.mayTransmit(account) == null },
                 )
                 val report = PlaylistSyncCoordinator(scopedHost, transport, clock, config, backoff).runOnce(account, mode, budget)
+                metrics.runFinished(clock() - started, backoff.failures)
+                metrics.count(SyncMetrics.Event.RUN_FINISHED)
+                report
+            } finally {
+                reader.forget()
+                activeReader = null
+            }
+        }
+    }
+
+    private fun guardedNamedHost(source: NamedPlaylistSyncHost, valid: () -> Boolean) = object : NamedPlaylistSyncHost {
+        override fun view(account: TelegramUserId): NamedSyncView? = if (valid()) source.view(account) else null
+        override fun update(account: TelegramUserId, epoch: Long, transform: (NamedPlaylistState) -> NamedPlaylistState): NamedUpdateResult {
+            if (!valid()) return NamedUpdateResult.Stale
+            return source.update(account, epoch) { state ->
+                check(valid()) { "Sync scope ended" }
+                transform(state)
+            }
+        }
+    }
+
+    /**
+     * Nhiều Playlist có tên: one run of the named playlists over the SAME verified channel as the favourites (the channel the
+     * favourites' checkpoint names; nothing is discovered or created here). The consent, the build switch, the foreground and
+     * identity gates are exactly those of [runSync]. At most [NamedSyncLimits.PRODUCTION_ENVELOPES] message per run, whatever
+     * a caller asks for; zero reads and acknowledges only. A named run that is interrupted by a replay in progress resumes it.
+     */
+    fun runNamedSync(
+        account: TelegramUserId,
+        mode: SyncMode = SyncMode.INCREMENTAL,
+        maxEnvelopes: Int = NamedSyncLimits.PRODUCTION_ENVELOPES,
+    ): Gated<SyncReport> {
+        val named = namedHost ?: return denied(SyncDenied.NOT_OPEN)
+        val cancellationAtStart = cancellation.get()
+        gate.mayRun(account)?.let { return denied(it) }
+        val envelopes = maxEnvelopes.coerceIn(0, NamedSyncLimits.PRODUCTION_ENVELOPES)
+        val budget = envelopes * NamedSyncLimits.OPS_PER_ENVELOPE
+        val channel = (host.view(account) ?: return denied(SyncDenied.NOT_OPEN)).state.checkpoint.channelId
+        if (channel == 0L) return Gated.Done(SyncReport(SyncStatus.NO_CHANNEL)) // never creates one, never touches TDLib
+        val view = named.view(account) ?: return denied(SyncDenied.NOT_OPEN)
+        val waiting = view.state.outbox.any { it.status != OutboxStatus.ACKNOWLEDGED }
+        if (waiting && budget > 0 && gate.mayTransmit(account) != null) return denied(SyncDenied.TRANSMIT_NOT_ALLOWED)
+        val effectiveMode =
+            if (mode == SyncMode.INCREMENTAL && view.state.checkpoint.replayPosition != SyncCheckpoint.NO_REPLAY) SyncMode.FULL_REPLAY else mode
+        return session(account, { null }) { epoch ->
+            fun valid() = activeScope(account, epoch, cancellationAtStart)
+            val scopedHost = guardedNamedHost(named, ::valid)
+            metrics.count(SyncMetrics.Event.RUN_STARTED)
+            val started = clock()
+            val backoff = namedBackoffs.getOrPut(account.value) { SyncBackoff() }
+            hub.watchChannel(channel)
+            val reader = TdlibHistoryReader(hub, account.value, epoch, channel, historyLimits, clock)
+            activeReader = reader
+            try {
+                val transport = TdlibPlaylistSyncTransport(
+                    hub, account.value, epoch, channel, reader, timeouts,
+                    sendAllowed = { valid() && gate.mayTransmit(account) == null },
+                )
+                val report = NamedPlaylistSyncCoordinator(
+                    scopedHost, transport, clock, config.copy(maxEnvelopesPerRun = maxOf(1, envelopes)), backoff,
+                ).runNamedOnce(account, channel, effectiveMode, budget)
                 metrics.runFinished(clock() - started, backoff.failures)
                 metrics.count(SyncMetrics.Event.RUN_FINISHED)
                 report

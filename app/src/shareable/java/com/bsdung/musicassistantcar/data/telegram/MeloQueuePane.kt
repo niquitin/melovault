@@ -53,6 +53,9 @@ internal class MeloQueuePane(context: Context, private val c: MeloComponents, pr
         view.addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
             addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            if (!preview && host.named() != null) {
+                addView(c.chip("≡ Lưu Playlist", false) { host.named()?.saveQueue() }.apply { contentDescription = MeloNamedPlaylistPolicy.SAVE_QUEUE_LABEL })
+            }
             if (onLibrary != null) addView(c.chip("Thư viện", false) { onLibrary() })
         })
         if (list != null) {

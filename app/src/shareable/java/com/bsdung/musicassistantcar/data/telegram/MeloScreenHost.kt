@@ -48,6 +48,9 @@ internal interface MeloScreenHost {
      */
     fun playlistStatus(): PlaylistSyncStatusPolicy.Line? = null
 
+    /** Nhiều Playlist có tên: the Playlist tab as an index and playlists; null on hosts without them (Car Mode, previews, fakes). */
+    fun named(): MeloNamedPlaylistHost? = null
+
     /** Opens Settings > Đồng bộ Playlist. */
     fun openSyncSettings() = Unit
 

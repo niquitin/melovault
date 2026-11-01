@@ -49,7 +49,7 @@ internal object MeloCompactPolicy {
 
     fun headerTitle(mode: Mode, sourceTitle: String?, count: Int?): String {
         val name = when {
-            mode == Mode.PLAYLIST -> "Playlist"
+            mode == Mode.PLAYLIST -> "Yêu thích"
             !sourceTitle.isNullOrBlank() -> sourceTitle.trim()
             mode == Mode.DOWNLOADED -> "Đã tải"
             else -> "Tất cả"

@@ -46,7 +46,7 @@ internal object MeloCarPolicy {
     enum class Nav(val icon: String, val label: String) {
         MUSIC("♫", "Nhạc"),
         TELEGRAM("☷", "Telegram"),
-        PLAYLIST("☆", "Playlist"),
+        PLAYLIST("☆", "Yêu thích"),
         DOWNLOADED("✓", "Đã tải"),
         SEARCH("⌕", "Tìm"),
         SETTINGS("⚙", "Cài đặt")

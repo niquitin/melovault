@@ -10,6 +10,10 @@ internal data class PendingPlaylistReview(
     val playlistEpoch: Long,
     val opCounter: Long,
     val entries: List<OutboxEntry>,
+    /** Nhiều Playlist có tên: what waits in their own outbox, so the one confirmation covers it too. Empty when they are not wired. */
+    val namedOpCounter: Long = 0L,
+    val namedEntries: List<NamedOutboxEntry> = emptyList(),
+    val namedNames: Map<ListId, String> = emptyMap(),
 )
 
 /**
@@ -26,12 +30,20 @@ internal class AutomaticPlaylistSync(
     private val schedule: (Long, () -> Unit) -> SyncScheduledTask,
     private val clock: () -> Long = System::currentTimeMillis,
     private val runLog: SyncRunLog = SyncRunLog(),
+    /** Nhiều Playlist có tên: only read to show and to match the pending review. Null = not wired. */
+    private val namedHost: NamedPlaylistSyncHost? = null,
     private val changed: () -> Unit = {},
 ) {
     companion object {
         const val POLL_MS = 15_000L
         const val SAVE_DELAY_MS = 500L
         const val CONTINUE_MS = 1_000L
+
+        /** When the favourites' run ended like this, the named playlists are left for the next turn. */
+        private val NAMED_SKIPPED_AFTER = setOf(
+            SyncStatus.BACKOFF, SyncStatus.BACKOFF_ACTIVE, SyncStatus.RECOVERY_REQUIRED, SyncStatus.SAVE_FAILED,
+            SyncStatus.STALE_SESSION, SyncStatus.NOT_OPEN, SyncStatus.NO_CHANNEL,
+        )
     }
 
     private data class Scope(val who: TelegramUserId, val auth: Long, val playlist: Long, val generation: Long)
@@ -112,15 +124,23 @@ internal class AutomaticPlaylistSync(
     fun pendingReview(): PendingPlaylistReview? = synchronized(this) {
         val s = scope(generation) ?: return null
         val view = host.view(s.who) ?: return null
+        val named = namedHost?.view(s.who)?.state
         PendingPlaylistReview(s.who, s.auth, s.playlist, view.state.opCounter,
-            view.state.outbox.filter { it.status != OutboxStatus.ACKNOWLEDGED }.toList())
+            view.state.outbox.filter { it.status != OutboxStatus.ACKNOWLEDGED }.toList(),
+            named?.opCounter ?: 0L,
+            named?.outbox?.filter { it.status != OutboxStatus.ACKNOWLEDGED }.orEmpty(),
+            named?.let { NamedPendingReviewPolicy.namesOf(it) }.orEmpty())
     }
 
     private fun matches(review: PendingPlaylistReview, s: Scope): Boolean {
         val state = host.view(s.who)?.state ?: return false
+        val named = namedHost?.view(s.who)?.state
         return current(s) && review.account == s.who && review.authEpoch == s.auth &&
             review.playlistEpoch == s.playlist && review.opCounter == state.opCounter &&
-            review.entries == state.outbox.filter { it.status != OutboxStatus.ACKNOWLEDGED }
+            review.entries == state.outbox.filter { it.status != OutboxStatus.ACKNOWLEDGED } &&
+            // What the person confirmed includes the named playlists' changes: any change since makes the confirmation void.
+            review.namedOpCounter == (named?.opCounter ?: 0L) &&
+            review.namedEntries == named?.outbox?.filter { it.status != OutboxStatus.ACKNOWLEDGED }.orEmpty()
     }
 
     /** A single explicit confirmation covers the v3 warning AND this exact pending review. */
@@ -289,6 +309,33 @@ internal class AutomaticPlaylistSync(
                         delay = maxOf(POLL_MS, report.retryAfterMs)
                     }
                     stop = report.status in setOf(SyncStatus.RECOVERY_REQUIRED, SyncStatus.SAVE_FAILED, SyncStatus.STALE_SESSION)
+                }
+            }
+            // Nhiều Playlist có tên: after the favourites, in the same scope, on the channel they just verified. It never changes
+            // what was recorded for the favourites, never stops them and runs only if the favourites' own run left the way clear.
+            val favourite = (answer as? Gated.Done)?.value
+            if (favourite != null && !stop && favourite.status !in NAMED_SKIPPED_AFTER &&
+                synchronized(this) { current(s) && store.load(s.who).automatic }
+            ) {
+                val named = try {
+                    actions.runNamed(s.who, SyncMode.INCREMENTAL, NamedSyncLimits.PRODUCTION_ENVELOPES)
+                } catch (_: Exception) {
+                    null
+                }
+                synchronized(this) {
+                    if (!current(s)) return
+                    val report = (named as? Gated.Done)?.value ?: return@synchronized
+                    val progress = report.opsAcknowledged > 0 || report.opsApplied > 0 || report.envelopesSent > 0
+                    // Work left on either side: come back soon. A catch-up run always moved the cursor forward.
+                    if (report.status == SyncStatus.CATCH_UP_INCOMPLETE ||
+                        (report.status in setOf(SyncStatus.OUTBOX_INCOMPLETE, SyncStatus.SEND_LIMIT_REACHED) && progress)
+                    ) delay = minOf(delay, CONTINUE_MS)
+                    // Temporary trouble with the connection (flood wait included) holds back both; a problem of the named
+                    // playlists alone (damaged message, unknown delivery) waits in their own coordinator and holds back nothing.
+                    if (report.status == SyncStatus.BACKOFF && report.retryAfterMs > 0) {
+                        notBefore = maxOf(notBefore, clock() + report.retryAfterMs)
+                        delay = maxOf(POLL_MS, report.retryAfterMs)
+                    }
                 }
             }
         } catch (_: Exception) {

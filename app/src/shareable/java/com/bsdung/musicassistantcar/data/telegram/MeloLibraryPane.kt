@@ -54,6 +54,20 @@ internal class MeloLibraryPane(
     private val sortChip = c.chip("↕ Mới nhất", false) {
         host.setSort(if (host.sort() == SongSort.NAME) SongSort.NEWEST else SongSort.NAME)
     }
+    /** Nhiều Playlist có tên, level 2 of the Playlist tab: back to the index, shuffle and the ⋮ of one playlist. Hidden everywhere else. */
+    private val namedBack = c.chip(MeloNamedPlaylistPolicy.BACK_LABEL, false) { host.named()?.back() }.apply { visibility = View.GONE }
+    private val namedShuffle = c.chip("⤨ Ngẫu nhiên", false) { host.named()?.play(true) }.apply {
+        visibility = View.GONE
+        contentDescription = "Phát ngẫu nhiên Playlist"
+    }
+    private val namedMore = c.chip("⋮", false).apply {
+        visibility = View.GONE
+        contentDescription = "Tùy chọn Playlist: đổi tên, sắp xếp, xóa"
+        setOnClickListener { host.named()?.openMenu(this) }
+    }
+    /** Level 1: the index of the Playlist tab, in place of the song list. */
+    private val namedIndexHolder = FrameLayout(context).apply { visibility = View.GONE }
+    private var namedIndexScrollY = 0
     private val header = LinearLayout(context)
     private val headerChips = LinearLayout(context)
     private var headerStacked = false
@@ -167,8 +181,11 @@ internal class MeloLibraryPane(
         headerChips.apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            addView(namedBack)
             addView(sortChip)
+            addView(namedShuffle)
             addView(playAll)
+            addView(namedMore)
         }
         header.apply {
             orientation = LinearLayout.HORIZONTAL
@@ -261,6 +278,7 @@ internal class MeloLibraryPane(
         listContent.addView(listStatus)
         listContent.addView(listFrame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         view.addView(listContent, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        view.addView(namedIndexHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         if (layer == NewLayer.TWO_PANE) {
             sourceList.adapter = sourceAdapter
             sourceList.divider = null
@@ -425,6 +443,18 @@ internal class MeloLibraryPane(
         renderChips(snap)
         renderSourceCards(snap)
         header.post { fitHeader() }
+        // Nhiều Playlist có tên: the Playlist tab is an index first; "Yêu thích" and one playlist are level 2.
+        val named = host.named()?.takeIf { snap.mode == Mode.PLAYLIST && !snap.showingSources && !snap.local }
+        val namedScreen = named?.screen()
+        namedBack.visibility = if (named != null && namedScreen != MeloNamedPlaylistPolicy.Screen.Index) View.VISIBLE else View.GONE
+        namedShuffle.visibility = if (namedScreen is MeloNamedPlaylistPolicy.Screen.Detail) View.VISIBLE else View.GONE
+        namedMore.visibility = namedShuffle.visibility
+        if (named != null && namedScreen == MeloNamedPlaylistPolicy.Screen.Index) {
+            renderNamedIndex(named)
+            applyTrim()
+            return
+        }
+        namedIndexHolder.visibility = View.GONE
         if (snap.showingSources) {
             groupTitle.text = if (snap.browseLoadState == MeloBrowseUiPolicy.LoadState.READY) {
                 "Telegram · ${MeloComponentPolicy.formatCount(snap.sources.count { it.chatId != 0L })} nguồn"
@@ -449,7 +479,7 @@ internal class MeloLibraryPane(
                 }
             }
         } else {
-            groupTitle.text = MeloCompactPolicy.headerTitle(snap.mode, snap.sourceTitle, snap.total)
+            groupTitle.text = named?.headerTitle() ?: MeloCompactPolicy.headerTitle(snap.mode, snap.sourceTitle, snap.total)
             playAll.visibility = View.VISIBLE
             playAll.isEnabled = MeloLibraryPolicy.playAllEnabled(snap.rows.size)
             playAll.alpha = if (playAll.isEnabled) 1f else 0.4f
@@ -461,10 +491,12 @@ internal class MeloLibraryPane(
             listContent.visibility = View.VISIBLE
             listFrame.visibility = if (snap.rows.isEmpty()) View.GONE else View.VISIBLE
             // E98: on the teal theme the sort lives in the filter panel, so the chip goes.
-            sortChip.visibility = if (c.teal) View.GONE else View.VISIBLE
+            // A named playlist keeps the order the person gave it: no A–Z sort, no letter bar.
+            val ownOrder = namedScreen is MeloNamedPlaylistPolicy.Screen.Detail
+            sortChip.visibility = if (c.teal || ownOrder) View.GONE else View.VISIBLE
             sortChip.text = if (snap.sort == SongSort.NAME) "↕ Tên A–Z" else "↕ Mới nhất"
             val rowCount = snap.total ?: snap.rows.size
-            val showBar = if (c.teal) MeloAlphabetPolicy.barVisibleThemed(false, rowCount, snap.letterFloor != null)
+            val showBar = !ownOrder && if (c.teal) MeloAlphabetPolicy.barVisibleThemed(false, rowCount, snap.letterFloor != null)
             else MeloAlphabetPolicy.barVisible(snap.sort, false, rowCount, snap.letterFloor != null)
             bar.visibility = if (showBar) View.VISIBLE else View.GONE
             list.setPadding(0, 0, if (showBar) bar.barWidthPx else 0, 0)
@@ -520,6 +552,31 @@ internal class MeloLibraryPane(
             }
         }
         applyTrim()
+    }
+
+    /** Level 1 of the Playlist tab. The song list, the sources and the song header give way to the index; its scroll position is kept. */
+    private fun renderNamedIndex(named: MeloNamedPlaylistHost) {
+        groupTitle.text = "Playlist"
+        playAll.visibility = View.GONE
+        sortChip.visibility = View.GONE
+        noteWanted = false
+        note.text = ""
+        scopeNote.text = ""
+        restoringAnchor = null
+        pendingTopReset = false
+        listContent.visibility = View.GONE
+        sourcesScroll.visibility = View.GONE
+        sourceList.visibility = View.GONE
+        bar.visibility = View.GONE
+        if (namedIndexHolder.childCount > 0) {
+            namedIndexScrollY = (namedIndexHolder.getChildAt(0) as? ScrollView)?.scrollY ?: namedIndexScrollY
+        }
+        namedIndexHolder.removeAllViews()
+        val index = MeloNamedPlaylistViews.indexView(context, c, named.statusNote(), named.indexRows()) { named.open(it) }
+        namedIndexHolder.addView(index, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        namedIndexHolder.visibility = View.VISIBLE
+        val y = namedIndexScrollY
+        index.post { index.scrollTo(0, y) }
     }
 
     // ---- UI-07: the search hint loses whole words, not half a word, when the field is narrow ---------

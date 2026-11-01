@@ -26,6 +26,8 @@ internal class SyncServiceProvider(
     /** [TelegramPlaylistFlags.SYNC_CREATE_ALLOWED]. False unless a QA build was started with the extra create flag. */
     private val channelCreationUnlocked: Boolean = false,
     private val isActive: () -> Boolean = { true },
+    /** Nhiều Playlist có tên: read only when a real service is made, never while the build switch is off. Null = not wired. */
+    private val namedHost: () -> NamedPlaylistSyncHost? = { null },
 ) {
     private var cached: SyncActionsPort? = null
 
@@ -43,6 +45,7 @@ internal class SyncServiceProvider(
             owner(), playlist, SyncGate(buildEnabled, store), clock, config, timeouts, historyLimits, discoveryLimits,
             channelCreationUnlocked = channelCreationUnlocked,
             isActive = isActive,
+            namedHost = namedHost(),
         )
         return TdlibSyncActions(service).also { cached = it }
     }
@@ -54,6 +57,7 @@ internal class TdlibSyncActions(private val service: TdlibPlaylistSyncService) :
     override fun create(account: TelegramUserId) = service.createChannel(account)
     override fun bind(account: TelegramUserId, chatId: Long) = service.bindChannel(account, chatId)
     override fun run(account: TelegramUserId, mode: SyncMode, sendBudget: Int) = service.runSync(account, mode, sendBudget)
+    override fun runNamed(account: TelegramUserId, mode: SyncMode, maxEnvelopes: Int) = service.runNamedSync(account, mode, maxEnvelopes)
 
     override fun close() {
         service.cancel()
@@ -112,7 +116,7 @@ internal object SyncRuntime {
                 val future = worker.schedule({ task() }, delay, TimeUnit.MILLISECONDS)
                 SyncScheduledTask { future.cancel(false) }
             },
-            runLog = runLog, changed = ::notifyChanged,
+            runLog = runLog, namedHost = TelegramPlaylistRuntime.namedSession(root), changed = ::notifyChanged,
         ).also { auto = it }
     }
 
@@ -126,5 +130,6 @@ internal object SyncRuntime {
         store = FileSyncConsentStore(noBackupDir),
         channelCreationUnlocked = TelegramPlaylistFlags.SYNC_CREATE_ALLOWED,
         isActive = { foreground },
+        namedHost = { TelegramPlaylistRuntime.namedSession(noBackupDir) },
     ).also { provider = it }
 }

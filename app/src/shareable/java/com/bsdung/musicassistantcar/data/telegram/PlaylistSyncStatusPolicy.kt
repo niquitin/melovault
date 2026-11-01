@@ -20,7 +20,20 @@ internal data class PlaylistStatusFacts(
     val projectionStale: Boolean,
     val importWarning: PlaylistWarning?,
     val unreadable: PlaylistUnreadableReason?,
+    /** Nhiều Playlist có tên: operations of the named playlists not yet acknowledged (PENDING + RETRY_REQUIRED). 0 when they are not open. */
+    val namedPendingCount: Int = 0,
+    val namedRetryRequiredCount: Int = 0,
 ) {
+    /** The same facts plus what waits in the named playlists' own outbox. A null state (not open) adds nothing. */
+    fun withNamed(named: NamedPlaylistState?): PlaylistStatusFacts = copy(
+        namedPendingCount = named?.outbox?.count { it.status != OutboxStatus.ACKNOWLEDGED } ?: 0,
+        namedRetryRequiredCount = named?.outbox?.count { it.status == OutboxStatus.RETRY_REQUIRED } ?: 0,
+    )
+
+    /** Everything that waits to be sent, favourites and named playlists together. */
+    val allPendingCount: Int get() = pendingCount + namedPendingCount
+    val allRetryRequiredCount: Int get() = retryRequiredCount + namedRetryRequiredCount
+
     companion object {
         fun of(state: PlaylistState, importWarning: PlaylistWarning?): PlaylistStatusFacts = PlaylistStatusFacts(
             accountId = state.accountId,
@@ -159,20 +172,20 @@ internal object PlaylistSyncStatusPolicy {
             return Line(Kind.NO_CHANNEL, "Đã lưu trên máy · Chưa có kênh đồng bộ", "Chưa gắn được kênh Telegram hợp lệ. Hãy bật tự đồng bộ trong Cài đặt để kiểm tra kênh có sẵn.", Severity.WARN, notes)
         }
         run?.denied?.let { return denied(it, notes) }
-        if (facts.pendingCount > 0 && !sync.consent.mayTransmitInitial) {
+        if (facts.allPendingCount > 0 && !sync.consent.mayTransmitInitial) {
             return Line(
                 Kind.NEEDS_TRANSMIT_CONSENT, "Đã lưu trên máy · Chưa cho phép gửi",
-                "Có ${facts.pendingCount} thay đổi chờ gửi. Hãy xem danh sách và xác nhận bật tự đồng bộ trong Cài đặt.", Severity.WARN, notes,
+                "Có ${facts.allPendingCount} thay đổi chờ gửi. Hãy xem danh sách và xác nhận bật tự đồng bộ trong Cài đặt.", Severity.WARN, notes,
             )
         }
         if (run == null) {
-            return if (facts.pendingCount > 0) pending(facts, notes) else
+            return if (facts.allPendingCount > 0) pending(facts, notes) else
                 Line(Kind.NEVER_SYNCED, "Đã lưu trên máy · Chờ kiểm tra đồng bộ", "Ứng dụng sẽ kiểm tra khi đang mở và đã bật tự đồng bộ. Chưa có kết quả xác nhận trong phiên này.", Severity.INFO, notes)
         }
         val attention = Line(Kind.ATTENTION, "Chưa đồng bộ được · Thử lại", "Lần đồng bộ vừa rồi không hoàn tất. Playlist trên máy vẫn nguyên vẹn.", Severity.WARN, notes)
         return when (run.status ?: return attention) {
             SyncStatus.OK ->
-                if (facts.pendingCount == 0 && facts.retryRequiredCount == 0 && run.pendingLeft == 0 && run.opCounterAtRun == facts.opCounter) {
+                if (facts.allPendingCount == 0 && facts.allRetryRequiredCount == 0 && run.pendingLeft == 0 && run.opCounterAtRun == facts.opCounter) {
                     Line(Kind.SYNCED, "Đã đồng bộ", "Danh sách khớp với kênh Telegram riêng của bạn. $METADATA_ONLY", Severity.OK, notes)
                 } else pending(facts, notes)
             SyncStatus.BACKOFF, SyncStatus.BACKOFF_ACTIVE -> {
@@ -180,11 +193,11 @@ internal object PlaylistSyncStatusPolicy {
                 Line(Kind.OFFLINE_BACKOFF, "Đã lưu trên máy · Thử lại sau", "Mạng hoặc Telegram đang bận.$wait Playlist trên máy không bị ảnh hưởng.", Severity.WARN, notes)
             }
             SyncStatus.CATCH_UP_INCOMPLETE -> catchingUp(notes)
-            SyncStatus.OUTBOX_INCOMPLETE -> sending(maxOf(run.pendingLeft, facts.pendingCount), notes)
+            SyncStatus.OUTBOX_INCOMPLETE -> sending(maxOf(run.pendingLeft, facts.pendingCount) + facts.namedPendingCount, notes)
             SyncStatus.SEND_LIMIT_REACHED -> Line(
                 Kind.SEND_LIMIT, "Đã lưu trên máy · Chưa gửi hết",
-                if (sync.consent.automatic) "Còn ${maxOf(run.pendingLeft, facts.pendingCount)} thay đổi. Ứng dụng sẽ tự gửi tiếp khi đang mở."
-                else "Còn ${maxOf(run.pendingLeft, facts.pendingCount)} thay đổi chờ gửi. Hãy bật tự đồng bộ trong Cài đặt.", Severity.INFO, notes,
+                if (sync.consent.automatic) "Còn ${maxOf(run.pendingLeft, facts.pendingCount) + facts.namedPendingCount} thay đổi. Ứng dụng sẽ tự gửi tiếp khi đang mở."
+                else "Còn ${maxOf(run.pendingLeft, facts.pendingCount) + facts.namedPendingCount} thay đổi chờ gửi. Hãy bật tự đồng bộ trong Cài đặt.", Severity.INFO, notes,
             )
             SyncStatus.DELIVERY_UNCONFIRMED -> Line(
                 Kind.DELIVERY_UNCONFIRMED, "Đã lưu trên máy · Chưa xác nhận đã tới kênh",
@@ -207,7 +220,7 @@ internal object PlaylistSyncStatusPolicy {
     fun songLine(availability: MeloSavePolicy.Availability, saved: Boolean, overall: Line): Line = when {
         availability == MeloSavePolicy.Availability.LOCAL_ONLY ->
             Line(Kind.LOCAL_SONG, "Nhạc trên máy · không đồng bộ", MeloSavePolicy.HINT_LOCAL_ONLY, Severity.INFO)
-        !saved -> Line(Kind.NOT_SAVED, "Chưa lưu", "Bài này chưa nằm trong Playlist.", Severity.INFO)
+        !saved -> Line(Kind.NOT_SAVED, "Chưa lưu", "Bài này chưa nằm trong Yêu thích.", Severity.INFO)
         availability == MeloSavePolicy.Availability.LEGACY_ONLY ->
             Line(Kind.SAVED_DEVICE_ONLY, "Đã lưu trên máy · chưa rõ nguồn Telegram", MeloSavePolicy.HINT_LEGACY, Severity.WARN)
         else -> overall
@@ -215,7 +228,7 @@ internal object PlaylistSyncStatusPolicy {
 
     private fun pending(facts: PlaylistStatusFacts, notes: List<String>) = Line(
         Kind.LOCAL_PENDING, "Đã lưu trên máy · Chờ đồng bộ",
-        (if (facts.pendingCount > 0) "Có ${facts.pendingCount} thay đổi chờ gửi lên kênh Telegram riêng."
+        (if (facts.allPendingCount > 0) "Có ${facts.allPendingCount} thay đổi chờ gửi lên kênh Telegram riêng."
         else "Playlist có thay đổi mới hơn lần đồng bộ gần nhất.") + " $METADATA_ONLY", Severity.INFO, notes,
     )
 
@@ -230,10 +243,10 @@ internal object PlaylistSyncStatusPolicy {
     )
 
     private fun unreadable(reason: PlaylistUnreadableReason) = Line(
-        Kind.UNREADABLE, "Không đọc được Playlist trên máy",
+        Kind.UNREADABLE, "Không đọc được Yêu thích trên máy",
         when (reason) {
-            PlaylistUnreadableReason.SCHEMA -> "Playlist do bản ứng dụng mới hơn tạo. Bản này chỉ đọc, không ghi đè."
-            PlaylistUnreadableReason.ACCOUNT -> "Tệp Playlist thuộc tài khoản Telegram khác; không ghi đè."
+            PlaylistUnreadableReason.SCHEMA -> "Yêu thích do bản ứng dụng mới hơn tạo. Bản này chỉ đọc, không ghi đè."
+            PlaylistUnreadableReason.ACCOUNT -> "Tệp Yêu thích thuộc tài khoản Telegram khác; không ghi đè."
             else -> "Để không mất dữ liệu, ứng dụng không ghi đè lên tệp. Hãy giữ nguyên ứng dụng và báo người hỗ trợ."
         },
         Severity.ERROR,
@@ -274,6 +287,10 @@ internal object PlaylistSyncStatusPolicy {
         if (facts.projectionStale) add("Bản sao cho ứng dụng cũ chưa cập nhật kịp; danh sách chính vẫn đúng.")
         if (facts.retryRequiredCount > 0) {
             add("${facts.retryRequiredCount} thay đổi đã gửi nhưng chưa rõ đã tới kênh chưa. Ứng dụng giữ nguyên, không tự gửi lại.")
+        }
+        if (facts.namedPendingCount > 0) add("Trong đó ${facts.namedPendingCount} thay đổi của các Playlist có tên.")
+        if (facts.namedRetryRequiredCount > 0) {
+            add("${facts.namedRetryRequiredCount} thay đổi của Playlist có tên đã gửi nhưng chưa rõ đã tới kênh chưa. Ứng dụng giữ nguyên, không tự gửi lại.")
         }
     }
 

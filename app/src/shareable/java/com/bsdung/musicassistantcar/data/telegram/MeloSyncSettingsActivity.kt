@@ -93,7 +93,10 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
         val epoch = ShareableTdlibOwner.authEpoch()
         val request = ++refreshGeneration
         background {
-            val facts = who?.let { TelegramPlaylistRuntime.session(noBackupFilesDir).statusFacts(it) }
+            val facts = who?.let {
+                TelegramPlaylistRuntime.session(noBackupFilesDir).statusFacts(it)
+                    ?.withNamed(TelegramPlaylistRuntime.namedSession(noBackupFilesDir).view(it)?.state)
+            }
             val context = automatic.context(who)
             context.lastRun?.takeIf { it.stage != SyncStage.NONE }?.let {
                 Log.w("MeloSync", "stage=${it.stage.name} status=${it.status?.name}")
@@ -111,20 +114,20 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
                        line: PlaylistSyncStatusPolicy.Line, notice: String?) {
         content.removeAllViews()
         button("‹ Quay lại", true) { finish() }
-        content.addView(components.sectionTitle("Tự đồng bộ Playlist"))
+        content.addView(components.sectionTitle("Tự đồng bộ Yêu thích & Playlist"))
         content.addView(note(line.text, bold = true))
         content.addView(note(line.fullDetail()))
         notice?.let { content.addView(note(it)) }
         if (automatic.needsDisableRetry) button("Lưu trạng thái tắt lại", who != null) { confirmTurnOff() }
         val enabled = context.consent.automatic
         val ready = TelegramPlaylistFlags.SYNC_ENABLED && who != null && facts != null && facts.unreadable == null
-        button(if (enabled) "☑ Tự đồng bộ đang bật · Bấm để tắt" else "Bật tự đồng bộ Playlist",
+        button(if (enabled) "☑ Tự đồng bộ đang bật · Bấm để tắt" else "Bật tự đồng bộ Yêu thích & Playlist",
             ready && (enabled || !context.running) && !reviewing) {
             if (enabled) confirmTurnOff() else reviewPending(enable = true)
         }
         content.addView(note("Bật một lần trên mỗi máy. Khi app đang mở, thêm/bỏ bài sẽ tự truyền sang máy khác. Máy đang đóng nhận khi mở lại."))
         content.addView(note("Chỉ dùng cùng tài khoản Telegram và kênh đồng bộ đã có. Không tạo kênh mới; không tự tải hoặc phát nhạc."))
-        button("Xem thay đổi chờ gửi (${facts?.pendingCount ?: 0})", ready && !reviewing) { reviewPending(enable = false) }
+        button("Xem thay đổi chờ gửi (${facts?.allPendingCount ?: 0})", ready && !reviewing) { reviewPending(enable = false) }
         button("Đồng bộ ngay", ready && enabled && !context.running && !reviewing) { automatic.requestNow() }
         content.addView(note(SyncPrivacyText.OFF_NOTE))
     }
@@ -148,7 +151,7 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
                     addView(note(text).apply { setPadding(32, 16, 32, 16) })
                 }
                 val dialog = AlertDialog.Builder(this)
-                    .setTitle(if (enable) "Bật tự đồng bộ Playlist?" else "Thay đổi chờ gửi")
+                    .setTitle(if (enable) "Bật tự đồng bộ Yêu thích & Playlist?" else "Thay đổi chờ gửi")
                     .setView(scroll)
                     .setNegativeButton(if (enable) "Hủy" else "Đóng", null)
                 if (enable) dialog.setPositiveButton("Đồng ý và bật") { _, _ ->
@@ -156,7 +159,7 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
                     automatic.enable(review, confirmed = true) { ok, message ->
                         runOnUiThread {
                             if (visible && !isDestroyed && token == viewGeneration && account() == review.account && ShareableTdlibOwner.authEpoch() == review.authEpoch) {
-                                toast(if (ok) "Đã bật tự đồng bộ Playlist." else message ?: "Chưa bật được đồng bộ.")
+                                toast(if (ok) "Đã bật tự đồng bộ Yêu thích & Playlist." else message ?: "Chưa bật được đồng bộ.")
                                 refresh()
                             }
                         }
@@ -170,22 +173,26 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
 
     /** Metadata from the existing local library only; exact source IDs disambiguate duplicate titles. Never logged. */
     private fun pendingText(review: PendingPlaylistReview): String {
-        if (review.entries.isEmpty()) return "Không có thay đổi chờ gửi."
-        val keys = review.entries.map { it.op.item.songKey(review.account.value) }
+        if (review.entries.isEmpty() && review.namedEntries.isEmpty()) return "Không có thay đổi chờ gửi."
+        val keys = review.entries.map { it.op.item.songKey(review.account.value) } +
+            NamedPendingReviewPolicy.songsOf(review.namedEntries).map { it.songKey(review.account.value) }
         val dbFile = getDatabasePath("melovault_tg_index_${review.account.value}.db")
         val songs = if (dbFile.exists()) runCatching {
             AndroidTelegramLibraryDatabase(applicationContext, review.account.value).use { db ->
                 db.getSongsByKeys(review.account.value, keys).associateBy { it.songKey }
             }
         }.getOrDefault(emptyMap()) else emptyMap()
-        return review.entries.mapIndexed { index, entry ->
+        val favourites = review.entries.map { entry ->
             val item = entry.op.item
             val song = songs[item.songKey(review.account.value)]
             val action = if (entry.op.type == OpType.ADD) "Thêm" else "Bỏ"
             val name = song?.title?.takeIf { it.isNotBlank() } ?: "Bài chưa có tên trong thư viện máy này"
             val uncertain = if (entry.status == OutboxStatus.RETRY_REQUIRED) "\nChưa xác nhận đã tới kênh; chỉ đối chiếu, không gửi lại." else ""
-            "${index + 1}. $action: $name\n${song?.sourceTitle.orEmpty()} · Nguồn ${item.chatId} · Tin ${item.messageId}$uncertain"
-        }.joinToString("\n\n")
+            "$action: $name\n${song?.sourceTitle.orEmpty()} · Nguồn ${item.chatId} · Tin ${item.messageId}$uncertain"
+        }
+        // The named playlists' changes: kind, playlist name, song title. No ids.
+        val named = NamedPendingReviewPolicy.rows(review.namedEntries, review.namedNames) { songs[it.songKey(review.account.value)]?.title }
+        return (favourites + named).mapIndexed { index, row -> "${index + 1}. $row" }.joinToString("\n\n")
     }
 
     private fun confirmTurnOff() {

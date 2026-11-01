@@ -24,8 +24,8 @@ internal object MeloSavePolicy {
     const val HINT_LOCAL_ONLY = "Chỉ lưu được bài Telegram"
     const val HINT_LEGACY = "Chưa rõ nguồn Telegram · chỉ lưu trên máy"
     const val HINT_NOT_IDENTIFIED = "Chưa xác định được bài đang phát"
-    const val HINT_UNREADABLE = "Không đọc được Playlist trên máy"
-    const val HINT_NOT_LOADED = "Playlist chưa sẵn sàng"
+    const val HINT_UNREADABLE = "Không đọc được Yêu thích trên máy"
+    const val HINT_NOT_LOADED = "Yêu thích chưa sẵn sàng"
     const val HINT_NOTHING = "Chưa có bài đang phát"
 
     /** [chatId]/[rawMessageId] are 0 when the song row did not carry them. */
@@ -86,12 +86,12 @@ internal object MeloSavePolicy {
         val label = if (shownSaved) "★ Bỏ lưu" else "☆ Lưu"
         val hint = hintFor(availability)
         val description = buildString {
-            append(if (shownSaved) "Bỏ lưu bài đang phát khỏi Playlist" else "Lưu bài đang phát vào Playlist")
+            append(if (shownSaved) "Bỏ lưu bài đang phát khỏi Yêu thích" else "Lưu bài đang phát vào Yêu thích")
             if (busy) append(", đang ghi")
             if (hint != null) append(". ").append(hint)
         }
         val state = when {
-            busy -> "Đang ghi vào Playlist"
+            busy -> "Đang ghi vào Yêu thích"
             availability == Availability.LOCAL_ONLY -> HINT_LOCAL_ONLY
             shownSaved -> "Đã lưu trên máy"
             else -> "Chưa lưu"
@@ -113,9 +113,9 @@ internal object MeloSavePolicy {
         val hint = if (availability == Availability.NOT_IDENTIFIED) "Chưa xác định được nguồn Telegram của bài này" else state.hint
         return state.copy(label = (if (state.saved) "★" else "☆") + if (busy) "…" else "",
             hint = hint,
-            contentDescription = (if (state.saved) "Bỏ lưu $title khỏi Playlist" else "Lưu $title vào Playlist") +
+            contentDescription = (if (state.saved) "Bỏ lưu $title khỏi Yêu thích" else "Lưu $title vào Yêu thích") +
                 (if (busy) ", đang xử lý lưu" else "") + (hint?.let { ". $it" } ?: ""),
-            stateDescription = if (busy) "Đang xử lý lưu Playlist" else state.stateDescription)
+            stateDescription = if (busy) "Đang xử lý lưu Yêu thích" else state.stateDescription)
     }
 
     fun rowTarget(boundOwner: Long, currentOwner: Long, key: Long, chatId: Long, rawMessageId: Long,
