@@ -153,6 +153,8 @@ internal class NamedPlaylistUi(
             .setNegativeButton("Hủy", null)
             .create()
         dialog.setOnShowListener {
+            input.requestFocus()
+            dialog.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
             dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
                 when (val check = MeloNamedPlaylistPolicy.checkName(input.text.toString(), controller.lists, except)) {
                     is NameCheck.Ok -> {
