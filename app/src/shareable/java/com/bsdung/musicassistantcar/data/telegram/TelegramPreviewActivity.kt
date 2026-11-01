@@ -906,7 +906,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val popup = PopupMenu(ContextThemeWrapper(this, R.style.Theme_MeloVault_Dialog), anchor)
         popup.menu.add(0, 1, 1, "▶ Phát bài này")
         popup.menu.add(0, 2, 2, "ℹ Thông tin")
-        popup.menu.add(0, 3, 3, "☆ Lưu vào Playlist · chỉ bài Telegram")
+        popup.menu.add(0, 3, 3, "☆ Lưu vào Yêu thích · chỉ bài Telegram")
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> onPlay()
@@ -2937,7 +2937,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             if (shouldScan) scanAllTelegramAudio()
             else { songFilter.text?.clear(); refreshSongRows() }
         }
-        tab("Playlist", "Playlist các bài yêu thích") {
+        tab("Yêu thích", "Danh sách Yêu thích") {
             if (!auth.isReady()) return@tab
             playlistMode = true
             browseSources = false
@@ -3176,7 +3176,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 rightMargin = dp(4)
             })
         }
-        playlistButton = uiButton("☷ Playlist").apply {
+        playlistButton = uiButton("☷ Yêu thích").apply {
             isEnabled = false
             setOnClickListener {
                 if (!auth.isReady()) return@setOnClickListener
@@ -3191,7 +3191,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 updatePlaylistButtons()
                 refreshSongRows()
                 if (playlistMode && shownSongs.isEmpty()) {
-                    showMessage("Playlist chưa có bài trong thư viện hiện tại.")
+                    showMessage("Yêu thích chưa có bài trong thư viện hiện tại.")
                 }
             }
             playlistRow.addView(this, LinearLayout.LayoutParams(0, -1, 1f).apply {
@@ -3726,7 +3726,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             else { songFilter.text?.clear(); refreshSongRows() }
             updateBottomNavState()
         }
-        bottomTab(2, "☆ Playlist", "Playlist các bài yêu thích") {
+        bottomTab(2, "☆ Yêu thích", "Danh sách Yêu thích") {
             if (!auth.isReady()) return@bottomTab
             playlistMode = true
             browseSources = false
@@ -4404,7 +4404,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             "★ Đã lưu bài"
         } else "☆ Lưu bài"
         playlistButton.isEnabled = auth.isReady()
-        playlistButton.text = if (playlistMode) "☷ Tất cả bài" else "☷ Playlist"
+        playlistButton.text = if (playlistMode) "☷ Tất cả bài" else "☷ Yêu thích"
     }
 
     private fun offlineSong(it: IndexedTelegramSong) = Song(
@@ -5149,14 +5149,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
         when (outcome) {
             is TelegramPlaylistSession.ToggleOutcome.Added -> {
                 applySavedPlaylist(outcome.ids)
-                showMessage(if (title != null) "Đã lưu '$title' trên máy." else "Đã lưu trên máy · ${outcome.ids.size} bài trong Playlist.")
+                showMessage(if (title != null) "Đã lưu '$title' vào Yêu thích." else "Đã lưu vào Yêu thích · ${outcome.ids.size} bài.")
             }
             is TelegramPlaylistSession.ToggleOutcome.Removed -> {
                 applySavedPlaylist(outcome.ids)
-                showMessage(if (title != null) "Đã bỏ lưu '$title'." else "Đã bỏ lưu · ${outcome.ids.size} bài trong Playlist.")
+                showMessage(if (title != null) "Đã bỏ '$title' khỏi Yêu thích." else "Đã bỏ khỏi Yêu thích · ${outcome.ids.size} bài.")
             }
             is TelegramPlaylistSession.ToggleOutcome.Full -> {
-                val message = "Playlist đã đủ ${TelegramPlaylistPolicy.MAX_IDS} bài. Hãy xóa bớt một bài trước khi thêm bài mới."
+                val message = "Yêu thích đã đủ ${TelegramPlaylistPolicy.MAX_IDS} bài. Hãy bỏ bớt một bài trước khi thêm bài mới."
                 showMessage(message)
                 toast(message)
             }
@@ -5165,11 +5165,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 showPlaylistUnreadable()
             }
             is TelegramPlaylistSession.ToggleOutcome.NotOpen ->
-                showMessage("Playlist chưa sẵn sàng. Hãy thử lại sau giây lát.")
+                showMessage("Yêu thích chưa sẵn sàng. Hãy thử lại sau giây lát.")
             is TelegramPlaylistSession.ToggleOutcome.Failed ->
                 showMessage("Không lưu được playlist an toàn trên thiết bị.")
             is TelegramPlaylistSession.ToggleOutcome.OutboxFull -> {
-                val message = "Có quá nhiều thay đổi Playlist đang chờ đồng bộ nên chưa thể lưu thêm. Dữ liệu cũ vẫn được giữ nguyên."
+                val message = "Có quá nhiều thay đổi đang chờ đồng bộ nên chưa thể lưu thêm vào Yêu thích. Dữ liệu cũ vẫn được giữ nguyên."
                 showMessage(message)
                 toast(message)
             }
@@ -5276,7 +5276,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun showPlaylistUnreadable() {
-        val message = "Không đọc được Playlist đã lưu trên máy này. Để không mất dữ liệu, ứng dụng sẽ không ghi đè lên nó. " +
+        val message = "Không đọc được Yêu thích đã lưu trên máy này. Để không mất dữ liệu, ứng dụng sẽ không ghi đè lên nó. " +
             "Hãy giữ nguyên ứng dụng và báo cho người hỗ trợ."
         showMessage(message)
         toast(message)
@@ -5286,9 +5286,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun showPlaylistImportDeferred(warning: PlaylistWarning) {
         val message = when (warning) {
             PlaylistWarning.IMPORT_DEFERRED_OUTBOX_FULL ->
-                "Playlist có bài do bản ứng dụng cũ thêm nhưng chưa nhập được vì hàng đợi thay đổi đang đầy. Không bài nào bị mất; ứng dụng sẽ thử lại ở lần mở sau."
+                "Yêu thích có bài do bản ứng dụng cũ thêm nhưng chưa nhập được vì hàng đợi thay đổi đang đầy. Không bài nào bị mất; ứng dụng sẽ thử lại ở lần mở sau."
             PlaylistWarning.IMPORT_NOT_SAVED ->
-                "Chưa lưu được các thay đổi Playlist từ bản ứng dụng cũ. Không bài nào bị mất; hãy mở lại ứng dụng để thử lại."
+                "Chưa lưu được các thay đổi Yêu thích từ bản ứng dụng cũ. Không bài nào bị mất; hãy mở lại ứng dụng để thử lại."
         }
         showMessage(message)
         toast(message)

@@ -114,14 +114,14 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
                        line: PlaylistSyncStatusPolicy.Line, notice: String?) {
         content.removeAllViews()
         button("‹ Quay lại", true) { finish() }
-        content.addView(components.sectionTitle("Tự đồng bộ Playlist"))
+        content.addView(components.sectionTitle("Tự đồng bộ Yêu thích & Playlist"))
         content.addView(note(line.text, bold = true))
         content.addView(note(line.fullDetail()))
         notice?.let { content.addView(note(it)) }
         if (automatic.needsDisableRetry) button("Lưu trạng thái tắt lại", who != null) { confirmTurnOff() }
         val enabled = context.consent.automatic
         val ready = TelegramPlaylistFlags.SYNC_ENABLED && who != null && facts != null && facts.unreadable == null
-        button(if (enabled) "☑ Tự đồng bộ đang bật · Bấm để tắt" else "Bật tự đồng bộ Playlist",
+        button(if (enabled) "☑ Tự đồng bộ đang bật · Bấm để tắt" else "Bật tự đồng bộ Yêu thích & Playlist",
             ready && (enabled || !context.running) && !reviewing) {
             if (enabled) confirmTurnOff() else reviewPending(enable = true)
         }
@@ -151,7 +151,7 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
                     addView(note(text).apply { setPadding(32, 16, 32, 16) })
                 }
                 val dialog = AlertDialog.Builder(this)
-                    .setTitle(if (enable) "Bật tự đồng bộ Playlist?" else "Thay đổi chờ gửi")
+                    .setTitle(if (enable) "Bật tự đồng bộ Yêu thích & Playlist?" else "Thay đổi chờ gửi")
                     .setView(scroll)
                     .setNegativeButton(if (enable) "Hủy" else "Đóng", null)
                 if (enable) dialog.setPositiveButton("Đồng ý và bật") { _, _ ->
@@ -159,7 +159,7 @@ class MeloSyncSettingsActivity : AppCompatActivity() {
                     automatic.enable(review, confirmed = true) { ok, message ->
                         runOnUiThread {
                             if (visible && !isDestroyed && token == viewGeneration && account() == review.account && ShareableTdlibOwner.authEpoch() == review.authEpoch) {
-                                toast(if (ok) "Đã bật tự đồng bộ Playlist." else message ?: "Chưa bật được đồng bộ.")
+                                toast(if (ok) "Đã bật tự đồng bộ Yêu thích & Playlist." else message ?: "Chưa bật được đồng bộ.")
                                 refresh()
                             }
                         }

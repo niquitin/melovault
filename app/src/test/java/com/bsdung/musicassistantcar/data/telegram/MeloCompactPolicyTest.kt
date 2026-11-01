@@ -82,7 +82,7 @@ class MeloCompactPolicyTest {
     fun headerTitleUsesRealCounts() {
         assertEquals("Đã tải · 76 bài", MeloCompactPolicy.headerTitle(Mode.DOWNLOADED, null, 76))
         assertEquals("Tất cả · 25.085 bài", MeloCompactPolicy.headerTitle(Mode.ALL, null, 25_085))
-        assertEquals("Playlist · 12 bài", MeloCompactPolicy.headerTitle(Mode.PLAYLIST, "Kênh A", 12))
+        assertEquals("Yêu thích · 12 bài", MeloCompactPolicy.headerTitle(Mode.PLAYLIST, "Kênh A", 12))
         assertEquals("Nhạc Lạnh · 77 bài", MeloCompactPolicy.headerTitle(Mode.ALL, " Nhạc Lạnh ", 77))
         assertEquals("Đã tải · Nhạc Lạnh · 3 bài", MeloCompactPolicy.headerTitle(Mode.DOWNLOADED, "Nhạc Lạnh", 3))
         assertEquals("Tất cả", MeloCompactPolicy.headerTitle(Mode.ALL, null, null))

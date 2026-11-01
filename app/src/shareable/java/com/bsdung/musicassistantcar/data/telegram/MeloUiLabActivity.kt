@@ -310,8 +310,8 @@ class MeloUiLabActivity : AppCompatActivity() {
 
         content.addView(groupTitle("THƯ VIỆN & ĐỒNG BỘ"))
         content.addView(settingRow(
-            "Đồng bộ Playlist giữa các máy",
-            subtitle = "Tự đồng bộ Playlist khi mở app",
+            "Đồng bộ Yêu thích & Playlist giữa các máy",
+            subtitle = "Tự đồng bộ Yêu thích & Playlist khi mở app",
             badge = "Thử nghiệm"
         ) { startActivity(Intent(this, MeloSyncSettingsActivity::class.java)) })
         // P2-B: the subtitle is the disclosure; saying yes here is the same consent as the box in the Lời nhạc tab.

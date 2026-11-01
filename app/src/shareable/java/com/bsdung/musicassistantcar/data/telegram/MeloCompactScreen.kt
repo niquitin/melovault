@@ -598,7 +598,7 @@ internal class MeloCompactScreen(
             shuffle.text = if (now.shuffle) "⇄ Đảo: bật" else "⇄ Đảo: tắt"
             repeat.text = "↻ Lặp: ${now.repeatLabel}"
             val save = MeloSavePolicy.buttonState(now.saveAvailability, now.favorite, now.saveBusy)
-            favorite.text = if (save.saved) "★ Bỏ lưu khỏi Playlist" else "☆ Lưu vào Playlist"
+            favorite.text = if (save.saved) "★ Bỏ khỏi Yêu thích" else "☆ Lưu vào Yêu thích"
             favorite.contentDescription = save.contentDescription
             setTextPx(shuffle); setTextPx(repeat); setTextPx(favorite); setTextPx(queue)
         }

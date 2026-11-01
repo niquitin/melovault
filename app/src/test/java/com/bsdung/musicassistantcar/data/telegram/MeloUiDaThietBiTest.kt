@@ -121,7 +121,7 @@ class MeloUiDaThietBiTest {
     @Test
     fun ui07_songMenuKeepsFullWordingUpToFontScale1_3() {
         val labels = MeloLibraryPolicy.songMenuLabels(1.3f, favorite = false, versions = 3)
-        assertEquals("☆ Thêm vào Playlist", labels.favorite)
+        assertEquals("☆ Thêm vào Yêu thích", labels.favorite)
         assertEquals("☰ Chọn bản khác (3 bản)", labels.versions)
         assertEquals("ℹ Thông tin chi tiết", labels.details)
         assertEquals(null, MeloLibraryPolicy.songMenuLabels(1.0f, false, null).versions)
@@ -152,9 +152,9 @@ class MeloUiDaThietBiTest {
     @Test
     fun ui07_songMenuUsesShortWordingFromFontScale1_5() {
         val labels = MeloLibraryPolicy.songMenuLabels(1.5f, favorite = false, versions = 3)
-        assertEquals("☆ Lưu Playlist", labels.favorite)
+        assertEquals("☆ Lưu Yêu thích", labels.favorite)
         assertEquals("☰ Bản khác (3)", labels.versions)
         assertEquals("ℹ Chi tiết", labels.details)
-        assertEquals("★ Bỏ Playlist", MeloLibraryPolicy.songMenuLabels(2.0f, favorite = true, versions = null).favorite)
+        assertEquals("★ Bỏ Yêu thích", MeloLibraryPolicy.songMenuLabels(2.0f, favorite = true, versions = null).favorite)
     }
 }

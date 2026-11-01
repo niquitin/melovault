@@ -220,7 +220,7 @@ internal object PlaylistSyncStatusPolicy {
     fun songLine(availability: MeloSavePolicy.Availability, saved: Boolean, overall: Line): Line = when {
         availability == MeloSavePolicy.Availability.LOCAL_ONLY ->
             Line(Kind.LOCAL_SONG, "Nhạc trên máy · không đồng bộ", MeloSavePolicy.HINT_LOCAL_ONLY, Severity.INFO)
-        !saved -> Line(Kind.NOT_SAVED, "Chưa lưu", "Bài này chưa nằm trong Playlist.", Severity.INFO)
+        !saved -> Line(Kind.NOT_SAVED, "Chưa lưu", "Bài này chưa nằm trong Yêu thích.", Severity.INFO)
         availability == MeloSavePolicy.Availability.LEGACY_ONLY ->
             Line(Kind.SAVED_DEVICE_ONLY, "Đã lưu trên máy · chưa rõ nguồn Telegram", MeloSavePolicy.HINT_LEGACY, Severity.WARN)
         else -> overall
@@ -243,10 +243,10 @@ internal object PlaylistSyncStatusPolicy {
     )
 
     private fun unreadable(reason: PlaylistUnreadableReason) = Line(
-        Kind.UNREADABLE, "Không đọc được Playlist trên máy",
+        Kind.UNREADABLE, "Không đọc được Yêu thích trên máy",
         when (reason) {
-            PlaylistUnreadableReason.SCHEMA -> "Playlist do bản ứng dụng mới hơn tạo. Bản này chỉ đọc, không ghi đè."
-            PlaylistUnreadableReason.ACCOUNT -> "Tệp Playlist thuộc tài khoản Telegram khác; không ghi đè."
+            PlaylistUnreadableReason.SCHEMA -> "Yêu thích do bản ứng dụng mới hơn tạo. Bản này chỉ đọc, không ghi đè."
+            PlaylistUnreadableReason.ACCOUNT -> "Tệp Yêu thích thuộc tài khoản Telegram khác; không ghi đè."
             else -> "Để không mất dữ liệu, ứng dụng không ghi đè lên tệp. Hãy giữ nguyên ứng dụng và báo người hỗ trợ."
         },
         Severity.ERROR,

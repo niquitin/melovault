@@ -37,8 +37,8 @@ class MeloRowSavePolicyTest {
 
     @Test fun rowWordsNameTheRowAndNeverClaimItIsPlaying() {
         val state = MeloSavePolicy.rowButtonState("Bài A", Availability.READY, false, false)
-        assertEquals("Lưu Bài A vào Playlist", state.contentDescription)
-        assertEquals("Bỏ lưu Bài A khỏi Playlist", MeloSavePolicy.rowButtonState("Bài A", Availability.READY, true, false).contentDescription)
+        assertEquals("Lưu Bài A vào Yêu thích", state.contentDescription)
+        assertEquals("Bỏ lưu Bài A khỏi Yêu thích", MeloSavePolicy.rowButtonState("Bài A", Availability.READY, true, false).contentDescription)
         assertFalse(MeloSavePolicy.rowButtonState("A", Availability.NOT_IDENTIFIED, false, false).contentDescription.contains("đang phát"))
         assertTrue(MeloSavePolicy.buttonState(Availability.READY, false, false).contentDescription.contains("đang phát"))
     }

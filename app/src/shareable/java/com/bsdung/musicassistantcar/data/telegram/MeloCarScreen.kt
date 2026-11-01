@@ -266,7 +266,7 @@ internal class MeloCarScreen(
         playerPane.addView(seekRow, matchWrap().apply { topMargin = s.gap * 2 })
 
         // E96 P4: one tap, always on the Now Playing pane (no menu, no Playlist tab, no long press).
-        saveButton = bigButton("☆ Lưu", "Lưu bài đang phát vào Playlist") { onSaveTap() }
+        saveButton = bigButton("☆ Lưu", "Lưu bài đang phát vào Yêu thích") { onSaveTap() }
         playerPane.addView(saveButton, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, MeloSavePolicy.carButtonHeightPx(s)
         ).apply { topMargin = s.gap * 2 })

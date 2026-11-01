@@ -291,8 +291,8 @@ internal object MeloLibraryPolicy {
             versions = versions?.let { if (short) "☰ Bản khác ($it)" else "☰ Chọn bản khác ($it bản)" },
             playNext = if (short) "⏭ Phát tiếp" else "⏭ Phát tiếp theo",
             favorite = when {
-                favorite -> if (short) "★ Bỏ Playlist" else "★ Xóa khỏi Playlist"
-                else -> if (short) "☆ Lưu Playlist" else "☆ Thêm vào Playlist"
+                favorite -> if (short) "★ Bỏ Yêu thích" else "★ Bỏ khỏi Yêu thích"
+                else -> if (short) "☆ Lưu Yêu thích" else "☆ Thêm vào Yêu thích"
             },
             download = if (short) "⬇ Tải và phát" else "⬇ Tải về và phát",
             details = if (short) "ℹ Chi tiết" else "ℹ Thông tin chi tiết"
