@@ -41,6 +41,9 @@ internal object MeloNamedPlaylistPolicy {
 
     const val FAVOURITES_NAME = "Yêu thích"
 
+    /** The name box stops typing here; longer than the 60 a name may have, so that "too long" can be told instead of silently cut. */
+    const val MAX_NAME_INPUT = 120
+
     fun countText(count: Int): String = "$count bài"
 
     /** [favourites] null = the old list has not been read yet (no number is guessed). */

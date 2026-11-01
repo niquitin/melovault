@@ -162,7 +162,8 @@ internal class MeloCompactScreen(
         title.text = if (snap.showingSources) {
             "Telegram · ${MeloComponentPolicy.formatCount(snap.sources.count { it.chatId != 0L })} nguồn"
         } else {
-            MeloCompactPolicy.headerTitle(snap.mode, snap.sourceTitle, snap.total)
+            (if (snap.mode == Mode.PLAYLIST) host.named()?.headerTitle() else null)
+                ?: MeloCompactPolicy.headerTitle(snap.mode, snap.sourceTitle, snap.total)
         }
         if (snap.local != lastLocal) {
             // The search box belongs to one source: show that source's own query when switching.
@@ -368,19 +369,36 @@ internal class MeloCompactScreen(
             menu.add(0, 7, 4, "♪ Nhạc trên máy")
             menu.add(0, 4, 5, "▶ Đang phát")
             menu.add(0, 5, 6, "⚙ Cài đặt")
+            // Nhiều Playlist có tên: with one playlist open, its own actions are one tap away.
+            val named = host.named()?.takeIf { snapshot?.mode == Mode.PLAYLIST }
+            val detail = named?.screen() is MeloNamedPlaylistPolicy.Screen.Detail
+            if (detail) {
+                menu.add(0, 8, 7, "▶ Phát Playlist này")
+                menu.add(0, 9, 8, "⤨ Phát ngẫu nhiên")
+                menu.add(0, 10, 9, "⋮ Đổi tên · Sắp xếp · Xóa")
+            }
             setOnMenuItemClickListener {
                 when (it.itemId) {
                     1 -> { host.openSource(null); host.setMode(Mode.ALL) }
                     2 -> host.showSources()
-                    3 -> host.setMode(Mode.PLAYLIST)
+                    3 -> openPlaylistTab()
                     4 -> openNowPlaying()
                     5 -> host.openUiLab()
                     6 -> host.setMode(Mode.DOWNLOADED)
                     7 -> host.openLocal()
+                    8 -> named?.play(false)
+                    9 -> named?.play(true)
+                    10 -> named?.openMenu(anchor)
                 }
                 true
             }
         }.show()
+    }
+
+    /** Gọn has no room for an inline index: the Playlist entry opens it as a list in a box (Yêu thích, the playlists, + Tạo Playlist). */
+    private fun openPlaylistTab() {
+        host.setMode(Mode.PLAYLIST)
+        host.named()?.openIndexDialog()
     }
 
     private fun showFilterMenu(anchor: View) {
@@ -394,7 +412,7 @@ internal class MeloCompactScreen(
                 when (it.itemId) {
                     1 -> host.setMode(Mode.ALL)
                     2 -> host.setMode(Mode.DOWNLOADED)
-                    3 -> host.setMode(Mode.PLAYLIST)
+                    3 -> openPlaylistTab()
                     4 -> host.openLegacyOverflow(anchor)
                 }
                 true
@@ -408,7 +426,7 @@ internal class MeloCompactScreen(
         when (tab) {
             MeloBottomBarPolicy.Tab.LIBRARY -> { host.openSource(null); host.setMode(Mode.ALL) }
             MeloBottomBarPolicy.Tab.TELEGRAM -> host.showSources()
-            MeloBottomBarPolicy.Tab.PLAYLIST -> host.setMode(Mode.PLAYLIST)
+            MeloBottomBarPolicy.Tab.PLAYLIST -> openPlaylistTab()
             MeloBottomBarPolicy.Tab.DOWNLOADED -> host.setMode(Mode.DOWNLOADED)
         }
     }
