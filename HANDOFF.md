@@ -1,4 +1,14 @@
 # HANDOFF — MeloVault (Shareable Preview)
+## Cập nhật tích hợp 01/11/2026 — GIAO DIỆN ĐA THIẾT BỊ MERGED (ƯU TIÊN CAO NHẤT)
+
+- **2026-10-31-giao-dien-da-thiet-bi: ĐẠT** — chủ dự án nhắn trong chat 01/11: `ĐẠT 2026-10-31-giao-dien-da-thiet-bi — 8664915/367CAA37`. Nghiệm thu: [`-nghiem-thu.md`](docs/plans/2026-10-31-giao-dien-da-thiet-bi-nghiem-thu.md) (PASS kèm giới hạn); sơ bộ: [`-nghiem-thu-so-bo.md`](docs/plans/2026-10-31-giao-dien-da-thiet-bi-nghiem-thu-so-bo.md) (CẦN SỬA UI-03, UI-02 — chủ dự án vẫn ĐẠT).
+- Nội dung: sửa UI nhiều cỡ máy (UI-01 Thư viện ngang, UI-02 bàn phím, UI-04 thanh dưới, UI-05 dòng trạng thái, UI-07/08 chữ lớn, Hai khung…). Chỉ file UI trong `data/telegram/` + test; không đụng service, DB, TDLib, package, signer. Mã cuối `75375b4`; hồ sơ cuối `86e40cf`. Test chặng B: 2336/21 skipped/0/0 mỗi biến thể (không chạy lại sau merge vì cây giống hệt nhánh nguồn).
+- APK QA: Debug vc121 0.6.96-beta, SHA-256 `367CAA3738171D4163CAC04844F9E9F4FB2D0BC3C142CDA631F889C2929F1006`, cài trên Sony; Drive owner-only (xem [`-apk-test.md`](docs/plans/2026-10-31-giao-dien-da-thiet-bi-apk-test.md)). **Chưa phải bản phát hành**, chưa có Release công khai.
+- Merge `--no-ff` vào `feature/e93-03d-y700-offline-cockpit`: **merge commit `4517ce5`** (parent `94ab6b0` + `86e40cf`), làm trong worktree `C:\Users\ntdun\.codex\worktrees\workflow-md-handoff\MeloVault-E91-Shareable`. Sạch, không xung đột, `git diff` với nhánh nguồn rỗng. **Chưa push** (repo không có remote); **chưa public** (chủ dự án chưa nói kênh/bản — cần chỉ thị cụ thể).
+- **Lỗi/giới hạn đã vào nhánh tích hợp, chưa sửa (chủ dự án chấp nhận khi ĐẠT):** SB-1 UI-03 — lề màn Hàng đợi chưa có hiệu lực (nghi `showMeloQueue()` ở `TelegramPreviewActivity.kt` thiếu `setDecorFitsSystemWindows(false)`); SB-2 UI-02 — cửa sổ thấp có bàn phím còn ≈ 0–0,5 dòng kết quả; UI-06 không sửa; UI-01 M2 ngang ≈ 1,5 dòng; Gọn chia đôi chưa chụp lại; tablet/máy gập thật chưa kiểm; **CHƯA XÁC NHẬN ÂM THANH THỰC**. Muốn sửa SB-1/SB-2 → REWORK hoặc nhiệm vụ riêng.
+- Hồ sơ: [kế hoạch](docs/plans/2026-10-31-giao-dien-da-thiet-bi.md), [bàn giao](docs/plans/2026-10-31-giao-dien-da-thiet-bi-ban-giao.md). Nhánh nguồn `dot/2026-10-31-giao-dien-da-thiet-bi` (giữ nguyên), worktree `D:\Bots\_worktrees\MeloVault-giao-dien-da-thiet-bi`, baseline `94ab6b0`.
+- Việc còn mở: nhiệm vụ kế do chủ dự án chọn (agent không tự chọn); push/public chờ chỉ thị.
+
 ## Cập nhật hồ sơ 31/10/2026 — bổ sung 4 nhiệm vụ ngày 30/10 và danh sách việc còn mở
 
 - Lý do: HANDOFF chưa ghi 4 nhiệm vụ ngày 30/10, dù cả 4 đã ĐẠT và đã merge. Nay ghi ở mục “Cập nhật tích hợp 30/10/2026” bên dưới. Chủ dự án giao trong chat (“Cập nhật HANDOFF”). Đây là tác vụ chỉ sửa tài liệu: [kế hoạch/báo cáo](docs/plans/2026-10-31-cap-nhat-handoff.md), [bàn giao](docs/plans/2026-10-31-cap-nhat-handoff-ban-giao.md).
