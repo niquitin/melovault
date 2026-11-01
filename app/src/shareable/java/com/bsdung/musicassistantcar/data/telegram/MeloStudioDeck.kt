@@ -77,6 +77,9 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
     private lateinit var sleep: TextView
     private val prefetchSwitch: Switch
     private lateinit var queuePane: MeloQueuePane
+    private lateinit var lyricsPane: MeloLyricsPane
+    /** "Tiếp theo | Lời nhạc" (P2-B); null on a host without lyrics, which then keeps the plain queue. */
+    private var lyricsTabs: MeloLyricsTabs? = null
 
     private var currentKey: Long? = null
     private var probedKey: Long? = null
@@ -123,6 +126,12 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
             onSeek = { host.seekTo(it); refresh() }
         )
         queuePane = MeloQueuePane(activity, c, host, preview = layout == DeckLayout.PORTRAIT)
+        lyricsPane = MeloLyricsPane(
+            activity, c, host,
+            fixedHeightPx = if (layout == DeckLayout.PORTRAIT) {
+                MeloLyricsUiPolicy.portraitPaneHeight((metrics.windowHeightDp * d.density).toInt(), c.sizes.minTouch)
+            } else null
+        )
         prefetchSwitch = Switch(activity).apply {
             text = "Tải trước bài kế"
             setTextColor(p.text)
@@ -148,6 +157,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         fitScroll?.post { fitScroll?.scrollTo(0, saved.bodyScrollY) }
         handler.removeCallbacks(update)
         handler.post(update)
+        lyricsTabs?.setActive(true)
     }
 
     fun isShowing(): Boolean = dialog.isShowing
@@ -165,6 +175,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
 
     private fun stop() {
         saveUiState()
+        lyricsTabs?.setActive(false)
         playFeedbackView.stop()
         handler.removeCallbacksAndMessages(null)
         jobGeneration.incrementAndGet()
@@ -203,10 +214,12 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         addPlayerBody(player)
         column.addView(player, matchWrap())
         column.addView(c.spacer(s.gap * 3))
-        column.addView(queueHeader(), matchWrap())
-        column.addView(queuePane.view, matchWrap())
-        column.addView(c.chip("Xem cả hàng đợi", false) { host.openQueue() }, LinearLayout.LayoutParams(
+        val queueBlock = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        queueBlock.addView(queueHeader(), matchWrap())
+        queueBlock.addView(queuePane.view, matchWrap())
+        queueBlock.addView(c.chip("Xem cả hàng đợi", false) { host.openQueue() }, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, s.minTouch).apply { topMargin = s.gap })
+        column.addView(withLyricsTabs(queueBlock, fillHeight = false), matchWrap())
         scroll.addView(column)
         fitScroll = scroll
         fitColumn = player
@@ -235,9 +248,11 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         left.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         left.addView(buildDock(0), matchWrap())
         row.addView(left, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 45f).apply { marginEnd = s.screenMargin })
+        val queueBlock = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+        queueBlock.addView(queueHeader(), matchWrap().apply { topMargin = s.gap })
+        queueBlock.addView(queuePane.view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         val right = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
-        right.addView(queueHeader(), matchWrap().apply { topMargin = s.gap })
-        right.addView(queuePane.view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        right.addView(withLyricsTabs(queueBlock, fillHeight = true), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         row.addView(right, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 55f))
         fitScroll = scroll
         fitColumn = player
@@ -408,6 +423,14 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         }
         column.addView(extrasBox, matchWrap().apply { topMargin = s.gap * 2 })
         arrangeExtras(false)
+    }
+
+    /** The queue block alone, or under the "Tiếp theo | Lời nhạc" strip when this host has lyrics. */
+    private fun withLyricsTabs(queueBlock: View, fillHeight: Boolean): View {
+        if (host.lyrics() == null) return queueBlock
+        val tabs = MeloLyricsTabs(activity, c, host, queueBlock, lyricsPane, fillHeight)
+        lyricsTabs = tabs
+        return tabs.view
     }
 
     private fun queueHeader(): View = LinearLayout(activity).apply {

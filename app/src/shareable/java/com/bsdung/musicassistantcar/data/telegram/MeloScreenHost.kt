@@ -151,6 +151,9 @@ internal interface MeloScreenHost {
     fun sleepTimer(): Pair<Long?, Boolean>
     fun setSleepTimer(option: MeloNowPlayingPolicy.SleepOption)
 
+    /** P2-B: lyrics of the song now playing; null on hosts without lyrics (fakes, previews), which then show no "Lời nhạc" tab. */
+    fun lyrics(): MeloLyricsAccess? = null
+
     data class QueueItem(
         val title: String,
         val sourceTitle: String?,

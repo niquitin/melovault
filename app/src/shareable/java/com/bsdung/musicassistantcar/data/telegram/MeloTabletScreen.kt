@@ -53,7 +53,8 @@ internal class MeloTabletScreen(
     private val rightSlot = FrameLayout(context)
     private var showingQueue = false
     private lateinit var queuePane: MeloQueuePane
-    private val pane = MeloLibraryPane(context, c, host, NewLayer.TWO_PANE)
+    private var lyricsTabs: MeloLyricsTabs? = null
+    private val pane =MeloLibraryPane(context, c, host, NewLayer.TWO_PANE)
     private val playFeedbackView = MeloPlayFeedbackView(context, c, host)
 
     // Player pane parts.
@@ -140,7 +141,15 @@ internal class MeloTabletScreen(
         right.addView(heading, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             bottomMargin = s.gap
         })
-        queuePane = MeloQueuePane(context, c, host, onLibrary = { closeQueue() })
+        // P2-B: the queue panel gets a "Tiếp theo | Lời nhạc" strip; "Thư viện" then moves to the end of the strip.
+        val hasLyrics = host.lyrics() != null
+        queuePane = MeloQueuePane(context, c, host, onLibrary = if (hasLyrics) null else ({ closeQueue() }))
+        if (hasLyrics) {
+            lyricsTabs = MeloLyricsTabs(
+                context, c, host, queuePane.view, MeloLyricsPane(context, c, host), fillHeight = true,
+                trailing = c.chip("Thư viện", false) { closeQueue() }
+            )
+        }
         rightSlot.addView(pane.view)
         right.addView(rightSlot, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         view.addView(right, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 60f))
@@ -151,15 +160,17 @@ internal class MeloTabletScreen(
         // The pane remains mounted, preserving pending query and list anchor from S2.
         showingQueue = true
         pane.view.visibility = View.GONE
-        rightSlot.addView(queuePane.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        rightSlot.addView(lyricsTabs?.view ?: queuePane.view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         backCallback.isEnabled = true
         queuePane.update()
+        lyricsTabs?.setActive(true)
     }
 
     private fun closeQueue() {
         if (!showingQueue) return
         showingQueue = false
-        rightSlot.removeView(queuePane.view)
+        lyricsTabs?.setActive(false)
+        rightSlot.removeView(lyricsTabs?.view ?: queuePane.view)
         pane.view.visibility = View.VISIBLE
         onLibraryChanged()
     }
@@ -171,6 +182,7 @@ internal class MeloTabletScreen(
     }
 
     fun detach() {
+        lyricsTabs?.setActive(false)
         playFeedbackView.stop()
         backCallback.remove()
         pane.detach()
