@@ -4,7 +4,7 @@ TASK_ID: `2026-11-01-nhieu-playlist-co-ten`. Nhánh `dot/2026-11-01-nhieu-playli
 
 Thực thi: Claude Code Sonnet 5.5 (effort không xác định từ công cụ), phiên Chặng 1.
 Phạm vi phiên: **Chặng 1 (S1–S5)** — mô hình, lưu trữ, session. Không UI, không đồng bộ, không build APK, không ADB/Sony/Tiny/Drive.
-Trạng thái: **CHẶNG 1 VÀ CHẶNG 2 XONG, chờ phiên thực thi Chặng 3.** Chưa có APK, chưa nghiệm thu.
+Trạng thái: **CHẶNG 1, 2 VÀ 3 XONG, chờ phiên thực thi Chặng 4.** Chưa có APK, chưa nghiệm thu.
 
 ## 1. Bảng kết quả
 
@@ -167,3 +167,26 @@ Test mới Chặng 2: **83** = 19 (`NamedPlaylistSyncProtocolTest`) + 26 (`Named
 ## 7. Việc tiếp
 
 Chặng 3 (S11–S19, UI Views). Prompt đầy đủ ở `2026-11-01-nhieu-playlist-co-ten-ban-giao.md`.
+
+---
+
+# Chặng 3 (S11–S19) — giao diện Playlist có tên
+
+Thực thi: Claude Code Sonnet 5.5 (effort không xác định), phiên Chặng 3 (lệnh “Tiếp chặng 3” trong cùng hội thoại). Chi tiết ở phụ lục [2026-11-01-nhieu-playlist-co-ten-bao-cao-chang3.md](2026-11-01-nhieu-playlist-co-ten-bao-cao-chang3.md). Mã dừng ở `751b623`. **Chưa chạy trên máy; chưa có APK; chưa nghiệm thu.**
+
+| Bước | Việc | Commit | Test mới | Kết quả |
+|---|---|---|---|---|
+| S11 | Nhãn Yêu thích (Phụ lục A); sửa 6 dòng test nhãn | `3f150c5` | 0 | PASS |
+| S12 | `MeloNamedPlaylistPolicy` thuần | `a02ed2a` | 29 | PASS |
+| S13 | `NamedPlaylistController`, mở/đóng cùng Yêu thích, cờ hoàn tác | `79b318e` | 22 | PASS |
+| S14–S18 | Tab Playlist 2 mức, Thêm vào Playlist, Đổi tên/Xóa, Sắp xếp, Lưu hàng chờ, Phát | `0e8d45a`, `751b623` | 10 (guard nguồn) | PASS |
+| S19 | Gate Ni | (commit hồ sơ) | — | PASS |
+
+Gate S19 (một lần, cây sạch): Debug và Release mỗi biến thể 199 suite, **2683 test, 21 skipped, 0 failures, 0 errors** (baseline Chặng 3: 196/2622/21/0/0; +61 đúng phần mới); `assembleShareableDebug/Release`, `-PmeloOpen=true` (test + assemble Debug) và `assemblePersonalDebug` đều BUILD SUCCESSFUL; `git diff --check` sạch.
+
+Điểm cần chủ dự án biết (chi tiết: phụ lục mục 5–6):
+1. Từ Chặng 3, session Playlist có tên được mở trong app ⇒ mã đồng bộ Chặng 2 chạy thật ở foreground khi tự đồng bộ đang bật.
+2. Phát Playlist: hàng chờ chỉ gồm bài Telegram; bài trên máy chạm từng bài (service giữ hai hàng chờ riêng). **Khác Q5 của kế hoạch khi Playlist có bài trên máy.**
+3. Cờ `NAMED_ENABLED` ở `NamedPlaylistFlags.kt` (file `TelegramPlaylistV2Session.kt` không đổi).
+4. Sắp xếp là hộp ↑/↓ (không phải chế độ ngay trên dòng); Gọn dùng hộp danh sách làm chỉ mục.
+5. **Giao diện chưa từng được nhìn thấy trên máy**: bố cục, vùng chạm, xoay, chữ lớn, TalkBack chỉ có guard nguồn.
