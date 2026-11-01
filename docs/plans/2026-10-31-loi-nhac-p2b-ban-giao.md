@@ -153,3 +153,11 @@ Phạm vi kiểm nhanh (không kiểm lại toàn bộ):
 Ghi kết quả vào docs/plans/2026-10-31-loi-nhac-p2b-nghiem-thu-so-bo.md: "SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN" / "SƠ BỘ: CẦN SỬA" (liệt kê lỗi có vị trí và bước tái hiện, kể cả B1) / "SƠ BỘ: BLOCKED". Không ghi PASS chính thức, không merge/push/public, không chọn việc khác.
 Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Dòng cuối: "Đã dừng, chờ chủ dự án nghiệm thu." kèm `ĐẠT 2026-10-31-loi-nhac-p2b — <commit/APK>` hoặc `Yêu cầu sửa 2026-10-31-loi-nhac-p2b: <lỗi>`.
 ```
+
+## Checkpoint nghiệm thu sơ bộ vòng 1 — 01/11/2026, Claude Code (Opus 5.5)
+
+- Kết luận: **SƠ BỘ: CẦN SỬA** (lỗi B1). Biên bản: [`-nghiem-thu-so-bo.md`](2026-10-31-loi-nhac-p2b-nghiem-thu-so-bo.md). Trạng thái chính thức: **CHỜ CHỦ DỰ ÁN NGHIỆM THU**.
+- Đã xác minh: diff đúng phạm vi; log không lộ tên bài; APK Drive owner-only đúng SHA/byte; bản cài trên Sony đúng SHA `31609D80…1E88`.
+- B1 xác nhận bằng mã: `Dialog.dismiss()` gọi `OnDismissListener` bất đồng bộ, nên `cancel()` của pane Deck cũ chạy **sau** `request()` của pane Deck mới và xóa `current` của controller dùng chung → kết quả bị bỏ, pane kẹt Loading (không có nút thoát).
+- Sony: chỉ lệnh đọc, màn hình không bật, `Display State=OFF`. Không sửa mã, không build, không merge/push.
+- Bước tiếp: chủ dự án chọn REWORK B1 (phiên thực thi mới trên nhánh này) hoặc nghiệm thu kèm giới hạn.
