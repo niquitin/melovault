@@ -72,7 +72,7 @@ Quan sát phụ (không phải lỗi chặn):
 
 - ≈ 18:57 vẫn thao tác bình thường (Q4 mở “Tiếp theo”, cuộn trang).
 - ≈ 18:58 chạm “Xem cả hàng đợi”; chụp màn hình trả file 0 byte và `uiautomator dump` rỗng; ngay sau đó `adb` báo `device 'QV725WEQ54' not found`.
-- Một lần `adb devices -l` trên Tiny thấy máy với transport id mới (10239) rồi lại rỗng; thăm dò thêm ≈ 4 phút (nhiều lần cách 12–15 s) vẫn không thấy. Chưa rõ: cáp/USB bị rút, máy khởi động lại, hay ứng dụng bị treo/crash khi mở “Xem cả hàng đợi” (chưa đọc được logcat). **Không kết luận lỗi ứng dụng.**
+- Một lần `adb devices -l` trên Tiny thấy máy với transport id mới (10239) rồi lại rỗng (và thêm một lần thoáng hiện ≈ 19:04, transport 10556, rồi mất lại; tám lần thử ≈ 15 s/lần sau đó đều không thấy); thăm dò thêm ≈ 4 phút (nhiều lần cách 12–15 s) vẫn không thấy. Chưa rõ: cáp/USB bị rút, máy khởi động lại, hay ứng dụng bị treo/crash khi mở “Xem cả hàng đợi” (chưa đọc được logcat). **Không kết luận lỗi ứng dụng.**
 - Watcher QA trên Tiny đã dừng (`watcher_stop=2026-11-01T19:02:27`); không còn tiến trình do phiên này tạo (trừ daemon Gradle).
 
 ## 6. Việc còn lại
