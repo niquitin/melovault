@@ -191,16 +191,22 @@ Gate S19 (một lần, cây sạch): Debug và Release mỗi biến thể 199 su
 4. Sắp xếp là hộp ↑/↓ (không phải chế độ ngay trên dòng); Gọn dùng hộp danh sách làm chỉ mục.
 5. **Giao diện chưa từng được nhìn thấy trên máy**: bố cục, vùng chạm, xoay, chữ lớn, TalkBack chỉ có guard nguồn.
 
-## Chặng 4 — build Tiny + QA Sony (một phần, BLOCKED)
+## Chặng 4 — build Tiny + QA Sony (xong; chờ nghiệm thu sơ bộ)
 
-Thực thi: Claude Code Sonnet 5.5, phiên Chặng 4, 01/11/2026. Chi tiết: [phụ lục Chặng 4](2026-11-01-nhieu-playlist-co-ten-bao-cao-chang4.md). **Chưa xong: dừng vì Sony mất kết nối ADB giữa Q4.**
+Thực thi: Claude Code Sonnet 5.5, phiên Chặng 4, 01/11/2026 (hai lượt: 18:30–19:17 dừng vì USB Sony chập chờn; 21:39 làm tiếp sau khi chủ dự án cắm lại cáp). Chi tiết: [phụ lục Chặng 4](2026-11-01-nhieu-playlist-co-ten-bao-cao-chang4.md); APK/Drive: [apk-test](2026-11-01-nhieu-playlist-co-ten-apk-test.md); ảnh: [hinh-nghiem-thu](2026-11-01-nhieu-playlist-co-ten-hinh-nghiem-thu.md). **QA CANDIDATE — CHƯA NGHIỆM THU.**
 
 | Bước | Kết quả |
 |---|---|
 | S20 | Bundle `d43922cb…fecff` (13.673.183 byte) khớp SHA hai đầu; clone Tiny cô lập HEAD `0efec5a`; config=true; Debug 2m51s và Release 3m42s BUILD SUCCESSFUL |
 | S21 | Debug vc121 `0.6.96-beta` SHA-256 `5B2FB5CC…03FEF8`, 33.773.508 byte, cert `eecd3df7…fce8` (khớp bản đang cài); một lệnh `install -r` → Success, SHA bản cài khớp. Release chưa cài |
-| S22 Q1 Q2 Q3 | PASS: chỉ mục + Yêu thích 2 bài; tạo `QA Thu 1`, thêm 3 bài Telegram + 1 bài máy, ✓ đúng, không phát; Sắp xếp ↑ rồi mở lại app giữ thứ tự |
-| S22 Q4 | Dở: vào được tab “Tiếp theo”; ADB rớt khi chạm “Xem cả hàng đợi”, chưa thấy chip “Lưu Playlist” |
-| S22 Q5 Q6, S23 Drive, S24 | Chưa làm; chưa có link Drive |
+| S22 Q1–Q3 | PASS: chỉ mục + Yêu thích 2 bài; tạo `QA Thu 1`, thêm 3 bài Telegram + 1 bài máy, ✓ đúng, không phát; Sắp xếp rồi khởi động lại tiến trình vẫn giữ thứ tự |
+| S22 Q4 | PASS: “Đã lưu 3 bài, bỏ qua 0 bài.”, Playlist 3 bài đúng thứ tự hàng chờ |
+| S22 Q5 | PASS theo điều chỉnh: hàng chờ chỉ 3 bài Telegram (bài máy không vào), Next đúng bài, Media3 PLAYING. **CHƯA XÁC NHẬN ÂM THANH THỰC** |
+| S22 Q6 | PASS: xóa có xác nhận (bài vẫn trong thư viện), đổi tên, xoay ngang/dọc giữ chi tiết; đã dọn Playlist thử bằng UI |
+| S22 Q7–Q9 | **BLOCKED — chưa QA đồng bộ hai máy thật** (không có máy/gói thứ hai) |
+| S23 | Drive owner-only: thư mục + APK + 11 ảnh, quyền chỉ owner, byte khớp. Link ở `*-apk-test.md`, `*-hinh-nghiem-thu.md` |
+| S24 | Báo cáo + bàn giao + prompt nghiệm thu sơ bộ (trong bàn giao) |
 
-Giới hạn/sự cố: tên thử ASCII (adb không gõ dấu); `monkey` khởi chạy ứng dụng lạ (đã chuyển `am start`); một lần vô tình phát nhạc ≈ 20–47 s rồi tạm dừng; xoay đang khóa dọc, màn `ON`, `SONY_SCREEN_END` chưa xác minh, Playlist thử còn trên máy. **CHƯA XÁC NHẬN ÂM THANH THỰC; đồng bộ hai máy BLOCKED.**
+Sự cố tự báo cáo (phụ lục mục 4–5): `monkey` khởi chạy ứng dụng lạ (đã chuyển `am start`); một lần chạm ⌃ vô tình phát nhạc ≈ 20–47 s rồi tạm dừng; ADB Sony rớt ≈ 18:58–21:39 do USB (app không crash: PID giữ nguyên, crash buffer rỗng). Cuối phiên: xoay tự động (=1), `SONY_SCREEN_END`: `Display State=OFF`.
+
+Giới hạn: tên thử ASCII (adb không gõ dấu); không chạy Release/`.open`/Personal trên máy; đồng bộ Telegram thật cho Playlist có tên chưa chạy (đồng bộ “Chưa bật đồng bộ”); chữ lớn/TalkBack chưa kiểm; lỗi có sẵn SB-1 (lề màn Hàng đợi sát mép) vẫn thấy ở ảnh Hàng đợi.

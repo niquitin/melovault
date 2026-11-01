@@ -2,7 +2,57 @@
 
 TASK_ID: **2026-11-01-nhieu-playlist-co-ten**.
 
-## Checkpoint 01/11/2026 19:05 — Chặng 4 DỪNG GIỮA CHỪNG, BLOCKED: Sony mất ADB (Claude Code, Sonnet 5.5)
+## Checkpoint 01/11/2026 22:00 — Chặng 4 XONG, chờ nghiệm thu sơ bộ (Claude Code, Sonnet 5.5)
+
+- **Vai:** thực thi Chặng 4 (Tiny build + QA Sony + Drive), hai lượt: 18:30–19:17 (dừng vì USB Sony chập chờn, xem checkpoint cũ bên dưới) và 21:39 (sau khi chủ dự án cắm lại cáp). Không code, không sửa mã. Phiên đã dừng; watcher/script QA trên Tiny đã tắt.
+- **Worktree/nhánh:** `D:\Bots\_worktrees\MeloVault-nhieu-playlist-co-ten`, `dot/2026-11-01-nhieu-playlist-co-ten`. Baseline `57c1be6`, kế hoạch `b0cfeac`, mã tính năng kết thúc `751b623`, APK build từ HEAD `0efec5a`. HEAD hiện tại: `git rev-parse HEAD` (commit hồ sơ Chặng 4 nằm sau đó).
+- **Hồ sơ:** [báo cáo](2026-11-01-nhieu-playlist-co-ten-bao-cao.md) (mục Chặng 4), [phụ lục Chặng 4](2026-11-01-nhieu-playlist-co-ten-bao-cao-chang4.md), [apk-test](2026-11-01-nhieu-playlist-co-ten-apk-test.md), [hinh-nghiem-thu](2026-11-01-nhieu-playlist-co-ten-hinh-nghiem-thu.md). **QA CANDIDATE — CHƯA NGHIỆM THU.**
+
+| Chặng / bước | Trạng thái | Bằng chứng | Việc còn lại |
+|---|---|---|---|
+| S1–S19 (Chặng 1–3) | Xong | Gate Ni 2683/21 skipped/0/0 mỗi biến thể | — |
+| S20 build Tiny | Xong | bundle `d43922cb…fecff` khớp hai đầu; Debug + Release BUILD SUCCESSFUL | — |
+| S21 gate APK + cài | Xong | Debug vc121 `5B2FB5CC…03FEF8`, cert `eecd3df7…fce8`; một lệnh `install -r`; SHA bản cài khớp | — |
+| S22 QA Sony | Q1–Q6 PASS (Q5 theo điều chỉnh); Q7–Q9 BLOCKED | 53 ảnh + `00_tong_hop.png` (git bỏ qua) | Nghiệm thu |
+| S23 Drive | Xong | thư mục/APK/11 ảnh owner-only, byte khớp | — |
+| S24 | Xong | báo cáo + bàn giao + prompt dưới | Phiên sơ bộ mới |
+
+- **APK QA (Drive owner-only):** [thư mục](https://drive.google.com/drive/folders/18RmsQArh_0QVdBId3pDjYwR2RuyU9Zvx) · [APK Debug](https://drive.google.com/file/d/16CiZb215xnzr5qfZigL1Eh8wN45DTURz/view) · [ảnh](https://drive.google.com/drive/folders/15EXRhg7w7eBzsgzI5bM0zYqkNzyskJSJ) · [ảnh tổng hợp](https://drive.google.com/file/d/1jBiqcr6tjfvcdc7NYXX2ZrBY5Y4TSbE2/view). SHA-256 `5B2FB5CC323B486ADFC2F359BF7C9FCC20E104D0D6FDE4DB3D2D3B3BDE03FEF8`, 33.773.508 byte. Tải bằng trình duyệt chưa thử.
+- **Trạng thái Sony cuối:** xoay tự động (`accelerometer_rotation=1`, `user_rotation=0`); `SONY_SCREEN_END`: `Display State=OFF`; nhạc tạm dừng (bài `#140` ở 1:43 — khác `#Bản nháp 1.mp3` trước QA); Playlist thử đã xóa bằng UI; Yêu thích còn 2 bài; thư viện 25.496 bài; đồng bộ “Chưa bật đồng bộ” suốt phiên.
+- **Sự cố tự báo cáo:** `monkey` khởi chạy ứng dụng lạ (hộp USB — chạm “TỪ CHỐI” một lần —, Google Tin nhắn, Vita3K); một lần chạm ⌃ vô tình phát nhạc ≈ 20–47 s rồi tạm dừng; ADB rớt ≈ 18:58–21:39 do USB (app không crash: PID 23759 giữ nguyên, `logcat -b crash` rỗng). Chi tiết phụ lục mục 4–5c.
+- **Giới hạn / còn mở:** CHƯA XÁC NHẬN ÂM THANH THỰC; đồng bộ hai máy (Q7–Q9) BLOCKED — cần chủ dự án chọn (a)/(b) ở kế hoạch mục 7 nếu muốn QA; đồng bộ Telegram thật cho Playlist có tên chưa chạy; tên thử ASCII (adb không gõ dấu); Release/`.open`/Personal chưa chạy trên máy; chữ lớn/TalkBack chưa kiểm; SB-1 (lề màn Hàng đợi sát mép) có sẵn từ trước, vẫn thấy.
+- **Quyết định treo cho chủ dự án:** (1) hàng chờ ▶ Phát chỉ gồm bài Telegram (bài máy không vào); (2) một công tắc đồng bộ chung; (3) cờ `NAMED_ENABLED` ở `NamedPlaylistFlags.kt`; (4) QA đồng bộ hai máy.
+- **3–6 thao tác để chủ dự án thử (Sony, APK trên máy):** (1) Tab Playlist → thấy “★ Yêu thích · N bài” và “+ Tạo Playlist”; (2) Tạo Playlist, thêm bài từ menu ⋮ → “≡ Thêm vào Playlist…” (kể cả bài “Nhạc trên máy”); (3) mở Playlist → ⋮ → Sắp xếp, đổi thứ tự, đóng-mở lại app; (4) màn Hàng đợi → “≡ Lưu Playlist”; (5) ▶ Phát hết một Playlist (lưu ý hàng chờ chỉ có bài Telegram); (6) đổi tên/xóa Playlist, xoay ngang/dọc. Muốn QA đồng bộ: nói rõ cách (a)/(b).
+- **File chưa commit:** không có sau commit hồ sơ này. Repo chính vẫn có `?? .codex-remote-attachments/` và kế hoạch UI/UX chưa commit của phiên khác, không động tới.
+- **Bước tiếp:** chủ dự án mở **phiên nghiệm thu sơ bộ mới** bằng prompt dưới. Không merge/push/public.
+
+### Prompt cho phiên nghiệm thu sơ bộ
+
+```text
+MELOVAULT — NGHIỆM THU SƠ BỘ NHANH, KHÔNG CODE
+TASK_ID: 2026-11-01-nhieu-playlist-co-ten; nhánh dot/2026-11-01-nhieu-playlist-co-ten; worktree: D:\Bots\_worktrees\MeloVault-nhieu-playlist-co-ten (repo chuẩn D:\Bots\MeloVault-E91-Shareable đang ở nhánh tài liệu khác, có file chưa commit của phiên khác — KHÔNG làm ở đó).
+Baseline: 57c1be64436c3c364bcd8c1a5f8a8193ea52a553; HEAD dự kiến: commit hồ sơ Chặng 4 (git log -1 --format=%H -- docs/plans/2026-11-01-nhieu-playlist-co-ten-apk-test.md); source APK: 0efec5a98eb187f6f85b748bf06bcb77bcec6eda (mã tính năng kết thúc 751b623).
+Kế hoạch: docs/plans/2026-11-01-nhieu-playlist-co-ten.md.
+Báo cáo: docs/plans/2026-11-01-nhieu-playlist-co-ten-bao-cao.md (Chặng 1–4) + phụ lục docs/plans/2026-11-01-nhieu-playlist-co-ten-bao-cao-chang3.md và -bao-cao-chang4.md.
+Bàn giao: docs/plans/2026-11-01-nhieu-playlist-co-ten-ban-giao.md (checkpoint đầu file).
+APK và SHA-256: Drive owner-only https://drive.google.com/file/d/16CiZb215xnzr5qfZigL1Eh8wN45DTURz/view ; SHA-256 5B2FB5CC323B486ADFC2F359BF7C9FCC20E104D0D6FDE4DB3D2D3B3BDE03FEF8, 33.773.508 byte, vc121 / 0.6.96-beta, cert eecd3df7…fce8; hồ sơ: docs/plans/2026-11-01-nhieu-playlist-co-ten-apk-test.md (ảnh: -hinh-nghiem-thu.md). Bản sao trên Tiny: C:\Bots\MeloVault-NPL-IsolatedQA-20261101-0efec5a\app\build\outputs\apk\shareable\debug\app-shareable-debug.apk.
+Phạm vi cần kiểm nhanh (rủi ro theo kế hoạch mục 8 + báo cáo):
+  1. Yêu thích không đổi: không sửa TelegramPlaylistModel/Codec/StoreV2/V2Session/SyncProtocol/SyncCoordinator, TransmitPlanner, V1, SQLite, service/Media3, TDLib auth, package, signer, versionCode — kiểm bằng git diff --stat 57c1be6..HEAD và đọc kỹ các file chạm vào ở Chặng 2–3 (AutomaticPlaylistSync, TdlibPlaylistSyncService, SyncServiceProvider, SyncSettingsController, TdlibPlaylistSyncTransport, TdlibHistoryReader, PlaylistSyncStatusPolicy, TelegramPreviewActivity); test mới Chặng 1–3 (NamedPlaylist*, FractionalIndex, MeloNamedPlaylistPolicy, NamedPlaylistUiGuardTest) và 6 dòng test nhãn đã đổi.
+  2. Đồng bộ Playlist có tên chạy thật từ Chặng 3 khi tự đồng bộ BẬT (guard NamedPlaylistSyncCallSitesTest, cờ NamedPlaylistFlags.NAMED_ENABLED) — đọc lại logic kiểm tài khoản/epoch trong NamedPlaylistController; chưa chạy qua Telegram thật.
+  3. Bằng chứng Chặng 4: Q1–Q6 PASS (Q5 theo điều chỉnh: hàng chờ chỉ bài Telegram), Q7–Q9 BLOCKED; xem ảnh tổng hợp 00_tong_hop.png trước, ảnh gốc chỉ khi nghi ngờ.
+Kiểm thiết bị (tùy chọn, nếu hữu ích): Sony QV725WEQ54 qua Tiny DESKTOP-HNP4GVR (xác minh adb devices -l + getprop; USB từng chập chờn nên thử ổn định trước; KHÔNG dùng `adb shell monkey`; mở app bằng `am start -n app.melovault.player/com.bsdung.musicassistantcar.data.telegram.TelegramPreviewActivity`; cấm BACK ở màn gốc, uninstall, pm clear, xóa dữ liệu, logout, -d, downgrade, bật máy bay, bật/tắt tự đồng bộ; chạm thanh “Nghe tiếp”/⌃ sẽ PHÁT nhạc). Bản đang cài là đúng APK trên. Màn tắt khi không thao tác; finally tắt màn, xác minh Display State=OFF, ghi SONY_SCREEN_END; khôi phục xoay nếu đổi (accelerometer_rotation=1, user_rotation=0). Dọn mọi Playlist thử bằng UI. Media3 PLAYING không phải âm thanh thật.
+
+1. Đọc CLAUDE.md mục 0, chỉ mục đầu HANDOFF.md, bàn giao/kế hoạch/báo cáo và apk-test. Kiểm git status/branch/HEAD/source/agent theo luật đầu phiên. Thiếu/mâu thuẫn nguồn ⇒ ghi BLOCKED đúng phần; không reset/clean/stash.
+2. git log --oneline 57c1be6..HEAD, git diff --stat 57c1be6..HEAD, rồi diff file rủi ro và test liên quan; đối chiếu yêu cầu, kết quả test/build (gate Ni Chặng 3: 2683/21/0/0), APK/package/version/cert/hash/config. Không đọc lại toàn repo, không chạy lại toàn bộ test trừ khi có lý do cụ thể.
+3. Không sửa code, không build APK mới. Cần sửa/build ⇒ ghi việc cho phiên thực thi REWORK.
+4. Ghi docs/plans/2026-11-01-nhieu-playlist-co-ten-nghiem-thu-so-bo.md (agent/model/ngày, HEAD/source/APK hash, tài liệu và diff đã đọc, kiểm nào dựa bằng chứng cũ/tự chạy, lỗi có vị trí/bước tái hiện, phạm vi chưa kiểm). Kết luận một trong: SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN / SƠ BỘ: CẦN SỬA / SƠ BỘ: BLOCKED; không ghi PASS chính thức. *-nghiem-thu.md vẫn CHỜ CHỦ DỰ ÁN NGHIỆM THU. Cập nhật *-ban-giao.md, commit tài liệu trên nhánh nhiệm vụ. Không merge/push/public/mở nhiệm vụ tiếp.
+
+Kết thúc tiếng Việt dễ hiểu: Đã làm / Chưa kiểm chứng / Rủi ro, rồi “Đã dừng, chờ chủ dự án nghiệm thu.” kèm cách phản hồi: `ĐẠT 2026-11-01-nhieu-playlist-co-ten — <commit/APK>` hoặc `Yêu cầu sửa 2026-11-01-nhieu-playlist-co-ten: <lỗi>`.
+```
+
+---
+
+## (Lịch sử — đã giải quyết lúc 22:00) Checkpoint 01/11/2026 19:05 — Chặng 4 DỪNG GIỮA CHỪNG, BLOCKED: Sony mất ADB (Claude Code, Sonnet 5.5)
 
 - **Vai:** thực thi Chặng 4 (Tiny build + QA Sony), theo lệnh “tiến hành Chặng 4”. Không code, không sửa mã. Phiên đã dừng; không còn tiến trình QA (watcher Tiny đã tắt 19:02:27).
 - **Worktree/nhánh:** `D:\Bots\_worktrees\MeloVault-nhieu-playlist-co-ten`, `dot/2026-11-01-nhieu-playlist-co-ten`. Mã không đổi từ Chặng 3 (`751b623`); đầu vào Chặng 4 = HEAD `0efec5a`. HEAD hiện tại: `git rev-parse HEAD` (commit hồ sơ Chặng 4 nằm sau đó).

@@ -3,7 +3,7 @@
 TASK_ID: `2026-11-01-nhieu-playlist-co-ten`. Báo cáo chính: [2026-11-01-nhieu-playlist-co-ten-bao-cao.md](2026-11-01-nhieu-playlist-co-ten-bao-cao.md).
 
 Thực thi: Claude Code Sonnet 5.5 (effort không xác định từ công cụ), phiên Chặng 4, 01/11/2026. Không code tính năng mới, không sửa mã.
-Trạng thái: **DỪNG GIỮA CHỪNG — S20, S21 xong; S22 (QA Sony) xong Q1–Q3 và dở Q4; S23 (Drive) và S24 chưa làm. BLOCKED: Sony mất kết nối ADB lúc ≈ 18:59 (+07) và chưa quay lại.** Chưa có PASS chính thức nào; đây không phải nghiệm thu.
+Trạng thái: **S20–S23 xong; S22 xong Q1–Q6 (đều PASS, Q5 theo điều chỉnh), Q7–Q9 BLOCKED (không có máy thứ hai); S24 hoàn tất bằng bàn giao + prompt sơ bộ. Chưa có PASS chính thức; mọi thứ ở trạng thái QA CANDIDATE — CHƯA NGHIỆM THU.** Phiên đầu (18:30–19:17) dừng vì USB Sony chập chờn; phiên sau (21:39) làm tiếp sau khi chủ dự án cắm lại cáp.
 
 ## 1. S20 — bundle và build Tiny (xong)
 
@@ -37,22 +37,22 @@ Ghi chú: bản này **không** chạy lại test JVM trên Tiny (đã có gate 
 - APK Release **chưa cài**, chưa thử trên máy.
 - Log: `docs/plans/artifacts/2026-11-01-nhieu-playlist-co-ten/chang4/` (`s20.log`, `s21-gate.log`, `s21-install.log`; thư mục này git bỏ qua).
 
-## 3. S22 — QA Sony (dở)
+## 3. S22 — QA Sony (Q1–Q6 xong; Q7–Q9 BLOCKED)
 
-Phương pháp: script PowerShell trên Tiny (`C:\Bots\_qa_temp\NPL-0efec5a\q.ps1`) chạy `adb` + `uiautomator dump`; mọi lần chạm đều kiểm focus thuộc `app.melovault.player` (hoặc menu/hộp thoại của chính app). Ảnh: `docs/plans/artifacts/2026-11-01-nhieu-playlist-co-ten/chang4/shots/` (29 PNG, hợp lệ). Chưa ghép `00_tong_hop.png` vì QA chưa xong.
+Phương pháp: script PowerShell trên Tiny (`C:\Bots\_qa_temp\NPL-0efec5a\q.ps1`) chạy `adb` + `uiautomator dump`; mọi lần chạm đều kiểm focus thuộc `app.melovault.player` (hoặc menu/hộp thoại của chính app). Ảnh: `docs/plans/artifacts/2026-11-01-nhieu-playlist-co-ten/chang4/shots/` (53 PNG hợp lệ) và ảnh tổng hợp `docs/plans/artifacts/2026-11-01-nhieu-playlist-co-ten/00_tong_hop.png` (1336×1560).
 
 **Chênh lệch so với kế hoạch (ghi thẳng):**
 - Tên Playlist thử dùng ASCII **`QA Thu 1`** (không phải `QA Thử 1`), vì `adb input text` không gõ được dấu tiếng Việt. Do đó chưa kiểm được tên có dấu/emoji trên máy (đã có test JVM vòng tròn).
-- Thao tác Q4 đổi thứ tự sau Q5 (xem mục 4).
+- Thứ tự Q4/Q5 đổi: làm Q5 trước để hàng chờ có nhiều bài rồi mới Q4.
 
 | # | Hành động | Kỳ vọng | Thực tế | Kết quả | Ảnh |
 |---|---|---|---|---|---|
 | Q1 | Mở app → chip Playlist → mở “Yêu thích” | Chỉ mục “★ Yêu thích · N bài”, “+ Tạo Playlist”; Yêu thích mở ra đúng bài cũ; ☆ ghi “Lưu vào Yêu thích” | Chỉ mục: “★ Yêu thích · 2 bài” + “+ Tạo Playlist”; Yêu thích mở đúng 2 bài (Nothingg Mix, Trôi Kem), nút ★ “Bỏ lưu … khỏi Yêu thích”; dòng bài ở Thư viện có ☆ “Lưu … vào Yêu thích”; trạng thái “Chưa bật đồng bộ” | **PASS** (số “2 bài” khớp danh sách; chưa so với số cũ từ trước nhiệm vụ vì không có ảnh trước) | 02, 03, 04 |
 | Q2 | “+ Tạo Playlist” → `QA Thu 1` → ⋮ bài Telegram → “≡ Thêm vào Playlist…” → chọn; thêm thêm 2 bài Telegram + 1 bài máy | Hộp có ✓ đúng; không phát bài; chi tiết 4 bài đúng thứ tự thêm; bài máy có dấu “trên máy” | Hộp tạo có bàn phím và không bị che; toast “Đã thêm '# Mưa Bay Bay.mp3' vào ‘QA Thu 1’.”; ✓ hiện đúng ở Playlist đã chứa bài; không có phát nhạc (Media3 không PLAYING); chi tiết “QA Thu 1 · 4 bài”: Mưa Bay Bay (SƯU TẦM), #140 EM MUON TU DO, Mưa Bay Bay (kho nhạc), Bee Moved (“Trên máy · FLAC”); 4 chip ‹ Playlist / ⤨ Ngẫu nhiên / ▶ Phát hết / ⋮ vừa một hàng | **PASS** | 05–19 |
 | Q3 | ⋮ → Sắp xếp → ↑ bài cuối lên đầu → Xong; đóng mở app | Thứ tự mới giữ sau mở lại | Hộp Sắp xếp rõ (↑/↓ cao 126 px = 48 dp; ↑ dòng đầu và ↓ dòng cuối mờ); bấm ↑ 3 lần đưa “Bee Moved” lên đầu; sau HOME + `am kill` + `am start` (PID 21706 → 23759) thứ tự giữ: Bee Moved, Mưa Bay Bay, #140, Mưa Bay Bay | **PASS** | 20–24 |
-| Q4 | Hàng đợi → “Lưu Playlist” → `QA Hàng chờ` | Số bài = bài Telegram + máy; báo bỏ qua đúng | Mở màn Đang phát → tab “Tiếp theo” (hàng đợi chỉ 1 bài); chạm “Xem cả hàng đợi” rồi ảnh chụp rỗng (0 byte), `dump` rỗng và ADB rớt (mục 5) | **BLOCKED / DỞ** — chưa thấy chip “≡ Lưu Playlist” | 25–28 |
-| Q5 | ▶ Phát `QA Thu 1`; Next 1 lần | Hàng chờ = bài Telegram (3, điều chỉnh Q5); Media3 PLAYING; CHƯA XÁC NHẬN ÂM THANH THỰC | **Chưa làm** | **CHƯA LÀM** | — |
-| Q6 | Đổi tên → `QA Thu 2`; Xóa `QA Hàng chờ`; xoay ngang/dọc ở chi tiết | Tên mới; xóa không mất bài trong thư viện; xoay giữ chi tiết/cuộn | **Chưa làm** | **CHƯA LÀM** | — |
+| Q4 | Hàng đợi → “Lưu Playlist” → tên (ASCII `QA Hang cho`) | Số bài = bài Telegram + máy của hàng chờ; báo bỏ qua đúng | Sau Q5 hàng chờ có 3 bài Telegram. Màn “Xem cả hàng đợi” mở bình thường (“Hàng đợi · 3 bài”, chip “≡ Lưu Playlist”); hộp “Lưu hàng chờ thành Playlist” có bàn phím; toast “Đã lưu 3 bài, bỏ qua 0 bài.”; chỉ mục có “QA Hang cho · 3 bài”; chi tiết đúng 3 bài theo thứ tự hàng chờ | **PASS** (chưa thử hàng chờ có bài bị bỏ qua hoặc > 1000 trên máy; có test JVM) | 30–40 |
+| Q5 | ▶ Phát hết trong `QA Thu 1`; Next 1 lần | Hàng chờ = 3 bài Telegram (điều chỉnh Q5); Media3 PLAYING; CHƯA XÁC NHẬN ÂM THANH THỰC | Toast “Bài trên máy không nằm trong hàng chờ khi phát cả Playlist; chạm từng bài để p…”; phát bài Telegram đầu (state=3); Next → bài thứ 2 (`active item id=1`, state=3); “Tiếp theo · tối đa 12 / 3 bài” = Mưa Bay Bay, #140, Mưa Bay Bay đúng thứ tự Playlist (không có Bee Moved); tạm dừng sau đó (state=2) | **PASS** theo điều chỉnh Q5 (không phải 4 bài như kế hoạch gốc); **CHƯA XÁC NHẬN ÂM THANH THỰC** | 30–34 |
+| Q6 | Đổi tên → `QA Thu 2`; Xóa `QA Hang cho`; xoay ngang/dọc ở chi tiết | Tên mới; bài vẫn còn trong thư viện; xoay giữ chi tiết | Hộp “Xóa Playlist ‘QA Hang cho’? Bài hát không bị xóa khỏi Telegram hay máy.” (GIỮ LẠI/XÓA); sau XÓA không còn trong chỉ mục; thư viện Telegram vẫn 25.496 bài, nhạc máy 3 bài; đổi tên → “QA Thu 2 · 4 bài”; xoay ngang giữ chi tiết `QA Thu 2` (4 chip vừa hàng); xoay dọc lại về chi tiết như cũ | **PASS** (cuộn không thử vì danh sách ngắn) | 41–49 |
 
 Quan sát phụ (không phải lỗi chặn):
 - Ở Yêu thích và chi tiết Playlist, nhãn nhỏ dưới thanh chip vẫn ghi “Phạm vi: Playlist”; hàng 4 chip có lề trái ≈ 54 px lớn hơn các hàng khác (thẩm mỹ).
@@ -63,9 +63,9 @@ Quan sát phụ (không phải lỗi chặn):
 
 1. **`monkey` khởi chạy ứng dụng lạ.** Lệnh `adb shell monkey -p app.melovault.player -c LAUNCHER 1` lần đầu không đưa MeloVault lên trước mà làm hiện hộp thoại hệ thống “Cho phép truy cập?” (USB/MTP), màn đăng nhập nhanh Google Tin nhắn, rồi Vita3K (`launchedFromPackage=com.android.shell`). Tôi chạm đúng một lần “TỪ CHỐI” trên hộp thoại USB, nhấn HOME, không chạm gì khác trong các ứng dụng đó, rồi chuyển sang `am start -n app.melovault.player/…TelegramPreviewActivity`. Vita3K có thể đã tự cập nhật cơ sở dữ liệu tương thích của nó (nội dung hộp thoại của chính app đó); tôi không đụng vào. Tiến trình Vita3K và Tin nhắn có thể còn nằm trong ứng dụng gần đây.
 2. **Vô tình phát nhạc.** Chạm nút ⌃ trên thanh “Nghe tiếp” đã phát `#Bản nháp 1.mp3` (Media3 state=3, vị trí ≈ 27–47 s, có thể nghe được trên loa/tai nghe) rồi tôi nhấn “Dừng” (state=2). Không đổi hàng đợi.
-3. **Thiết bị đang để cài đặt xoay.** Tôi đặt `accelerometer_rotation=0`, `user_rotation=0` (khóa dọc) để QA. **Chưa khôi phục** về `accelerometer_rotation=1` vì ADB rớt. Việc cần làm khi Sony kết nối lại: `settings put system user_rotation 0` rồi `settings put system accelerometer_rotation 1`.
-4. **`SONY_SCREEN_END` chưa xác minh.** Lần kiểm cuối `Display State=ON`; ADB rớt trước khi tôi tắt màn được. Khi máy quay lại phải tắt (`keyevent 223`) và xác minh `Display State=OFF`.
-5. **Dữ liệu thử còn trên Sony:** Playlist `QA Thu 1` (4 bài) trong app (chỉ ở máy; đồng bộ đang “Chưa bật đồng bộ” nên không lên Telegram). Chưa dọn.
+3. **Cài đặt xoay đã khôi phục.** Tôi đặt khóa dọc để QA; cuối phiên 21:39 chạy `rotreset`: `accelerometer_rotation=1`, `user_rotation=0` (đã kiểm bằng `settings get`).
+4. **`SONY_SCREEN_END`: `Display State=OFF`** (`mWakefulness=Dozing`) xác minh sau lệnh tắt cuối phiên 21:39–21:5x. (Trong khoảng ADB rớt 18:58–21:39 màn ở trạng thái `ON`, không tắt được.)
+5. **Dữ liệu thử đã dọn bằng UI:** xóa `QA Hang cho` (Q6) và `QA Thu 2` (dọn); chỉ mục còn “★ Yêu thích · 2 bài” + “+ Tạo Playlist”; thư viện Telegram vẫn 25.496 bài, Nhạc trên máy 3 bài. Đồng bộ vẫn “Chưa bật đồng bộ” suốt phiên nên không có gì lên Telegram. Tác dụng phụ còn lại: bài/hàng đợi hiện tại của app giờ là `#140 - EM MUON TU DO` (tạm dừng, 1:43) thay vì `#Bản nháp 1.mp3` trước QA.
 6. Không `uninstall`, không `pm clear`, không xóa dữ liệu/cache, không logout, không bật/tắt đồng bộ, không máy bay. Một lần `am kill` đóng tiến trình MeloVault (an toàn, ở nền) để kiểm Q3.
 
 ## 5. Điểm dừng — Sony mất ADB
@@ -83,11 +83,15 @@ Quan sát phụ (không phải lỗi chặn):
 - Không thao tác QA thêm trên máy (tránh bấm dở nửa chừng như chọn xóa/xác nhận). Q4–Q6 và dọn Playlist thử vẫn chưa làm.
 - Cần chủ dự án: rút/cắm lại hoặc **đổi cáp/cổng USB** (ưu tiên cổng sau của Tiny hoặc cáp dữ liệu khác), kiểm trên điện thoại chế độ USB (Truyền tệp/Không truyền dữ liệu) và hộp thoại “Cho phép gỡ lỗi USB”; xác nhận `adb devices -l` ổn định ≥ 1 phút.
 
+### 5c. Phiên 21:39–21:5x (cáp đã cắm lại, USB ổn định)
+
+- `usbwatch.log` 90 giây: một trạng thái `device` duy nhất, không ngắt. Chẩn đoán trước khi làm tiếp: máy chạy 19 ngày, PID app vẫn `23759`, `logcat -b crash` rỗng, `exit-info` chỉ có lần `am kill` của tôi lúc 18:55 (`USER REQUESTED`) ⇒ **app không crash lúc “Xem cả hàng đợi”; ADB rớt là do USB**.
+- Làm tiếp Q5 → Q4 → Q6 → dọn → ảnh tổng hợp → Drive. Mọi thao tác chạm đều qua `q.ps1` có kiểm focus; không dùng `monkey`.
+
 ## 6. Việc còn lại
 
-1. Chủ dự án kiểm cáp/nguồn Sony và xác nhận máy báo `device` trong `adb devices -l` trên Tiny.
-2. Phiên tiếp: kiểm `logcat -b crash`/`pidof` để biết app có crash ở “Xem cả hàng đợi” không; khôi phục xoay; tắt màn; làm Q4 (chip “Lưu Playlist”), Q5, Q6; dọn Playlist thử; ghép `00_tong_hop.png`.
-3. S23: upload Drive owner-only **chỉ sau** khi QA xong (APK Debug `5B2FB5CC…03FEF8`) → `*-apk-test.md`, `*-hinh-nghiem-thu.md`. Chưa upload, chưa có link; **không có link Drive nào được tạo ở phiên này**.
-4. S24: hoàn chỉnh báo cáo và prompt nghiệm thu sơ bộ.
-5. Đồng bộ hai máy (Q7–Q9): **BLOCKED — chưa QA đồng bộ hai máy thật** (chưa có chỉ định (a)/(b) của chủ dự án).
-6. Âm thanh thật: **CHƯA XÁC NHẬN ÂM THANH THỰC**.
+1. **Nghiệm thu sơ bộ** ở phiên mới (prompt trong bàn giao), rồi chủ dự án nghiệm thu chính thức. Chưa có PASS chính thức.
+2. Đồng bộ hai máy (Q7–Q9): **BLOCKED — chưa QA đồng bộ hai máy thật** (chưa có chỉ định (a)/(b) của chủ dự án). Đồng bộ Telegram thật cho Playlist có tên chưa chạy.
+3. Âm thanh thật: **CHƯA XÁC NHẬN ÂM THANH THỰC**. Tên có dấu/emoji trên máy, Release/`.open`/Personal trên máy, chữ lớn, TalkBack, tablet/Hai khung/Gọn trên máy thật: chưa kiểm.
+4. Quyết định treo cho chủ dự án: hàng chờ khi ▶ Phát chỉ gồm bài Telegram (bài máy không vào hàng chờ); công tắc đồng bộ chung; chỗ đặt cờ `NAMED_ENABLED`; sửa lỗi có sẵn SB-1 (lề màn Hàng đợi sát mép — thấy lại ở ảnh 35).
+5. Drive: xong (xem `*-apk-test.md`, `*-hinh-nghiem-thu.md`); tải bằng trình duyệt chưa thử.
