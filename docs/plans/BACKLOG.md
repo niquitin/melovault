@@ -13,9 +13,9 @@ Mỗi phiên làm đúng 1 việc: tạo `docs/plans/<việc>.md` (mục tiêu, 
 
 Mỗi việc dưới đây cần chủ dự án giao riêng; quy trình 29/10 (lập kế hoạch → thực thi → sơ bộ → chủ dự án).
 
-- **A. P2-B lời nhạc** — chưa làm.
-  - Trước khi code phải có phiên lập kế hoạch chốt nguồn/dịch vụ lời nhạc, chính sách dữ liệu và cache.
-  - Đã có hợp đồng UI dự kiến: [phụ lục UI/UX mục P2-B](2026-10-29-melo-ui-ux-ke-hoach-chi-tiet.md).
+- **A. ~~P2-B lời nhạc~~ — ĐÃ LÀM, ĐẠT và merge ngày 01/11/2026** (`2026-10-31-loi-nhac-p2b`, merge `b136f4d`; xem HANDOFF mục đầu).
+  - Còn lại (chủ dự án giao riêng): lời nhúng trong tệp nhạc / tệp `.lrc`; tự tìm cho bài Telegram thiếu nghệ sĩ; chạm câu để tua; lời theo từng chữ; dịch lời; quyết định đưa tính năng vào bản open công khai (LD9, bản quyền lời).
+  - Chưa kiểm: lời tự động cho bài Telegram đủ tên + nghệ sĩ khớp LRCLIB; âm thanh thật; chữ lớn/TalkBack; Release/open/Personal trên máy.
 - **B. Giao diện phù hợp mọi loại thiết bị** — định hướng chủ dự án nêu ngày 31/10; chưa có kế hoạch hay phạm vi cụ thể.
 - **C. Đăng bản open công khai** — cần:
   - khóa ký phát hành (hiện chỉ có khóa debug của Tiny);
