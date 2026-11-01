@@ -89,7 +89,7 @@ internal fun NamedPlaylistState.applyRemoteBatch(
  *    written down BEFORE the dispatch (write-ahead) and taken back only for a definite refusal.
  *  - The clock only decides WHEN to try again, never what is in the playlists.
  *
- * The channel is not discovered here: [runOnce] gets the [channelId] of the Playlist V2 sync (already verified by discovery). The
+ * The channel is not discovered here: [runNamedOnce] gets the [channelId] of the Playlist V2 sync (already verified by discovery). The
  * first run stores it in this store's own checkpoint; a different one later is RECOVERY_REQUIRED, never a silent switch.
  * [SyncReport] and [SyncStatus] are shared with the favourites sync on purpose, so one status policy reads both.
  */
@@ -136,7 +136,7 @@ internal class NamedPlaylistSyncCoordinator(
      * number below one mean read-and-acknowledge only.
      */
     @Synchronized
-    fun runOnce(account: TelegramUserId, channelId: Long, mode: SyncMode = SyncMode.INCREMENTAL, sendBudget: Int = 0): SyncReport {
+    fun runNamedOnce(account: TelegramUserId, channelId: Long, mode: SyncMode = SyncMode.INCREMENTAL, sendBudget: Int = 0): SyncReport {
         val c = Counters()
         val now = clock()
         if (now < backoff.notBeforeMs) {

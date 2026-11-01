@@ -56,7 +56,7 @@ internal class TdlibPlaylistSyncTransport(
     }
 
     override fun send(channelId: Long, text: String): SendResult {
-        require(text.startsWith(PlaylistSyncProtocol.MARKER)) { "only sync messages are ever sent" }
+        require(text.startsWith(PlaylistSyncProtocol.MARKER) || text.startsWith(NamedPlaylistSyncProtocol.MARKER)) { "only sync messages are ever sent" }
         require(text.length <= PlaylistSyncProtocol.MAX_TEXT_CHARS)
         if (channelId != this.channelId) return SendResult.Failed(SyncErrorKind.CHANNEL_MISSING, stage = SyncStage.SEND_PRECHECK_IDENTITY)
         if (!sendAllowed()) return SendResult.Failed(SyncErrorKind.UNAUTHORIZED, stage = SyncStage.SEND_PRECHECK_CONSENT)

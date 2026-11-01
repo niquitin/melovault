@@ -11,6 +11,15 @@ internal interface SyncActionsPort {
     fun bind(account: TelegramUserId, chatId: Long): Gated<BindResult>
     /** [sendBudget] = how many OPERATIONS the run may send. Zero (the default) reads and acknowledges only. There is no "unlimited". */
     fun run(account: TelegramUserId, mode: SyncMode, sendBudget: Int = 0): Gated<SyncReport>
+
+    /**
+     * Nhiều Playlist có tên: one run of the named playlists over the favourites' verified channel, at most [maxEnvelopes] message
+     * (production: one). Answers [SyncDenied.BUILD_OFF] unless an implementation really has them, so a port that knows nothing of
+     * named playlists is inert for them.
+     */
+    fun runNamed(account: TelegramUserId, mode: SyncMode, maxEnvelopes: Int = NamedSyncLimits.PRODUCTION_ENVELOPES): Gated<SyncReport> =
+        Gated.Denied(SyncDenied.BUILD_OFF)
+
     fun close() = Unit
 }
 
@@ -20,6 +29,7 @@ internal object DisabledSyncActions : SyncActionsPort {
     override fun create(account: TelegramUserId): Gated<CreateOutcome> = Gated.Denied(SyncDenied.BUILD_OFF)
     override fun bind(account: TelegramUserId, chatId: Long): Gated<BindResult> = Gated.Denied(SyncDenied.BUILD_OFF)
     override fun run(account: TelegramUserId, mode: SyncMode, sendBudget: Int): Gated<SyncReport> = Gated.Denied(SyncDenied.BUILD_OFF)
+    override fun runNamed(account: TelegramUserId, mode: SyncMode, maxEnvelopes: Int): Gated<SyncReport> = Gated.Denied(SyncDenied.BUILD_OFF)
 }
 
 internal object SyncPrivacyText {

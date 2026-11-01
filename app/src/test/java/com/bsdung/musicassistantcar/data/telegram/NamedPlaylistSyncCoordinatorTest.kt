@@ -52,7 +52,7 @@ class NamedPlaylistSyncCoordinatorTest {
         }
 
         fun sync(mode: SyncMode = SyncMode.INCREMENTAL, budget: Int = TEST_SEND_BUDGET, channelId: Long = channel.channelId) =
-            coordinator.runOnce(account, channelId, mode, budget)
+            coordinator.runNamedOnce(account, channelId, mode, budget)
 
         fun state(): NamedPlaylistState = checkNotNull(session.view(account)).state
         fun lists() = state().lists

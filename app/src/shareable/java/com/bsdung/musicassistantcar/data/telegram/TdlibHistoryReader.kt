@@ -299,7 +299,7 @@ internal class TdlibHistoryReader(
             if (id <= 0L || m.optLong("chat_id", 0L) != channelId) return Parsed.Malformed
             val content = m.optJSONObject("content")
             val text = if (content?.optString("@type") == "messageText") content.optJSONObject("text")?.optString("text").orEmpty() else ""
-            if (text.startsWith(PlaylistSyncProtocol.MARKER) && m.optInt("edit_date", 0) > 0) {
+            if ((text.startsWith(PlaylistSyncProtocol.MARKER) || text.startsWith(NamedPlaylistSyncProtocol.MARKER)) && m.optInt("edit_date", 0) > 0) {
                 hub.alerts.raise(ContinuityAlert.MESSAGE_EDITED)
                 hub.metrics.count(SyncMetrics.Event.CONTINUITY_ALERT)
                 return Parsed.Tampered
