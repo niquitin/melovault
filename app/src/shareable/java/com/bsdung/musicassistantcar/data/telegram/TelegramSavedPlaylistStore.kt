@@ -151,6 +151,9 @@ internal class KeystorePlaylistCipher(
 
         /** The V2 key: a separate Keystore entry, so V1 and V2 can never break each other. */
         const val V2_ALIAS = "melovault_e96_playlist_v2_aes_v1"
+
+        /** The named-playlist key: yet another Keystore entry, so it can never break V1 or V2 (and they never break it). */
+        const val NAMED_V1_ALIAS = "melovault_nl1_named_playlists_aes_v1"
     }
 }
 
