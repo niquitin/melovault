@@ -188,3 +188,11 @@ Phạm vi kiểm nhanh (không kiểm lại toàn bộ):
 Ghi kết quả vào docs/plans/2026-10-31-loi-nhac-p2b-nghiem-thu-so-bo.md: "SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN" / "SƠ BỘ: CẦN SỬA" (liệt kê lỗi có vị trí và bước tái hiện) / "SƠ BỘ: BLOCKED". Không ghi PASS chính thức, không merge/push/public, không chọn việc khác.
 Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Dòng cuối: "Đã dừng, chờ chủ dự án nghiệm thu." kèm `ĐẠT 2026-10-31-loi-nhac-p2b — <commit/APK>` hoặc `Yêu cầu sửa 2026-10-31-loi-nhac-p2b: <lỗi>`.
 ```
+
+## Checkpoint nghiệm thu sơ bộ vòng 2 — 01/11/2026, Claude Code (Sonnet 5.5)
+
+- Kết luận: **SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN** (bản `fd1f943`, APK `62ED3500…3DB9`); chính thức vẫn **CHỜ CHỦ DỰ ÁN NGHIỆM THU**. Biên bản: [`-nghiem-thu-so-bo.md`](2026-10-31-loi-nhac-p2b-nghiem-thu-so-bo.md) mục “Vòng 2”.
+- **Vòng 2 do chính phiên đã viết mã thực hiện theo yêu cầu của chủ dự án, không độc lập**; ghi rõ trong biên bản. Có thể mở phiên mới chạy lại bằng prompt “Prompt nghiệm thu sơ bộ — dùng bản này thay cho bản ở Checkpoint chặng C” ở mục REWORK-01 phía trên.
+- Kiểm lại B1 với request mạng đang bay lúc xoay: pane mới nhận kết quả, `lyrics_drop` duy nhất là câu trả lời cũ của Deck cũ (đúng), xoay về dọc ổn, 0 crash/ANR. Q7 ổn. APK khớp SHA ở Drive/mount/Tiny/Sony.
+- Sony: màn hình OFF, xoay 1/0, 1080×2520/420; bài hiện tại “Bee Moved” (nhạc trên máy) tạm dừng 0:02; công tắc Lời nhạc BẬT.
+- Phản hồi: `ĐẠT 2026-10-31-loi-nhac-p2b — fd1f943/62ED3500` hoặc `Yêu cầu sửa 2026-10-31-loi-nhac-p2b: <lỗi>`. Không merge/push/public.
