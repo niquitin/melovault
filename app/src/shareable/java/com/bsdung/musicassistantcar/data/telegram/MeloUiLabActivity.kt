@@ -314,6 +314,12 @@ class MeloUiLabActivity : AppCompatActivity() {
             subtitle = "Tự đồng bộ Playlist khi mở app",
             badge = "Thử nghiệm"
         ) { startActivity(Intent(this, MeloSyncSettingsActivity::class.java)) })
+        // P2-B: the subtitle is the disclosure; saying yes here is the same consent as the box in the Lời nhạc tab.
+        val lyricsOn = MeloLyricsUiPolicy.loadConsent(prefs) == LyricsConsent.GRANTED
+        content.addView(switchRow("Lời nhạc từ LRCLIB", MeloLyricsUiPolicy.SETTINGS_SUBTITLE, lyricsOn) {
+            MeloLyricsUiPolicy.saveConsent(prefs, !lyricsOn)
+            render(keepScroll = true)
+        })
 
         content.addView(groupTitle("THIẾT BỊ & MÀN HÌNH"))
         content.addView(settingRow("Bố cục Gọn (máy nhỏ)", value = MeloSettingsPolicy.compactName(MeloCompactPolicy.loadSetting(prefs))) {

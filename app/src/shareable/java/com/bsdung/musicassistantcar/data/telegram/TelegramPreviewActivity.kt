@@ -6338,6 +6338,82 @@ class TelegramPreviewActivity : AppCompatActivity() {
         override fun sleepTimer(): Pair<Long?, Boolean> = ShareablePlaybackService.sleepTimerState()
 
         override fun setSleepTimer(option: MeloNowPlayingPolicy.SleepOption) = ShareablePlaybackService.setSleepTimer(option)
+
+        override fun lyrics(): MeloLyricsAccess = lyricsAccess
+    }
+
+    // ---- P2-B lyrics (docs/plans/2026-10-31-loi-nhac-p2b.md): LRCLIB, off until the owner agrees ----
+
+    private val lyricsCacheRoot by lazy { File(noBackupFilesDir, "melo_lyrics_v1") }
+    private val lyricsAccessLazy = lazy<MeloLyricsAccess> {
+        val prefs = getSharedPreferences(MeloScreenPolicy.PREFS_NAME, Context.MODE_PRIVATE)
+        val worker = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "melo-lyrics").apply { isDaemon = true } }
+        val main = Handler(Looper.getMainLooper())
+        // Sony hides app logs below W; the log lines carry only a stage and an HTTP code, never a song name.
+        val log: (String) -> Unit = { android.util.Log.w("MeloVaultLyrics", it) }
+        val controller = ShareableLyricsController(
+            cache = ShareableLyricsCache(lyricsCacheRoot),
+            provider = ShareableLyricsProvider(
+                HttpUrlConnectionLyricsTransport(), MeloLyricsPolicy.userAgent(BuildConfig.VERSION_NAME, null), log = log
+            ),
+            executor = worker,
+            post = { main.post(it) },
+            consent = { MeloLyricsUiPolicy.loadConsent(prefs) },
+            log = log
+        )
+        object : MeloLyricsAccess {
+            override fun controller() = controller
+            override fun owner(): String = (library.authorizedUser()?.value ?: 0L).takeIf { it > 0L }?.toString().orEmpty()
+            override fun meta() = lyricsMetaNow()
+            override fun filename(): String? = lyricsFilenameNow()
+            override fun consent() = MeloLyricsUiPolicy.loadConsent(prefs)
+            override fun setConsent(granted: Boolean) = MeloLyricsUiPolicy.saveConsent(prefs, granted)
+            override fun tab() = MeloLyricsUiPolicy.loadTab(prefs)
+            override fun setTab(tab: MeloLyricsUiPolicy.Tab) = MeloLyricsUiPolicy.saveTab(prefs, tab)
+        }
+    }
+    private val lyricsAccess: MeloLyricsAccess by lyricsAccessLazy
+
+    /** The four facts the lookup may use (LD3/LD4). No album for Telegram (TDLib audio has none); a local folder name is not an artist. */
+    private fun lyricsMetaNow(): MeloLyricsPolicy.Meta? {
+        val controller = player ?: return null
+        val item = controller.currentMediaItem ?: return null
+        val playerSeconds = controller.duration.takeIf { it != C.TIME_UNSET && it > 0L }?.let { (it / 1000).toInt() }
+        if (currentLocalId() != null) {
+            val artist = item.mediaMetadata.artist?.toString()?.takeIf { it.isNotBlank() }
+            val folder = MeloLocalSourcePolicy.idOfMediaId(item.mediaId)
+                ?.let { id -> if (localMusicLazy.isInitialized()) localMusic.byId(id)?.folder else null }
+            return MeloLyricsPolicy.Meta(
+                title = item.mediaMetadata.title?.toString(),
+                artist = artist.takeUnless { MeloNowPlayingPolicy.localSourceIsFolder(artist, folder) },
+                album = item.mediaMetadata.albumTitle?.toString(),
+                durationSec = playerSeconds ?: (localDurationOf(item) / 1000).toInt().takeIf { it > 0 }
+            )
+        }
+        val song = lyricsSongNow() ?: return null
+        val title = song.title.trim().takeIf { it.isNotEmpty() && !it.equals(song.filename.trim(), ignoreCase = true) }
+        return MeloLyricsPolicy.Meta(
+            title = title,
+            artist = song.performer,
+            album = null,
+            durationSec = song.durationSeconds.takeIf { it > 0 } ?: playerSeconds
+        )
+    }
+
+    private fun lyricsSongNow(): Song? {
+        val key = currentTelegramMessageId() ?: return null
+        return shownSongs.firstOrNull { it.messageId == key } ?: queueSongOrder.firstOrNull { it.messageId == key }
+            ?: songs.firstOrNull { it.messageId == key }
+    }
+
+    /** Only to pre-fill the manual search box. */
+    private fun lyricsFilenameNow(): String? = if (currentLocalId() != null) null else lyricsSongNow()?.filename
+
+    /** Logout: forget this account's lyrics and any request still in flight (LD7). */
+    private fun clearLyricsOf(owner: Long) {
+        if (owner <= 0L) return
+        if (lyricsAccessLazy.isInitialized()) lyricsAccess.controller().clearOwner(owner.toString())
+        else ShareableLyricsCache(lyricsCacheRoot).clearOwner(owner.toString())
     }
 
     private fun prefetchNextEnabled(): Boolean =
@@ -8083,6 +8159,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun logoutUser() {
         if (!auth.isReady()) return
+        clearLyricsOf(library.authorizedUser()?.value ?: 0L)
         detachMeloLayer()
         autoRecoveryPolicy.reset()
         setNavigationCollapsed(false)
