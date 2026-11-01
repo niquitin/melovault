@@ -2,6 +2,11 @@
 
 TASK_ID: **2026-11-01-nhieu-playlist-co-ten**.
 
+## Quyết định 01/11/2026 — ĐẠT (chủ dự án)
+
+- Chủ dự án nhắn “Đạt” trong chat (đáp đề nghị phản hồi `ĐẠT 2026-11-01-nhieu-playlist-co-ten — fe518f5/5B2FB5CC`). **TASK_ID này: ĐẠT, PASS kèm giới hạn** — xem [nghiệm thu](2026-11-01-nhieu-playlist-co-ten-nghiem-thu.md). Không có nghiệm thu sơ bộ độc lập (chủ dự án quyết định trước khi mở phiên sơ bộ); prompt sơ bộ bên dưới **không còn cần dùng**, trừ khi chủ dự án muốn kiểm thêm.
+- **Chưa merge, chưa push, chưa public.** Cần chỉ thị riêng: merge `--no-ff` vào nhánh tích hợp `feature/e93-03d-y700-offline-cockpit` (nhớ chạy lại gate Ni sau merge vì cây tích hợp khác nhánh nguồn), push/public. Agent không tự chọn nhiệm vụ kế.
+
 ## Checkpoint 01/11/2026 22:00 — Chặng 4 XONG, chờ nghiệm thu sơ bộ (Claude Code, Sonnet 5.5)
 
 - **Vai:** thực thi Chặng 4 (Tiny build + QA Sony + Drive), hai lượt: 18:30–19:17 (dừng vì USB Sony chập chờn, xem checkpoint cũ bên dưới) và 21:39 (sau khi chủ dự án cắm lại cáp). Không code, không sửa mã. Phiên đã dừng; watcher/script QA trên Tiny đã tắt.
