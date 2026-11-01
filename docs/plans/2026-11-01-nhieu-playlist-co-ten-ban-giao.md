@@ -23,7 +23,7 @@ TASK_ID: **2026-11-01-nhieu-playlist-co-ten**.
 - **Chênh lệch kế hoạch:** tên thử ASCII `QA Thu 1` (adb không gõ được dấu); thứ tự Q4/Q5 đổi (Q5 trước để hàng chờ có nhiều bài). Q5 theo điều chỉnh: hàng chờ chỉ gồm bài Telegram (3 bài của `QA Thu 1`).
 - **Chưa làm / vẫn BLOCKED:** đồng bộ hai máy Q7–Q9 (chưa có (a)/(b)); âm thanh thật CHƯA XÁC NHẬN; Release chưa chạy trên máy.
 - **File chưa commit:** không có sau commit hồ sơ này. Repo chính vẫn có `?? .codex-remote-attachments/` và kế hoạch UI/UX chưa commit của phiên khác, không động tới.
-- **Bước tiếp:** chủ dự án kiểm cáp Sony và giao lại phiên thực thi Chặng 4 (Codex hoặc Claude Code) bằng prompt tiếp tục dưới.
+- **Bước tiếp:** chủ dự án **đổi/cắm lại cáp-cổng USB Sony** (xem phụ lục Chặng 4 mục 5b: phiên 19:08–19:17 vẫn không có kết nối ổn định; app không crash — PID 23759, máy chạy 19 ngày), rồi giao lại phiên thực thi Chặng 4 (Codex hoặc Claude Code) bằng prompt tiếp tục dưới.
 
 ### Prompt tiếp tục Chặng 4 (S22 từ Q4 → S24)
 

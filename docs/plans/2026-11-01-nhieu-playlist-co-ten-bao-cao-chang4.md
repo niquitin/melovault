@@ -75,6 +75,14 @@ Quan sát phụ (không phải lỗi chặn):
 - Một lần `adb devices -l` trên Tiny thấy máy với transport id mới (10239) rồi lại rỗng (và thêm một lần thoáng hiện ≈ 19:04, transport 10556, rồi mất lại; tám lần thử ≈ 15 s/lần sau đó đều không thấy); thăm dò thêm ≈ 4 phút (nhiều lần cách 12–15 s) vẫn không thấy. Chưa rõ: cáp/USB bị rút, máy khởi động lại, hay ứng dụng bị treo/crash khi mở “Xem cả hàng đợi” (chưa đọc được logcat). **Không kết luận lỗi ứng dụng.**
 - Watcher QA trên Tiny đã dừng (`watcher_stop=2026-11-01T19:02:27`); không còn tiến trình do phiên này tạo (trừ daemon Gradle).
 
+### 5b. Phiên tiếp theo (19:08–19:17) — vẫn BLOCKED
+
+- Git khớp bàn giao (HEAD `e3d8383`, cây sạch). `adb devices -l` thấy Sony lúc 19:09 nhưng từng lệnh lại báo `device not found`.
+- **App không crash:** `uptime` máy 19 ngày (không khởi động lại) và PID `app.melovault.player` vẫn là `23759` như trước sự cố; cửa sổ có focus là `TelegramPreviewActivity`. Nguyên nhân mất kết nối là USB, không phải ứng dụng. (Chưa đọc được `logcat -b crash` và `exit-info` vì lệnh rớt giữa chừng; không có bằng chứng crash nào.)
+- **USB tự ngắt/kết nối lại liên tục:** nhật ký 90 giây (`chang4/usbwatch.log`): máy xuất hiện rồi biến mất ≈ 10 lần (có lúc `authorizing`), mỗi lần chỉ vài giây. Thêm cơ chế tự thử lại vào `q.ps1` vẫn không đủ. Lệnh “khôi phục + tắt màn” chỉ một lần ngắn, thử liên tục 3 phút 19 giây (`chang4/restore-burst.log`): **không lần nào hoàn tất** ⇒ xoay vẫn khóa dọc, `SONY_SCREEN_END` vẫn chưa xác minh (lần kiểm cuối `ON`).
+- Không thao tác QA thêm trên máy (tránh bấm dở nửa chừng như chọn xóa/xác nhận). Q4–Q6 và dọn Playlist thử vẫn chưa làm.
+- Cần chủ dự án: rút/cắm lại hoặc **đổi cáp/cổng USB** (ưu tiên cổng sau của Tiny hoặc cáp dữ liệu khác), kiểm trên điện thoại chế độ USB (Truyền tệp/Không truyền dữ liệu) và hộp thoại “Cho phép gỡ lỗi USB”; xác nhận `adb devices -l` ổn định ≥ 1 phút.
+
 ## 6. Việc còn lại
 
 1. Chủ dự án kiểm cáp/nguồn Sony và xác nhận máy báo `device` trong `adb devices -l` trên Tiny.
