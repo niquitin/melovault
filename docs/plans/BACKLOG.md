@@ -21,7 +21,7 @@ Mỗi việc dưới đây cần chủ dự án giao riêng; quy trình 29/10 (l
   - khóa ký phát hành (hiện chỉ có khóa debug của Tiny);
   - chủ dự án đọc điều khoản API Telegram cho app bên thứ ba;
   - chỉ thị public riêng.
-- **D. Push** — BLOCKED: repo chưa có remote/URL đích.
+- **D. ~~Push~~ — ĐÃ LÀM 01/11/2026** theo chỉ thị của chủ dự án: remote `github` (`https://github.com/niquitin/melovault.git`, repo **công khai**) nhận nhánh `source/feature-e93-03d-y700-offline-cockpit`; `main` (trang giới thiệu) không đổi. Các lần đẩy sau cần chỉ thị riêng; không đẩy nhánh `dot/*`, không force.
 - **E. Chưa kiểm** (ghi trong các hồ sơ ĐẠT; mỗi mục cần giao mới thực hiện):
   - Đăng nhập:
     - mã open thật bị Telegram từ chối (câu D7);
