@@ -2,7 +2,8 @@
 
 Thực thi: Claude Code (Sonnet 5.5), phiên chặng A. TASK_ID `2026-10-31-loi-nhac-p2b`, nhánh `dot/2026-10-31-loi-nhac-p2b`, worktree `D:\Bots\_worktrees\MeloVault-loi-nhac-p2b`, baseline `94ab6b0`.
 Kế hoạch: [`2026-10-31-loi-nhac-p2b.md`](2026-10-31-loi-nhac-p2b.md). Bàn giao: [`-ban-giao.md`](2026-10-31-loi-nhac-p2b-ban-giao.md).
-Trạng thái: **CHẶNG A XONG (L0–L4). Chưa có UI, chưa có APK, chưa QA thiết bị. Chưa nghiệm thu.**
+Trạng thái: **CHẶNG A XONG (L0–L4) và CHẶNG B XONG (L5–L6, mục 9). Chưa build trên Tiny, chưa QA thiết bị, chưa có APK đủ điều kiện cài. Chưa nghiệm thu.**
+Chặng B: Thực thi: Claude Code (Sonnet 5.5), cùng phiên với chặng A theo yêu cầu “Làm ngay ở đây” của chủ dự án.
 
 ## 1. Tóm tắt
 
@@ -72,3 +73,59 @@ Không dùng ADB, không đụng thiết bị. `SONY_SCREEN_END` = KHÔNG THAO T
 
 - Rủi ro: LRCLIB đổi API hoặc chặn → `TemporaryError`, app vẫn phát. Bản quyền lời khi đăng công khai vẫn là câu hỏi mở (LD9).
 - Rollback: chặng A chỉ thêm 8 file mới và không có điểm nối vào app nên có thể `git revert 6f274b9` hoàn toàn; không có migration.
+
+## 9. Chặng B — UI + gate Ni (L5–L6), 01/11/2026
+
+Commit mã: `3447310`. Log cục bộ (bị `.gitignore`): `docs/plans/artifacts/2026-10-31-loi-nhac-p2b/B-20261101-110516/` (`B1`…`B5`, `B-exit.txt`, `run-gate.ps1`).
+
+### 9.1 Đã làm (L5)
+
+| File | Nội dung |
+|---|---|
+| `MeloLyricsUiPolicy.kt` (mới) | Chữ và nút cho từng `LyricsState`; chữ hộp đồng ý LD2 đúng theo kế hoạch; nhãn ứng viên; chữ điền sẵn ô tìm; quy tắc nút “Về dòng đang hát”, cuộn về giữa, chiều cao pane, chiều cao nút theo cỡ chữ; đọc/ghi đồng ý và tab trong prefs `melovault_ui_lab` (`lyrics_consent`, `lyrics_tab`) |
+| `MeloLyricsPane.kt` (mới) | `MeloLyricsAccess` (giao diện app cấp cho pane), `MeloLyricsPane` (Android Views: thông báo + nút, lời đồng bộ tô và tự cuộn, lời thường, danh sách chọn, ô tìm thủ công có IME “Tìm”, dòng “Lời: LRCLIB”), `MeloLyricsTabs` (thanh “Tiếp theo \| ♪ Lời nhạc”, nhớ tab) |
+| `MeloScreenHost.kt` | thêm `lyrics(): MeloLyricsAccess? = null` (host không có lời thì không hiện tab) |
+| `MeloStudioDeck.kt` | dọc: khối hàng đợi nằm dưới thanh tab, pane lời cao cố định `portraitPaneHeight`; ngang: cột phải có thanh tab; mở/đóng Deck bật/tắt pane |
+| `MeloTabletScreen.kt` | panel Hàng đợi ở cột phải có thanh tab; “Thư viện” chuyển về cuối thanh tab |
+| `MeloUiLabActivity.kt` | công tắc “Lời nhạc từ LRCLIB” (nhóm THƯ VIỆN & ĐỒNG BỘ); chữ phụ nêu rõ dữ liệu gửi đi và “Mặc định tắt” |
+| `TelegramPreviewActivity.kt` | tạo controller (executor 1 luồng, `post` về luồng chính, log mức **W**), `lyricsMetaNow()` (Telegram: title/performer/thời lượng, không album; nhạc trên máy: có album, tên thư mục không bị coi là nghệ sĩ), `clearLyricsOf()` gọi đầu `logoutUser()` |
+
+Không đụng service, Media3, DB, TDLib (không gọi thêm), package, signer, versionCode, Car, Gọn. Không đọc tệp nhạc.
+
+### 9.2 Gate L6
+
+| Lệnh | Kết quả |
+|---|---|
+| `:app:testShareableDebugUnitTest :app:testShareableReleaseUnitTest` | BUILD SUCCESSFUL (1 phút 41 giây) |
+| Cộng XML Debug | 184 suite, **2412 test, 21 skipped, 0 failures, 0 errors** |
+| Cộng XML Release | 184 suite, **2412 test, 21 skipped, 0 failures, 0 errors** |
+| `:app:assembleShareableDebug :app:assembleShareableRelease` | BUILD SUCCESSFUL |
+| `-PmeloOpen=true :app:assembleShareableDebug` | BUILD SUCCESSFUL |
+| `:app:assemblePersonalDebug` | BUILD SUCCESSFUL |
+| `git diff --check` | sạch |
+
+2412 = 2393 (sau chặng A) + 19 (`MeloLyricsUiPolicyTest`). Năm lớp test lời nhạc: 23 + 19 + 18 + 22 + 20 = 102, đều xanh ở hai biến thể.
+
+### 9.3 Lệch so với kế hoạch (chủ dự án cần biết)
+
+1. **Hai khung:** pane lời không nằm ở khung phát bên trái. Bản trái không có phần “Tiếp theo”; hàng đợi của Hai khung mở ở cột phải bằng nút “☰ Hàng đợi”. Thanh tab “Tiếp theo | Lời nhạc” gắn vào chính panel đó. Vì vậy ở Hai khung muốn xem lời phải bấm “Hàng đợi” rồi chọn tab Lời nhạc; **bước Q6 của kế hoạch phải đọc theo cách này**. Nếu chủ dự án muốn lời nằm cố định ở khung trái thì cần đổi thiết kế (REWORK/nhiệm vụ riêng).
+2. **Nhớ tab:** lưu trong prefs `lyrics_tab` (cùng file Cài đặt), không thêm trường vào `MeloBrowseState.Deck`, nên không đụng cơ chế lưu/khôi phục trạng thái S2. Tab vẫn được nhớ qua xoay và mở lại màn.
+3. **Nhịp 1 giây:** pane có `Handler` luồng chính riêng (chỉ chạy khi hiện), không dùng ticker của Deck, để dùng chung cho Hai khung. Không thêm luồng nền.
+4. **Công tắc Cài đặt** nằm ở trang chính, nhóm “THƯ VIỆN & ĐỒNG BỘ”. Bật ở đây là cùng một đồng ý với hộp ở tab; tắt thì tab hiện “Lời nhạc đang tắt” và nút “Bật lời nhạc” (mở lại hộp đồng ý).
+
+### 9.4 Chưa kiểm chứng
+
+- **Toàn bộ phần nhìn thấy được chưa từng chạy:** `MeloLyricsPane`, `MeloLyricsTabs`, gắn vào Deck/Hai khung chỉ được biên dịch, không có test JVM (view). Chưa thấy bằng mắt trên máy nào.
+- Chưa biết: cuộn lồng nhau của pane cao cố định trong màn dọc của Deck; ô tìm với bàn phím trong cửa sổ `Dialog` của Deck; chữ lớn 1.3 trên thiết bị; xoay giữ tab và câu tô; Hai khung ngang trên Sony (cao ~360 dp có đủ chỗ cho pane không).
+- Chưa gọi LRCLIB thật. Âm thanh thật: **CHƯA XÁC NHẬN**.
+- APK build trên Ni **không có Telegram config** nên **KHÔNG CÀI** để QA. Chưa build ở Tiny, chưa kiểm package/versionCode/chứng chỉ, chưa Sony, chưa Drive.
+- Chưa có `-apk-test.md`, `-hinh-nghiem-thu.md`, `00_tong_hop.png` (thuộc L8).
+
+### 9.5 Thiết bị / màn hình
+
+Không dùng ADB hay thiết bị. `SONY_SCREEN_END` = KHÔNG THAO TÁC.
+
+### 9.6 Rủi ro / rollback
+
+- Rủi ro lớn nhất là bố cục: lỗi chỉ lộ khi chạy thật (chặng C). Lỗi lời nhạc không chạm player/queue theo thiết kế (controller không có tham chiếu tới player).
+- Rollback: tính năng tắt sẵn. Muốn ẩn hẳn mà giữ lõi: `git revert 3447310`.

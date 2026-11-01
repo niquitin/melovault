@@ -85,3 +85,43 @@ Lưu ý riêng:
 
 Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Dòng cuối: "Đã dừng, bàn giao phiên thực thi tiếp theo." kèm prompt chặng C đã điền HEAD thật.
 ```
+
+## Checkpoint chặng B — 01/11/2026, Claude Code (Sonnet 5.5)
+
+- Trạng thái: **CHẶNG B XONG (L5–L6). Chờ phiên thực thi chặng C (L7–L8: Tiny build + QA Sony + hồ sơ).** Chưa nghiệm thu; chưa có APK đủ điều kiện cài.
+- Commit mã chặng A `6f274b9`; commit mã chặng B `3447310`. Báo cáo: [`-bao-cao.md`](2026-10-31-loi-nhac-p2b-bao-cao.md) mục 9. HEAD khi bắt đầu chặng C = commit cuối của nhánh (chứa file này).
+- Gate Ni: test Debug + Release mỗi biến thể 2412 test, 21 skipped, 0 lỗi; assemble Shareable Debug/Release, open Debug, Personal Debug đều xanh; `git diff --check` sạch.
+- Làm theo bản đã chốt: LRCLIB trực tiếp, tắt sẵn + hỏi đồng ý, không liên hệ trong User-Agent, mixset 15 phút, có trong bản open (tắt sẵn), bỏ qua lời nhúng/`.lrc`.
+- **Điểm lệch cần chặng C biết:** ở Hai khung, tab Lời nhạc nằm trong panel “Hàng đợi” ở cột phải (bấm “☰ Hàng đợi” rồi chọn “♪ Lời nhạc”), không ở khung trái. Studio Deck (dọc và ngang) có thanh tab đúng như kế hoạch. Xem báo cáo mục 9.3.
+- **Phần nhìn thấy được CHƯA TỪNG CHẠY trên máy.** Chặng C là lần đầu thấy giao diện: nếu bố cục lỗi (cuộn lồng nhau ở Deck dọc, bàn phím trong Dialog, Hai khung thấp ~360 dp) thì ghi FAIL kèm ảnh, KHÔNG tự sửa bố cục ngoài phạm vi nhỏ; báo để chủ dự án giao REWORK.
+- APK build ở Ni không có Telegram config: **không cài**. Chặng C phải build ở Tiny.
+- Không merge/push/public. Không dùng thiết bị trong chặng B.
+
+## Prompt phiên thực thi — chặng C (dán nguyên văn)
+
+```text
+MELOVAULT — PHIÊN THỰC THI ĐÃ KẾ HOẠCH
+
+Repo/worktree: D:\Bots\_worktrees\MeloVault-loi-nhac-p2b (repo chuẩn D:\Bots\MeloVault-E91-Shareable; KHÔNG làm trong thư mục chính)
+TASK_ID: 2026-10-31-loi-nhac-p2b
+Nhánh: dot/2026-10-31-loi-nhac-p2b
+Kế hoạch đã chốt: docs/plans/2026-10-31-loi-nhac-p2b.md (mục 5 L7–L8, mục 6 QA, mục 7 tiêu chí)
+Báo cáo: docs/plans/2026-10-31-loi-nhac-p2b-bao-cao.md (mục 9 là chặng B)
+Bàn giao: docs/plans/2026-10-31-loi-nhac-p2b-ban-giao.md; HEAD dự kiến: commit cuối của nhánh (chứa checkpoint chặng B); commit mã: 6f274b9 (chặng A), 3447310 (chặng B)
+Baseline: 94ab6b0
+PHIÊN: 3 = chặng C, Tiny build + QA Sony + hồ sơ, bước L7–L8
+Lưu ý riêng:
+- KHÔNG sửa mã trong chặng này. Nếu QA lộ lỗi, ghi FAIL kèm ảnh/log/bước tái hiện và dừng; chủ dự án giao REWORK ở phiên thực thi mới.
+- Thiết bị QA thật duy nhất: Sony XQ-AS52 serial QV725WEQ54 qua Tiny (Shanling đã bán 31/10). Kiểm adb devices -l + getprop mỗi phiên. Chỉ adb install -r Debug thường (bản đang có trên máy, cùng chữ ký); tuyệt đối không uninstall/pm clear/xóa dữ liệu, không logout, không máy bay/tắt mạng.
+- L7: bundle Git + SHA-256 hai đầu → clone cô lập trên Tiny → copy local.properties theo ngoại lệ E104 S11 (không đọc/in/hash) → reportTelegramConfig (KHÔNG có -PmeloOpen) → build Debug thường → gate package app.melovault.player / versionCode 121 / chứng chỉ eecd3df7…fce8 / SHA-256 / bytes.
+- QA theo mục 6 kế hoạch (Q1–Q6) với MỘT thay đổi: ở Q6 và mọi chỗ nói "Hai khung", tab Lời nhạc nằm trong panel "☰ Hàng đợi" ở cột phải (xem bàn giao). Cần thêm: Q7 công tắc "Lời nhạc từ LRCLIB" trong Cài đặt bật/tắt và tab phản ứng đúng; Q8 xoay dọc↔ngang giữ tab. Agent được gõ từ khóa tìm lời. Log lời nhạc: tag MeloVaultLyrics mức W, chỉ có stage + mã HTTP; kiểm không có tên bài trong logcat. Bắt đầu từ trạng thái chưa đồng ý (UNDECIDED); nếu máy đã có lựa chọn cũ trong prefs thì ghi rõ, không xóa prefs.
+- Lỗi mạng/429/hết hạn cache chỉ có ở test JVM. Âm thanh thật: CHƯA XÁC NHẬN.
+- Màn hình Sony theo CLAUDE.md mục 7: chỉ bật khi cần, tắt trong finally, xác minh Display State=OFF; ghi SONY_SCREEN_END.
+- L8: -bao-cao.md (mục chặng C), -apk-test.md, -hinh-nghiem-thu.md, 00_tong_hop.png (≤ 1600 px, 6–8 ảnh), upload APK + ảnh vào Drive Ni N owner-only nhãn "QA CANDIDATE — CHƯA NGHIỆM THU", gửi link đã kiểm; Drive chặn tải thì ghi BLOCKED đúng lỗi. Hồ sơ sơ bộ: đưa prompt cho phiên nghiệm thu sơ bộ MỚI (PROMPT_NGHIEM_THU_SO_BO.md).
+
+1. Đọc CLAUDE.md mục 0, mục cập nhật đầu HANDOFF.md, docs/workflow/QUY_TRINH_3_VAI_TRO.md, file bàn giao, báo cáo và kế hoạch trên. Kiểm git status, branch, HEAD, baseline, diff --check, agent đang chạy. Cây bẩn không rõ nguồn hoặc HEAD lạ → STOP, không reset/clean/stash/đè.
+2. Làm L7 → L8. Sau mỗi mốc cập nhật báo cáo (mở đầu "Thực thi: <Claude Code/Codex> <model>, phiên chặng C") và file bàn giao.
+3. Không merge/push/public, không ghi PASS, không chọn việc khác.
+
+Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Dòng cuối: "Đã dừng. Mở phiên mới để nghiệm thu sơ bộ nhanh." kèm prompt sơ bộ đã điền HEAD thật.
+```
