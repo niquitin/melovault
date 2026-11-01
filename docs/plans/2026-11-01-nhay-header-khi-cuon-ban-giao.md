@@ -1,50 +1,39 @@
 # 2026-11-01-nhay-header-khi-cuon — Bàn giao (checkpoint)
 
-## Checkpoint 1 — 01/11/2026, kết thúc phiên lập kế hoạch
+## Checkpoint 2 — 01/11/2026, sau S6 (Chặng A xong trên Ni)
 
-1. **TASK_ID:** `2026-11-01-nhay-header-khi-cuon`.
-   - Vai: lập kế hoạch. Công cụ: Claude Code (model do chủ dự án chọn).
-   - Yêu cầu: chủ dự án báo lỗi “kéo danh sách bị nháy chồng hình” ở Playlist và các danh sách khác khi lướt nhanh (video 01/11 22:21). Chủ dự án chọn “Viết kế hoạch”.
-2. **Repo/worktree:** `D:\Bots\_worktrees\MeloVault-nhay-header-khi-cuon` (worktree của `D:\Bots\MeloVault-E91-Shareable`).
-   - Nhánh `dot/2026-11-01-nhay-header-khi-cuon`.
-   - Baseline `8a8c978` (tip `feature/e93-03d-y700-offline-cockpit` lúc tạo nhánh).
-   - Commit kế hoạch: xem `git log -1 -- docs/plans/2026-11-01-nhay-header-khi-cuon-ban-giao.md`.
-   - Chưa có source commit/build.
-3. **Hồ sơ:** [kế hoạch](2026-11-01-nhay-header-khi-cuon.md). Báo cáo/sơ bộ/APK: chưa có.
+1. **TASK_ID:** `2026-11-01-nhay-header-khi-cuon`. Vai: thực thi (Claude Code, Sonnet 5.5), phiên GỘP; đang ở ranh giới Chặng A → Chặng B.
+2. **Repo/worktree:** `D:\Bots\_worktrees\MeloVault-nhay-header-khi-cuon`; nhánh `dot/2026-11-01-nhay-header-khi-cuon`; baseline `8a8c978`; commit kế hoạch `8a48584`; **commit mã `4fe5a37`** (nguồn dùng build).
+   - Commit chứa checkpoint này: `git log -1 -- docs/plans/2026-11-01-nhay-header-khi-cuon-ban-giao.md`.
+3. **Hồ sơ:** [kế hoạch](2026-11-01-nhay-header-khi-cuon.md), [báo cáo](2026-11-01-nhay-header-khi-cuon-bao-cao.md). Chưa có sơ bộ/APK.
 
 | Bước | Trạng thái | Bằng chứng | Việc còn lại |
 |---|---|---|---|
-| Chẩn đoán | Xong | Kế hoạch mục 3 (khung hình video + `MeloLibraryPane.kt:240-259`, `MeloPhoneScreen.kt:103-105`, `MeloLibraryPolicy.kt:233-238`) | Xác nhận nguyên nhân 2 bằng log trên Sony (S1/S8) |
-| Kế hoạch S0–S10 | Xong | `2026-11-01-nhay-header-khi-cuon.md` | Chủ dự án chốt, mở phiên thực thi |
-| S0–S10 thực thi | Chưa làm | — | Theo kế hoạch mục 6 |
+| S0 | Xong | HEAD `8a48584`, cây sạch | — |
+| S1 baseline Sony | Xong, tái hiện được | Báo cáo mục 3; video `docs/plans/artifacts/2026-11-01-nhay-header-khi-cuon/base_0*.mp4` (private, gitignore); header đổi 8 và 14 lần/cử chỉ giữ tay | — |
+| S2–S5 mã + test | Xong | Commit `4fe5a37` | — |
+| S6 gate Ni | Xong | Test 2698/21/0/0 Debug và Release; assemble Debug/Release xanh; `diff --check` sạch | — |
+| S7 build Tiny | **Chưa làm** | — | Bundle + SHA256, clone cô lập, build Debug có config, verify package/version/cert |
+| S8 cài + QA Sony | Chưa làm | — | `install -r`, Q1–Q6, đếm số lần đổi header bằng log `MeloHeaderFold` và `count_header.ps1`, `00_tong_hop.png` |
+| S9–S10 | Chưa làm | — | Drive owner-only, `-apk-test.md`, `-hinh-nghiem-thu.md`, prompt sơ bộ |
 
-4. **File chưa commit:** không có (sau commit kế hoạch).
-5. **Test/build:** chưa chạy (phiên lập kế hoạch không build).
-6. **APK/thiết bị:**
-   - Chưa có APK mới. Phiên này không dùng Sony.
-   - Bản trong video của chủ dự án: “nhiều playlist có tên” `fe518f5` vc121, quay trên máy của chủ dự án (1080×2340).
-   - Video gốc không lưu vào repo vì có PII trong tên bài.
-7. **Quyết định/rủi ro:**
-   - Chọn phương án A (không đổi header khi đang kéo tay; delta theo cùng dòng; ngưỡng dp cộng dồn).
-   - Loại phương án B (translationY) và C (chỉ tăng ngưỡng); lý do ở kế hoạch mục 5.
-   - Điểm cần chủ dự án xác nhận khi nghiệm thu: header chỉ gấp khi nhả tay hoặc khi đang trôi.
-8. **Trạng thái:** phiên lập kế hoạch đã dừng sau commit, không còn tác vụ chạy.
+4. **File chưa commit:** chỉ các file hồ sơ (báo cáo + bàn giao) của checkpoint này nếu chưa commit; mã đã commit.
+5. **Thiết bị:** Sony `QV725WEQ54` trên Tiny, app đang cài vc121 0.6.96-beta **bản cũ (chưa sửa)**. Màn Sony đã tắt sau baseline. Tiny có sẵn thư mục scratch `C:\Bots\_qa_temp\nhay-header\` (video/ảnh baseline gốc và `gesture.ps1` dùng quay + chạy cử chỉ).
+6. **Công cụ QA đã có:**
+   - `gesture.ps1 -Tag <t> -Seq 'F,S,U,SU,H,HU,P' -Limit <s>` trên Tiny: quay màn hình, chạy cử chỉ, lấy logcat `MeloHeaderFold`. `H`/`HU` = giữ tay kéo xuống/lên bằng `input motionevent` (tái hiện lỗi; `input swipe` thì không).
+   - `count_header.ps1 -Video <mp4>` (trên Ni, dùng ffmpeg Ni): đếm số lần header đổi theo độ sáng vùng biểu tượng ⚙ tại (810,105,80×80) trên khung 1080×2520. Bản sao script nằm trong scratchpad của phiên; nếu mất, viết lại theo mô tả.
+   - ffmpeg trên Tiny **không chạy được**; xử lý video trên Ni sau khi chép qua `T:\_qa_temp\nhay-header\` (chỉ đọc).
+7. **Rủi ro/quyết định:**
+   - Baseline Sony không có playlist ≥ 20 bài; dùng Thư viện/Tất cả. Q1–Q3 làm trên tab đó (ghi rõ trong QA).
+   - Hành vi mới: header chỉ đổi khi nhả tay hoặc khi danh sách trôi (CẦN chủ dự án xác nhận khi nghiệm thu).
+8. **Trạng thái bàn giao:** nếu phiên này tiếp tục S7–S10 thì checkpoint này được thay bằng checkpoint cuối; nếu phiên dừng ở đây thì không còn tác vụ chạy.
 
-### Prompt thực thi (dán vào phiên MỚI, model do chủ dự án chọn)
+### Prompt tiếp tục (Chặng B)
 
 ```text
-MELOVAULT — PHIÊN THỰC THI ĐÚNG KẾ HOẠCH
-Repo/worktree: D:\Bots\_worktrees\MeloVault-nhay-header-khi-cuon (repo chuẩn D:\Bots\MeloVault-E91-Shareable)
-TASK_ID: 2026-11-01-nhay-header-khi-cuon
-Nhánh: dot/2026-11-01-nhay-header-khi-cuon
-Kế hoạch: docs/plans/2026-11-01-nhay-header-khi-cuon.md
-Bàn giao: docs/plans/2026-11-01-nhay-header-khi-cuon-ban-giao.md; HEAD dự kiến: commit kế hoạch (git log -1)
-Baseline: 8a8c978
-PHIÊN: GỘP (S0–S10); nếu thiếu quota thì dừng ở checkpoint sau S6 (Chặng A Ni) và bàn giao Chặng B (Tiny/Sony).
-Lưu ý riêng:
-- Lỗi: header (hàng MeloVault + Đã đồng bộ) ẩn/hiện liên tục khi kéo/lướt danh sách bài (MeloLibraryPane onScroll).
-- Sửa theo phương án A ở mục 5–6 kế hoạch. Chỉ đụng file ở mục 8; không sửa TelegramPreviewActivity, MainActivity, Media3/DB/TDLib.
-- Tái hiện baseline trên Sony (S1) trước khi sửa; đo số lần đổi header bằng log Debug MeloHeaderFold.
-- Không tăng versionCode; video/ảnh có tên bài/kênh riêng tư không commit.
-Làm theo docs/workflow/PROMPT_SONNET.md (Claude Code) hoặc PROMPT_CODEX.md (Codex).
+Tiếp tục TASK_ID 2026-11-01-nhay-header-khi-cuon, vai thực thi, Chặng B (S7–S10).
+Worktree D:\Bots\_worktrees\MeloVault-nhay-header-khi-cuon; nhánh dot/2026-11-01-nhay-header-khi-cuon; mã dùng build 4fe5a37.
+Đọc CLAUDE.md mục 0, docs/plans/2026-11-01-nhay-header-khi-cuon-ban-giao.md, kế hoạch, báo cáo.
+Phiên trước đã dừng; không có tác vụ chạy. Kiểm Git trước khi làm.
+Làm S7 (build Tiny có config) → S8 (cài Sony, QA Q1–Q6) → S9–S10. Không tăng versionCode; không commit video/ảnh riêng tư.
 ```
