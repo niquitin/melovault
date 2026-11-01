@@ -4,7 +4,7 @@ TASK_ID: `2026-11-01-nhieu-playlist-co-ten`. Nhánh `dot/2026-11-01-nhieu-playli
 
 Thực thi: Claude Code Sonnet 5.5 (effort không xác định từ công cụ), phiên Chặng 1.
 Phạm vi phiên: **Chặng 1 (S1–S5)** — mô hình, lưu trữ, session. Không UI, không đồng bộ, không build APK, không ADB/Sony/Tiny/Drive.
-Trạng thái: **CHẶNG 1 XONG, chờ phiên thực thi Chặng 2.** Chưa có APK, chưa nghiệm thu.
+Trạng thái: **CHẶNG 1 VÀ CHẶNG 2 XONG, chờ phiên thực thi Chặng 3.** Chưa có APK, chưa nghiệm thu.
 
 ## 1. Bảng kết quả
 
@@ -90,3 +90,80 @@ Không sửa: `TelegramPlaylistModel/Codec/StoreV2/V2Session/SyncProtocol/SyncCo
 ## 7. Việc tiếp
 
 Chặng 2 (S6–S10): `NamedPlaylistSyncProtocol`, `NamedPlaylistSyncCoordinator`, nối `AutomaticPlaylistSync`, trạng thái/Cài đặt. Prompt đầy đủ ở `2026-11-01-nhieu-playlist-co-ten-ban-giao.md`.
+
+---
+
+# Chặng 2 (S6–S10) — đồng bộ `#mvlist v1`
+
+Thực thi: Claude Code Sonnet 5.5 (effort không xác định từ công cụ), phiên Chặng 2. Chủ dự án ra lệnh “tiếp tục chặng 2” ngay trong hội thoại của Chặng 1 (cùng agent; Chặng 1 đã dừng, cây sạch, HEAD `d71bc44` khớp bàn giao trước khi làm).
+Phạm vi: S6–S10. Không UI, không build APK, không ADB/Sony/Tiny/Drive; `SONY_SCREEN_END=KHÔNG THAO TÁC`.
+Trạng thái: **CHẶNG 2 XONG.** Mã dừng ở `2ebf127`. Chưa có APK, chưa nghiệm thu.
+
+## 1. Bảng kết quả
+
+| Bước | Việc | Commit | File chính | Test mới | Kết quả |
+|---|---|---|---|---|---|
+| S6 | Giao thức `#mvlist v1` | `ea38b30` | `NamedPlaylistSyncProtocol.kt` | 19 | PASS |
+| S7 | Coordinator đồng bộ Playlist có tên | `7f8248d` | `NamedPlaylistSyncCoordinator.kt` | 26 | PASS |
+| S8 | Nối vào tự đồng bộ (sau Yêu thích), service, cổng | `3994772` | `AutomaticPlaylistSync`, `TdlibPlaylistSyncService`, `SyncServiceProvider`, `SyncSettingsController`, `TdlibPlaylistSyncTransport`, `TdlibHistoryReader` | 13 lịch + 7 TDLib giả + 5 guard | PASS |
+| S9 | Trạng thái + “Thay đổi chờ gửi” | `2ebf127` | `NamedPendingReviewPolicy.kt`, `PlaylistSyncStatusPolicy`, `AutomaticPlaylistSync`, `MeloSyncSettingsActivity` | 10 + 3 | PASS |
+| S10 | Gate Ni | (commit hồ sơ) | log trong `docs/plans/artifacts/2026-11-01-nhieu-playlist-co-ten/` | — | PASS |
+
+Test mới Chặng 2: **83** = 19 (`NamedPlaylistSyncProtocolTest`) + 26 (`NamedPlaylistSyncCoordinatorTest`) + 16 (`AutomaticPlaylistSyncNamedTest`, gồm 3 của S9) + 7 (`NamedPlaylistTdlibSyncTest`) + 5 (`NamedPlaylistSyncCallSitesTest`) + 10 (`NamedSyncStatusPolicyTest`); 6 suite mới.
+
+## 2. Gate Ni (S10) — chạy trên HEAD `2ebf127` (cây sạch), một lần
+
+| Mục | Kết quả |
+|---|---|
+| `:app:testShareableDebugUnitTest :app:testShareableReleaseUnitTest` | BUILD SUCCESSFUL (2 phút 4 giây) |
+| `:app:assembleShareableDebug :app:assembleShareableRelease` | BUILD SUCCESSFUL (1 phút 25 giây) |
+| `git diff --check` | sạch (exit 0) |
+
+| Biến thể | Suite | Test | Skipped | Failures | Errors |
+|---|---|---|---|---|---|
+| Debug | 196 | 2622 | 21 | 0 | 0 |
+| Release | 196 | 2622 | 21 | 0 | 0 |
+| Baseline Chặng 2 (= kết quả Chặng 1) | 190 | 2539 | 21 | 0 | 0 |
+
+- 2622 = 2539 + 83: đúng phần mới; skipped không đổi (21, có sẵn). Không `@Ignore`; **không sửa assertion của test cũ** (không file test cũ nào bị đổi; xem mục 5 về một guard nguồn).
+- Log: `gate-s10-tests.log`, `gate-s10-assemble.log`, `gate-s10-status.txt`. Trong lúc làm có chạy lọc `--tests` (kể cả một lượt rộng `*Sync* *Tdlib* *Playlist*`: 730 test, 0 lỗi sau khi sửa guard) để bắt lỗi sớm; gate đầy đủ chỉ chạy một lần sau S9.
+
+## 3. Đã làm — chi tiết
+
+**S6 `NamedPlaylistSyncProtocol`** (đúng kế hoạch 4.4): sáu dòng `op` (`LCREATE/LRENAME/LDELETE/IADD/IREMOVE/IMOVE`), một dấu cách giữa trường, tên base64url (không padding), `sum` sha256; dùng lại `TdlibText`, `PlaylistSyncProtocol.scopeOf`, giới hạn và danh sách lỗi (`PlaylistSyncProtocol.Error`).
+- Test: mọi loại op vòng tròn; điểm cố định của `TdlibText.normalize`; 20 op tên dài nhất luôn ≤ 3500 ký tự (planner tách nhiều tin, đủ thứ tự); 20 op ngắn vừa một tin; **test chéo hai chiều**: `PlaylistSyncProtocol.decode(tin #mvlist)` = Foreign và `NamedPlaylistSyncProtocol.decode(tin #mvsync)` = Foreign; phiên bản mới → `FUTURE_VERSION`; sai tài khoản chỉ báo sau cùng; sai checksum, cắt, đổi ngẫu nhiên 300 vị trí, ~40 dạng dòng op hỏng, quá 20 op, quá 32 dot, trùng op, sender không khớp → đều Invalid, không bao giờ Ok.
+
+**S7 `NamedPlaylistSyncCoordinator`** (viết riêng theo từng luật của `PlaylistSyncCoordinator`, **không sửa class cũ**, không rút helper chung): fetch (đọc từ 0, FULL_REPLAY có vị trí lưu, chứng minh trang, kiểm đầu trang, dừng trước tin hỏng, op của mình phải về nguyên văn) và send (write-ahead cờ RETRY_REQUIRED trước khi gửi, hoàn tác khi chắc chắn bị từ chối, `UnconfirmedBlocked`, chặn xóa-trước-thêm), `NamedTransmitPlanner`. Kênh = kênh của Yêu thích; lần chạy đầu ghi vào checkpoint riêng, kênh khác về sau → RECOVERY_REQUIRED (không đổi ngầm). Dùng chung `SyncReport/SyncStatus/SyncBackoff/PlaylistSyncTransport`; lối vào là `runNamedOnce` (xem mục 5).
+- Test 26: hai máy hội tụ (tạo/đổi tên/thêm/move/xóa), đổi đồng thời, replay từ 0 và tiếp tục qua khởi động lại, trang không chứng minh được, xáo/lặp trang, FLOOD_WAIT 35 s (không gọi lại khi còn chờ), mất ACK (không gửi lại, tìm thấy trong lịch sử mới ACK), crash giữa chừng, không ghi được cờ ⇒ không gửi, ngân sách theo số op, hàng chờ 200 bài ≈ 11 tin (1 tin/lượt), phiên đổi giữa chừng, tin `#mvsync` xen kẽ, Yêu thích chạy trên cùng kênh cho kết quả y hệt đối chứng, 12 kịch bản ngẫu nhiên 3 máy hội tụ.
+
+**S8 nối vào tự đồng bộ:**
+- `AutomaticPlaylistSync.run`: sau lượt Yêu thích, cùng scope/epoch, gọi `actions.runNamed(INCREMENTAL, 1 tin)` nếu Yêu thích không ở trạng thái BACKOFF/BACKOFF_ACTIVE/RECOVERY_REQUIRED/SAVE_FAILED/STALE_SESSION/NOT_OPEN/NO_CHANNEL và quyền tự đồng bộ còn bật. Playlist lỗi hoặc ném ngoại lệ không đổi báo cáo Yêu thích và không dừng lịch; còn việc ở bất kỳ bên nào ⇒ lượt kế sau 1 s; lỗi kết nối (BACKOFF) của Playlist có tên giữ cả hai theo `notBefore`; lỗi riêng (hỏng tin, giao chưa rõ) chỉ chờ trong coordinator riêng với backoff riêng.
+- `SyncActionsPort.runNamed` (mặc định BUILD_OFF, `DisabledSyncActions` tường minh), `TdlibSyncActions.runNamed`, `TdlibPlaylistSyncService.runNamedSync` (cùng cổng consent/build/foreground/identity như `runSync`; tối đa 1 tin/lượt dù người gọi xin nhiều; không tạo kênh), `SyncServiceProvider`/`SyncRuntime` truyền `namedHost`.
+- **Chạm transport TDLib (có chủ ý):** `TdlibPlaylistSyncTransport.send` chỉ chấp nhận tin bắt đầu bằng `#mvsync`; nếu không mở thì mọi tin `#mvlist` bị coi là “giao chưa rõ”. Đã cho phép thêm tiền tố `#mvlist` (mở rộng, hành vi `#mvsync` giữ nguyên) và cho `TdlibHistoryReader` coi tin `#mvlist` bị sửa là bằng chứng liên tục giống `#mvsync`. Cả hai nằm trong phạm vi “transport chỉ ở mức văn bản”, không thuộc điều kiện dừng mục 8.
+- Test: 13 (lịch: thứ tự, FLOOD, recovery, lỗi/ném ngoại lệ, tiếp tục sau 1 s, tắt đồng bộ giữ dữ liệu, rút quyền/đổi tài khoản giữa lượt, build tắt, cổng mặc định BUILD_OFF, provider tắt không đọc `namedHost`) + 7 qua TDLib giả thật (tin `#mvlist` đi qua transport thật tới máy khác; Yêu thích và Playlist chung kênh không ảnh hưởng nhau; tin bị sửa chặn đọc; thiếu quyền gửi ⇒ Denied, không gửi; build tắt/chưa nối/chưa gắn kênh không chạm TDLib; 1 tin/lượt) + 5 guard nguồn mới.
+
+**S9 trạng thái + Cài đặt:**
+- `PlaylistStatusFacts` thêm `namedPendingCount/namedRetryRequiredCount` (mặc định 0) + `withNamed(state)`, `allPendingCount`; `PlaylistSyncStatusPolicy` tính tổng: “Đã đồng bộ” cần cả hai bên hết chờ; câu chữ có ghi chú “Trong đó N thay đổi của các Playlist có tên” và “… đã gửi nhưng chưa rõ đã tới kênh chưa”. Không có Playlist có tên thì dòng trạng thái **y hệt cũ** (test so sánh).
+- `NamedPendingReviewPolicy.rows`: loại thay đổi + tên Playlist + tên bài, không hiện id/tag/chat/tin; thêm cờ “chưa xác nhận đã tới kênh”. `PendingPlaylistReview` mang thêm `namedEntries/namedOpCounter/namedNames`; `enable()` yêu cầu khớp cả hai: **thay đổi Playlist có tên sau khi xem làm hủy xác nhận.** `MeloSyncSettingsActivity` liệt kê thêm các dòng này và đếm “Xem thay đổi chờ gửi (N)” gồm cả hai.
+
+## 4. Chưa kiểm chứng / giới hạn
+
+- Chỉ JVM + TDLib giả. Chưa chạy trên Sony; chưa gửi/nhận tin `#mvlist` thật qua Telegram; Keystore thật với alias mới vẫn chưa chạy.
+- **Chưa có gì mở `NamedPlaylistSession` trong app** (việc của S13, Chặng 3). Tới lúc đó `AutomaticPlaylistSync` thấy view = null và `runNamedSync` trả NOT_OPEN: mã Chặng 2 hiện chưa hoạt động trên máy thật; thay đổi ở màn Cài đặt (dòng Playlist có tên, đếm chờ gửi) cũng chưa hiện được.
+- Dòng “Tự đồng bộ Playlist” ở Cài đặt và nhãn Yêu thích: để S11.
+- E105 vẫn BLOCKED nghiệm thu; nhiệm vụ này dựa trên đường đó và không sửa nó.
+- Chủ dự án còn hai quyết định treo từ kế hoạch (4.5 công tắc chung — đang theo mặc định “một công tắc chung”; mục 7 QA hai máy). Chưa ảnh hưởng Chặng 3.
+
+## 5. Điểm cần chủ dự án biết
+
+1. **Guard nguồn cũ `SyncBuildGateReworkTest.everyProductionCallToTheCoordinatorOrTheServiceRunnerIsAccountedFor`** đếm đúng 2 lời gọi `.runOnce(` trong `TdlibPlaylistSyncService.kt`. Lời gọi coordinator mới là lời gọi thứ ba nên guard fail ở lần chạy lọc đầu. Vì luật “không sửa assertion cũ”, tôi **không** đổi test đó mà đặt tên lối vào mới là `runNamedOnce` / `runNamed` / `runNamedSync` (không khớp regex cũ) và thêm `NamedPlaylistSyncCallSitesTest` đếm đúng từng nơi gọi mới (chỉ service gọi `runNamedOnce`, chỉ provider gọi `runNamedSync`, chỉ bộ lập lịch gọi `runNamed` sau Yêu thích và sau kiểm quyền; lớp Yêu thích không nhắc `Named`/`mvlist`; lớp mới không tạo thread/timer). Nếu chủ dự án muốn guard cũ được cập nhật thay vì đặt tên khác, ghi REWORK.
+2. Cờ `NAMED_ENABLED` vẫn chưa có (cần sửa `TelegramPlaylistV2Session.kt`); phương án ở prompt Chặng 3.
+3. Máy bản cũ coi tin `#mvlist` là Foreign và bỏ qua (có test), nên thêm các tin này vào kênh không làm hỏng đồng bộ Yêu thích của máy cũ.
+
+## 6. Thiết bị / an toàn
+
+`SONY_SCREEN_END=KHÔNG THAO TÁC`. Không ADB, không Tiny, không Drive, không bí mật (`local.properties` không đọc). Repo chính không bị động tới.
+
+## 7. Việc tiếp
+
+Chặng 3 (S11–S19, UI Views). Prompt đầy đủ ở `2026-11-01-nhieu-playlist-co-ten-ban-giao.md`.

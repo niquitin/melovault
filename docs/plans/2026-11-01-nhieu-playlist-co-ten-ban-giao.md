@@ -2,6 +2,67 @@
 
 TASK_ID: **2026-11-01-nhieu-playlist-co-ten**.
 
+## Checkpoint 01/11/2026 — Chặng 2 (S6–S10) xong (Claude Code, Sonnet 5.5)
+
+- **Vai:** thực thi Chặng 2 (code + test Ni), theo lệnh “tiếp tục chặng 2” của chủ dự án trong cùng hội thoại với Chặng 1. Không ADB/Sony/Tiny/Drive; `SONY_SCREEN_END=KHÔNG THAO TÁC`. Phiên đã dừng, không còn tác vụ chạy.
+- **Worktree/nhánh:** `D:\Bots\_worktrees\MeloVault-nhieu-playlist-co-ten`, `dot/2026-11-01-nhieu-playlist-co-ten`. Baseline `57c1be6`, commit kế hoạch `b0cfeac`. HEAD hiện tại: `git rev-parse HEAD` (commit hồ sơ Chặng 2 nằm sau mã `2ebf127`).
+- **Báo cáo:** [2026-11-01-nhieu-playlist-co-ten-bao-cao.md](2026-11-01-nhieu-playlist-co-ten-bao-cao.md) (mục “Chặng 2”).
+
+| Chặng / bước | Trạng thái | Commit | Bằng chứng | Việc còn lại |
+|---|---|---|---|---|
+| Chặng 1 S1–S5 | Xong | `fa6e858` … `3336154` | 2539 test, xem checkpoint Chặng 1 bên dưới | — |
+| S6 `NamedPlaylistSyncProtocol` (`#mvlist v1`) | Xong | `ea38b30` | 19 test pass | — |
+| S7 `NamedPlaylistSyncCoordinator` | Xong | `7f8248d` | 26 test pass | — |
+| S8 nối `AutomaticPlaylistSync` / service / transport / cổng | Xong | `3994772` | 13 + 7 + 5 test pass | — |
+| S9 trạng thái + “Thay đổi chờ gửi” | Xong | `2ebf127` | 10 + 3 test pass | — |
+| S10 gate Ni | Xong | — | Debug và Release mỗi biến thể: 196 suite, 2622 test, 21 skipped, 0 failures, 0 errors (baseline Chặng 2: 190/2539/21/0/0; +83 đúng phần mới); assembleShareableDebug+Release BUILD SUCCESSFUL; `git diff --check` sạch | — |
+| Chặng 3 S11–S19 (UI) | Chưa làm | — | — | Phiên thực thi 3 |
+| Chặng 4 S20–S24 (Tiny, Sony, Drive) | Chưa làm | — | — | Phiên thực thi 4 |
+
+- **File chưa commit:** không có sau commit hồ sơ (log gate ở `docs/plans/artifacts/2026-11-01-nhieu-playlist-co-ten/`, git bỏ qua). Repo chính vẫn có `?? .codex-remote-attachments/` và kế hoạch UI/UX chưa commit của phiên khác, không động tới.
+- **File Yêu thích/đồng bộ cũ đã chạm (đều chỉ thêm, có test):** `AutomaticPlaylistSync.kt` (gọi Playlist có tên sau Yêu thích; review mang thêm trường), `TdlibPlaylistSyncService.kt` (+`runNamedSync`), `SyncServiceProvider.kt`, `SyncSettingsController.kt` (+`runNamed` mặc định BUILD_OFF), `TdlibPlaylistSyncTransport.kt` (+tiền tố `#mvlist` được phép gửi), `TdlibHistoryReader.kt` (tin `#mvlist` bị sửa = bằng chứng liên tục), `PlaylistSyncStatusPolicy.kt` (+đếm Playlist có tên), `MeloSyncSettingsActivity.kt` (liệt kê/đếm thêm). Không đụng `TelegramPlaylistModel/Codec/StoreV2/V2Session/SyncProtocol/SyncCoordinator`, `TransmitPlanner`, V1, SQLite, service/Media3, package/signer/versionCode. Không file test cũ nào bị sửa.
+- **Lỗi/giới hạn còn mở:**
+  1. Chưa có gì mở `NamedPlaylistSession` trong app: mã đồng bộ Chặng 2 chưa chạy thật cho tới S13 (Chặng 3).
+  2. Cờ `NAMED_ENABLED` chưa có (cần sửa `TelegramPlaylistV2Session.kt`). Chủ dự án cần chốt: cho phép Chặng 3 thêm đúng 1 dòng const vào file đó, hoặc dùng object cờ riêng. **Chưa có chấp thuận ghi trong hồ sơ ⇒ Chặng 3 mặc định dùng object cờ riêng.**
+  3. Guard cũ `SyncBuildGateReworkTest` (đếm `.runOnce(`) không sửa; lối vào mới đặt tên khác + guard mới `NamedPlaylistSyncCallSitesTest` (báo cáo mục 5). Chủ dự án muốn cập nhật guard cũ ⇒ REWORK.
+  4. Chưa chạy Keystore thật / Telegram thật với `#mvlist`; E105 vẫn BLOCKED nghiệm thu.
+  5. Hai quyết định treo từ kế hoạch (4.5 công tắc chung, mặc định đang theo; mục 7 QA hai máy).
+- **Bước tiếp:** chủ dự án mở phiên thực thi mới cho **Chặng 3 (S11–S19)** bằng prompt dưới.
+
+### Prompt cho phiên thực thi Chặng 3
+
+```text
+MELOVAULT — PHIÊN THỰC THI ĐÚNG KẾ HOẠCH
+
+Repo/worktree: D:\Bots\_worktrees\MeloVault-nhieu-playlist-co-ten (repo chuẩn D:\Bots\MeloVault-E91-Shareable — KHÔNG làm ở repo chính, nó đang ở nhánh tài liệu khác và có file chưa commit của phiên khác)
+TASK_ID: 2026-11-01-nhieu-playlist-co-ten
+Nhánh: dot/2026-11-01-nhieu-playlist-co-ten
+Kế hoạch Claude đã được chủ dự án CHỐT: docs/plans/2026-11-01-nhieu-playlist-co-ten.md
+Bàn giao: docs/plans/2026-11-01-nhieu-playlist-co-ten-ban-giao.md; báo cáo: docs/plans/2026-11-01-nhieu-playlist-co-ten-bao-cao.md (mục Chặng 1 và Chặng 2)
+HEAD dự kiến: commit hồ sơ Chặng 2 (git log -1 --format=%H -- docs/plans/2026-11-01-nhieu-playlist-co-ten-ban-giao.md); mã Chặng 2 kết thúc ở 2ebf127
+Model: do chủ dự án chọn; bước tiếp tục: Chặng 3, S11 → S19
+Baseline: 57c1be64436c3c364bcd8c1a5f8a8193ea52a553, commit kế hoạch: b0cfeac138e3cb0edbb4857f650795c79bd78957
+PHIÊN: 3 = code + test Ni, CHỈ Chặng 3 (S11–S19, giao diện Views). Không làm Chặng 4 (Tiny/Sony/Drive).
+Lưu ý riêng:
+- Đã có từ Chặng 1–2 (đọc trước khi viết UI, không viết lại): NamedPlaylistModel.kt (ListId, NamedPlaylistState: lists(), entries(listId), listsContaining(item), itemCount, các thao tác), NamedPlaylistSession.kt (NamedPlaylistSessionApi: open/close/snapshotFor/entries/listsContaining + createList/renameList/deleteList/addTelegram/removeTelegram/moveItem/addLocal/removeLocal/moveLocal/rebalance trả NamedOutcome), NamedPlaylistSyncProtocol/Coordinator, NamedPendingReviewPolicy, TelegramPlaylistRuntime.namedSession(noBackupDir), LocalFingerprint.of(tên, thời lượng ms, kích thước).
+- Việc UI phải làm mà Chặng 2 CHƯA làm: MỞ/ĐÓNG NamedPlaylistSession cùng chỗ loadSavedPlaylist/closeSavedPlaylist trong TelegramPreviewActivity (S13). Cho tới lúc đó session luôn ở trạng thái "chưa mở" nên mã đồng bộ Chặng 2 chưa chạy thật (AutomaticPlaylistSync thấy view = null và bỏ qua). Mọi ghi qua TelegramPlaylistRuntime.submit; callback kiểm tài khoản/epoch như MeloSavePolicy.acceptsCallback; sau khi đồng bộ áp thay đổi thì làm mới UI (mẫu PlaylistLiveRefresh).
+- Cờ NAMED_ENABLED (kế hoạch mục 8) CHƯA có: phải nằm cạnh V2_ENABLED trong TelegramPlaylistV2Session.kt, file Chặng 1–2 cấm sửa. Chặng 3 được phép sửa ĐÚNG MỘT dòng const đó nếu chủ dự án đã chấp thuận trong bàn giao; nếu bàn giao chưa ghi chấp thuận thì tạo object cờ riêng trong file mới và ghi quyết định vào báo cáo.
+- Nhãn S11: đổi chữ theo Phụ lục A (kế hoạch). Các chuỗi mới ở Chặng 2 (NamedPendingReviewPolicy, ghi chú trạng thái "Playlist có tên") đã theo Phụ lục A; dòng "Tự đồng bộ Playlist" ở Cài đặt (MeloSyncSettingsActivity) và nhãn trạng thái còn chữ cũ → đổi ở S11 và liệt kê test nào đổi chuỗi.
+- KHÔNG sửa TelegramPlaylistModel/Codec/StoreV2/V2Session/SyncProtocol/SyncCoordinator, V1, SQLite, service/Media3, package/signer/versionCode. Có guard mã nguồn (SyncBuildGateReworkTest, NamedPlaylistSyncCallSitesTest, P5ReadinessInertnessTest, TdlibSendDiagnosticsTest, ShareableDialogThemeTest): không sửa assertion cũ; UI mới dùng Theme_MeloVault_Dialog cho hộp thoại.
+- Gate kế hoạch mục 6 (Chặng 3): thêm -PmeloOpen=true :app:testShareableDebugUnitTest :app:assembleShareableDebug và :app:assemblePersonalDebug. Log ra docs/plans/artifacts/2026-11-01-nhieu-playlist-co-ten/, đếm XML. Baseline cho Chặng 3 = kết quả cuối Chặng 2 (xem báo cáo, mục Chặng 2); không @Ignore, không sửa assertion cũ ngoài nhãn S11 (liệt kê).
+- Không ADB/Sony/Tiny/Drive ở chặng này. Màn Sony giữ OFF, ghi SONY_SCREEN_END=KHÔNG THAO TÁC.
+- Gặp điều kiện dừng ở kế hoạch mục 8 → ghi BLOCKED vào bàn giao, dừng.
+
+1. Đọc CLAUDE.md mục 0, mục cập nhật đầu HANDOFF.md, docs/workflow/QUY_TRINH_3_VAI_TRO.md, *-ban-giao.md, *-bao-cao.md, kế hoạch TASK_ID. Kiểm git status, branch, HEAD, plan commit, git diff --check, agent/build đang chạy. Tree dirty không rõ nguồn hoặc HEAD không khớp bàn giao → STOP; không reset/clean/stash/đè.
+2. Làm S11→S18 đúng kế hoạch mục 5 (bảng Chặng 3), commit theo mốc từng bước. Logic thuần đặt ở policy/model, Activity chỉ nối. Viết test đủ cột "Xong khi". Chạy gate mục 6 (có thêm -PmeloOpen và Personal) một lần sau S18 (S19), log ra file, chỉ ghi tổng kết, test defined/pass/skipped/fail thực và diff --check. Sau mỗi mốc cập nhật báo cáo (mục "Chặng 3", mở đầu "Thực thi: Claude Code <model> <effort nếu biết>, phiên Chặng 3") và *-ban-giao.md: bước xong/dở, file/commit, bằng chứng, lỗi/giới hạn, việc tiếp.
+3. Báo cáo ≤ ~250 dòng (nếu vượt, tách phụ lục .md có liên kết), bảng trước. Không đoán model/chứng cứ.
+4. Commit code, báo cáo, bàn giao trên dot/2026-11-01-nhieu-playlist-co-ten. Không merge/push/public. Viết prompt đầy đủ cho phiên thực thi Chặng 4 (S20–S24: build Tiny, QA Sony, Drive owner-only, hồ sơ APK) vào *-ban-giao.md theo cùng mẫu này.
+
+Kết thúc tiếng Việt dễ hiểu ba đoạn: Đã làm / Chưa kiểm chứng / Rủi ro. Dòng cuối: "Đã dừng, bàn giao phiên thực thi tiếp theo." kèm đường dẫn bàn giao và prompt Chặng 4. KHÔNG tự đề xuất rồi làm việc kế tiếp.
+```
+
+---
+
 ## Checkpoint 01/11/2026 — Chặng 1 (S1–S5) xong (Claude Code, Sonnet 5.5)
 
 - **Vai:** thực thi Chặng 1 (code + test Ni). Không ADB/Sony/Tiny/Drive; `SONY_SCREEN_END=KHÔNG THAO TÁC`. Phiên đã dừng, không còn tác vụ chạy.
