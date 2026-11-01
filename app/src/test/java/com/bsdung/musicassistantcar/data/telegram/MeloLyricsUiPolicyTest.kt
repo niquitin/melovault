@@ -149,6 +149,21 @@ class MeloLyricsUiPolicyTest {
         assertTrue(MeloLyricsUiPolicy.controlHeightPx(48, 60f, 2.0f) > 48)
     }
 
+    // --- stuck "Đang tìm lời…" (B1) ---------------------------------------------------------
+
+    @Test
+    fun loadingIsOnlyStuckAfterFortySeconds() {
+        assertFalse(MeloLyricsUiPolicy.loadingStuck(sinceMs = 1_000, nowMs = 1_000))
+        assertFalse(MeloLyricsUiPolicy.loadingStuck(sinceMs = 1_000, nowMs = 40_999))
+        assertTrue(MeloLyricsUiPolicy.loadingStuck(sinceMs = 1_000, nowMs = 41_000))
+    }
+
+    @Test
+    fun stuckLimitCoversAGetPlusASearchAtTheirTimeouts() {
+        // connect 5 s + read 8 s for each of the two requests
+        assertTrue(MeloLyricsUiPolicy.LOADING_STUCK_MS > 2 * (5_000 + 8_000))
+    }
+
     // --- stored choices ---------------------------------------------------------------------
 
     @Test

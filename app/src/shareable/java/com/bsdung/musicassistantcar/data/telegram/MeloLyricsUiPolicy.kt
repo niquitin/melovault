@@ -86,6 +86,14 @@ internal object MeloLyricsUiPolicy {
         return title.ifEmpty { artist }
     }
 
+    /**
+     * "Đang tìm lời…" that has lasted this long has lost its answer (one lookup is at most a `get` and a `search`, each
+     * limited to 13 s by the transport timeouts): the pane asks again instead of waiting for ever.
+     */
+    const val LOADING_STUCK_MS = 40_000L
+
+    fun loadingStuck(sinceMs: Long, nowMs: Long): Boolean = nowMs - sinceMs >= LOADING_STUCK_MS
+
     /** The "Về dòng đang hát" button: only when the owner scrolled away and a line is being sung. */
     fun showJumpButton(autoFollow: Boolean, activeIndex: Int): Boolean = !autoFollow && activeIndex >= 0
 

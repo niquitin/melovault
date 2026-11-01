@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.text.InputType
 import android.view.MotionEvent
 import android.view.View
@@ -68,6 +69,7 @@ internal class MeloLyricsPane(
     private var shown = false
     private var requestedKey: Key? = null
     private var state: LyricsState? = null
+    private var loadingSinceMs = 0L
     private var lines: List<LyricsLine> = emptyList()
     private var lineViews: List<TextView> = emptyList()
     private var activeIndex = -1
@@ -127,7 +129,8 @@ internal class MeloLyricsPane(
             update(host.nowPlaying())
             handler.postDelayed(tick, 1000L)
         } else {
-            host.lyrics()?.controller()?.cancel()
+            // Only this pane's own request: a new Deck (after rotation) may already have asked for the same song.
+            host.lyrics()?.controller()?.cancel(this)
             requestedKey = null
             hideKeyboard()
         }
@@ -142,6 +145,9 @@ internal class MeloLyricsPane(
         if (key != requestedKey) {
             requestedKey = key
             start(access, meta)
+        } else if (state == LyricsState.Loading && MeloLyricsUiPolicy.loadingStuck(loadingSinceMs, SystemClock.elapsedRealtime())) {
+            // An answer that never arrived must not leave "Đang tìm lời…" on screen for good: ask again.
+            askAgain()
         } else {
             highlight(now?.positionMs ?: 0L)
         }
@@ -149,12 +155,13 @@ internal class MeloLyricsPane(
 
     private fun start(access: MeloLyricsAccess, meta: Meta?) {
         autoFollow = true
+        loadingSinceMs = SystemClock.elapsedRealtime()
         closeSearch()
         if (meta == null) {
-            access.controller().cancel()
+            access.controller().cancel(this)
             render(null)
         } else {
-            access.controller().request(access.owner(), meta) { render(it) }
+            access.controller().request(access.owner(), meta, publish = { render(it) }, client = this)
         }
     }
 
@@ -166,6 +173,7 @@ internal class MeloLyricsPane(
     // ---- drawing -----------------------------------------------------------------------------
 
     private fun render(next: LyricsState?) {
+        if (next == LyricsState.Loading && state != LyricsState.Loading) loadingSinceMs = SystemClock.elapsedRealtime()
         state = next
         val presentation = MeloLyricsUiPolicy.presentation(next)
         message.text = presentation.text.orEmpty()

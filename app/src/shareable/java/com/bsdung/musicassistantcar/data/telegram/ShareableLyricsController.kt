@@ -51,7 +51,7 @@ internal class ShareableLyricsController(
     private val log: (String) -> Unit = {}
 ) {
 
-    private class Current(val owner: String, val signature: String, val generation: Int)
+    private class Current(val owner: String, val signature: String, val generation: Int, val client: Any?)
 
     private val counter = AtomicInteger(0)
 
@@ -60,11 +60,12 @@ internal class ShareableLyricsController(
 
     /**
      * Ask for the lyrics of the song that is now playing. Call on the main thread; [publish] is always called on it.
-     * Any earlier request is cancelled by the new generation.
+     * Any earlier request is cancelled by the new generation. [client] names the pane asking: only that pane's own
+     * [cancel] may cancel this request (a screen that is closing must not cancel the one that replaced it).
      */
-    fun request(ownerId: String, meta: Meta, publish: (LyricsState) -> Unit) {
+    fun request(ownerId: String, meta: Meta, publish: (LyricsState) -> Unit, client: Any? = null) {
         val signature = MeloLyricsPolicy.signature(meta)
-        val now = Current(ownerId, signature, counter.incrementAndGet())
+        val now = Current(ownerId, signature, counter.incrementAndGet(), client)
         current = now
         when (consent()) {
             LyricsConsent.UNDECIDED -> return publish(LyricsState.NeedConsent)
@@ -78,8 +79,13 @@ internal class ShareableLyricsController(
         }
     }
 
-    /** Tab closed, account changed or logout: drop whatever is in flight. */
-    fun cancel() {
+    /**
+     * Tab closed, account changed or logout: drop whatever is in flight. With a [client] only that client's own request
+     * is dropped; if another pane has asked since (screen rotation: the new Deck asks before the old one closes) the
+     * call does nothing. Without a client everything is dropped.
+     */
+    fun cancel(client: Any? = null) {
+        if (client != null && current?.client !== client) return
         counter.incrementAndGet()
         current = null
     }

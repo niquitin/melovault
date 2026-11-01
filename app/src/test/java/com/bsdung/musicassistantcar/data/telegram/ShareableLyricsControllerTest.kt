@@ -249,6 +249,69 @@ class ShareableLyricsControllerTest {
         assertTrue(logs.contains("stage=lyrics_drop"))
     }
 
+    // --- screen rotation: the new pane asks before the old one closes (B1) ---------------------
+
+    @Test
+    fun aClosingPaneDoesNotCancelTheRequestOfThePaneThatReplacedIt() {
+        val c = controller(FakeLyricsTransport().answer(200, record(1, 233)).answer(200, record(1, 233)))
+        val oldPane = Any()
+        val newPane = Any()
+        val oldShown = mutableListOf<LyricsState>()
+        val newShown = mutableListOf<LyricsState>()
+        c.request("u", meta, { oldShown += it }, oldPane)
+        c.request("u", meta, { newShown += it }, newPane)
+        c.cancel(oldPane)
+        runAll()
+        assertTrue("the new pane gets the lyrics: $newShown", newShown.last() is LyricsState.Synced)
+        assertEquals("the old pane gets nothing after Loading", listOf<LyricsState>(LyricsState.Loading), oldShown)
+    }
+
+    @Test
+    fun aPaneStillCancelsItsOwnRequest() {
+        val c = controller(FakeLyricsTransport().answer(200, record(1, 233)))
+        val pane = Any()
+        val shown = mutableListOf<LyricsState>()
+        c.request("u", meta, { shown += it }, pane)
+        c.cancel(pane)
+        runAll()
+        assertEquals(listOf<LyricsState>(LyricsState.Loading), shown)
+    }
+
+    @Test
+    fun cancelOfAPaneThatNeverAskedChangesNothing() {
+        val c = controller(FakeLyricsTransport().answer(200, record(1, 233)))
+        val asking = Any()
+        val shown = mutableListOf<LyricsState>()
+        c.request("u", meta, { shown += it }, asking)
+        c.cancel(Any())
+        runAll()
+        assertTrue(shown.last() is LyricsState.Synced)
+    }
+
+    @Test
+    fun cancelWithoutAClientDropsEveryRequest() {
+        val c = controller(FakeLyricsTransport().answer(200, record(1, 233)))
+        val shown = mutableListOf<LyricsState>()
+        c.request("u", meta, { shown += it }, Any())
+        c.cancel()
+        runAll()
+        assertEquals(listOf<LyricsState>(LyricsState.Loading), shown)
+    }
+
+    @Test
+    fun anAnswerThatNeverComesCanBeAskedForAgain() {
+        val transport = FakeLyricsTransport().answer(200, record(1, 233))
+        val c = controller(transport)
+        val pane = Any()
+        val shown = mutableListOf<LyricsState>()
+        c.request("u", meta, { shown += it }, pane)
+        queued.clear() // the answer is lost
+        assertEquals(listOf<LyricsState>(LyricsState.Loading), shown)
+        c.request("u", meta, { shown += it }, pane) // the pane asks again
+        runAll()
+        assertTrue(shown.last() is LyricsState.Synced)
+    }
+
     @Test
     fun answerForAnotherAccountIsDropped() {
         val c = controller(FakeLyricsTransport().answer(200, record(1, 233)).answer(200, record(2, 233)))
