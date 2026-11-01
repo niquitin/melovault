@@ -196,3 +196,10 @@ Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Dòng c
 - Kiểm lại B1 với request mạng đang bay lúc xoay: pane mới nhận kết quả, `lyrics_drop` duy nhất là câu trả lời cũ của Deck cũ (đúng), xoay về dọc ổn, 0 crash/ANR. Q7 ổn. APK khớp SHA ở Drive/mount/Tiny/Sony.
 - Sony: màn hình OFF, xoay 1/0, 1080×2520/420; bài hiện tại “Bee Moved” (nhạc trên máy) tạm dừng 0:02; công tắc Lời nhạc BẬT.
 - Phản hồi: `ĐẠT 2026-10-31-loi-nhac-p2b — fd1f943/62ED3500` hoặc `Yêu cầu sửa 2026-10-31-loi-nhac-p2b: <lỗi>`. Không merge/push/public.
+
+## Checkpoint nghiệm thu chính thức — 01/11/2026
+
+- **PASS — chủ dự án ĐẠT** (lời nhắn “ĐẠT” trong chat đáp câu hỏi nghiệm thu bản `fd1f943`). Biên bản: [`-nghiem-thu.md`](2026-10-31-loi-nhac-p2b-nghiem-thu.md). Mã A `6f274b9`, B `3447310`, REWORK-01 `fd1f943`; APK Debug QA `62ED3500…3DB9`.
+- Giới hạn còn lại ghi ở mục 3 của biên bản (âm thanh thật chưa xác nhận; lời tự động cho bài Telegram đủ tên + nghệ sĩ chưa kiểm; bài Telegram thiếu nghệ sĩ không tự tìm; LRCLIB đôi lúc 503; v.v.).
+- **Chưa merge/push/public.** Merge cần chỉ thị riêng; thử khô với `feature/e93-03d-y700-offline-cockpit` (`f7acb55`) cho thấy merge sạch. Cập nhật HANDOFF/BACKLOG làm ở bước merge.
+- Việc kế tiếp do chủ dự án chọn; agent không tự mở.
