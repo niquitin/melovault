@@ -190,3 +190,17 @@ Gate S19 (một lần, cây sạch): Debug và Release mỗi biến thể 199 su
 3. Cờ `NAMED_ENABLED` ở `NamedPlaylistFlags.kt` (file `TelegramPlaylistV2Session.kt` không đổi).
 4. Sắp xếp là hộp ↑/↓ (không phải chế độ ngay trên dòng); Gọn dùng hộp danh sách làm chỉ mục.
 5. **Giao diện chưa từng được nhìn thấy trên máy**: bố cục, vùng chạm, xoay, chữ lớn, TalkBack chỉ có guard nguồn.
+
+## Chặng 4 — build Tiny + QA Sony (một phần, BLOCKED)
+
+Thực thi: Claude Code Sonnet 5.5, phiên Chặng 4, 01/11/2026. Chi tiết: [phụ lục Chặng 4](2026-11-01-nhieu-playlist-co-ten-bao-cao-chang4.md). **Chưa xong: dừng vì Sony mất kết nối ADB giữa Q4.**
+
+| Bước | Kết quả |
+|---|---|
+| S20 | Bundle `d43922cb…fecff` (13.673.183 byte) khớp SHA hai đầu; clone Tiny cô lập HEAD `0efec5a`; config=true; Debug 2m51s và Release 3m42s BUILD SUCCESSFUL |
+| S21 | Debug vc121 `0.6.96-beta` SHA-256 `5B2FB5CC…03FEF8`, 33.773.508 byte, cert `eecd3df7…fce8` (khớp bản đang cài); một lệnh `install -r` → Success, SHA bản cài khớp. Release chưa cài |
+| S22 Q1 Q2 Q3 | PASS: chỉ mục + Yêu thích 2 bài; tạo `QA Thu 1`, thêm 3 bài Telegram + 1 bài máy, ✓ đúng, không phát; Sắp xếp ↑ rồi mở lại app giữ thứ tự |
+| S22 Q4 | Dở: vào được tab “Tiếp theo”; ADB rớt khi chạm “Xem cả hàng đợi”, chưa thấy chip “Lưu Playlist” |
+| S22 Q5 Q6, S23 Drive, S24 | Chưa làm; chưa có link Drive |
+
+Giới hạn/sự cố: tên thử ASCII (adb không gõ dấu); `monkey` khởi chạy ứng dụng lạ (đã chuyển `am start`); một lần vô tình phát nhạc ≈ 20–47 s rồi tạm dừng; xoay đang khóa dọc, màn `ON`, `SONY_SCREEN_END` chưa xác minh, Playlist thử còn trên máy. **CHƯA XÁC NHẬN ÂM THANH THỰC; đồng bộ hai máy BLOCKED.**

@@ -2,6 +2,60 @@
 
 TASK_ID: **2026-11-01-nhieu-playlist-co-ten**.
 
+## Checkpoint 01/11/2026 19:05 — Chặng 4 DỪNG GIỮA CHỪNG, BLOCKED: Sony mất ADB (Claude Code, Sonnet 5.5)
+
+- **Vai:** thực thi Chặng 4 (Tiny build + QA Sony), theo lệnh “tiến hành Chặng 4”. Không code, không sửa mã. Phiên đã dừng; không còn tiến trình QA (watcher Tiny đã tắt 19:02:27).
+- **Worktree/nhánh:** `D:\Bots\_worktrees\MeloVault-nhieu-playlist-co-ten`, `dot/2026-11-01-nhieu-playlist-co-ten`. Mã không đổi từ Chặng 3 (`751b623`); đầu vào Chặng 4 = HEAD `0efec5a`. HEAD hiện tại: `git rev-parse HEAD` (commit hồ sơ Chặng 4 nằm sau đó).
+- **Báo cáo chi tiết:** [phụ lục Chặng 4](2026-11-01-nhieu-playlist-co-ten-bao-cao-chang4.md) (bảng Q1–Q6, sự cố, việc còn lại).
+
+| Bước | Trạng thái | Bằng chứng | Việc còn lại |
+|---|---|---|---|
+| S20 bundle + build Tiny | Xong | bundle `d43922cb…fecff` 13.673.183 byte khớp hai đầu; clone `C:\Bots\MeloVault-NPL-IsolatedQA-20261101-0efec5a` HEAD `0efec5a`; config=true; Debug 2m51s, Release 3m42s BUILD SUCCESSFUL | — |
+| S21 gate APK + cài | Xong | Debug vc121 `0.6.96-beta`, SHA-256 `5B2FB5CC323B486ADFC2F359BF7C9FCC20E104D0D6FDE4DB3D2D3B3BDE03FEF8`, 33.773.508 byte, cert `eecd3df7…fce8`; một lệnh `install -r` → Success; SHA bản cài khớp. Release `7C3340E1…81810` 30.933.358 byte chưa cài | — |
+| S22 QA Sony | **Dở**: Q1 Q2 Q3 PASS; Q4 dở; Q5 Q6 chưa | 29 ảnh trong `docs/plans/artifacts/2026-11-01-nhieu-playlist-co-ten/chang4/shots/` (git bỏ qua) | Làm Q4–Q6, dọn, ghép `00_tong_hop.png` |
+| S23 Drive | Chưa làm | — | Upload owner-only sau khi QA xong; chưa có link nào |
+| S24 báo cáo + prompt sơ bộ | Chưa làm | — | Sau S22–S23 |
+
+- **BLOCKED:** `adb` mất Sony `QV725WEQ54` lúc ≈ 18:58 (ngay sau khi chạm “Xem cả hàng đợi”; chụp màn hình ra 0 byte), chưa quay lại sau ≈ 4+ phút thăm dò. Chưa rõ do cáp/USB, khởi động lại, hay app treo — **không kết luận lỗi ứng dụng**.
+- **Cần làm ngay khi Sony kết nối lại (trước mọi thao tác khác):** (1) `adb devices -l` + `getprop` xác minh lại; (2) đọc `logcat -b crash` / `pidof app.melovault.player` để biết app có crash không; (3) khôi phục xoay: `settings put system user_rotation 0` rồi `settings put system accelerometer_rotation 1`; (4) màn hình đang `ON` ở lần kiểm cuối — **`SONY_SCREEN_END` chưa xác minh**, phải tắt (`keyevent 223`) và kiểm `Display State=OFF` trong `finally`.
+- **Tự báo cáo sự cố (chi tiết phụ lục mục 4):** `monkey` khởi chạy ứng dụng lạ (hộp thoại USB — tôi chạm “TỪ CHỐI” một lần —, Google Tin nhắn, Vita3K); sau đó chỉ dùng `am start`. Một lần chạm ⌃ vô tình phát nhạc ≈ 20–47 s rồi tạm dừng. Một lần `am kill` (ở nền) để kiểm Q3.
+- **Dọn còn lại:** Playlist thử `QA Thu 1` (4 bài) còn trên Sony; chưa đổi tên/xóa. Đồng bộ đang “Chưa bật đồng bộ” nên không lên Telegram.
+- **Chênh lệch kế hoạch:** tên thử ASCII `QA Thu 1` (adb không gõ được dấu); thứ tự Q4/Q5 đổi (Q5 trước để hàng chờ có nhiều bài). Q5 theo điều chỉnh: hàng chờ chỉ gồm bài Telegram (3 bài của `QA Thu 1`).
+- **Chưa làm / vẫn BLOCKED:** đồng bộ hai máy Q7–Q9 (chưa có (a)/(b)); âm thanh thật CHƯA XÁC NHẬN; Release chưa chạy trên máy.
+- **File chưa commit:** không có sau commit hồ sơ này. Repo chính vẫn có `?? .codex-remote-attachments/` và kế hoạch UI/UX chưa commit của phiên khác, không động tới.
+- **Bước tiếp:** chủ dự án kiểm cáp Sony và giao lại phiên thực thi Chặng 4 (Codex hoặc Claude Code) bằng prompt tiếp tục dưới.
+
+### Prompt tiếp tục Chặng 4 (S22 từ Q4 → S24)
+
+```text
+MELOVAULT — TIẾP TỤC THỰC THI CHẶNG 4 (S22 Q4 → S24)
+
+Repo/worktree: D:\Bots\_worktrees\MeloVault-nhieu-playlist-co-ten (KHÔNG làm ở repo chính D:\Bots\MeloVault-E91-Shareable)
+TASK_ID: 2026-11-01-nhieu-playlist-co-ten
+Nhánh: dot/2026-11-01-nhieu-playlist-co-ten
+Kế hoạch đã chốt: docs/plans/2026-11-01-nhieu-playlist-co-ten.md (mục 5 Chặng 4, mục 7, mục 8)
+Bàn giao: docs/plans/2026-11-01-nhieu-playlist-co-ten-ban-giao.md (checkpoint đầu file); phụ lục Chặng 4: docs/plans/2026-11-01-nhieu-playlist-co-ten-bao-cao-chang4.md; báo cáo chính: …-bao-cao.md
+HEAD dự kiến: commit hồ sơ Chặng 4 (git log -1 --format=%H -- docs/plans/2026-11-01-nhieu-playlist-co-ten-bao-cao-chang4.md); mã kết thúc ở 751b623; APK Debug đã build/cài từ HEAD 0efec5a
+Model: do chủ dự án chọn. Bước tiếp tục: S22 từ Q4, rồi S23, S24. KHÔNG build lại, KHÔNG cài lại APK (APK Debug SHA-256 5B2FB5CC323B486ADFC2F359BF7C9FCC20E104D0D6FDE4DB3D2D3B3BDE03FEF8 đã cài trên Sony; chỉ cài lại nếu `pm path` + pull base.apk cho SHA khác).
+Tiny: DESKTOP-HNP4GVR (Desktop Commander id 9c7f081b-6e1c-4221-ac78-da470bab1e5d); clone build C:\Bots\MeloVault-NPL-IsolatedQA-20261101-0efec5a; APK Debug …\app\build\outputs\apk\shareable\debug\app-shareable-debug.apk; công cụ QA C:\Bots\_qa_temp\NPL-0efec5a\ (q.ps1, watcher.ps1, shots\) — đọc q.ps1 trước khi dùng.
+
+Lưu ý riêng:
+- Điều kiện vào: `adb devices -l` trên Tiny phải thấy QV725WEQ54 = device, getprop model XQ-AS52 / Sony. Chưa thấy ⇒ BLOCKED, dừng, báo.
+- Việc đầu tiên khi máy quay lại: đọc logcat -b crash và pidof app.melovault.player (app có crash lúc “Xem cả hàng đợi” không? ghi vào phụ lục, không kết luận khi thiếu bằng chứng); khôi phục xoay (settings put system user_rotation 0; settings put system accelerometer_rotation 1) khi kết thúc QA; tắt màn và xác minh Display State=OFF trong finally, ghi SONY_SCREEN_END.
+- KHÔNG dùng `adb shell monkey` (nó khởi chạy ứng dụng lạ). Mở app bằng: adb shell am start -n app.melovault.player/com.bsdung.musicassistantcar.data.telegram.TelegramPreviewActivity. Cấm BACK ở màn gốc, cấm uninstall/pm clear/xóa dữ liệu/logout/-d/downgrade/bật máy bay. Chạm vào thanh “Nghe tiếp”/⌃ sẽ PHÁT nhạc: tránh trừ khi đang làm Q5.
+- Q4: màn Đang phát → cuộn lên → tab “Tiếp theo” → “Xem cả hàng đợi” → chip “≡ Lưu Playlist” → tên `QA Hang cho` (ASCII) → kiểm “Đã lưu N bài, bỏ qua M bài.” và số bài. Nếu app thật sự crash ở “Xem cả hàng đợi” ⇒ ghi BLOCKED/REWORK (lỗi có vị trí, bước tái hiện, logcat) và dừng; sửa mã là việc của REWORK.
+- Q5 (điều chỉnh): ▶ Phát hết trong QA Thu 1 ⇒ hàng chờ CHỈ gồm 3 bài Telegram (bài máy “Bee Moved” không nằm trong hàng chờ; thông báo “Bài trên máy không nằm trong hàng chờ…”); Next 1 lần; Media3 PLAYING chỉ chứng minh luồng phát — ghi CHƯA XÁC NHẬN ÂM THANH THỰC; tạm dừng sau khi xong.
+- Q6: Đổi tên QA Thu 1 → QA Thu 2; Xóa QA Hang cho (xác nhận) — bài vẫn còn trong thư viện; xoay ngang rồi dọc ở chi tiết (settings put system accelerometer_rotation 0; user_rotation 1/0; chờ ≈ 10 s trước khi dump), kiểm giữ màn chi tiết/cuộn; khôi phục xoay. Dọn: xóa QA Thu 2 bằng UI khi hết ảnh (ghi lại; đồng bộ đang “Chưa bật đồng bộ”, KHÔNG bật).
+- Không tự bật tự đồng bộ, không gửi/xóa outbox, không tắt mạng. Q7–Q9 hai máy: ghi BLOCKED — chưa QA đồng bộ hai máy thật, trừ khi chủ dự án chọn (a)/(b) ở kế hoạch mục 7.
+- S22 xong: ghép 6–8 ảnh chính thành docs/plans/artifacts/2026-11-01-nhieu-playlist-co-ten/00_tong_hop.png (≤ 1600 px cạnh dài, ghi số bước từng ô); không commit ảnh riêng tư. Cập nhật phụ lục Chặng 4 (bảng Q1–Q6) và bàn giao sau mỗi mốc.
+- S23: Drive Ni N owner-only theo CLAUDE.md mục 8–9 (thư mục riêng TASK_ID/ngày/vc121/commit, tên APK duy nhất, kiểm quyền bằng connector, không public). Tạo docs/plans/2026-11-01-nhieu-playlist-co-ten-apk-test.md và …-hinh-nghiem-thu.md chỉ với link đã kiểm; nhãn “QA CANDIDATE — CHƯA NGHIỆM THU”. Drive chặn ⇒ BLOCKED đúng phần, lưu vị trí nội bộ. Không bịa link.
+- S24: hoàn chỉnh báo cáo chính (≤ ~250 dòng, chi tiết ở phụ lục), bàn giao, và viết PROMPT_NGHIEM_THU_SO_BO.md đầy đủ (mẫu docs/workflow/PROMPT_NGHIEM_THU_SO_BO.md) cho phiên sơ bộ mới. KHÔNG tự chạy vai sơ bộ. Không merge/push/public.
+
+Kết thúc tiếng Việt dễ hiểu ba đoạn: Đã làm / Chưa kiểm chứng / Rủi ro. Dòng cuối: “Đã dừng. Mở phiên mới để nghiệm thu sơ bộ nhanh.” kèm đường dẫn bàn giao và prompt sơ bộ (hoặc, nếu chưa hết chặng, “Đã dừng, bàn giao phiên thực thi tiếp theo.”). KHÔNG tự đề xuất rồi làm việc kế tiếp.
+```
+
+---
+
 ## Checkpoint 01/11/2026 — Chặng 3 (S11–S19) xong (Claude Code, Sonnet 5.5)
 
 - **Vai:** thực thi Chặng 3 (code + test Ni), theo lệnh “Tiếp chặng 3” của chủ dự án trong cùng hội thoại. Không ADB/Sony/Tiny/Drive; `SONY_SCREEN_END=KHÔNG THAO TÁC`. Phiên đã dừng, không còn tác vụ chạy.
