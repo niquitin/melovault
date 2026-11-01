@@ -116,7 +116,7 @@ internal object SyncRuntime {
                 val future = worker.schedule({ task() }, delay, TimeUnit.MILLISECONDS)
                 SyncScheduledTask { future.cancel(false) }
             },
-            runLog = runLog, changed = ::notifyChanged,
+            runLog = runLog, namedHost = TelegramPlaylistRuntime.namedSession(root), changed = ::notifyChanged,
         ).also { auto = it }
     }
 

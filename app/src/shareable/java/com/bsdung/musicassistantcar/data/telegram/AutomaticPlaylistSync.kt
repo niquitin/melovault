@@ -10,6 +10,10 @@ internal data class PendingPlaylistReview(
     val playlistEpoch: Long,
     val opCounter: Long,
     val entries: List<OutboxEntry>,
+    /** Nhiều Playlist có tên: what waits in their own outbox, so the one confirmation covers it too. Empty when they are not wired. */
+    val namedOpCounter: Long = 0L,
+    val namedEntries: List<NamedOutboxEntry> = emptyList(),
+    val namedNames: Map<ListId, String> = emptyMap(),
 )
 
 /**
@@ -26,6 +30,8 @@ internal class AutomaticPlaylistSync(
     private val schedule: (Long, () -> Unit) -> SyncScheduledTask,
     private val clock: () -> Long = System::currentTimeMillis,
     private val runLog: SyncRunLog = SyncRunLog(),
+    /** Nhiều Playlist có tên: only read to show and to match the pending review. Null = not wired. */
+    private val namedHost: NamedPlaylistSyncHost? = null,
     private val changed: () -> Unit = {},
 ) {
     companion object {
@@ -118,15 +124,23 @@ internal class AutomaticPlaylistSync(
     fun pendingReview(): PendingPlaylistReview? = synchronized(this) {
         val s = scope(generation) ?: return null
         val view = host.view(s.who) ?: return null
+        val named = namedHost?.view(s.who)?.state
         PendingPlaylistReview(s.who, s.auth, s.playlist, view.state.opCounter,
-            view.state.outbox.filter { it.status != OutboxStatus.ACKNOWLEDGED }.toList())
+            view.state.outbox.filter { it.status != OutboxStatus.ACKNOWLEDGED }.toList(),
+            named?.opCounter ?: 0L,
+            named?.outbox?.filter { it.status != OutboxStatus.ACKNOWLEDGED }.orEmpty(),
+            named?.let { NamedPendingReviewPolicy.namesOf(it) }.orEmpty())
     }
 
     private fun matches(review: PendingPlaylistReview, s: Scope): Boolean {
         val state = host.view(s.who)?.state ?: return false
+        val named = namedHost?.view(s.who)?.state
         return current(s) && review.account == s.who && review.authEpoch == s.auth &&
             review.playlistEpoch == s.playlist && review.opCounter == state.opCounter &&
-            review.entries == state.outbox.filter { it.status != OutboxStatus.ACKNOWLEDGED }
+            review.entries == state.outbox.filter { it.status != OutboxStatus.ACKNOWLEDGED } &&
+            // What the person confirmed includes the named playlists' changes: any change since makes the confirmation void.
+            review.namedOpCounter == (named?.opCounter ?: 0L) &&
+            review.namedEntries == named?.outbox?.filter { it.status != OutboxStatus.ACKNOWLEDGED }.orEmpty()
     }
 
     /** A single explicit confirmation covers the v3 warning AND this exact pending review. */

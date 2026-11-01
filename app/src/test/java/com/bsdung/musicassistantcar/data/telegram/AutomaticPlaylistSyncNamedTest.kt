@@ -38,6 +38,12 @@ class AutomaticPlaylistSyncNamedTest {
         fun nextAt(): Long? = tasks.filter { !it.cancelled }.minOfOrNull { it.at }
     }
 
+    private class NamedMemoryStore : NamedPlaylistPersistence {
+        val files = HashMap<Long, NamedPlaylistState>()
+        override fun load(user: TelegramUserId): NamedLoadResult = files[user.value]?.let { NamedLoadResult.Valid(it) } ?: NamedLoadResult.Missing
+        override fun save(user: TelegramUserId, state: NamedPlaylistState) { files[user.value] = state }
+    }
+
     private fun done(status: SyncStatus, retryAfterMs: Long = 0L, acked: Int = 0, sent: Int = 0, recovery: RecoveryReason? = null) =
         Gated.Done(SyncReport(status, recovery = recovery, retryAfterMs = retryAfterMs, opsAcknowledged = acked, envelopesSent = sent))
 
@@ -72,7 +78,8 @@ class AutomaticPlaylistSyncNamedTest {
                 return namedAnswer()
             }
         }
-        val sync = AutomaticPlaylistSync(enabled, actions, memory, device.session, { who }, { 1L }, timer::schedule, { timer.now }, log)
+        val named = NamedPlaylistSession(NamedMemoryStore()) { "n-$name" }.also { check(it.open(account) is NamedOpenResult.Ready) }
+        val sync = AutomaticPlaylistSync(enabled, actions, memory, device.session, { who }, { 1L }, timer::schedule, { timer.now }, log, named)
 
         fun permit() {
             memory.save(account, SyncConsent(enabled = true, mayTransmitInitial = true, acceptedWarningVersion = SyncConsent.WARNING_VERSION))
@@ -246,5 +253,52 @@ class AutomaticPlaylistSyncNamedTest {
         assertEquals(Gated.Denied(SyncDenied.BUILD_OFF), port.runNamed(account, SyncMode.INCREMENTAL))
         assertEquals(0, namedReads)
         assertFalse(provider.created())
+    }
+
+    // ---- S9: the one confirmation covers the named playlists' changes too ------------------------
+
+    private fun enableWith(r: Rig, review: PendingPlaylistReview): Boolean {
+        var result = false
+        r.sync.enable(review, true) { ok, _ -> result = ok }
+        r.timer.advance()
+        return result
+    }
+
+    @Test fun thePendingReviewListsTheNamedChangesAndTheConfirmationCoversThem() {
+        val r = Rig("review-named")
+        r.sync.setForeground(true); r.timer.advance()
+        r.device.toggle(-1001234L, 5)
+        val id = checkNotNull((r.named.createList(account, "Nhạc đi xe") as NamedOutcome.Ok).listId)
+        r.named.addTelegram(account, id, PlaylistItemId.Telegram(-1001234L, 9))
+        val review = checkNotNull(r.sync.pendingReview())
+        assertEquals(1, review.entries.size)
+        assertEquals(listOf(NamedOpType.LCREATE, NamedOpType.IADD), review.namedEntries.map { it.op.type })
+        assertEquals("Nhạc đi xe", review.namedNames[id])
+        assertTrue(enableWith(r, review))
+        assertTrue(r.memory.load(account).automatic)
+    }
+
+    @Test fun aNamedChangeMadeAfterTheReviewVoidsTheConfirmation() {
+        val r = Rig("review-void")
+        r.sync.setForeground(true); r.timer.advance()
+        val id = checkNotNull((r.named.createList(account, "Một") as NamedOutcome.Ok).listId)
+        val review = checkNotNull(r.sync.pendingReview())
+        r.named.addTelegram(account, id, PlaylistItemId.Telegram(-1001234L, 1))
+        assertFalse(enableWith(r, review))
+        assertFalse(r.memory.load(account).automatic)
+        assertTrue(r.calls.isEmpty())
+        // a fresh review that includes the new change is accepted
+        assertTrue(enableWith(r, checkNotNull(r.sync.pendingReview())))
+    }
+
+    @Test fun withoutNamedPlaylistsTheReviewIsExactlyTheOldOne() {
+        val r = Rig("review-none")
+        r.sync.setForeground(true); r.timer.advance()
+        r.device.toggle(-1001234L, 5)
+        val review = checkNotNull(r.sync.pendingReview())
+        assertTrue(review.namedEntries.isEmpty())
+        assertEquals(0L, review.namedOpCounter)
+        assertTrue(review.namedNames.isEmpty())
+        assertTrue(enableWith(r, review))
     }
 }
