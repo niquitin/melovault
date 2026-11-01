@@ -2,7 +2,7 @@
 
 Thực thi: Claude Code (Sonnet 5.5), phiên chặng A. TASK_ID `2026-10-31-loi-nhac-p2b`, nhánh `dot/2026-10-31-loi-nhac-p2b`, worktree `D:\Bots\_worktrees\MeloVault-loi-nhac-p2b`, baseline `94ab6b0`.
 Kế hoạch: [`2026-10-31-loi-nhac-p2b.md`](2026-10-31-loi-nhac-p2b.md). Bàn giao: [`-ban-giao.md`](2026-10-31-loi-nhac-p2b-ban-giao.md).
-Trạng thái: **CHẶNG A, B, C XONG (mục 9 và 10). CHỜ CHỦ DỰ ÁN NGHIỆM THU — QA CANDIDATE — CHƯA NGHIỆM THU, có 1 lỗi đã biết B1 (Q8: xoay màn hình làm pane Lời nhạc kẹt “Đang tìm lời…”).** APK/Drive: [`-apk-test.md`](2026-10-31-loi-nhac-p2b-apk-test.md); ảnh: [`-hinh-nghiem-thu.md`](2026-10-31-loi-nhac-p2b-hinh-nghiem-thu.md).
+Trạng thái: **CHẶNG A, B, C XONG (mục 9 và 10) và REWORK-01 XONG (mục 11): lỗi B1 (xoay màn hình làm pane Lời nhạc kẹt “Đang tìm lời…”) đã sửa ở `fd1f943` và kiểm lại PASS trên Sony. CHỜ CHỦ DỰ ÁN NGHIỆM THU — QA CANDIDATE — CHƯA NGHIỆM THU.** Bản APK hiện hành là `fd1f943` (mục 10 mô tả bản cũ `8d4284e`). APK/Drive: [`-apk-test.md`](2026-10-31-loi-nhac-p2b-apk-test.md); ảnh: [`-hinh-nghiem-thu.md`](2026-10-31-loi-nhac-p2b-hinh-nghiem-thu.md).
 Chặng B: Thực thi: Claude Code (Sonnet 5.5), cùng phiên với chặng A theo yêu cầu “Làm ngay ở đây” của chủ dự án.
 
 ## 1. Tóm tắt
@@ -189,3 +189,50 @@ Bổ sung (không nằm trong bảng kế hoạch):
 - **Bài Telegram có tên + nghệ sĩ khớp LRCLIB (đường tự động ra lời đồng bộ)** — không có bài như vậy trong tài khoản; chỉ kiểm bằng lời chọn thủ công.
 - Q5 “quay lại bài thì còn nhớ lựa chọn” và nút “Bỏ lời đã chọn” trên máy (có nút, chưa bấm).
 - Xoay ngang → dọc; chữ lớn 1.3; TalkBack; Release/`.open`/Personal trên máy; lỗi mạng thật, 429, hết hạn cache (chỉ JVM); Y700/S25/FYT. **CHƯA XÁC NHẬN ÂM THANH THỰC.**
+
+## 11. REWORK-01 — sửa lỗi B1 (01/11/2026, Claude Code Sonnet 5.5)
+
+Chủ dự án yêu cầu “Sửa ngay ở đây” sau khi nhận báo cáo chặng C. Chỉ sửa lỗi B1; không đổi phạm vi khác.
+
+### 11.1 Nguyên nhân (xác nhận bằng đọc mã)
+
+Giả thuyết ở 10.3 đúng. Khi xoay, `MeloStudioDeck` mới được dựng và `show()` → `lyricsTabs.setActive(true)` → pane mới gọi `controller.request` (tăng generation). Deck cũ đóng sau đó: `stop()` → `setActive(false)` → `setShown(false)` → `controller.cancel()` tăng generation lần nữa và đặt `current = null`. Kết quả của pane mới đến sau, `deliver` thấy generation/`current` không còn khớp nên bỏ (`stage=lyrics_drop`); `requestedKey` của pane mới đã khớp nên `update()` không hỏi lại → kẹt `Loading`.
+
+### 11.2 Sửa (commit `fd1f943`)
+
+| File | Thay đổi |
+|---|---|
+| `ShareableLyricsController.kt` | `request(…, publish, client: Any? = null)` lưu “chủ yêu cầu”; `cancel(client: Any? = null)` chỉ hủy khi `client` chính là chủ của yêu cầu hiện hành, nếu yêu cầu hiện hành thuộc pane khác thì không làm gì; `cancel()` không tham số vẫn hủy tất cả (đăng xuất, `clearOwner`) |
+| `MeloLyricsPane.kt` | `request(..., client = this)`, `cancel(this)` ở `setShown(false)` và khi không có bài; **khóa phụ**: nếu `Loading` kéo dài ≥ 40 giây thì tự hỏi lại (tránh kẹt vĩnh viễn nếu một câu trả lời nào đó mất) |
+| `MeloLyricsUiPolicy.kt` | `LOADING_STUCK_MS = 40_000` và `loadingStuck(sinceMs, nowMs)`; 40 giây > 2 × (kết nối 5 s + đọc 8 s) của một lần `get` + `search` |
+| Test | `ShareableLyricsControllerTest` +5: pane cũ đóng sau khi pane mới hỏi không làm mất lời của pane mới (đúng thứ tự gây lỗi), pane vẫn tự hủy yêu cầu của mình, hủy của pane chưa từng hỏi không đổi gì, `cancel()` không client vẫn hủy hết, hỏi lại khi mất câu trả lời; `MeloLyricsUiPolicyTest` +2 (ngưỡng 40 giây và ràng buộc theo timeout) |
+
+Không đụng service, Media3, DB, TDLib, package, signer, versionCode.
+
+### 11.3 Gate Ni (log cục bộ `docs/plans/artifacts/2026-10-31-loi-nhac-p2b/R1-20261101-145357/`)
+
+| Lệnh | Kết quả |
+|---|---|
+| Test lời nhạc mục tiêu (Debug) | 23 + 21 + 18 + 27 + 20 = 109 test, 0 lỗi |
+| `:app:testShareableDebugUnitTest :app:testShareableReleaseUnitTest` | BUILD SUCCESSFUL (1m52s); Debug 184 suite **2419 test**, 21 skipped, 0 failures, 0 errors; Release y hệt |
+| `assembleShareableDebug/Release`, `-PmeloOpen=true assembleShareableDebug`, `assemblePersonalDebug` | đều BUILD SUCCESSFUL |
+| `git diff --check` | sạch |
+
+2419 = 2412 (sau chặng B) + 7 test mới.
+
+### 11.4 Tiny build và Sony
+
+- Bundle `MeloVault_loi-nhac-p2b_full_fd1f943_20261101.bundle` 13.428.563 byte, SHA-256 `4d13ba15208a7a08a8441e83eb0d663d5b8617f3835ea30009a03aba7cc97b73`, khớp hai đầu; clone `C:\Bots\MeloVault-LOINHAC-IsolatedQA-20261101-fd1f943` HEAD `fd1f943…`, cây sạch; `reportTelegramConfig` true; `assembleShareableDebug` BUILD SUCCESSFUL 2m52s.
+- Gate APK: vc121, debuggable, cert `eecd3df7…fce8`, 33.642.436 byte, SHA-256 `62ED3500C171AAF9CCFCEE3EDDB8D7A11F3D08B65B93DA425A3790126B173DB9`. Sony `XQ-AS52`/`Sony`, nhạc đang tạm dừng (`state=2`); đúng một lệnh `adb -s QV725WEQ54 install -r` → `Success`; SHA bản cài khớp.
+- **Kiểm lại Q8:** bật lại công tắc Lời nhạc (Cài đặt), mở Deck dọc ở tab Lời nhạc, rồi xoay ngang → dọc → ngang → dọc (5 giây mỗi lần). Mọi lần pane hiện đúng “Thiếu tên bài hoặc nghệ sĩ để tìm lời.” + “Tìm lời”; **không còn kẹt**; `logcat` `MeloVaultLyrics` có 0 dòng `stage=lyrics_drop`; không `FATAL EXCEPTION`/ANR. **PASS.** Ảnh: `r1-landscape-1`, `r1-portrait-1`, `r1-landscape-2`, `r1-portrait-2`, ảnh tổng hợp `00_tong_hop_rework.png`.
+- Giới hạn: bài dùng để thử là bài thiếu nghệ sĩ (kết quả ra ngay, không có request mạng đang bay lúc xoay). Đường “request mạng đang bay khi xoay” chỉ được phủ bằng test JVM ở 11.2.
+
+### 11.5 Trạng thái Sony sau REWORK (ghi đúng)
+
+- App nay là `fd1f943` (cùng vc121, chữ ký trùng). Lần mở app sau khi cài đã khiến thẻ “Nghe tiếp” **phát lại ~27 giây** bài “#Bản nháp 1” (BOX MUSIC HOUSE) trước khi tôi tạm dừng; bài hiện tại là “#Bản nháp 1.mp3” tạm dừng ở 0:27 (trước REWORK: “Total Immersion” dừng 0:02).
+- Công tắc “Lời nhạc từ LRCLIB” đang **BẬT** (tôi bật lại để kiểm).
+- Xoay đã khôi phục: `accelerometer_rotation=1`, `user_rotation=0`, 1080×2520 / 420, font 1.0. **`SONY_SCREEN_END`: `Display State=OFF`.** Không uninstall, không `pm clear`, không logout, không máy bay.
+
+### 11.6 Còn lại / chưa kiểm chứng
+
+F2 (bài Telegram thiếu nghệ sĩ nên không tự tìm), F3 (LRCLIB `search` chập chờn 503) và F4 (thanh tab dưới ảnh bìa lớn) ở mục 10.3 **không đổi** — là quan sát/thiết kế cho chủ dự án, không phải lỗi đã sửa. Vẫn chưa kiểm: âm thanh thật, lời tự động cho bài Telegram có tên + nghệ sĩ khớp LRCLIB, “quay lại bài còn nhớ lựa chọn” và “Bỏ lời đã chọn” trên máy, chữ lớn 1.3, Release/`.open`/Personal trên máy, Y700/S25/FYT.

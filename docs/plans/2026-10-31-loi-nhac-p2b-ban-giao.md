@@ -161,3 +161,30 @@ Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Dòng c
 - B1 xác nhận bằng mã: `Dialog.dismiss()` gọi `OnDismissListener` bất đồng bộ, nên `cancel()` của pane Deck cũ chạy **sau** `request()` của pane Deck mới và xóa `current` của controller dùng chung → kết quả bị bỏ, pane kẹt Loading (không có nút thoát).
 - Sony: chỉ lệnh đọc, màn hình không bật, `Display State=OFF`. Không sửa mã, không build, không merge/push.
 - Bước tiếp: chủ dự án chọn REWORK B1 (phiên thực thi mới trên nhánh này) hoặc nghiệm thu kèm giới hạn.
+
+## Checkpoint REWORK-01 (B1) — 01/11/2026, Claude Code (Sonnet 5.5)
+
+- Trạng thái: **REWORK-01 XONG. Chờ phiên nghiệm thu sơ bộ.** Chính thức: **CHỜ CHỦ DỰ ÁN NGHIỆM THU (QA CANDIDATE — CHƯA NGHIỆM THU)**. Bản hiện hành: APK `fd1f943` (SHA `62ED3500…3DB9`); bản `8d4284e` đã bị thay thế.
+- Mã: A `6f274b9`, B `3447310`, sửa B1 `fd1f943`. Báo cáo [`-bao-cao.md`](2026-10-31-loi-nhac-p2b-bao-cao.md) mục 11; APK [`-apk-test.md`](2026-10-31-loi-nhac-p2b-apk-test.md); ảnh [`-hinh-nghiem-thu.md`](2026-10-31-loi-nhac-p2b-hinh-nghiem-thu.md).
+- Gate Ni: 2419 test/21 skipped/0 lỗi mỗi biến thể; 4 lần assemble xanh. Sony: Q8 kiểm lại PASS (4 lần xoay, 0 `lyrics_drop`).
+- Việc còn mở (không thuộc B1): F2 bài Telegram thiếu nghệ sĩ không tự tìm; F3 LRCLIB `search` chập chờn; F4 thanh tab nằm dưới ảnh bìa lớn ở Deck dọc; chưa có lời tự động cho bài Telegram có tên + nghệ sĩ; âm thanh thật chưa xác nhận.
+- Không merge/push/public.
+
+### Prompt nghiệm thu sơ bộ — dùng bản này thay cho bản ở “Checkpoint chặng C” (đổi HEAD/APK/SHA)
+
+```text
+MELOVAULT — PHIÊN NGHIỆM THU SƠ BỘ NHANH (sau REWORK-01)
+
+Repo/worktree: D:\Bots\_worktrees\MeloVault-loi-nhac-p2b (repo chuẩn D:\Bots\MeloVault-E91-Shareable; KHÔNG sửa mã, KHÔNG build APK mới)
+TASK_ID: 2026-10-31-loi-nhac-p2b
+Nhánh: dot/2026-10-31-loi-nhac-p2b; baseline 94ab6b0; HEAD dự kiến: commit cuối của nhánh (chứa checkpoint REWORK-01); mã A 6f274b9, mã B 3447310, sửa B1 fd1f943; APK build từ fd1f943
+Hồ sơ: docs/plans/2026-10-31-loi-nhac-p2b.md (kế hoạch), -bao-cao.md (mục 9 chặng B, mục 10 chặng C, mục 11 REWORK-01), -ban-giao.md, -apk-test.md, -hinh-nghiem-thu.md; quy trình: docs/workflow/PROMPT_NGHIEM_THU_SO_BO.md
+Phạm vi kiểm nhanh (không kiểm lại toàn bộ):
+1. Git: git status, HEAD, diff --check; git log --oneline 94ab6b0..HEAD; git diff --stat 94ab6b0..HEAD — chỉ file lời nhạc mới + UI chặng B + host; không đụng service/Media3/DB/TDLib/package/signer/versionCode.
+2. Đọc kỹ chỉ phần rủi ro: ShareableLyricsController (request/cancel(client)/deliver), MeloLyricsPane (setShown, update, start, khóa Loading 40 giây), MeloLyricsTabs.setActive, hook TelegramPreviewActivity (lyricsMetaNow, clearLyricsOf). Xác nhận cách sửa B1 đúng với nguyên nhân ở báo cáo 11.1 và không mở ra lỗi mới (ví dụ hai pane cùng sống: Hai khung có panel Hàng đợi mở và Deck mở cùng lúc).
+3. APK: SHA-256 62ED3500C171AAF9CCFCEE3EDDB8D7A11F3D08B65B93DA425A3790126B173DB9, 33.642.436 byte, vc121, cert eecd3df7…fce8; bản trên Drive owner-only đúng SHA/byte/quyền (connector); bản cài trên Sony khớp (pm path + pull + hash).
+4. Sony QV725WEQ54 qua Tiny (an toàn, không cài mới, không uninstall/pm clear/logout/máy bay): tái hiện lại Q8 (Deck dọc, tab Lời nhạc, xoay ngang rồi dọc) và Q1/Q7 nhanh. Lưu ý: chạm thẻ "Nghe tiếp" sẽ tự phát nhạc; tạm dừng ngay (keyevent 127). Màn hình tắt trong finally (SONY_SCREEN_END), khôi phục xoay 1/0.
+5. Không chạy lại test/Gradle trừ khi có lý do cụ thể. Gate Ni đã ghi: 2419 test/21 skipped/0 lỗi mỗi biến thể.
+Ghi kết quả vào docs/plans/2026-10-31-loi-nhac-p2b-nghiem-thu-so-bo.md: "SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN" / "SƠ BỘ: CẦN SỬA" (liệt kê lỗi có vị trí và bước tái hiện) / "SƠ BỘ: BLOCKED". Không ghi PASS chính thức, không merge/push/public, không chọn việc khác.
+Kết thúc tiếng Việt: Đã làm / Chưa kiểm chứng / Rủi ro. Dòng cuối: "Đã dừng, chờ chủ dự án nghiệm thu." kèm `ĐẠT 2026-10-31-loi-nhac-p2b — <commit/APK>` hoặc `Yêu cầu sửa 2026-10-31-loi-nhac-p2b: <lỗi>`.
+```
