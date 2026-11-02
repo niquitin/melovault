@@ -107,9 +107,16 @@ internal class MeloEqPanel(private val activity: Activity, private val c: MeloCo
 
     private fun presetRow(): View {
         val labels = Preset.entries.map { it.label }
-        return c.chipRow(labels, Preset.entries.indexOf(settings.preset)) { index ->
+        val row = c.chipRow(labels, Preset.entries.indexOf(settings.preset)) { index ->
             change(settings.copy(preset = Preset.entries[index]), rebuildPresets = false)
         }
+        // The row is wider than the sheet: bring the chosen chip (e.g. "Tùy chỉnh", the last one) into view.
+        row.post {
+            val strip = row.getChildAt(0) as ViewGroup
+            val chosen = (0 until strip.childCount).map { strip.getChildAt(it) }.firstOrNull { it.isSelected }
+            if (chosen != null) row.scrollTo(maxOf(0, chosen.left - s.gap), 0)
+        }
+        return row
     }
 
     private fun bandRow(index: Int, hz: Int): View {
