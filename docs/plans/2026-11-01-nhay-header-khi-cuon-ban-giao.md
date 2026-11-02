@@ -1,12 +1,5 @@
 # 2026-11-01-nhay-header-khi-cuon — Bàn giao (checkpoint)
 
-## Checkpoint 4 — 02/11/2026, chủ dự án nghiệm thu ĐẠT
-
-- Chủ dự án nhắn “Đã nghiệm thu tiến trình trên — Đạt”. Đã ghi [nghiệm thu](2026-11-01-nhay-header-khi-cuon-nghiem-thu.md): **PASS kèm giới hạn**, phạm vi mã `4fe5a37` / APK `E5D808D2…6B74`.
-- Không có phiên sơ bộ độc lập (chủ dự án quyết định ĐẠT trước).
-- **Chưa merge, chưa push.** Bước tiếp theo chỉ khi có chỉ thị merge riêng: merge `--no-ff` nhánh `dot/2026-11-01-nhay-header-khi-cuon` vào `feature/e93-03d-y700-offline-cockpit` trong worktree riêng; chạy lại gate Ni nếu cây sau merge khác nhánh nguồn; cập nhật HANDOFF.
-- Ghi chú người ghi: Claude Code (phiên lập kế hoạch cũ được chủ dự án dùng lại để ghi quyết định); không sửa mã.
-
 ## Checkpoint 3 — 01/11/2026, kết thúc phiên thực thi GỘP S0–S10
 
 1. **TASK_ID:** `2026-11-01-nhay-header-khi-cuon`. Vai: thực thi (Claude Code, Sonnet 5.5), phiên GỘP, đã hết chặng cuối. Yêu cầu của chủ dự án còn hiệu lực: sửa header nháy khi lướt danh sách bài theo phương án A.
