@@ -55,12 +55,12 @@ class MeloAboutPolicyTest {
     }
 
     @Test
-    fun noEmailRowUntilTheOwnerConfirmsAnAddress() {
-        // CĐR1: the address is public once shipped, so it stays empty until the owner gives one.
-        assertEquals("", MeloAboutPolicy.FEEDBACK_EMAIL)
-        assertFalse(MeloAboutPolicy.feedbackAvailable())
-        assertFalse(MeloAboutPolicy.feedbackAvailable("   "))
-        assertTrue(MeloAboutPolicy.feedbackAvailable("someone@example.com"))
+    fun feedbackEmailIsTheOneTheOwnerConfirmed() {
+        // CĐR1: the address is public once shipped, so it is only the one the owner gave in chat (2026-11-02).
+        assertEquals("ntdung.md@gmail.com", MeloAboutPolicy.FEEDBACK_EMAIL)
+        assertTrue(MeloAboutPolicy.feedbackAvailable())
+        assertFalse("a blank address shows no email row", MeloAboutPolicy.feedbackAvailable("   "))
+        assertFalse(MeloAboutPolicy.feedbackAvailable(""))
     }
 
     @Test

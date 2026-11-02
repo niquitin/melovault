@@ -19,8 +19,9 @@ internal object MeloAboutPolicy {
     /**
      * Where feedback mail goes. Public once shipped, so it is only the address the owner confirmed (CĐR1).
      * Empty = not confirmed yet: the page shows no email row.
+     * Confirmed by the owner in chat on 2026-11-02.
      */
-    const val FEEDBACK_EMAIL = ""
+    const val FEEDBACK_EMAIL = "ntdung.md@gmail.com"
 
     fun feedbackAvailable(email: String = FEEDBACK_EMAIL): Boolean = email.isNotBlank()
 
