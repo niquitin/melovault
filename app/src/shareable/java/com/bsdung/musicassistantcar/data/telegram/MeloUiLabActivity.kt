@@ -715,7 +715,7 @@ class MeloUiLabActivity : AppCompatActivity() {
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
                 layoutParams = LinearLayout.LayoutParams(mark, mark)
             })
-            addView(components.logo(s.titleText * 1.5f))
+            addView(components.logo(s.titleText * 1.5f).apply { gravity = Gravity.CENTER })
             addView(components.text(MeloAboutPolicy.TAGLINE, s.secondaryText, p.textSecondary, maxLines = 2).apply {
                 gravity = Gravity.CENTER
                 setPadding(0, s.gap / 2, 0, 0)
@@ -747,8 +747,14 @@ class MeloUiLabActivity : AppCompatActivity() {
             MeloSettingsPolicy.saveDevUnlocked(prefs, true)
             devUnlocked = true
         }
-        result.message?.let { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() }
+        // One toast at a time: a quick run of taps must show the latest count, not a queue of old ones.
+        result.message?.let {
+            tapToast?.cancel()
+            tapToast = Toast.makeText(this, it, Toast.LENGTH_SHORT).also { toast -> toast.show() }
+        }
     }
+
+    private var tapToast: Toast? = null
 
     private fun openSource() {
         try {

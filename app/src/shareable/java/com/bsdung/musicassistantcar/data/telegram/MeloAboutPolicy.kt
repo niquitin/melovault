@@ -44,7 +44,7 @@ internal object MeloAboutPolicy {
     val PRIVACY_POINTS: List<String> = listOf(
         "Đăng nhập, danh sách kênh và tải nhạc đi thẳng giữa máy bạn và Telegram. MeloVault không có máy chủ riêng.",
         "Yêu thích và Playlist chỉ đồng bộ qua chính tài khoản Telegram của bạn, và chỉ khi bạn bật Đồng bộ.",
-        "${MeloLyricsUiPolicy.SETTINGS_SUBTITLE} Lời nhạc chỉ hoạt động khi bạn bật.",
+        MeloLyricsUiPolicy.SETTINGS_SUBTITLE,
         "Không quảng cáo, không công cụ theo dõi hay thống kê trong ứng dụng."
     )
 
