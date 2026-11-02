@@ -5843,7 +5843,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
             .setTitle("Bật Car Mode?")
             .setMessage("Màn hình này rộng như màn hình ô tô. Car Mode dùng nút to, chữ lớn, 5 bài mỗi trang và ẩn thanh hệ thống. " +
-                "Có thể đổi lại trong ⋮ → Cài đặt → Thiết bị & màn hình.")
+                "Có thể tắt lại trong ⋮ → Cài đặt → Car Mode.")
             .setNegativeButton("Không", null)
             .setPositiveButton("Bật Car Mode") { _, _ ->
                 MeloCarPolicy.saveSetting(prefs, MeloCarPolicy.CarSetting.ON)
