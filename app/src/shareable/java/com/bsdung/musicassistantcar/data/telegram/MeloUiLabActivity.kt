@@ -8,8 +8,10 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.graphics.Typeface
 import android.hardware.display.DisplayManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.util.TypedValue
 import android.view.Display
@@ -18,6 +20,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -26,6 +29,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.bsdung.musicassistantcar.BuildConfig
 import com.bsdung.musicassistantcar.R
@@ -33,10 +37,14 @@ import com.bsdung.musicassistantcar.data.telegram.MeloScreenPolicy.DisplaySpec
 import com.bsdung.musicassistantcar.data.telegram.MeloScreenPolicy.Emulation
 import com.bsdung.musicassistantcar.data.telegram.MeloSettingsPolicy.Page
 import java.util.Locale
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 
 /**
- * "Cài đặt" (E102): a main page with grouped rows and three sub pages (Giao diện & màu sắc, Thiết bị & màn hình,
- * Nâng cao). Screen measurements and device emulation (docs/ui-spec.md step 1) live on the last one.
+ * "Cài đặt": a main page of icon cards (Giao diện, Thư viện & đồng bộ, Giới thiệu, Đăng xuất) under a fixed title bar,
+ * with sub pages Giao diện & màu sắc, Màn Đang phát, Giới thiệu (Quyền riêng tư, Giấy phép) and Car Mode.
+ * "Công cụ nhà phát triển" (Thiết bị & màn hình, Nâng cao: screen measurements and device emulation, docs/ui-spec.md step 1)
+ * is hidden until the owner taps the version line seven times; a Car Mode or emulation left on stays visible on the main page.
  * Every choice writes through its old save function and old preferences file;
  * it never touches login, library, playlists or cache. Class name and manifest entry are unchanged.
  */
@@ -59,6 +67,9 @@ class MeloUiLabActivity : AppCompatActivity() {
 
         /** Result code: the owner confirmed "Đăng xuất" here; the host checks it is still signed in and logs out. */
         const val RESULT_LOGOUT = Activity.RESULT_FIRST_USER
+
+        /** Marks a row that has an icon tile, so the hairline above the next row starts under its text. */
+        private const val TAG_ICON_ROW = "icon_row"
 
         private const val STATE_PAGE = "page"
         private const val STATE_INFO_EXPANDED = "info_expanded"
@@ -202,6 +213,13 @@ class MeloUiLabActivity : AppCompatActivity() {
     private var infoExpanded = false
     private var page = Page.HOME
     private var lastInsets: WindowInsetsCompat? = null
+    private var devUnlocked = false
+    private val devTaps = MeloSettingsPolicy.DevTapCounter()
+
+    /** The real "tự đồng bộ" choice for the sync row; null until the background read answers (or when it cannot be read). */
+    private var syncAutomatic: Boolean? = null
+    private var syncGeneration = 0
+    private var syncWorker: java.util.concurrent.ExecutorService? = null
     private val prefs by lazy { getSharedPreferences(MeloScreenPolicy.PREFS_NAME, Context.MODE_PRIVATE) }
 
     /** Theme preset and source display mode live in the library's own preferences file, as before. */
@@ -212,13 +230,28 @@ class MeloUiLabActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setTheme(R.style.Theme_MeloVault_Shareable)
         title = "Cài đặt"
-        page = Page.fromName(savedInstanceState?.getString(STATE_PAGE) ?: intent.getStringExtra(EXTRA_PAGE))
+        // The window is always edge to edge here; render() gives the bars their room explicitly, on every Android version.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        devUnlocked = MeloSettingsPolicy.loadDevUnlocked(prefs)
+        page = Page.fromName(savedInstanceState?.getString(STATE_PAGE) ?: intent.getStringExtra(EXTRA_PAGE), devUnlocked)
         infoExpanded = savedInstanceState?.getBoolean(STATE_INFO_EXPANDED, false) ?: false
-        // A sub page goes back to the main page; only the main page closes the screen.
+        // A sub page goes back to its parent page; only the main page closes the screen.
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = goBack()
         })
         render()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Coming back from "Đồng bộ Yêu thích & Playlist": read the choice again so the row says Bật/Tắt for real.
+        refreshSyncValue()
+    }
+
+    override fun onDestroy() {
+        syncGeneration++
+        syncWorker?.shutdownNow()
+        super.onDestroy()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -228,12 +261,40 @@ class MeloUiLabActivity : AppCompatActivity() {
     }
 
     private fun goBack() {
-        if (page.isSubPage) openPage(Page.HOME) else finish()
+        if (page.isSubPage) openPage(page.parent) else finish()
     }
 
     private fun openPage(target: Page) {
+        if (target != Page.LICENSES) licenseFullShown = false
         page = target
         render()
+    }
+
+    /**
+     * Reads the automatic-sync choice off the main thread (it is a small file under noBackup, never TDLib) and redraws the
+     * main page when the answer changes. Not readable (signed out, sync off in this build): the row keeps its plain line.
+     */
+    private fun refreshSyncValue() {
+        if (!signedIn) return
+        val request = ++syncGeneration
+        val worker = syncWorker ?: Executors.newSingleThreadExecutor { task ->
+            Thread(task, "MeloVault-SettingsSync").apply { isDaemon = true }
+        }.also { syncWorker = it }
+        try {
+            worker.execute {
+                val value = runCatching {
+                    val who = ShareableTdlibOwner.authorizedAccount()?.let { TelegramUserId(it) }
+                    if (who == null || !TelegramPlaylistFlags.SYNC_ENABLED) null
+                    else SyncRuntime.automatic(noBackupFilesDir).context(who).consent.automatic
+                }.getOrNull()
+                runOnUiThread {
+                    if (isDestroyed || request != syncGeneration || value == syncAutomatic) return@runOnUiThread
+                    syncAutomatic = value
+                    if (page == Page.HOME) render(keepScroll = true)
+                }
+            }
+        } catch (_: RejectedExecutionException) {
+        }
     }
 
     /** Draws [page]. [keepScroll] keeps the place on the page after a choice was changed. */
@@ -245,18 +306,47 @@ class MeloUiLabActivity : AppCompatActivity() {
         components = MeloComponents(this, sizes)
         val p = components.palette
 
+        // The developer tools can be hidden while a saved page or an intent still points at them: fall back to the main page.
+        devUnlocked = MeloSettingsPolicy.loadDevUnlocked(prefs)
+        if (page.needsDevTools && !devUnlocked) page = Page.HOME
+
+        // Both system bars take the page colour, so the bar area and the page read as one surface in every colour theme.
+        @Suppress("DEPRECATION")
+        window.statusBarColor = p.background
+        @Suppress("DEPRECATION")
+        window.navigationBarColor = p.background
+
         val scroll = ScrollView(this).apply {
             setBackgroundColor(p.background)
             isFillViewport = true
+            // The last row scrolls up over the navigation bar instead of staying under it.
+            clipToPadding = false
         }
         content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(sizes.screenMargin, sizes.gap, sizes.screenMargin, sizes.screenMargin)
         }
         scroll.addView(content)
-        ViewCompat.setOnApplyWindowInsetsListener(scroll) { v, insets ->
+
+        // Fixed title bar + scrolling body. The root takes the system bars and the cut-out: top and sides as its own
+        // padding (so the title bar sits under the status bar), bottom as padding of the body so the content clears the nav bar.
+        val divider = View(this).apply {
+            setBackgroundColor(p.border)
+            alpha = 0f
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, maxOf(1, sizes.gap / 8))
+        }
+        scroll.setOnScrollChangeListener { _, _, y, _, _ -> divider.alpha = if (y > 0) 1f else 0f }
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(p.background)
+            addView(titleBar())
+            addView(divider)
+            addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
             val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
-            v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
+            v.setPadding(bars.left, bars.top, bars.right, 0)
+            scroll.setPadding(0, 0, 0, bars.bottom)
             lastInsets = insets
             v.post { refreshInfo() }
             insets
@@ -271,10 +361,18 @@ class MeloUiLabActivity : AppCompatActivity() {
         when (page) {
             Page.HOME -> renderHome()
             Page.APPEARANCE -> renderAppearance()
+            Page.NOW_PLAYING -> renderNowPlaying()
+            Page.CAR -> renderCar()
+            Page.ABOUT -> renderAbout()
+            Page.PRIVACY -> renderPrivacy()
+            Page.LICENSES -> renderLicenses()
+            Page.DEV_TOOLS -> renderDevTools()
             Page.DEVICES -> renderDevices(m, layout)
             Page.ADVANCED -> renderAdvanced(m, scroll)
         }
-        setContentView(scroll)
+        setContentView(root)
+        // A window that is already on screen does not always send its insets again to a view that replaced the old one.
+        ViewCompat.requestApplyInsets(root)
         if (oldScrollY > 0) {
             scroll.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
                 override fun onPreDraw(): Boolean {
@@ -289,69 +387,99 @@ class MeloUiLabActivity : AppCompatActivity() {
     // ---- Main page ----
 
     private fun renderHome() {
-        val s = components.sizes
-        content.addView(header("Cài đặt"))
-        if (signedIn) content.addView(accountCard())
-
-        content.addView(groupTitle("GIAO DIỆN"))
-        content.addView(settingRow(
-            "Giao diện & màu sắc",
-            value = null,
-            subtitle = MeloSettingsPolicy.homeSummary(
-                MeloLibraryPolicy.loadStyle(prefs),
-                MeloThemePolicy.load(prefs),
-                TelegramVaultBentoPolicy.getSavedSourceDisplayMode(uiPrefs)
-            )
-        ) { openPage(Page.APPEARANCE) })
-        content.addView(settingRow(
-            "Màn Đang phát",
-            subtitle = MeloSettingsPolicy.nowPlayingName(MeloNowPlayingPolicy.loadStyle(prefs))
-        ) { openPage(Page.APPEARANCE) })
-
-        content.addView(groupTitle("THƯ VIỆN & ĐỒNG BỘ"))
-        content.addView(settingRow(
-            "Đồng bộ Yêu thích & Playlist giữa các máy",
-            subtitle = "Tự đồng bộ Yêu thích & Playlist khi mở app",
-            badge = "Thử nghiệm"
-        ) { startActivity(Intent(this, MeloSyncSettingsActivity::class.java)) })
-        // P2-B: the subtitle is the disclosure; saying yes here is the same consent as the box in the Lời nhạc tab.
-        val lyricsOn = MeloLyricsUiPolicy.loadConsent(prefs) == LyricsConsent.GRANTED
-        content.addView(switchRow("Lời nhạc từ LRCLIB", MeloLyricsUiPolicy.SETTINGS_SUBTITLE, lyricsOn) {
-            MeloLyricsUiPolicy.saveConsent(prefs, !lyricsOn)
-            render(keepScroll = true)
-        })
-
-        content.addView(groupTitle("THIẾT BỊ & MÀN HÌNH"))
-        content.addView(settingRow("Bố cục Gọn (máy nhỏ)", value = MeloSettingsPolicy.compactName(MeloCompactPolicy.loadSetting(prefs))) {
-            openPage(Page.DEVICES)
-        })
-        content.addView(settingRow("Car Mode (FYT 7870)", value = MeloSettingsPolicy.carName(MeloCarPolicy.loadSetting(prefs))) {
-            openPage(Page.DEVICES)
-        })
-        content.addView(settingRow("Chừa chỗ nút ••• hệ thống", value = WindowInsetsPolicy.loadHandleBand(prefs).displayName) {
-            openPage(Page.DEVICES)
-        })
-
-        content.addView(groupTitle("NÂNG CAO"))
-        content.addView(settingRow("Thông tin màn hình & giả lập") { openPage(Page.ADVANCED) })
-
-        if (signedIn) {
-            content.addView(groupTitle("TÀI KHOẢN"))
-            content.addView(settingRow(
-                "Đăng xuất Telegram",
-                subtitle = "Luôn hỏi xác nhận trước khi đăng xuất",
-                danger = true,
-                chevron = false
-            ) { confirmLogout() })
+        val attention = MeloSettingsPolicy.attentionRows(
+            MeloCompactPolicy.loadSetting(prefs), MeloCarPolicy.loadSetting(prefs),
+            MeloScreenPolicy.loadEmulation(prefs), MeloScreenPolicy.loadPreviewCarMode(prefs)
+        )
+        MeloSettingsPolicy.homeSections(signedIn, devUnlocked, attention).forEach { section ->
+            when (section) {
+                MeloSettingsPolicy.HomeSection.ACCOUNT -> content.addView(accountCard())
+                MeloSettingsPolicy.HomeSection.APPEARANCE -> content.addView(group("GIAO DIỆN", listOf(
+                    row(
+                        R.drawable.ic_tune, "Giao diện & màu sắc",
+                        subtitle = MeloSettingsPolicy.homeSummary(
+                            MeloLibraryPolicy.loadStyle(prefs),
+                            MeloThemePolicy.load(prefs),
+                            TelegramVaultBentoPolicy.getSavedSourceDisplayMode(uiPrefs)
+                        )
+                    ) { openPage(Page.APPEARANCE) },
+                    row(
+                        R.drawable.ic_play_arrow, "Màn Đang phát",
+                        value = MeloSettingsPolicy.nowPlayingName(MeloNowPlayingPolicy.loadStyle(prefs))
+                    ) { openPage(Page.NOW_PLAYING) }
+                )))
+                MeloSettingsPolicy.HomeSection.LIBRARY -> content.addView(group("THƯ VIỆN & ĐỒNG BỘ", listOf(
+                    row(
+                        R.drawable.ic_cloud, "Đồng bộ Yêu thích & Playlist",
+                        value = MeloSettingsPolicy.syncValue(syncAutomatic), badge = "Thử nghiệm",
+                        subtitle = if (syncAutomatic == null) "Tự đồng bộ giữa các máy khi mở app" else null
+                    ) { startActivity(Intent(this, MeloSyncSettingsActivity::class.java)) },
+                    lyricsRow()
+                )))
+                MeloSettingsPolicy.HomeSection.ATTENTION -> content.addView(group("CHÚ Ý", attention.map { attentionRow(it) }))
+                MeloSettingsPolicy.HomeSection.DEVELOPER -> content.addView(group("NHÀ PHÁT TRIỂN", listOf(
+                    row(R.drawable.ic_settings, "Công cụ nhà phát triển") { openPage(Page.DEV_TOOLS) }
+                )))
+                MeloSettingsPolicy.HomeSection.ABOUT -> content.addView(group(null, listOf(
+                    row(R.drawable.ic_info, "Giới thiệu", value = BuildConfig.VERSION_NAME) { openPage(Page.ABOUT) }
+                )))
+                MeloSettingsPolicy.HomeSection.LOGOUT -> content.addView(group(null, listOf(logoutRow())))
+            }
         }
+    }
 
-        content.addView(components.text(
-            "MeloVault ${BuildConfig.VERSION_NAME} · vc${BuildConfig.VERSION_CODE}",
-            s.secondaryText, components.palette.textSecondary
-        ).apply {
+    /** P2-B: saying yes here is the same consent as the box in the Lời nhạc tab, so turning it on asks with the same words. */
+    private fun lyricsRow(): View {
+        val on = MeloLyricsUiPolicy.loadConsent(prefs) == LyricsConsent.GRANTED
+        return switchRow("Lời nhạc từ LRCLIB", MeloLyricsUiPolicy.SETTINGS_SUBTITLE_SHORT, on, icon = R.drawable.ic_music_note, inCard = true) {
+            if (on) {
+                MeloLyricsUiPolicy.saveConsent(prefs, false)
+                render(keepScroll = true)
+            } else {
+                AlertDialog.Builder(this, R.style.Theme_MeloVault_Dialog)
+                    .setTitle("Lời nhạc từ LRCLIB")
+                    .setMessage(MeloLyricsUiPolicy.CONSENT_TEXT)
+                    .setNegativeButton("Hủy", null)
+                    .setPositiveButton("Đồng ý") { _, _ ->
+                        MeloLyricsUiPolicy.saveConsent(prefs, true)
+                        render(keepScroll = true)
+                    }
+                    .show()
+            }
+        }
+    }
+
+    private fun attentionRow(item: MeloSettingsPolicy.AttentionRow): View = when (item.kind) {
+        MeloSettingsPolicy.AttentionKind.CAR_ON -> row(R.drawable.ic_car, item.title, value = item.value) { openPage(Page.CAR) }
+        MeloSettingsPolicy.AttentionKind.EMULATION -> row(
+            R.drawable.ic_warning, item.title, value = item.value, subtitle = "Chạm để về lại như bình thường"
+        ) { turnEmulationOff() }
+    }
+
+    /** Back to normal: only the test values are replaced; a Gọn or Car Mode choice the owner really made stays. */
+    private fun turnEmulationOff() {
+        MeloCompactPolicy.saveSetting(prefs, MeloSettingsPolicy.compactAfterEmulationOff(MeloCompactPolicy.loadSetting(prefs)))
+        MeloCarPolicy.saveSetting(prefs, MeloSettingsPolicy.carAfterEmulationOff(MeloCarPolicy.loadSetting(prefs)))
+        MeloScreenPolicy.saveEmulation(prefs, Emulation.OFF)
+        MeloScreenPolicy.savePreviewCarMode(prefs, false)
+        Toast.makeText(this, "Đã tắt khung giả lập", Toast.LENGTH_SHORT).show()
+        render(keepScroll = true)
+    }
+
+    private fun logoutRow(): View {
+        val s = components.sizes
+        val p = components.palette
+        return components.text("Đăng xuất Telegram", s.titleText, p.warning, bold = true, maxLines = 2).apply {
             gravity = Gravity.CENTER
-            setPadding(0, s.gap * 2, 0, s.gap)
-        })
+            minimumHeight = s.minTouch
+            setPadding(s.gap * 3 / 2, s.gap, s.gap * 3 / 2, s.gap)
+            isClickable = true
+            isFocusable = true
+            applyRipple()
+            contentDescription = "Đăng xuất Telegram. Luôn hỏi xác nhận trước khi đăng xuất"
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            setOnClickListener { confirmLogout() }
+        }
     }
 
     /** Account card: counts and the last sync time the host passed in, no TDLib call and no user name. */
@@ -408,8 +536,6 @@ class MeloUiLabActivity : AppCompatActivity() {
     // ---- Giao diện & màu sắc ----
 
     private fun renderAppearance() {
-        content.addView(header("Giao diện & màu sắc"))
-
         content.addView(components.sectionTitle("Kiểu thư viện"))
         val libraryStyle = MeloLibraryPolicy.loadStyle(prefs)
         content.addView(choiceRow("Mới", libraryStyle == MeloLibraryPolicy.LibraryStyle.NEW,
@@ -460,7 +586,11 @@ class MeloUiLabActivity : AppCompatActivity() {
             render(keepScroll = true)
         })
 
-        content.addView(components.sectionTitle("Màn Đang phát"))
+    }
+
+    // ---- Màn Đang phát ----
+
+    private fun renderNowPlaying() {
         val nowStyle = MeloNowPlayingPolicy.loadStyle(prefs)
         content.addView(choiceRow("Studio Deck", nowStyle == MeloNowPlayingPolicy.NowPlayingStyle.STUDIO_DECK,
             subtitle = "Ảnh bìa lớn, −30s / +60s, hẹn giờ tắt, hàng đợi") {
@@ -477,8 +607,6 @@ class MeloUiLabActivity : AppCompatActivity() {
     // ---- Thiết bị & màn hình ----
 
     private fun renderDevices(m: Measurements, layout: MeloScreenPolicy.Layout) {
-        val s = components.sizes
-        content.addView(header("Thiết bị & màn hình"))
         content.addView(infoBox(
             "Máy này đang dùng: ${effectiveLayoutName(m, layout)}. Thay đổi có hiệu lực khi quay lại thư viện."
         ))
@@ -505,6 +633,21 @@ class MeloUiLabActivity : AppCompatActivity() {
         })
 
         content.addView(components.sectionTitle("Car Mode (FYT 7870)"))
+        addCarControls(withFrames = true)
+
+        content.addView(components.sectionTitle("Chừa chỗ nút ••• hệ thống"))
+        val band = WindowInsetsPolicy.loadHandleBand(prefs)
+        val bands = WindowInsetsPolicy.HandleBand.entries
+        content.addView(segmented(bands.map { it.displayName }, bands.indexOf(band)) { index ->
+            WindowInsetsPolicy.saveHandleBand(prefs, bands[index])
+            render(keepScroll = true)
+        })
+        content.addView(note(MeloSettingsPolicy.bandHint(band)))
+    }
+
+    /** Car Mode Tắt/Bật and its note; [withFrames] adds the two FYT test frames (developer tools only). */
+    private fun addCarControls(withFrames: Boolean) {
+        val s = components.sizes
         val car = MeloCarPolicy.loadSetting(prefs)
         val carChoices = listOf(MeloCarPolicy.CarSetting.OFF to "Tắt", MeloCarPolicy.CarSetting.ON to "Bật")
         content.addView(segmented(carChoices.map { it.second }, carChoices.indexOfFirst { it.first == car }) { index ->
@@ -515,6 +658,7 @@ class MeloUiLabActivity : AppCompatActivity() {
             "Nút to, chữ lớn, 5 bài mỗi trang, tua −30s / +60s, ẩn thanh hệ thống; dùng nhạc thật. " +
                 "Car Mode đè lên mọi bố cục khác. Chỉ hiện sau khi đã đăng nhập Telegram."
         ))
+        if (!withFrames) return
         listOf(
             MeloCarPolicy.CarSetting.EMULATE_FYT_160 to "Thử khung · mật độ 160",
             MeloCarPolicy.CarSetting.EMULATE_FYT_240 to "Thử khung · mật độ 240"
@@ -528,22 +672,183 @@ class MeloUiLabActivity : AppCompatActivity() {
             })
         }
         content.addView(note("Khung thử vẽ đúng 1920 × 1200 điểm ảnh, nên cầm máy ngang."))
+    }
 
-        content.addView(components.sectionTitle("Chừa chỗ nút ••• hệ thống"))
-        val band = WindowInsetsPolicy.loadHandleBand(prefs)
-        val bands = WindowInsetsPolicy.HandleBand.entries
-        content.addView(segmented(bands.map { it.displayName }, bands.indexOf(band)) { index ->
-            WindowInsetsPolicy.saveHandleBand(prefs, bands[index])
+    // ---- Car Mode (shown from the main page while it is on) ----
+
+    private fun renderCar() {
+        addCarControls(withFrames = false)
+    }
+
+    // ---- Công cụ nhà phát triển ----
+
+    private fun renderDevTools() {
+        content.addView(note("Dành cho việc chỉnh bố cục và thử khung máy. Không động tới đăng nhập, thư viện, playlist hay cache."))
+        content.addView(group(null, listOf(
+            row(
+                R.drawable.ic_phone_android, "Thiết bị & màn hình",
+                subtitle = "Bố cục Gọn · Car Mode · Chừa chỗ nút •••",
+                value = MeloSettingsPolicy.compactName(MeloCompactPolicy.loadSetting(prefs))
+            ) { openPage(Page.DEVICES) },
+            row(R.drawable.ic_tune, "Nâng cao", subtitle = "Thông tin màn hình & giả lập") { openPage(Page.ADVANCED) }
+        )))
+        content.addView(components.spacer(components.sizes.gap))
+        content.addView(actionButton("Ẩn Công cụ nhà phát triển") {
+            MeloSettingsPolicy.saveDevUnlocked(prefs, false)
+            openPage(Page.HOME)
+        })
+    }
+
+    // ---- Giới thiệu ----
+
+    private fun renderAbout() {
+        val s = components.sizes
+        val p = components.palette
+        val version = MeloAboutPolicy.versionLine(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE)
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, s.gap * 2, 0, s.gap)
+            val mark = (s.minTouch * 1.6f).toInt()
+            addView(ImageView(context).apply {
+                setImageResource(R.drawable.ic_melovault_symbol)
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                layoutParams = LinearLayout.LayoutParams(mark, mark)
+            })
+            addView(components.logo(s.titleText * 1.5f).apply { gravity = Gravity.CENTER })
+            addView(components.text(MeloAboutPolicy.TAGLINE, s.secondaryText, p.textSecondary, maxLines = 2).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, s.gap / 2, 0, 0)
+            })
+        })
+        val rows = mutableListOf(
+            row(R.drawable.ic_heart_outline, "Phát triển bởi", subtitle = MeloAboutPolicy.AUTHOR),
+            // Seven quick taps here switch the developer tools on (and the same taps leave a toast otherwise).
+            row(R.drawable.ic_info, "Phiên bản", subtitle = version, chevron = false) { onVersionTapped() },
+            row(R.drawable.ic_code, "Mã nguồn", subtitle = MeloAboutPolicy.SOURCE_LABEL) { openSource() }
+        )
+        if (MeloAboutPolicy.feedbackAvailable()) {
+            rows += row(R.drawable.ic_mail, "Góp ý qua email", subtitle = MeloAboutPolicy.FEEDBACK_EMAIL) { sendFeedback() }
+        }
+        content.addView(group(null, rows))
+        content.addView(group(null, listOf(
+            row(R.drawable.ic_shield, "Quyền riêng tư") { openPage(Page.PRIVACY) },
+            row(R.drawable.ic_description, "Giấy phép mã nguồn mở") { openPage(Page.LICENSES) }
+        )))
+        content.addView(components.text(MeloAboutPolicy.COPYRIGHT, s.secondaryText, p.textSecondary).apply {
+            gravity = Gravity.CENTER
+            setPadding(0, s.gap * 2, 0, s.gap)
+        })
+    }
+
+    private fun onVersionTapped() {
+        val result = devTaps.tap(SystemClock.elapsedRealtime(), devUnlocked)
+        if (result.unlocked) {
+            MeloSettingsPolicy.saveDevUnlocked(prefs, true)
+            devUnlocked = true
+        }
+        // One toast at a time: a quick run of taps must show the latest count, not a queue of old ones.
+        result.message?.let {
+            tapToast?.cancel()
+            tapToast = Toast.makeText(this, it, Toast.LENGTH_SHORT).also { toast -> toast.show() }
+        }
+    }
+
+    private var tapToast: Toast? = null
+
+    private fun openSource() {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(MeloAboutPolicy.SOURCE_URL)))
+        } catch (_: Exception) {
+            copyText("Liên kết mã nguồn MeloVault", MeloAboutPolicy.SOURCE_URL)
+            Toast.makeText(this, "Đã sao chép liên kết", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** Opens the mail app on a draft (nothing is sent); no mail app = the address is copied instead. */
+    private fun sendFeedback() {
+        val email = MeloAboutPolicy.FEEDBACK_EMAIL
+        val uri = MeloAboutPolicy.mailtoUri(
+            email,
+            MeloAboutPolicy.feedbackSubject(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
+            MeloAboutPolicy.feedbackBody(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, Build.MODEL, Build.VERSION.RELEASE)
+        )
+        try {
+            startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse(uri)))
+        } catch (_: Exception) {
+            copyText("Email góp ý MeloVault", email)
+            Toast.makeText(this, "Đã sao chép địa chỉ email", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun copyText(label: String, value: String) {
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
+    }
+
+    private fun renderPrivacy() {
+        val s = components.sizes
+        val p = components.palette
+        content.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = components.roundedBackground(p.surface, stroke = p.border)
+            setPadding(s.gap * 3 / 2, s.gap, s.gap * 3 / 2, s.gap)
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = s.gap
+            }
+            MeloAboutPolicy.PRIVACY_POINTS.forEach { point ->
+                addView(components.text("•  $point", s.titleText, p.text, maxLines = 12).apply {
+                    setPadding(0, s.gap / 2, 0, s.gap / 2)
+                    setLineSpacing(0f, 1.1f)
+                })
+            }
+        })
+    }
+
+    // ---- Giấy phép mã nguồn mở ----
+
+    private var licenseFullShown = false
+
+    private fun renderLicenses() {
+        val s = components.sizes
+        val p = components.palette
+        content.addView(group(null, MeloAboutPolicy.LICENSES.map { item ->
+            row(null, item.name, subtitle = "${item.license}\n${item.url}") { openUrl(item.url) }
+        }))
+        content.addView(note(MeloAboutPolicy.LRCLIB_NOTE))
+        content.addView(actionButton(if (licenseFullShown) "Ẩn toàn văn" else "Xem toàn văn") {
+            licenseFullShown = !licenseFullShown
             render(keepScroll = true)
         })
-        content.addView(note(MeloSettingsPolicy.bandHint(band)))
+        if (licenseFullShown) {
+            val full = runCatching { resources.openRawResource(R.raw.third_party_notices).bufferedReader().use { it.readText() } }
+                .getOrDefault("Không đọc được tệp thông báo giấy phép.")
+            content.addView(components.text(full, s.secondaryText, p.text, maxLines = Int.MAX_VALUE).apply {
+                ellipsize = null
+                typeface = Typeface.MONOSPACE
+                setTextIsSelectable(true)
+                background = components.roundedBackground(p.surface, stroke = p.border)
+                setPadding(s.gap * 3 / 2, s.gap, s.gap * 3 / 2, s.gap)
+                layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    topMargin = s.gap
+                }
+            })
+        }
+    }
+
+    private fun openUrl(url: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        } catch (_: Exception) {
+            copyText("Liên kết", url)
+            Toast.makeText(this, "Đã sao chép liên kết", Toast.LENGTH_SHORT).show()
+        }
     }
 
     // ---- Nâng cao ----
 
     private fun renderAdvanced(m: Measurements, scroll: ScrollView) {
         val s = components.sizes
-        content.addView(header("Nâng cao"))
         content.addView(note("Dành cho việc chỉnh bố cục. Không động tới đăng nhập, thư viện, playlist hay cache."))
 
         content.addView(components.sectionTitle("Thông tin màn hình"))
@@ -677,16 +982,20 @@ class MeloUiLabActivity : AppCompatActivity() {
 
     // ---- Small builders ----
 
-    private fun header(title: String): View {
+    /** The bar that stays on top while the page scrolls: back arrow and the page's title. */
+    private fun titleBar(): View {
         val s = components.sizes
         val p = components.palette
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = s.minTouch
+            minimumHeight = s.minTouch + s.gap
+            setBackgroundColor(p.background)
+            setPadding(s.gap / 2, s.gap / 2, s.screenMargin, s.gap / 2)
             addView(components.iconButton("←", "Quay lại") { goBack() }.apply { background = null })
-            addView(components.text(title, s.titleText * 1.15f, p.text, bold = true, maxLines = 2).apply {
+            addView(components.text(page.title, s.titleText * 1.15f, p.text, bold = true, maxLines = 2).apply {
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                ViewCompat.setAccessibilityHeading(this, true)
             })
         }
     }
@@ -695,6 +1004,112 @@ class MeloUiLabActivity : AppCompatActivity() {
         components.text(value, components.sizes.secondaryText, components.palette.textSecondary, bold = true).apply {
             setPadding(components.sizes.gap, components.sizes.gap * 2, 0, components.sizes.gap / 2)
         }
+
+    /** One card holding [rows] one under the other, separated by a hairline; [title] (small capitals) goes above the card. */
+    private fun group(title: String?, rows: List<View>): View {
+        val s = components.sizes
+        val p = components.palette
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = if (title == null) s.gap * 3 / 2 else 0
+            }
+            title?.let { addView(groupTitle(it)) }
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                background = components.roundedBackground(p.surface, stroke = p.border)
+                clipToOutline = true
+                rows.forEachIndexed { index, row ->
+                    if (index > 0) addView(View(context).apply {
+                        setBackgroundColor(p.border)
+                        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, maxOf(1, s.gap / 8)).apply {
+                            leftMargin = s.gap * 3 / 2 + if (row.tag == TAG_ICON_ROW) iconTileSize() + s.gap * 3 / 2 else 0
+                        }
+                    })
+                    addView(row)
+                }
+            })
+        }
+    }
+
+    private fun iconTileSize(): Int = (components.sizes.minTouch * 0.7f).toInt()
+
+    /** Round-cornered tile with the row's icon in the accent colour on a soft accent background. */
+    private fun iconTile(res: Int, tint: Int = components.palette.accent): View {
+        val size = iconTileSize()
+        val soft = (tint and 0x00FFFFFF) or (0x2E shl 24)
+        return FrameLayout(this).apply {
+            background = components.roundedBackground(soft, radius = size / 3)
+            layoutParams = LinearLayout.LayoutParams(size, size).apply { rightMargin = components.sizes.gap * 3 / 2 }
+            val icon = (size * 0.56f).toInt()
+            addView(components.vectorIcon(res, icon, tint), FrameLayout.LayoutParams(icon, icon, Gravity.CENTER))
+        }
+    }
+
+    /** Touch feedback for a row that sits inside a card. */
+    private fun View.applyRipple() {
+        val out = TypedValue()
+        if (context.theme.resolveAttribute(android.R.attr.selectableItemBackground, out, true)) setBackgroundResource(out.resourceId)
+    }
+
+    /**
+     * A row of a [group]: icon tile, title (+ small badge), optional lines under it, the current value and a ›.
+     * [onClick] null = information only (no ripple, no ›).
+     */
+    private fun row(
+        icon: Int?,
+        title: String,
+        value: String? = null,
+        subtitle: String? = null,
+        badge: String? = null,
+        chevron: Boolean = true,
+        onClick: (() -> Unit)? = null
+    ): View {
+        val s = components.sizes
+        val p = components.palette
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = s.minTouch + s.gap
+            setPadding(s.gap * 3 / 2, s.gap, s.gap * 3 / 2, s.gap)
+            if (icon != null) tag = TAG_ICON_ROW
+            contentDescription = listOfNotNull(title, badge, value, subtitle).joinToString(". ")
+            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            icon?.let {
+                addView(iconTile(it, if (it == R.drawable.ic_warning) p.warning else p.accent))
+            }
+            addView(LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                addView(components.text(title, s.titleText, p.text, maxLines = 2))
+                badge?.let {
+                    addView(components.text(it, s.secondaryText * 0.85f, p.accent, bold = true).apply {
+                        background = components.pill(p.accentSoft)
+                        setPadding(s.gap, s.gap / 4, s.gap, s.gap / 4)
+                        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                            topMargin = s.gap / 4
+                        }
+                    })
+                }
+                subtitle?.let { addView(components.text(it, s.secondaryText, p.textSecondary, maxLines = 3)) }
+            })
+            value?.let {
+                addView(components.text(it, s.secondaryText, p.textSecondary, maxLines = 2).apply {
+                    maxWidth = (resources.displayMetrics.widthPixels * 0.34f).toInt()
+                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                        leftMargin = s.gap
+                    }
+                })
+            }
+            if (onClick != null) {
+                if (chevron) addView(components.text("›", s.titleText * 1.2f, p.textSecondary).apply { setPadding(s.gap, 0, 0, 0) })
+                isClickable = true
+                isFocusable = true
+                applyRipple()
+                setOnClickListener { onClick() }
+            }
+        }
+    }
 
     private fun infoBox(value: String): View {
         val s = components.sizes
@@ -755,68 +1170,6 @@ class MeloUiLabActivity : AppCompatActivity() {
         }
     }
 
-    /** A row of the main page: title (+ small badge), optional line under it and the current value; opens a page or a dialog. */
-    private fun settingRow(
-        title: String,
-        subtitle: String? = null,
-        value: String? = null,
-        badge: String? = null,
-        danger: Boolean = false,
-        chevron: Boolean = true,
-        onClick: () -> Unit
-    ): View {
-        val s = components.sizes
-        val p = components.palette
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = s.minTouch
-            setPadding(s.gap * 3 / 2, s.gap, s.gap * 3 / 2, s.gap)
-            background = components.roundedBackground(p.surface, stroke = p.border)
-            isClickable = true
-            isFocusable = true
-            contentDescription = listOfNotNull(title, badge, value, subtitle).joinToString(". ")
-            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = s.gap / 2
-            }
-            addView(LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                addView(LinearLayout(context).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    addView(components.text(title, s.titleText, if (danger) p.warning else p.text, bold = danger, maxLines = 2).apply {
-                        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
-                    })
-                    badge?.let {
-                        addView(components.text(it, s.secondaryText * 0.85f, p.accent, bold = true).apply {
-                            background = components.pill(p.accentSoft)
-                            setPadding(s.gap, s.gap / 4, s.gap, s.gap / 4)
-                            layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                                leftMargin = s.gap
-                            }
-                        })
-                    }
-                })
-                subtitle?.let { addView(components.text(it, s.secondaryText, p.textSecondary, maxLines = 3)) }
-            })
-            value?.let {
-                addView(components.text(it, s.secondaryText, p.textSecondary, maxLines = 2).apply {
-                    maxWidth = (resources.displayMetrics.widthPixels * 0.34f).toInt()
-                    layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                        leftMargin = s.gap
-                    }
-                })
-            }
-            if (chevron) {
-                addView(components.text("›", s.titleText * 1.2f, p.textSecondary).apply {
-                    setPadding(s.gap, 0, 0, 0)
-                })
-            }
-            setOnClickListener { onClick() }
-        }
-    }
-
     /** Equal-width buttons in one strip; [selectedIndex] −1 means none of them is the current value. */
     private fun segmented(labels: List<String>, selectedIndex: Int, onSelect: (Int) -> Unit): View {
         val s = components.sizes
@@ -850,22 +1203,34 @@ class MeloUiLabActivity : AppCompatActivity() {
         }
     }
 
-    /** On/off row with a small track on the right. */
-    private fun switchRow(label: String, subtitle: String?, on: Boolean, onToggle: () -> Unit): View {
+    /**
+     * On/off row with a small track on the right. [inCard] = a row of a [group] (no card of its own; [icon] gives it the tile);
+     * otherwise it is its own card.
+     */
+    private fun switchRow(
+        label: String,
+        subtitle: String?,
+        on: Boolean,
+        icon: Int? = null,
+        inCard: Boolean = false,
+        onToggle: () -> Unit
+    ): View {
         val s = components.sizes
         val p = components.palette
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = s.minTouch
+            minimumHeight = if (inCard) s.minTouch + s.gap else s.minTouch
             setPadding(s.gap * 3 / 2, s.gap, s.gap * 3 / 2, s.gap)
-            background = components.roundedBackground(p.surface, stroke = p.border)
             isClickable = true
             isFocusable = true
+            if (inCard) applyRipple() else background = components.roundedBackground(p.surface, stroke = p.border)
+            if (icon != null) tag = TAG_ICON_ROW
             contentDescription = listOfNotNull(label, if (on) "đang bật" else "đang tắt", subtitle).joinToString(". ")
             layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                topMargin = s.gap / 2
+                if (!inCard) topMargin = s.gap / 2
             }
+            icon?.let { addView(iconTile(it)) }
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
                 layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)

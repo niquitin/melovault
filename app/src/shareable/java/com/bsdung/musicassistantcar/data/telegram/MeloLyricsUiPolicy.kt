@@ -22,6 +22,9 @@ internal object MeloLyricsUiPolicy {
     const val SETTINGS_SUBTITLE =
         "Gửi tên bài, nghệ sĩ, album và thời lượng tới LRCLIB (dịch vụ công cộng) khi mở tab Lời nhạc. Mặc định tắt."
 
+    /** One line under the Cài đặt switch; the full disclosure above is shown in the box before the switch is turned on. */
+    const val SETTINGS_SUBTITLE_SHORT = "Tìm lời trên LRCLIB khi mở tab Lời nhạc"
+
     const val SOURCE_LINE = "Lời: LRCLIB"
 
     enum class Tab(val label: String) { QUEUE("Tiếp theo"), LYRICS("♪ Lời nhạc") }

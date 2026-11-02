@@ -12,14 +12,144 @@ import java.util.TimeZone
  */
 internal object MeloSettingsPolicy {
 
-    /** Pages of the settings screen; a sub page goes back to [HOME], [HOME] closes the screen. */
-    enum class Page { HOME, APPEARANCE, DEVICES, ADVANCED;
+    /**
+     * Pages of the settings screen; a sub page goes back to its [parent], [HOME] closes the screen.
+     * [DEV_TOOLS], [DEVICES] and [ADVANCED] only exist while the owner has unlocked the developer tools.
+     */
+    enum class Page(val title: String) {
+        HOME("Cài đặt"),
+        APPEARANCE("Giao diện & màu sắc"),
+        NOW_PLAYING("Màn Đang phát"),
+        CAR("Car Mode"),
+        ABOUT("Giới thiệu"),
+        PRIVACY("Quyền riêng tư"),
+        LICENSES("Giấy phép mã nguồn mở"),
+        DEV_TOOLS("Công cụ nhà phát triển"),
+        DEVICES("Thiết bị & màn hình"),
+        ADVANCED("Nâng cao");
 
         val isSubPage: Boolean get() = this != HOME
 
-        companion object {
-            fun fromName(name: String?): Page = entries.firstOrNull { it.name == name } ?: HOME
+        val needsDevTools: Boolean get() = this == DEV_TOOLS || this == DEVICES || this == ADVANCED
+
+        val parent: Page get() = when (this) {
+            PRIVACY, LICENSES -> ABOUT
+            DEVICES, ADVANCED -> DEV_TOOLS
+            else -> HOME
         }
+
+        companion object {
+            /** A hidden page never opens again from a saved state or an intent extra: it falls back to [HOME]. */
+            fun fromName(name: String?, devUnlocked: Boolean = false): Page {
+                val page = entries.firstOrNull { it.name == name } ?: HOME
+                return if (page.needsDevTools && !devUnlocked) HOME else page
+            }
+        }
+    }
+
+    // ---- Developer tools (hidden behind 7 taps on the version line) ----
+
+    /** Same preferences file as the other Melo settings; absent = locked. */
+    const val KEY_DEV_UNLOCKED = "dev_tools_unlocked"
+
+    fun loadDevUnlocked(prefs: android.content.SharedPreferences): Boolean = prefs.getBoolean(KEY_DEV_UNLOCKED, false)
+
+    fun saveDevUnlocked(prefs: android.content.SharedPreferences, unlocked: Boolean) {
+        prefs.edit().putBoolean(KEY_DEV_UNLOCKED, unlocked).apply()
+    }
+
+    const val DEV_TAPS_REQUIRED = 7
+    const val DEV_TAP_WINDOW_MS = 2_000L
+    private const val DEV_TAP_HINT_FROM = 4
+
+    /** Toast to show (null = none) and whether this tap completed the unlock. */
+    data class TapResult(val message: String?, val unlocked: Boolean)
+
+    /**
+     * Counts taps on the version line: seven taps, each within [windowMs] of the one before. Kept in memory only;
+     * a pause longer than the window starts the count again.
+     */
+    class DevTapCounter(private val required: Int = DEV_TAPS_REQUIRED, private val windowMs: Long = DEV_TAP_WINDOW_MS) {
+        private var count = 0
+        private var lastMs = 0L
+
+        fun tap(nowMs: Long, alreadyUnlocked: Boolean): TapResult {
+            if (alreadyUnlocked) {
+                count = 0
+                return TapResult("Công cụ nhà phát triển đang bật", false)
+            }
+            if (count > 0 && nowMs - lastMs > windowMs) count = 0
+            count++
+            lastMs = nowMs
+            if (count >= required) {
+                count = 0
+                return TapResult("Đã bật Công cụ nhà phát triển", true)
+            }
+            val remaining = required - count
+            val message = if (count >= DEV_TAP_HINT_FROM) "Còn $remaining lần nữa để bật Công cụ nhà phát triển" else null
+            return TapResult(message, false)
+        }
+    }
+
+    // ---- Main page layout ----
+
+    enum class AttentionKind { CAR_ON, EMULATION }
+
+    /** A row that stays on the main page even with the developer tools hidden, so nobody is stuck in a test state. */
+    data class AttentionRow(val kind: AttentionKind, val title: String, val value: String)
+
+    /**
+     * Car Mode on, or any test frame / emulation left on: the owner must always find the way back to normal.
+     * Emulation counts the Gọn "Shanling" frame, the FYT frames of Car Mode, the device emulation and "xem như Car Mode".
+     */
+    fun attentionRows(
+        compact: MeloCompactPolicy.CompactSetting,
+        car: MeloCarPolicy.CarSetting,
+        emulation: MeloScreenPolicy.Emulation,
+        previewCar: Boolean
+    ): List<AttentionRow> = buildList {
+        if (car == MeloCarPolicy.CarSetting.ON) add(AttentionRow(AttentionKind.CAR_ON, "Car Mode", "Đang bật"))
+        if (isEmulating(compact, car, emulation, previewCar)) {
+            add(AttentionRow(AttentionKind.EMULATION, "Đang thử khung giả lập", "Tắt"))
+        }
+    }
+
+    fun isEmulating(
+        compact: MeloCompactPolicy.CompactSetting,
+        car: MeloCarPolicy.CarSetting,
+        emulation: MeloScreenPolicy.Emulation,
+        previewCar: Boolean
+    ): Boolean = compact == MeloCompactPolicy.CompactSetting.EMULATE_SHANLING ||
+        car == MeloCarPolicy.CarSetting.EMULATE_FYT_160 || car == MeloCarPolicy.CarSetting.EMULATE_FYT_240 ||
+        emulation.isActive || previewCar
+
+    /** The Gọn and Car values after "Tắt giả lập": only the emulation values are replaced, a real Gọn/Car choice stays. */
+    fun compactAfterEmulationOff(compact: MeloCompactPolicy.CompactSetting): MeloCompactPolicy.CompactSetting =
+        if (compact == MeloCompactPolicy.CompactSetting.EMULATE_SHANLING) MeloCompactPolicy.CompactSetting.AUTO else compact
+
+    fun carAfterEmulationOff(car: MeloCarPolicy.CarSetting): MeloCarPolicy.CarSetting =
+        if (car == MeloCarPolicy.CarSetting.EMULATE_FYT_160 || car == MeloCarPolicy.CarSetting.EMULATE_FYT_240) {
+            MeloCarPolicy.CarSetting.OFF
+        } else car
+
+    enum class HomeSection { ACCOUNT, APPEARANCE, LIBRARY, ATTENTION, DEVELOPER, ABOUT, LOGOUT }
+
+    /** Top to bottom: what the main page shows. */
+    fun homeSections(signedIn: Boolean, devUnlocked: Boolean, attention: List<AttentionRow>): List<HomeSection> = buildList {
+        if (signedIn) add(HomeSection.ACCOUNT)
+        add(HomeSection.APPEARANCE)
+        add(HomeSection.LIBRARY)
+        if (attention.isNotEmpty()) add(HomeSection.ATTENTION)
+        if (devUnlocked) add(HomeSection.DEVELOPER)
+        add(HomeSection.ABOUT)
+        if (signedIn) add(HomeSection.LOGOUT)
+    }
+
+    /** Value on the right of the sync row: the real automatic-sync choice, or null while it is not known. */
+    fun syncValue(automatic: Boolean?): String? = when (automatic) {
+        true -> "Bật"
+        false -> "Tắt"
+        null -> null
     }
 
     // ---- Sync card at the top of the ⋮ menu ----
