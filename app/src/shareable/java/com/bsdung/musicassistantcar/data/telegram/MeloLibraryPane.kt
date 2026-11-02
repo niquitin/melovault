@@ -137,10 +137,14 @@ internal class MeloLibraryPane(
         get() = queryDraft.committed
         set(value) { queryDraft.sync(value) }
     private var pendingQuery: Runnable? = null
-    private var collapsed = false
+    /** What the scroll wants for the owner's title row, kept apart from what is shown while a finger drags. */
+    private val fold = HeaderFold(MeloLibraryPolicy.collapseThresholdPx(context.resources.displayMetrics.density))
+    private val collapsed: Boolean get() = fold.applied
     /** Folds or shows the owner's title row and the source cards for the current [collapsed]. */
     private val applyCollapse = Runnable { onHeaderCollapse(collapsed); applySourceCardsVisibility() }
-    private var lastScrollKey = 0
+    /** Where the list was at the last scroll callback: first row, and the tops of the first few rows. */
+    private var prevFirst = -1
+    private val prevTops = IntArray(4)
     private var playAllWhenLoaded: MeloBrowseUiPolicy.Request? = null
     private var groupKey: String? = null
     private var emptyExpanded = false
@@ -225,13 +229,19 @@ internal class MeloLibraryPane(
             setOnScrollListener(object : AbsListView.OnScrollListener {
                 override fun onScrollStateChanged(v: AbsListView?, state: Int) {
                     scrollState = state
+                    fold.onPhase(when (state) {
+                        AbsListView.OnScrollListener.SCROLL_STATE_TOUCH_SCROLL -> HeaderFold.ScrollPhase.TOUCH
+                        AbsListView.OnScrollListener.SCROLL_STATE_FLING -> HeaderFold.ScrollPhase.FLING
+                        else -> HeaderFold.ScrollPhase.IDLE
+                    })
+                    applyFoldIfAllowed()
                     if (state != AbsListView.OnScrollListener.SCROLL_STATE_IDLE) endSongRestore()
                     // The covers of a fast scroll are fetched once the list slows down.
                     if (rowArtEnabled && state != AbsListView.OnScrollListener.SCROLL_STATE_FLING) requestVisibleArt()
                 }
                 override fun onScroll(v: AbsListView?, first: Int, visible: Int, total: Int) {
                     val snap = snapshot ?: return
-                    if (snap.showingSources) return
+                    if (snap.showingSources) { prevFirst = -1; return }
                     if (restoringSongScroll && songRestore.onScrolled(first, visible, total)) {
                         endSongRestore()
                         anchorLog { "stage=settled layer=$layer first=$first" }
@@ -247,16 +257,18 @@ internal class MeloLibraryPane(
                     if (bar.visibility == View.VISIBLE) {
                         snap.rows.getOrNull(first)?.sortKey?.let { bar.setActive(MeloAlphabetPolicy.letterOf(it)) }
                     }
-                    val key = first * (s.rowHeight + s.gap / 2) - (getChildAt(0)?.top ?: 0)
-                    val next = MeloLibraryPolicy.headerCollapsed(collapsed, key - lastScrollKey, first)
-                    lastScrollKey = key
-                    if (next != collapsed) {
-                        collapsed = next
-                        // A restore (setSelectionFromTop) or a refresh calls this inside the list's layout pass;
-                        // hiding a view there leaves its space behind (D3), so the change runs after that pass.
-                        list.removeCallbacks(applyCollapse)
-                        if (list.isInLayout) list.post(applyCollapse) else applyCollapse.run()
+                    val firstTop = getChildAt(0)?.top ?: 0
+                    if (!fold.consumeRebaseline()) {
+                        val delta = MeloLibraryPolicy.scrollDeltaPx(
+                            prevFirst, prevTops[0], first, firstTop,
+                            prevFirstTopNow = if (first < prevFirst) getChildAt(prevFirst - first)?.top else null,
+                            fallbackPitchPx = s.rowHeight + dividerHeight,
+                            newFirstTopBefore = if (first > prevFirst && prevFirst >= 0) prevTops.getOrNull(first - prevFirst) else null
+                        )
+                        fold.onDelta(delta, atTop = first <= 0 && firstTop >= 0)
                     }
+                    rememberScroll(first)
+                    applyFoldIfAllowed()
                 }
             })
         }
@@ -305,6 +317,29 @@ internal class MeloLibraryPane(
     /** R1b/R1c list-anchor diagnostics: Debug builds only, never written by a Release build (D1). */
     private inline fun anchorLog(message: () -> String) {
         if (com.bsdung.musicassistantcar.BuildConfig.DEBUG) android.util.Log.w("MeloAnchor", message())
+    }
+
+    /** Header-fold diagnostics, Debug builds only: one line per change, never a song or channel name. */
+    private inline fun foldLog(message: () -> String) {
+        if (com.bsdung.musicassistantcar.BuildConfig.DEBUG) android.util.Log.i("MeloHeaderFold", message())
+    }
+
+    private fun rememberScroll(first: Int) {
+        prevFirst = first
+        for (i in prevTops.indices) prevTops[i] = list.getChildAt(i)?.top ?: 0
+    }
+
+    /**
+     * The title row changes only while no finger drags: at once during a fling, otherwise when the list stops.
+     * A restore (setSelectionFromTop) or a refresh calls the scroll callback inside the list's layout pass;
+     * hiding a view there leaves its space behind (D3), so the change runs after that pass.
+     */
+    private fun applyFoldIfAllowed() {
+        val change = fold.pendingChange() ?: return
+        fold.markApplied(change)
+        foldLog { "collapsed=$change phase=${fold.phase} first=${list.firstVisiblePosition} layer=$layer" }
+        list.removeCallbacks(applyCollapse)
+        if (list.isInLayout) list.post(applyCollapse) else applyCollapse.run()
     }
 
     private fun endSongRestore() {
@@ -389,12 +424,13 @@ internal class MeloLibraryPane(
 
     /** Back at the top with the owner's title row visible, e.g. after switching group or page. */
     private fun resetScroll() {
-        if (collapsed) {
-            collapsed = false
+        val wasCollapsed = collapsed
+        fold.reset()
+        if (wasCollapsed) {
             onHeaderCollapse(false)
             applySourceCardsVisibility()
         }
-        lastScrollKey = 0
+        prevFirst = -1
         pendingTopReset = true
         list.setSelectionFromTop(0, 0)
         sourcesScroll.scrollTo(0, 0)
