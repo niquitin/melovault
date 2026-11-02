@@ -68,7 +68,7 @@ Không đổi: package, signer, versionCode/versionName, service, Media3, DB, TD
 
 ## 6. S8 — gate Ni
 
-Chạy trên mã của commit `091dc96`. Log ở `artifacts/2026-11-02-thiet-ke-lai-cai-dat/`.
+Chạy trên mã của commit `091dc96`. Log nằm trong `docs/plans/artifacts/2026-11-02-thiet-ke-lai-cai-dat/` của worktree (thư mục artifacts bị `.gitignore`, nên log không vào Git).
 
 | Lệnh | Kết quả |
 |---|---|
