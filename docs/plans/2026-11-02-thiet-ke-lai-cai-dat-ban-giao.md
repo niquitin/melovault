@@ -1,40 +1,48 @@
 # 2026-11-02-thiet-ke-lai-cai-dat — Bàn giao (checkpoint)
 
-## Checkpoint 1 — 02/11/2026, kết thúc Chặng 1 (S0–S8, Ni: code + test + commit)
+## Checkpoint 2 — 02/11/2026, kết thúc thực thi (Chặng 1 + Chặng 2 gộp trong một hội thoại theo lệnh chủ dự án)
 
-1. **TASK_ID:** `2026-11-02-thiet-ke-lai-cai-dat`. Vai: thực thi Chặng 1 (Claude Code, Sonnet 5.5). Chặng 2 (S9–S11) chưa bắt đầu.
-2. **Repo/worktree:** `D:\Bots\_worktrees\MeloVault-thiet-ke-lai-cai-dat`; nhánh `dot/2026-11-02-thiet-ke-lai-cai-dat`; baseline `fa4cd09`; commit kế hoạch `11201fc`; commit mã: `091dc96`; HEAD sau hồ sơ: xem `git rev-parse HEAD`.
-3. **Hồ sơ:** [kế hoạch](2026-11-02-thiet-ke-lai-cai-dat.md) · [báo cáo](2026-11-02-thiet-ke-lai-cai-dat-bao-cao.md). apk-test / hình / sơ bộ / nghiệm thu: chưa có.
-4. **Gate Ni:** xanh — 201 suite, 2725 test, 21 skipped, 0 lỗi (Debug và Release); assemble Shareable Debug/Release, `-PmeloOpen=true` Debug, Personal Debug đều BUILD SUCCESSFUL; `git diff --check` sạch (chi tiết mục 6 báo cáo; log ở `docs/plans/artifacts/2026-11-02-thiet-ke-lai-cai-dat/`).
-5. **CĐR1 email góp ý: CHƯA CÓ.** `MeloAboutPolicy.FEEDBACK_EMAIL = ""` nên dòng “Góp ý qua email” **chưa hiện**. Chủ dự án cho địa chỉ → điền hằng số, build lại (đổi 1 dòng + test `noEmailRowUntilTheOwnerConfirmsAnAddress` phải sửa theo). CĐR2 giữ “Nguyễn Dũng”; CĐR3 mặc định.
-6. **S1 chưa tái hiện** (không có thiết bị ở Ni). Giả thuyết và cách sửa ở mục 3 báo cáo. Máy trong ảnh chủ dự án gửi chưa rõ (Android 12 của Sony không bị edge-to-edge bắt buộc, nên nghi máy Android 15+). Chặng 2 phải chụp Q1 và ghi kết quả.
-7. **Thiết bị:** Ni không có ADB device. Sony `QV725WEQ54` trên Tiny đang cài vc121 (theo HANDOFF), chưa đụng tới trong phiên này.
-8. **File chưa commit:** không có sau commit hồ sơ.
+1. **TASK_ID:** `2026-11-02-thiet-ke-lai-cai-dat`. Vai: thực thi (Claude Code, Sonnet 5.5). **Đã xong S0–S11.** Việc kế: phiên **nghiệm thu sơ bộ mới** (prompt ở cuối).
+2. **Repo/worktree:** `D:\Bots\_worktrees\MeloVault-thiet-ke-lai-cai-dat`; nhánh `dot/2026-11-02-thiet-ke-lai-cai-dat`; baseline `fa4cd09`; kế hoạch `11201fc`; mã: `091dc96` (thiết kế lại), `2242319` (email), `d52fe43` (3 sửa nhỏ từ QA) — **APK build từ `d52fe43`**; sau đó chỉ còn commit hồ sơ (`git rev-parse HEAD`).
+3. **Hồ sơ:** [kế hoạch](2026-11-02-thiet-ke-lai-cai-dat.md) · [báo cáo](2026-11-02-thiet-ke-lai-cai-dat-bao-cao.md) · [apk-test](2026-11-02-thiet-ke-lai-cai-dat-apk-test.md) · [hình](2026-11-02-thiet-ke-lai-cai-dat-hinh-nghiem-thu.md). Sơ bộ / nghiệm thu: chưa có → **CHỜ CHỦ DỰ ÁN NGHIỆM THU**.
+4. **APK QA candidate (CHƯA NGHIỆM THU):** Debug vc121 `0.6.96-beta`, 33.812.590 B, SHA-256 `F376BCCBAB9B9FD9381FB7EA08068BDD9203AACB4C00078E282560971F8D77E7`, cert `eecd3df7…fce8`. Drive owner-only: [thư mục](https://drive.google.com/drive/folders/1Sm7XOBwnfh6cLwY0o8KcCvtUGt4IemRR), [APK](https://drive.google.com/file/d/10YNRVpKLeIU5WVH1B3gyyjKcIWmHVxaL/view?usp=drivesdk), [ảnh tổng hợp](https://drive.google.com/file/d/1PEXfWTYKmcnUqJdnhRHoQEGiMDuqwmLF/view?usp=drivesdk). Đã cài trên Sony `QV725WEQ54` (SHA bản cài khớp).
+5. **Gate Ni (trên `d52fe43`):** Debug/Release mỗi biến thể 201 suite, **2725 test, 21 skipped, 0 lỗi** (baseline 2698); assemble Shareable Debug/Release, `-PmeloOpen=true`, Personal Debug xanh; `git diff --check` sạch.
+6. **QA Sony:** Q1–Q7 PASS; Q8 (xoay ngang, chữ lớn) **CHƯA KIỂM**; soạn thư **CHƯA KIỂM** (Sony không có app email); **CHƯA XÁC NHẬN ÂM THANH THỰC**. Lỗi “chữ bị che” **không tái hiện trên Sony Android 12**; sửa theo phân tích mã, cần xem trên máy Android 15+.
+7. **Sony hiện:** vc121 bản `d52fe43`, màn OFF (`SONY_SCREEN_END`), prefs đã khôi phục (Gọn Tự động, Car Tắt, giả lập Tắt, công cụ nhà phát triển ẩn, màu Hiện tại, Lời nhạc đã đồng ý).
+8. **Chưa làm (đúng quy trình):** không merge/push/public; không nghiệm thu; không tự chọn nhiệm vụ kế. Email `ntdung.md@gmail.com` sẽ công khai khi push.
+9. **File chưa commit:** không (ảnh/log ở `docs/plans/artifacts/…` bị `.gitignore`).
 
 | Bước | Trạng thái |
 |---|---|
 | Kế hoạch | Xong |
-| S0–S8 (Chặng 1, Ni) | Xong (email chờ chủ dự án) |
-| S9–S11 (Chặng 2, Tiny/Sony/Drive) | Chưa bắt đầu |
+| S0–S8 (Ni) | Xong |
+| S9 (Tiny build + Sony QA) | Xong (Q8 chưa kiểm) |
+| S10 (Drive owner-only) | Xong, đã kiểm quyền |
+| S11 (hồ sơ + prompt sơ bộ) | Xong |
+| Nghiệm thu sơ bộ | Chưa |
+| Nghiệm thu chính thức | CHỜ CHỦ DỰ ÁN |
 
-### Điều Chặng 2 cần biết
+### 3–6 thao tác chủ dự án tự thử (Sony hoặc máy Android 15+)
 
-- Mã mới nằm trong `MeloUiLabActivity.kt` (khung, trang, 7 chạm), `MeloSettingsPolicy.kt`, `MeloAboutPolicy.kt`. Chưa ai nhìn giao diện thật: kỳ vọng phải chỉnh nhỏ (khoảng cách, cỡ icon, chữ bị cắt ở Gọn/chữ lớn) — nếu cần chỉnh thì sửa ở Ni qua phiên thực thi mới, không sửa trên Tiny.
-- Trang Giao diện / Màn Đang phát / Thiết bị / Nâng cao vẫn dùng kiểu hàng cũ trong khung mới (có chủ đích, ghi ở báo cáo mục 7).
-- Q7 (chống kẹt): trước QA ghi giá trị Gọn/Car/giả lập/handle band (mở khóa công cụ nhà phát triển cần 7 chạm, rồi **ẩn lại** sau QA); khôi phục đúng.
-- Không đăng xuất, không bấm “Đồng bộ ngay”, không gửi email. Màn Sony OFF trong `finally`, ghi `SONY_SCREEN_END`.
-- `dev_tools_unlocked` là khóa prefs mới (vô hại với bản cũ).
+1. Cài APK từ Drive (hoặc đã cài sẵn trên Sony) → ⋮ → Cài đặt: chỉ còn Giao diện, Thư viện & đồng bộ, Giới thiệu, Đăng xuất; **trên máy Android 15+ kiểm không chữ nào bị thanh trạng thái/thanh điều hướng che** (đây là điểm chưa chứng minh).
+2. Giới thiệu: thấy Nguyễn Dũng, phiên bản, GitHub mở được, “Góp ý qua email” mở app email đúng địa chỉ (không cần gửi).
+3. Chạm dòng Phiên bản 7 lần → quay lại Cài đặt có “Công cụ nhà phát triển” (Gọn, Car Mode, giả lập vẫn còn) → bấm “Ẩn” để giấu.
+4. Tắt rồi bật Lời nhạc: lúc bật hiện hộp đồng ý (Hủy giữ Tắt).
+5. Bật “Thử trong khung Shanling” trong công cụ → Ẩn công cụ: trang chính vẫn có dòng “Đang thử khung giả lập”, chạm để về bình thường.
+6. Xem trang chính khi xoay ngang và chữ lớn (Q8 chưa kiểm).
 
-### Prompt thực thi Chặng 2 (dán vào phiên MỚI)
+### Prompt nghiệm thu sơ bộ (dán vào phiên MỚI)
 
 ```text
-MELOVAULT — THỰC THI CHẶNG 2 (S9–S11: build Tiny + QA Sony + Drive + hồ sơ)
-TASK_ID: 2026-11-02-thiet-ke-lai-cai-dat
-Worktree Ni: D:\Bots\_worktrees\MeloVault-thiet-ke-lai-cai-dat; nhánh dot/2026-11-02-thiet-ke-lai-cai-dat; baseline fa4cd09; commit mã 091dc96.
-Đọc theo thứ tự: CLAUDE.md → docs/workflow/PROMPT_SONNET.md → docs/plans/2026-11-02-thiet-ke-lai-cai-dat.md (mục 6–7) → docs/plans/2026-11-02-thiet-ke-lai-cai-dat-bao-cao.md → docs/plans/2026-11-02-thiet-ke-lai-cai-dat-ban-giao.md.
-Email góp ý (CĐR1): <chủ dự án điền; "chưa có" thì build vẫn không có dòng email và QA ghi CHƯA KIỂM phần email>.
-Làm S9 (bundle SHA256 → Tiny clone cô lập build Debug có Telegram config → verify package/vc121/cert → cài install -r Sony QV725WEQ54 → QA Q1–Q8, ảnh tổng hợp 00_tong_hop.png, ghi SONY_SCREEN_END), S10 (Drive Ni N owner-only: APK + ảnh; *-apk-test.md, *-hinh-nghiem-thu.md), S11 (báo cáo, bàn giao, prompt sơ bộ).
-Q1 phải ghi rõ kết quả "chữ bị che" (S1 chưa tái hiện ở Ni). Nếu giao diện cần chỉnh: ghi lỗi + ảnh, DỪNG và bàn giao phiên sửa ở Ni, không sửa trên Tiny.
-Không đổi package/signer/versionCode, không uninstall/pm clear/xóa dữ liệu, không đăng xuất, không gửi email, không "Đồng bộ ngay".
-Kết thúc: đưa prompt nghiệm thu sơ bộ và ghi "Đã dừng. Mở phiên mới để nghiệm thu sơ bộ nhanh."
+MELOVAULT — NGHIỆM THU SƠ BỘ NHANH, KHÔNG CODE
+TASK_ID: 2026-11-02-thiet-ke-lai-cai-dat; nhánh dot/2026-11-02-thiet-ke-lai-cai-dat; worktree: D:\Bots\_worktrees\MeloVault-thiet-ke-lai-cai-dat.
+Baseline: fa4cd09; HEAD dự kiến: commit hồ sơ ngay sau d52fe43 (kiểm bằng git rev-parse HEAD); source APK: d52fe43affdb74422224dcc703321214c00b7a77.
+Kế hoạch: docs/plans/2026-11-02-thiet-ke-lai-cai-dat.md.
+Báo cáo: docs/plans/2026-11-02-thiet-ke-lai-cai-dat-bao-cao.md.
+Bàn giao: docs/plans/2026-11-02-thiet-ke-lai-cai-dat-ban-giao.md.
+APK và SHA-256: Drive owner-only https://drive.google.com/file/d/10YNRVpKLeIU5WVH1B3gyyjKcIWmHVxaL/view?usp=drivesdk ; F376BCCBAB9B9FD9381FB7EA08068BDD9203AACB4C00078E282560971F8D77E7 (33.812.590 B); hồ sơ: 2026-11-02-thiet-ke-lai-cai-dat-apk-test.md.
+Phạm vi cần kiểm nhanh: (1) diff `fa4cd09..HEAD` chỉ ở MeloUiLabActivity/MeloSettingsPolicy/MeloAboutPolicy/MeloLyricsUiPolicy + 1 dòng TelegramPreviewActivity + icon/raw + test, không đụng service/Media3/DB/TDLib/package/signer/versionCode; (2) chống kẹt: Car Mode đang bật hoặc khung giả lập còn bật luôn có lối tắt ở trang chính dù công cụ đã ẩn; Page.fromName không mở lại trang ẩn; (3) câu Quyền riêng tư đúng với mã; (4) trên Sony đã cài: trang chính, Giới thiệu, 7 chạm + Ẩn, hộp đồng ý Lời nhạc (Hủy giữ Tắt — nhớ trả Lời nhạc về BẬT, Gọn/Car/giả lập về như cũ, công cụ ẩn), không bấm Đồng bộ ngay, không gửi email, không đăng xuất; (5) ghi lại phần CHƯA KIỂM: máy Android 15+, soạn thư, Q8 xoay ngang/chữ lớn, âm thanh thật.
+Quy tắc: chỉ MỘT lệnh adb install -r nếu thật sự cần cài lại (cùng package/vc121/cert); không uninstall, pm clear, xóa dữ liệu; màn Sony OFF khi không thao tác, ghi SONY_SCREEN_END. Không sửa code, không build APK mới. Kết luận một trong: SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN / SƠ BỘ: CẦN SỬA / SƠ BỘ: BLOCKED vào docs/plans/2026-11-02-thiet-ke-lai-cai-dat-nghiem-thu-so-bo.md.
 ```
+
+Đã dừng. Mở phiên mới để nghiệm thu sơ bộ nhanh.
