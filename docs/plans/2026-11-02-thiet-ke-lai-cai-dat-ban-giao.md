@@ -2,14 +2,14 @@
 
 ## Checkpoint 2 — 02/11/2026, kết thúc thực thi (Chặng 1 + Chặng 2 gộp trong một hội thoại theo lệnh chủ dự án)
 
-1. **TASK_ID:** `2026-11-02-thiet-ke-lai-cai-dat`. Vai: thực thi (Claude Code, Sonnet 5.5). **Đã xong S0–S11.** Việc kế: phiên **nghiệm thu sơ bộ mới** (prompt ở cuối).
+1. **TASK_ID:** `2026-11-02-thiet-ke-lai-cai-dat`. Vai: thực thi (Claude Code, Sonnet 5.5). **Đã xong S0–S11.** Việc kế: không có (đã ĐẠT; prompt sơ bộ ở cuối không còn dùng).
 2. **Repo/worktree:** `D:\Bots\_worktrees\MeloVault-thiet-ke-lai-cai-dat`; nhánh `dot/2026-11-02-thiet-ke-lai-cai-dat`; baseline `fa4cd09`; kế hoạch `11201fc`; mã: `091dc96` (thiết kế lại), `2242319` (email), `d52fe43` (3 sửa nhỏ từ QA) — **APK build từ `d52fe43`**; sau đó chỉ còn commit hồ sơ (`git rev-parse HEAD`).
-3. **Hồ sơ:** [kế hoạch](2026-11-02-thiet-ke-lai-cai-dat.md) · [báo cáo](2026-11-02-thiet-ke-lai-cai-dat-bao-cao.md) · [apk-test](2026-11-02-thiet-ke-lai-cai-dat-apk-test.md) · [hình](2026-11-02-thiet-ke-lai-cai-dat-hinh-nghiem-thu.md). Sơ bộ / nghiệm thu: chưa có → **CHỜ CHỦ DỰ ÁN NGHIỆM THU**.
+3. **Hồ sơ:** [kế hoạch](2026-11-02-thiet-ke-lai-cai-dat.md) · [báo cáo](2026-11-02-thiet-ke-lai-cai-dat-bao-cao.md) · [apk-test](2026-11-02-thiet-ke-lai-cai-dat-apk-test.md) · [hình](2026-11-02-thiet-ke-lai-cai-dat-hinh-nghiem-thu.md). Sơ bộ: không có (chủ dự án quyết định trước). Nghiệm thu: [`-nghiem-thu.md`](2026-11-02-thiet-ke-lai-cai-dat-nghiem-thu.md) — **ĐẠT, PASS kèm giới hạn** (chủ dự án nhắn “đạt” 02/11/2026, bản `d52fe43`/`F376BCCB`).
 4. **APK QA candidate (CHƯA NGHIỆM THU):** Debug vc121 `0.6.96-beta`, 33.812.590 B, SHA-256 `F376BCCBAB9B9FD9381FB7EA08068BDD9203AACB4C00078E282560971F8D77E7`, cert `eecd3df7…fce8`. Drive owner-only: [thư mục](https://drive.google.com/drive/folders/1Sm7XOBwnfh6cLwY0o8KcCvtUGt4IemRR), [APK](https://drive.google.com/file/d/10YNRVpKLeIU5WVH1B3gyyjKcIWmHVxaL/view?usp=drivesdk), [ảnh tổng hợp](https://drive.google.com/file/d/1PEXfWTYKmcnUqJdnhRHoQEGiMDuqwmLF/view?usp=drivesdk). Đã cài trên Sony `QV725WEQ54` (SHA bản cài khớp).
 5. **Gate Ni (trên `d52fe43`):** Debug/Release mỗi biến thể 201 suite, **2725 test, 21 skipped, 0 lỗi** (baseline 2698); assemble Shareable Debug/Release, `-PmeloOpen=true`, Personal Debug xanh; `git diff --check` sạch.
 6. **QA Sony:** Q1–Q7 PASS; Q8 (xoay ngang, chữ lớn) **CHƯA KIỂM**; soạn thư **CHƯA KIỂM** (Sony không có app email); **CHƯA XÁC NHẬN ÂM THANH THỰC**. Lỗi “chữ bị che” **không tái hiện trên Sony Android 12**; sửa theo phân tích mã, cần xem trên máy Android 15+.
 7. **Sony hiện:** vc121 bản `d52fe43`, màn OFF (`SONY_SCREEN_END`), prefs đã khôi phục (Gọn Tự động, Car Tắt, giả lập Tắt, công cụ nhà phát triển ẩn, màu Hiện tại, Lời nhạc đã đồng ý).
-8. **Chưa làm (đúng quy trình):** không merge/push/public; không nghiệm thu; không tự chọn nhiệm vụ kế. Email `ntdung.md@gmail.com` sẽ công khai khi push.
+8. **Sau ĐẠT (chỉ thị chủ dự án 02/11):** agent merge `--no-ff` vào `feature/e93-03d-y700-offline-cockpit` và push fast-forward lên `source/feature-e93-03d-y700-offline-cockpit` (xem mục đầu `HANDOFF.md` để biết SHA). Không đụng `main`, không push nhánh `dot/*`, **chưa phát hành APK công khai**. Không tự chọn nhiệm vụ kế. Email `ntdung.md@gmail.com` công khai cùng lần push.
 9. **File chưa commit:** không (ảnh/log ở `docs/plans/artifacts/…` bị `.gitignore`).
 
 | Bước | Trạng thái |
@@ -19,8 +19,8 @@
 | S9 (Tiny build + Sony QA) | Xong (Q8 chưa kiểm) |
 | S10 (Drive owner-only) | Xong, đã kiểm quyền |
 | S11 (hồ sơ + prompt sơ bộ) | Xong |
-| Nghiệm thu sơ bộ | Chưa |
-| Nghiệm thu chính thức | CHỜ CHỦ DỰ ÁN |
+| Nghiệm thu sơ bộ | Bỏ qua (chủ dự án ĐẠT trước) |
+| Nghiệm thu chính thức | **ĐẠT** (PASS kèm giới hạn) |
 
 ### 3–6 thao tác chủ dự án tự thử (Sony hoặc máy Android 15+)
 
