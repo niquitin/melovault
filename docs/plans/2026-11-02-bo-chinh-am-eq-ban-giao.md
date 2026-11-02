@@ -58,3 +58,36 @@ Làm theo docs/workflow/PROMPT_SONNET.md (hoặc PROMPT_CODEX.md nếu là Codex
 | Nghiệm thu sơ bộ / chính thức | Chưa làm |
 
 **Bước tiếp:** chủ dự án giao phiên Chặng 2 (S8). Dừng-điều-kiện như kế hoạch mục 9. Lưu ý cho Chặng 2: chụp bảng EQ ở cỡ Gọn và (nếu đổi được trong app) chữ lớn để kiểm chữ không bị cắt; lấy `logcat -s MeloEq` cho Q2/Q4/Q5; thử xoay khi bảng mở.
+
+## Checkpoint 3 — 02/11/2026, kết thúc Chặng 2 (S8–S11, thực thi Tiny + Sony)
+
+1. **Vai/phiên:** thực thi Chặng 2 (Claude Code, Sonnet 5.5), cùng phiên Chặng 1 theo lời chủ dự án “Làm ngay đây”. Nhánh `dot/2026-11-02-bo-chinh-am-eq`, worktree `D:\Bots\_worktrees\MeloVault-eq`, baseline `b90834f`. **HEAD mã = `e2faf85`** (mã EQ `7353587` + sửa hàng mẫu); sau đó chỉ commit hồ sơ.
+2. **Đã làm:** bundle SHA-256 khớp Ni/Tiny → Tiny clone cô lập build Debug có Telegram config → verify package/vc121/cert/SHA-256/bytes → cài một lệnh `adb install -r` (hai lần: bản đầu rồi bản sửa) → QA Q1–Q7 trên Sony → đo CPU/underrun EQ Bật vs Tắt → Drive owner-only (đã kiểm quyền) → hồ sơ. Chi tiết: [báo cáo](2026-11-02-bo-chinh-am-eq-bao-cao.md) mục 6–10; [apk-test](2026-11-02-bo-chinh-am-eq-apk-test.md); [hình](2026-11-02-bo-chinh-am-eq-hinh-nghiem-thu.md).
+3. **APK:** vc121 `0.6.96-beta`, 33.828.974 B, SHA-256 `146A42859CFDC3EB204FBE1396BEE1A4EFE40F0C02EC8DADE46415446E1F368D`, cert `eecd3df7…fce8`, nhãn **QA CANDIDATE — CHƯA NGHIỆM THU**. Gate Ni trên `e2faf85`: 2754 test/21 skipped/0 lỗi mỗi biến thể; mọi assemble xanh.
+4. **Lỗi QA:** hàng mẫu không cuộn tới chip “Tùy chỉnh” sau khi kéo thanh → đã sửa trong `e2faf85`, ảnh xác nhận. Không crash.
+5. **Chưa kiểm chứng:** **CHƯA XÁC NHẬN ÂM THANH THỰC**; xoay ngang / chữ lớn 1.3 / FLAC-hi-res / Nhạc trên máy / tai nghe-Bluetooth / máy khác / Release trên máy / tải Drive bằng trình duyệt. Số đo: EQ Bật ≈ 19–20% một nhân so với ≈ 13% khi Tắt (Debug), underrun không tăng; một số mẫu bị chặn biên khi nhiều dải dương chồng nhau (báo cáo mục 7) — chủ dự án nghe thử, có thể REWORK preamp.
+6. **Sony:** `SONY_SCREEN_END` Display State=OFF; EQ Tắt, Phẳng; Hẹn giờ không đụng; nhạc tạm dừng (do QA phát); app ở màn hình chính. Không đổi hiệu ứng hệ thống, không đăng xuất, không xóa dữ liệu.
+7. **Chưa merge/push** (chủ dự án chưa ĐẠT).
+
+| Bước | Trạng thái |
+|---|---|
+| S0–S7 (Chặng 1) | Xong |
+| S8 build Tiny, cài, QA Q1–Q7 | Xong (Q6 xoay/chữ lớn CHƯA KIỂM) |
+| S9 đo CPU/underrun | Xong |
+| S10 Drive owner-only | Xong (quyền đã kiểm; tải bằng trình duyệt chưa thử) |
+| S11 hồ sơ, trả Sony | Xong |
+| Nghiệm thu sơ bộ / chính thức | Chưa làm |
+
+**Bước tiếp:** chủ dự án mở phiên mới cho nghiệm thu sơ bộ nhanh, hoặc tự thử theo mục 11 của kế hoạch rồi trả lời `ĐẠT 2026-11-02-bo-chinh-am-eq — e2faf85/146A4285` hoặc `Yêu cầu sửa 2026-11-02-bo-chinh-am-eq: <lỗi>` (ví dụ chỉnh giá trị mẫu, thêm dư preamp). **Đã dừng. Mở phiên mới để nghiệm thu sơ bộ nhanh.**
+
+### Prompt nghiệm thu sơ bộ (dán vào phiên MỚI)
+
+```text
+MELOVAULT — PHIÊN NGHIỆM THU SƠ BỘ NHANH
+Repo/worktree: D:\Bots\_worktrees\MeloVault-eq   TASK_ID: 2026-11-02-bo-chinh-am-eq
+Nhánh: dot/2026-11-02-bo-chinh-am-eq   HEAD mã: e2faf85 (sau đó chỉ có commit hồ sơ)
+Đọc: CLAUDE.md → docs/plans/2026-11-02-bo-chinh-am-eq-bao-cao.md (mục 6–10) → -ban-giao.md → -apk-test.md → docs/workflow/PROMPT_NGHIEM_THU_SO_BO.md.
+Việc: git log b90834f..HEAD --oneline và git diff --stat; đọc kỹ MeloEqAudioProcessor.kt (luồng audio, bypass byte giống hệt, ramp preamp, reset ở onFlush) và đoạn eq trong ShareablePlaybackService.kt; chạy lại chỉ test MeloEq* nếu cần. Không sửa code, không build mới. Sony có thể dùng nhưng đừng tranh thiết bị.
+Ghi docs/plans/2026-11-02-bo-chinh-am-eq-nghiem-thu-so-bo.md: SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN / CẦN SỬA / BLOCKED, kèm phạm vi và giới hạn (CHƯA XÁC NHẬN ÂM THANH THỰC).
+Kết thúc: "Đã dừng, chờ chủ dự án nghiệm thu." + cách phản hồi ĐẠT / Yêu cầu sửa.
+```

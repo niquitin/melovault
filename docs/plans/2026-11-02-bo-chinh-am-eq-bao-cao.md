@@ -1,7 +1,7 @@
 # 2026-11-02-bo-chinh-am-eq — Báo cáo thực thi
 
 Vai: thực thi (Claude Code, Sonnet 5.5). Nhánh `dot/2026-11-02-bo-chinh-am-eq`, worktree `D:\Bots\_worktrees\MeloVault-eq`, baseline `b90834f`, HEAD đầu phiên `297d635` (commit kế hoạch).
-Phạm vi phiên này: **Chặng 1 (S0–S7)**, không cần thiết bị. Chặng 2 (S8–S11: Tiny build, Sony QA, đo CPU, Drive) **chưa làm**.
+Phạm vi: **Chặng 1 (S0–S7)** trên Ni (mục 1–5) và **Chặng 2 (S8–S11)** trên Tiny + Sony cùng phiên theo lời chủ dự án “Làm ngay đây” (mục 6–9). HEAD cuối: `e2faf85` (commit mã `7353587` + 1 sửa giao diện sau QA).
 
 ## 1. Kết quả theo bước
 
@@ -57,3 +57,57 @@ Bảng mẫu dB dùng đúng giá trị trong kế hoạch mục 4.3 (vẫn **[C
 ## 5. Việc còn lại (Chặng 2)
 
 S8 (bundle SHA256 → Tiny build có Telegram config → cài Sony → QA Q1–Q7 kèm `logcat -s MeloEq`, ảnh tổng hợp `00_tong_hop.png`), S9 (đo CPU/underrun, EQ Bật vs Tắt), S10 (Drive owner-only), S11 (hồ sơ, trả Sony về EQ Tắt/Phẳng, ghi `SONY_SCREEN_END`). Chủ dự án chưa giao Chặng 2 trong phiên này.
+
+---
+
+# Chặng 2 — build Tiny, QA Sony, đo, bàn giao
+
+## 6. S8 — build Tiny, cài và QA Sony
+
+| Mục | Giá trị |
+|---|---|
+| Bundle → Tiny (bản cuối) | `EQ-e2faf85_20261102.bundle` 13.830.095 B, SHA-256 `25AA16A3…B4BC7` (khớp Ni và Tiny). Bản đầu `EQ-7353587_20261102.bundle` 13.829.157 B, `2D66C9B9…7821` (khớp) dùng cho build đầu |
+| Clone / config | `C:\Bots\MeloVault-EQ-IsolatedQA-20261102-e2faf85`, detach `e2faf85`, cây sạch; `telegram.config.valid=true`. `local.properties` chép ngay trên Tiny từ clone QA trước (như tiền lệ nhiệm vụ Cài đặt), **không đọc/in** |
+| Build | `assembleShareableDebug` BUILD SUCCESSFUL 1m38s. APK 33.828.974 B, SHA-256 `146A42859CFDC3EB204FBE1396BEE1A4EFE40F0C02EC8DADE46415446E1F368D`, `app.melovault.player` vc121 / `0.6.96-beta`, debuggable, cert `eecd3df7…fce8` (bằng cert app đang cài, kiểm bằng `apksigner` trên `base.apk` kéo từ máy) |
+| Gate cài | Sony `XQ-AS52` Sony, `device`, vc121 = vc121, cert khớp, không có phiên phát, màn OFF; **một** lệnh `adb -s QV725WEQ54 install -r` → Success (làm hai lần: bản đầu `7353587` `03309F19…F36A` rồi bản sửa `e2faf85`) |
+| Bản cài lúc đầu | `F376BCCB…77E7` (nhiệm vụ Cài đặt, commit `d52fe43`) — bị thay, không mất dữ liệu |
+
+QA dùng bài đã tải (MP3 44,1 kHz 320 kbps). Nhạc phát thật qua trình phát; agent **không nghe được** → **CHƯA XÁC NHẬN ÂM THANH THỰC**; bằng chứng là log `MeloEq` và số đo.
+
+| # | Thao tác | Kỳ vọng | Thực tế | Kết quả |
+|---|---|---|---|---|
+| Q1 | Mở Đang phát, chạm EQ | Chip “EQ” không tô; bảng mở, Tắt, Phẳng, 10 thanh 0 dB, chữ không cắt | Đúng (ảnh 03, 04). Cỡ Gọn tự động; hàng mẫu cuộn ngang | PASS |
+| Q2 | Bật EQ → Tăng bass | Thanh 31–250 Hz = +6/+5/+4/+2; log `enabled=true preset=bass_up preampDb=-6`; ≤10 s có `stats`; nhạc không dừng | Đúng. `stats inRmsDb=-8,7 outRmsDb=-13,0 clipped=0`; `state=3` PLAYING, vị trí liên tục | PASS |
+| Q3 | Kéo 1 kHz +4 | Chuyển “Tùy chỉnh”, dải khác giữ | Log `preset=custom gains=6,5,4,2,0,2…→4…`; **lỗi giao diện:** hàng mẫu dựng lại và cuộn về đầu nên chip “Tùy chỉnh” ngoài màn hình, không chip nào sáng | PASS chức năng; lỗi UI **đã sửa** `e2faf85` (ảnh 12 xác nhận) |
+| Q4 | Đóng bảng, chip; app khởi động lại → phát → mở bảng | Chip “EQ · Tùy chỉnh” tô màu; sau khởi động lại còn Bật + giá trị đúng | Cài lại APK làm tiến trình mới (pid 26925→27453); `settings enabled=true preset=custom gains=6,5,4,2,0,4…` áp lúc service tạo; chip “EQ · Tùy chỉnh” tô màu; bảng mở có “Tùy chỉnh” sáng (ảnh 12). Không vuốt app khỏi đa nhiệm (thay bằng cài lại) | PASS |
+| Q5 | Tắt EQ | Chip về “EQ”; không còn `stats` | Chip về “EQ” (ảnh 15); log `enabled=false`, không dòng `stats` sau đó; thanh vẫn hiện, bảng mờ (ảnh 14) | PASS |
+| Q6 | Tiến, +60 s, xoay, chữ lớn | Không crash, phát tốt | Tiến → `state=3` vị trí 5,8 s, log `configure sr=44100 enc=2 ch=2`; +60 s → 66,4 s; `logcat -b crash` không có dòng app. **Xoay ngang và chữ lớn 1.3: CHƯA KIỂM** (cần đổi cài đặt hệ thống) | PASS (xoay/chữ lớn: CHƯA KIỂM) |
+| Q7 | Đặt lại, trả EQ Tắt | Phẳng, Tắt | Log `preset=flat` rồi `enabled=false`; 10 thanh 0 dB (ảnh 18) | PASS |
+
+Lỗi QA và xử lý: (1) hàng mẫu không cuộn tới chip đang chọn → đã sửa (`MeloEqPanel.presetRow`, commit `e2faf85`). Không crash. Ảnh có ảnh bìa của người thật (Deck bài #3) **không** đưa lên Drive/ảnh tổng hợp; ảnh thư viện (có tên bài) cũng không upload.
+
+`SONY_SCREEN_END`: màn tắt bằng `keyevent 223` trong `finally`, xác minh `Display State=OFF`, `mWakefulness=Dozing`; nhạc **tạm dừng** (do QA phát, không phải phiên của chủ dự án), app ở màn hình chính. EQ về **Tắt, Phẳng**; Hẹn giờ không đụng tới; không đổi hiệu ứng âm thanh hệ thống, không đăng xuất, không xóa dữ liệu. Ảnh tổng hợp `docs/plans/artifacts/2026-11-02-bo-chinh-am-eq/00_tong_hop.png` (ảnh nằm `.gitignore`).
+
+## 7. S9 — đo EQ Bật và Tắt (Sony, Debug, ~2 phút mỗi lượt, cùng bài)
+
+| Chỉ số | EQ Bật (Rock) | EQ Tắt |
+|---|---|---|
+| CPU tiến trình (Δ thời gian CPU / thời gian) | ≈ 20,4 s / ~105 s ≈ **19–20%** của 1 nhân | ≈ 13,5 s / ~105 s ≈ **13%** của 1 nhân |
+| Xử lý EQ (log) | 1,6–2,3 ms mỗi buffer | không lọc (bypass) |
+| `dumpsys media.audio_flinger` | FastMixer `underruns=16` trước và sau (không tăng); “Normal mixer empty” 151→153 | `underruns=16` trước và sau; empty 163→163 |
+| Mẫu bị chặn biên | Rock: 0–22 / 10 s (≈ 882.000 mẫu); Tăng bass + 1 kHz +4: 104–215 / 10 s trên đoạn to nhất (RMS vào −8 dB) | — |
+
+Kết luận: EQ làm tăng khoảng **7 điểm phần trăm 1 nhân** trên máy này (Debug, 44,1 kHz stereo), **underrun không tăng**, không nghe/ghi nhận ngắt nhạc. Chưa đo Release, hi-res (96/192 kHz) hay máy khác. Chặn biên cứng đủ để không tràn nhưng khi nhiều dải dương chồng nhau (Tăng bass + 1 kHz +4) preamp tự động −6 dB chưa đủ bù cho tổng các dải nên có vài trăm mẫu bị cắt mỗi 10 s ở đoạn to. Mức này rất nhỏ (~0,02%) nhưng chủ dự án nên nghe thử; nếu thấy rè có thể REWORK: preamp = −(tổng độ tăng gộp tính theo đáp tuyến) hoặc thêm dư 2–3 dB. Không tự đổi trong phiên này.
+
+## 8. Gate sau sửa giao diện
+Sau commit `e2faf85` gate đầy đủ chạy lại trên Ni: `:app:testShareableDebugUnitTest :app:testShareableReleaseUnitTest` BUILD SUCCESSFUL, mỗi biến thể **203 suite, 2754 test, 21 skipped, 0 fail, 0 error** (bằng số trước khi sửa vì chỉ đổi một hàm giao diện); `assembleShareableDebug/Release`, `-PmeloOpen=true` Debug, `assemblePersonalDebug` BUILD SUCCESSFUL; `git diff --check` sạch (log `s11-*.log`). Không chạy lại test trên Tiny.
+
+## 9. APK QA bàn giao chủ dự án nghiệm thu
+Xem [apk-test](2026-11-02-bo-chinh-am-eq-apk-test.md) và [hình](2026-11-02-bo-chinh-am-eq-hinh-nghiem-thu.md). Nhãn **QA CANDIDATE — CHƯA NGHIỆM THU**. Drive Ni N owner-only: thư mục `MeloVault-EQ-QA-CANDIDATE-20261102-vc121-e2faf85`, APK, `hinh` — `get_file_permissions` = chỉ `ntdung.md@gmail.com` (owner). Tải bằng trình duyệt chưa thử.
+
+## 10. Chưa kiểm / giới hạn còn lại
+- **CHƯA XÁC NHẬN ÂM THANH THỰC**; chỉ Sony XQ-AS52 (Android 12), bài MP3 44,1 kHz. Chưa thử FLAC/hi-res/“Nhạc trên máy”, tai nghe/Bluetooth, Y700/S25/FYT.
+- Xoay ngang / chữ lớn 1.3 / Teal sáng / Gọn thủ công: chưa kiểm. Bảng EQ khi activity bị tạo lại: chưa thử.
+- Hiệu ứng hệ thống Sony (Dolby/ClearAudio+): không đổi; nếu đang bật thì cộng thêm lên EQ của app.
+- Thanh trượt tô từ trái sang thumb (cả quanh mức 0) và công tắc dùng màu hệ thống (xanh) — chưa theo màu nhấn; chip phía sau bảng chỉ cập nhật sau khi đóng bảng. Đều là chi tiết thẩm mỹ, chưa sửa.
+- Release/`.open`/Personal chạy trên máy: chưa.
