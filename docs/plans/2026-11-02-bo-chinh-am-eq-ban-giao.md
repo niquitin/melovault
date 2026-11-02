@@ -42,3 +42,19 @@ Làm theo docs/workflow/PROMPT_SONNET.md (hoặc PROMPT_CODEX.md nếu là Codex
 ```
 
 Đã dừng. Mở phiên mới, chọn model thực thi tiết kiệm hơn theo lựa chọn của chủ dự án.
+
+## Checkpoint 2 — 02/11/2026, kết thúc Chặng 1 (S0–S7, thực thi Ni)
+
+1. **Vai/phiên:** thực thi Chặng 1 (Claude Code, Sonnet 5.5). Nhánh `dot/2026-11-02-bo-chinh-am-eq`, worktree `D:\Bots\_worktrees\MeloVault-eq`, baseline `b90834f`. HEAD = commit mã (xem `git log -1`) trên commit kế hoạch `297d635`.
+2. **Đã làm:** S0–S7 xong. Baseline 2725/21/0/0 → sau thay đổi **2754 test**, 21 skipped, 0 fail/error, mỗi biến thể Debug/Release (203 suite). Build Shareable Debug/Release, `-PmeloOpen=true`, Personal Debug đều xanh; `git diff --check` sạch. Chi tiết: [báo cáo](2026-11-02-bo-chinh-am-eq-bao-cao.md).
+3. **File:** mới `MeloEqPolicy.kt`, `MeloEqAudioProcessor.kt`, `MeloEqPanel.kt` (+ 2 file test); sửa `ShareablePlaybackService.kt`, `MeloStudioDeck.kt`. Cờ hoàn tác `MeloEqPolicy.FEATURE_ENABLED`.
+4. **Chưa kiểm chứng:** mọi thứ trên thiết bị — bố cục bảng EQ, chip, log `MeloEq`, chuyển bài/tua/xoay với EQ Bật, CPU/underrun, âm thanh thực (CHƯA XÁC NHẬN ÂM THANH THỰC). Chưa có APK, chưa có ảnh.
+5. **Chưa merge/push** (chủ dự án chưa ĐẠT).
+
+| Bước | Trạng thái |
+|---|---|
+| S0–S7 (Chặng 1) | **Xong** |
+| S8–S11 (Chặng 2: Tiny build, Sony QA, đo CPU, Drive, hồ sơ) | Chưa làm — chờ chủ dự án giao |
+| Nghiệm thu sơ bộ / chính thức | Chưa làm |
+
+**Bước tiếp:** chủ dự án giao phiên Chặng 2 (S8). Dừng-điều-kiện như kế hoạch mục 9. Lưu ý cho Chặng 2: chụp bảng EQ ở cỡ Gọn và (nếu đổi được trong app) chữ lớn để kiểm chữ không bị cắt; lấy `logcat -s MeloEq` cho Q2/Q4/Q5; thử xoay khi bảng mở.
