@@ -42,3 +42,8 @@ Phạm vi cần kiểm nhanh: diff 8a8c978..HEAD chỉ gồm MeloHeaderFoldPolic
 ```
 
 Lời kết dự kiến: “Đã dừng. Mở phiên mới để nghiệm thu sơ bộ nhanh.”
+
+## Checkpoint 4 — 02/11/2026, chủ dự án nghiệm thu ĐẠT
+
+- Chủ dự án nhắn “Đã đạt” trong chat 02/11/2026. Ghi vào [`-nghiem-thu.md`](2026-11-01-nhay-header-khi-cuon-nghiem-thu.md): **ĐẠT — PASS kèm giới hạn**, đúng commit mã `4fe5a37`, APK `E5D808D2…6B74`. Không có sơ bộ độc lập.
+- Chưa merge/push/public; không tự chọn nhiệm vụ kế. Việc còn mở: chỉ thị merge riêng (nếu có), Q6 Hai khung, phương án B nếu muốn header gấp ngay lúc kéo.
