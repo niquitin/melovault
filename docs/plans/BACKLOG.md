@@ -45,6 +45,7 @@ Mỗi việc dưới đây cần chủ dự án giao riêng; quy trình 29/10 (l
 
 ## 2. EQ
 - Nút EQ ở Studio Deck hiện ghi "Sắp có". Cần quyết định phạm vi (EQ ExoPlayer/AudioEffect, bit-perfect, DSP FYT) trước khi code. Không đổi ExoPlayer/MediaSession khi chưa có plan.
+- **02/11/2026: đã lập kế hoạch** `docs/plans/2026-11-02-bo-chinh-am-eq.md` (chủ dự án chốt: EQ tự xử lý trong app bằng Media3 AudioProcessor, mẫu sẵn + 10 dải, chỉ mở từ nút EQ ở Đang phát, EQ theo đầu ra để sau). Chờ phiên thực thi.
 
 ## 3. Tìm không dấu
 - DB dùng `LIKE`, phân biệt dấu: "su thanh hoa" không ra "Sử Thanh Hóa". Cần cột/chỉ mục chuẩn hóa không dấu, có thể đổi schema → phải được duyệt, kèm migration an toàn cho DB đang có.
