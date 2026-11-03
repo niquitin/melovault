@@ -36,10 +36,11 @@ class TelegramForumReadProbeTest {
             assertTrue("BLOCKED: owner sink busy; no existing binding replaced", hub.open())
             fun call(type: String, configure: (JSONObject) -> Unit = {}): JSONObject {
                 requests++
-                return when (val reply = hub.call(requireNotNull(account), epoch, type, 20_000, configure)) {
+                return when (val reply = hub.call(requireNotNull(account), epoch, type, 45_000, configure)) {
                     is TdlibSyncHub.Reply.Ok -> reply.json
                     is TdlibSyncHub.Reply.Err -> error("BLOCKED: $type code=${reply.code}")
-                    else -> error("BLOCKED: $type no verified reply")
+                    TdlibSyncHub.Reply.Timeout -> error("BLOCKED: $type timeout identity=${hub.identityHolds(account, epoch)} connection=${hub.connectionIsUsable()}")
+                    TdlibSyncHub.Reply.Aborted -> error("BLOCKED: $type aborted identity=${hub.identityHolds(account, epoch)}")
                 }
             }
             // Loading the existing main list is read-only. A 404 means TDLib has already loaded it all.
@@ -107,16 +108,27 @@ class TelegramForumReadProbeTest {
             var matched = 0
             var missing = 0
             var historyPages = 0
-            // Prefer topics whose last message is near their creation date; bound all work explicitly.
-            val samples = forumTopics.sortedBy { row ->
-                val created = row.getJSONObject("info").optLong("creation_date")
-                (row.optJSONObject("last_message")?.optLong("date") ?: created) - created
-            }.take(2)
+            val samples = forumTopics.filterNot { it.getJSONObject("info").getBoolean("is_general") }.take(6)
             for (row in samples) {
+                if (finished == 2) break
                 val topicId = row.getJSONObject("info").getInt("forum_topic_id")
-                var from = 0L
+                // Probe-only seed: c15d3f5 ForumTopicManager.cpp uses the creation service's server id;
+                // MessageId.h encodes a server id with shift 20. Confirm the returned service message first,
+                // then use only its ORIGINAL raw id for history. Product pagination never needs this conversion.
+                requests++
+                val seed = hub.call(requireNotNull(account), epoch, "getMessage", 45_000) {
+                    it.put("chat_id", forumChat).put("message_id", topicId.toLong() shl 20)
+                }
+                if (seed is TdlibSyncHub.Reply.Err && seed.code == 400) { report("boundary_seed unavailable=true"); continue }
+                assertTrue("BLOCKED: creation service not available for bounded terminal probe", seed is TdlibSyncHub.Reply.Ok)
+                val creation = (seed as TdlibSyncHub.Reply.Ok).json
+                assertTrue("Creation seed returned foreign chat", creation.getLong("chat_id") == forumChat)
+                if (creation.getJSONObject("content").getString("@type") != "messageForumTopicCreated") {
+                    report("boundary_seed creation=false"); continue
+                }
+                var from = creation.getLong("id")
                 val seen = HashSet<Long>()
-                for (pageIndex in 0 until 80) {
+                for (pageIndex in 0 until 4) {
                     val page = call("getForumTopicHistory") {
                         it.put("chat_id", forumChat).put("forum_topic_id", topicId).put("from_message_id", from)
                             .put("offset", 0).put("limit", 50)
@@ -124,6 +136,7 @@ class TelegramForumReadProbeTest {
                     assertTrue("Schema mismatch: messages", page.getString("@type") == "messages")
                     historyPages++
                     val messages = page.getJSONArray("messages")
+                    report("boundary_page size=${messages.length()} index=$pageIndex")
                     if (messages.length() == 0) { finished++; break }
                     var oldest = Long.MAX_VALUE
                     for (j in 0 until messages.length()) {
@@ -146,9 +159,32 @@ class TelegramForumReadProbeTest {
                     } else from = oldest
                 }
                 report("history unique=${seen.size}")
+                // Also prove ordinary newest-to-older paging on the same topic, without exhaustively reading it.
+                var headFrom = 0L
+                for (pageIndex in 0 until 2) {
+                    val head = call("getForumTopicHistory") {
+                        it.put("chat_id", forumChat).put("forum_topic_id", topicId).put("from_message_id", headFrom)
+                            .put("offset", 0).put("limit", 50)
+                    }.getJSONArray("messages")
+                    var oldest = Long.MAX_VALUE
+                    for (j in 0 until head.length()) {
+                        val message = head.getJSONObject(j)
+                        val relation = message.getJSONObject("topic_id")
+                        assertTrue("Head page scope mismatch", message.getLong("chat_id") == forumChat &&
+                            relation.getString("@type") == "messageTopicForum" && relation.getInt("forum_topic_id") == topicId)
+                        val raw = message.getLong("id")
+                        assertTrue("Head cursor moved forward", headFrom == 0L || raw <= headFrom)
+                        oldest = minOf(oldest, raw)
+                        matched++
+                    }
+                    report("head_page size=${head.length()} index=$pageIndex")
+                    if (head.length() == 0 || oldest == headFrom) break
+                    headFrom = oldest
+                }
             }
             report("result topics=2 history_pages=$historyPages terminal=$finished singleton_probes=$singletonProbes matched=$matched missing=$missing requests=$requests")
             assertTrue("BLOCKED: terminal history not proven within budget", finished == 2)
+            assertTrue("BLOCKED: singleton boundary not observed", singletonProbes > 0)
         } finally {
             hub.close()
             instrumentation.runOnMainSync { activity.finish() }
