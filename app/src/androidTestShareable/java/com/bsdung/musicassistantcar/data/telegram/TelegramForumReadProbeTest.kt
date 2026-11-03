@@ -54,6 +54,7 @@ class TelegramForumReadProbeTest {
                 it.put("chat_list", JSONObject().put("@type", "chatListMain")).put("limit", 100)
             }.getJSONArray("chat_ids")
             var regular = false
+            var regularChat = 0L
             var forumChat = 0L
             var forumTopics: List<JSONObject> = emptyList()
             var generalSeen = false
@@ -65,9 +66,9 @@ class TelegramForumReadProbeTest {
                 val chat = call("getChat") { it.put("chat_id", chats.getLong(i)) }
                 val chatId = chat.getLong("id")
                 val type = chat.getJSONObject("type")
-                if (type.optString("@type") != "chatTypeSupergroup") { regular = true; continue }
+                if (type.optString("@type") != "chatTypeSupergroup") { regular = true; regularChat = chatId; continue }
                 val group = call("getSupergroup") { it.put("supergroup_id", type.getLong("supergroup_id")) }
-                if (!group.getBoolean("is_forum")) { regular = true; continue }
+                if (!group.getBoolean("is_forum")) { regular = true; regularChat = chatId; continue }
                 if (forumChat != 0L) continue
                 val topics = LinkedHashMap<Int, JSONObject>()
                 var date = 0
@@ -103,8 +104,14 @@ class TelegramForumReadProbeTest {
             report("catalogue pages=$cataloguePages visible=${forumTopics.size} general=$generalSeen end=$catalogueEnd repeated=$cursorRepeated regular=$regular")
             assertTrue("BLOCKED: no existing forum with two visible topics in bounded discovery", forumChat != 0L)
             assertTrue("BLOCKED: no regular source in bounded discovery", regular)
+            val regularHistory = call("getChatHistory") {
+                it.put("chat_id", regularChat).put("from_message_id", 0).put("offset", 0).put("limit", 1).put("only_local", false)
+            }
+            assertTrue("Regular source history schema mismatch", regularHistory.getString("@type") == "messages")
+            report("regular_history read=true size=${regularHistory.getJSONArray("messages").length()}")
             var finished = 0
             var singletonProbes = 0
+            var terminalSingletons = 0
             var matched = 0
             var missing = 0
             var historyPages = 0
@@ -126,7 +133,20 @@ class TelegramForumReadProbeTest {
                 if (creation.getJSONObject("content").getString("@type") != "messageForumTopicCreated") {
                     report("boundary_seed creation=false"); continue
                 }
-                var from = creation.getLong("id")
+                // TDLib may omit the creation service from topic history. Read the first actual message
+                // immediately after it, using the documented negative offset (bounded to ONE message).
+                val earliest = call("getForumTopicHistory") {
+                    it.put("chat_id", forumChat).put("forum_topic_id", topicId)
+                        .put("from_message_id", creation.getLong("id")).put("offset", -1).put("limit", 1)
+                }.getJSONArray("messages")
+                report("boundary_seed_page size=${earliest.length()}")
+                if (earliest.length() != 1) continue
+                val first = earliest.getJSONObject(0)
+                val firstTopic = first.getJSONObject("topic_id")
+                assertTrue("Earliest message scope mismatch", first.getLong("chat_id") == forumChat &&
+                    firstTopic.getString("@type") == "messageTopicForum" && firstTopic.getInt("forum_topic_id") == topicId)
+                var from = first.getLong("id")
+                var lastBoundarySize = 1
                 val seen = HashSet<Long>()
                 for (pageIndex in 0 until 4) {
                     val page = call("getForumTopicHistory") {
@@ -137,7 +157,12 @@ class TelegramForumReadProbeTest {
                     historyPages++
                     val messages = page.getJSONArray("messages")
                     report("boundary_page size=${messages.length()} index=$pageIndex")
-                    if (messages.length() == 0) { finished++; break }
+                    if (messages.length() == 0) {
+                        finished++
+                        if (lastBoundarySize == 1) terminalSingletons++
+                        break
+                    }
+                    lastBoundarySize = messages.length()
                     var oldest = Long.MAX_VALUE
                     for (j in 0 until messages.length()) {
                         val message = messages.getJSONObject(j)
@@ -182,9 +207,9 @@ class TelegramForumReadProbeTest {
                     headFrom = oldest
                 }
             }
-            report("result topics=2 history_pages=$historyPages terminal=$finished singleton_probes=$singletonProbes matched=$matched missing=$missing requests=$requests")
+            report("result topics=2 history_pages=$historyPages terminal=$finished terminal_singletons=$terminalSingletons inclusive_probes=$singletonProbes matched=$matched missing=$missing requests=$requests")
             assertTrue("BLOCKED: terminal history not proven within budget", finished == 2)
-            assertTrue("BLOCKED: singleton boundary not observed", singletonProbes > 0)
+            assertTrue("BLOCKED: singleton terminal page not observed", terminalSingletons == 2)
         } finally {
             hub.close()
             instrumentation.runOnMainSync { activity.finish() }

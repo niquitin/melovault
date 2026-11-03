@@ -103,4 +103,12 @@ class TelegramForumContractTest {
         assertFalse(page.complete)
         assertEquals(1L, page.nextMessageId)
     }
+
+    @Test fun nativeExclusiveBoundaryCanFinishOnlyAfterAnEmptyPage() {
+        val page = contract.historyPage(history(message(9000000001L)), -10001L, 71, 0)
+        assertFalse(page.complete)
+        val end = contract.historyPage(history(), -10001L, 71, page.nextMessageId)
+        assertTrue(end.complete)
+        assertFalse(end.boundaryProbe)
+    }
 }
