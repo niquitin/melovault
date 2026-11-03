@@ -1,37 +1,62 @@
 # Bàn giao — Widget Đang phát
-Checkpoint A hoàn tất · 03/11/2026 · Codex thực thi, phiên đang hoạt động; không có agent phụ. Chuẩn bị commit source rồi tiếp B.
+Checkpoint cuối phiên thực thi · 03/11/2026 · Codex; model/effort không được công cụ phiên cung cấp. Code/build/QA đã dừng; chỉ hoàn tất commit hồ sơ và kiểm Git. Không agent phụ hoặc tác vụ nền nhiệm vụ.
 
-- HEAD bắt đầu/commit kế hoạch: `192170642163c69229c8945b54c26f7ac2d5a80f`; baseline `b90834f44457b60a9732e59e59c1bc9c971368c3`.
-- Git sạch khi bắt đầu; fetch `github` thành công; ahead 1 / behind 0 so với nhánh tích hợp remote, chưa có upstream.
-- [Báo cáo thực thi](2026-11-03-widget-dang-phat-bao-cao.md). A0–A7 xong gate Ni; chưa QA launcher/Telegram/âm thanh thật. Source commit sẽ chứa checkpoint này; lấy SHA bằng git log thay vì tự tham chiếu.
-- Chưa commit: bốn lớp widget mới, manifest, LocalSourcePolicy, PlaybackService, PreviewActivity, tài nguyên Shareable, test policy và hai hồ sơ. Đối chiếu danh sách bằng git status/diff; không nhận thay đổi ngoài danh sách này.
-- Targeted đã BUILD SUCCESSFUL, 12 test / 0 skipped / 0 lỗi. Full lượt 2 BUILD SUCCESSFUL: mỗi Debug/Release 202 suite, 2.737 test / 2.716 passed / 21 skipped / 0 failure/error, log `a7-tests-r2-20261103.log`. Hai lượt thất bại trước đã lưu lý do trong báo cáo.
-- Assemble Shareable Debug/Release BUILD SUCCESSFUL 2m13s; .open 26s; Personal 28s. `telegram.config.valid=false` trên Ni; không cài/bàn giao các APK Ni. Merged manifests đã đối chiếu: widget có ở Shareable/.open, vắng Personal, exported=false, không quyền mới. Không còn Gradle job nhiệm vụ đang chạy.
-- Bước tiếp: commit explicit source/test/hồ sơ, ghi SHA nguồn; bundle chỉ nhánh widget, kiểm hash Ni/Tiny; clone Tiny cô lập, build cấu hình an toàn tại Tiny; gate APK rồi QA trên AVD riêng. Chưa có bundle/candidate Tiny.
-- Tài nguyên QA chuẩn bị: AVD mới `MeloVault_Widget_20261103`, serial riêng `emulator-5586`, launcher process Ni PID `22620`, no-window/no-audio/no-snapshot; Android API 36 x86_64. Chưa cài app. Không dùng AVD cũ.
-- Fixtures vô danh trong `artifacts/.../fixtures/`: âm thử A có ảnh nhúng hình vuông vàng/xanh/tím và tag ca sĩ `Nghe si QA A`; âm thử B thiếu bìa/ca sĩ. Không phải nhạc/dữ liệu người dùng; phải dọn khỏi AVD sau QA, giữ ảnh/log cần nghiệm thu.
-- Sony không dùng. Shanling đã bán theo luật gốc mới hơn; nội dung nhắc Shanling trong kế hoạch là lỗi thời. B chỉ QA trên môi trường riêng khi có đủ gate; không thay launcher/bản EQ.
-- Cleanup: chưa tạo tài nguyên tạm. Model/effort không được công cụ phiên cung cấp, không tự suy đoán.
+**A hoàn tất gate Ni; B BLOCKED ở QA bài đang phát và tải APK Drive. Chưa nghiệm thu, merge hoặc push.**
 
-| Mục | Trạng thái |
+## Định danh
+| Mục | Giá trị đã kiểm |
 |---|---|
 | TASK_ID / nhánh | `2026-11-03-widget-dang-phat` / `dot/2026-11-03-widget-dang-phat` |
-| Worktree trên Ni | `C:\Users\ntdun\.codex\worktrees\melovault-widget\MeloVault-E91-Shareable` |
-| SHA nguồn trước lập kế hoạch | `b90834f44457b60a9732e59e59c1bc9c971368c3` (tích hợp sau Cài đặt) |
-| Mốc kế hoạch | Commit tài liệu mang tên `docs(widget): plan Android now playing widget and implementation handoff`. Lấy SHA bằng `git log -1 --format=%H -- docs/plans/2026-11-03-widget-dang-phat.md` ngay đầu phiên thực thi. |
-| Đã làm | Đối chiếu manifest Shareable, lifecycle service, NextAwarePlayer, đường metadata/ảnh Telegram và local, chọn phạm vi với chủ dự án. Đã viết [kế hoạch chi tiết](2026-11-03-widget-dang-phat.md). |
-| Đầu ra đã tạo | Chỉ hai file kế hoạch và bàn giao. Không có source widget, APK, log test, ảnh QA hay kết luận nghiệm thu. |
-| Việc tiếp theo | **A0**, kiểm checkout/gate phiên mới, sau đó A1–A7 trên Ni. Sau commit mã mới dùng SHA đó cho chặng B. |
-| Ràng buộc thiết bị | Sony đang giữ bản EQ, không dùng cho widget. Chặng B kiểm launcher bằng máy QA riêng và Shanling nếu đủ gate; ghi rõ mọi giới hạn. |
+| Worktree Ni | `C:/Users/ntdun/.codex/worktrees/melovault-widget/MeloVault-E91-Shareable` |
+| Baseline | `b90834f44457b60a9732e59e59c1bc9c971368c3` |
+| Kế hoạch / HEAD đầu phiên | `192170642163c69229c8945b54c26f7ac2d5a80f` |
+| Source commit / APK | **`49ed94ccbd73abb2d9443828ede26c205e1e9e56`** |
+| Commit hồ sơ/checkpoint | Lấy `git log -1 --format=%H -- docs/plans/2026-11-03-widget-dang-phat-ban-giao.md`; tránh SHA tự tham chiếu. Các commit sau source chỉ hồ sơ. |
+| Git đầu phiên | Sạch, đúng nhánh/baseline; fetch github, ahead1/behind0 so remote tích hợp; chưa upstream; không code lạ nhận bàn giao |
+| Remote | `github` → `https://github.com/niquitin/melovault.git`; chưa push nhiệm vụ |
 
-## Prompt giao phiên thực thi mới
-```text
-MELOVAULT — THỰC THI WIDGET ĐANG PHÁT
-TASK_ID: 2026-11-03-widget-dang-phat
-Worktree: C:\Users\ntdun\.codex\worktrees\melovault-widget\MeloVault-E91-Shareable
-Nhánh: dot/2026-11-03-widget-dang-phat
-Baseline: b90834f44457b60a9732e59e59c1bc9c971368c3 + commit kế hoạch trên chính nhánh.
-Đọc CLAUDE.md mục 0 trước, AGENTS.md, chỉ mục HANDOFF/BACKLOG, quy trình ba vai, file -ban-giao.md và docs/plans/2026-11-03-widget-dang-phat.md. Kiểm Git đầu phiên; bắt đầu A0. Chỉ một agent sửa code mỗi lúc.
-Chủ dự án chọn widget Home Android hiển thị bìa thật nếu có, tên bài, ca sĩ và Bài trước / Phát hoặc Tạm dừng / Bài tiếp. Làm theo mục 4–7 của plan. Chú ý performer khác tên nguồn và dùng NextAwarePlayer cho bài Telegram chưa tải. Không đụng nhánh/tính năng EQ và không cài hay QA trên Sony đang giữ EQ.
-Thực hiện chặng A trên Ni, ghi checkpoint để có thể đổi model. Sau đó theo chặng B để bàn giao APK + ảnh nếu đủ gate; ghi BLOCKED đúng bước nếu thiếu điều kiện. Tạo báo cáo và cập nhật bàn giao ngay sau mỗi mốc. Commit trên nhánh nhiệm vụ. Kết thúc chặng cuối thì đưa prompt cho phiên sơ bộ mới; không tự nghiệm thu, merge hay push.
-```
+[Kế hoạch](2026-11-03-widget-dang-phat.md) · [Báo cáo](2026-11-03-widget-dang-phat-bao-cao.md) · [APK và lỗi tải](2026-11-03-widget-dang-phat-apk-test.md) · [Ảnh](2026-11-03-widget-dang-phat-hinh-nghiem-thu.md) · [Prompt sơ bộ mới](2026-11-03-widget-dang-phat-prompt-nghiem-thu-so-bo.md).
+
+## Quyết định/phạm vi còn hiệu lực
+- Widget Home: bìa thật nếu có, tên, ca sĩ thật hoặc unknown; Previous / PLAY-PAUSE / Next; source Shareable thường/.open, Personal không provider. Không EQ, schema/songKey/package/signer/version/quyền/TDLib auth mới.
+- Sony giữ candidate EQ: **không cài, QA hoặc điều khiển Sony**. Shanling đã bán theo CLAUDE.md/BACKLOG, tham chiếu trong plan lỗi thời.
+- Không tự đổi model/giao agent, nghiệm thu chính thức, merge, push/public hoặc chọn nhiệm vụ mới. Phiên mới theo vai sơ bộ do chủ dự án mở/chọn model; tiếp B cần môi trường QA được giao, không né auth hay chặn Drive.
+
+## Bảng checkpoint
+| Bước | Trạng thái | Bằng chứng / còn lại |
+|---|---|---|
+| A0 | Xong | Đọc luật/chỉ mục/quy trình/plan và kiểm Git |
+| A1–A6 | Xong gate Ni | Policy/generation/fence12 test; performer riêng; provider/RemoteViews; sessionPlayer/NextAware commands; ảnh worker owner/epoch/generation. Runtime bìa/transport còn BLOCKED |
+| A7 | Xong | Mỗi Debug/Release 202 suite,2737 tổng,2716 passed,21 skipped,0 lỗi. Assemble Debug/Release/.open/Personal xanh; manifest flavor và diff-check sạch |
+| B bundle/clone/build | Xong gate kỹ thuật | Bundle SHA Ni/Tiny khớp; clone sạch/detach49ed94c; Tiny config=true, build exit0 |
+| B gate APK/cài | Xong kỹ thuật | Package/version/cert/hash/bytes kiểm; cài AVD mới install-r Success, installed SHA khớp |
+| Q1 | Đã kiểm | Picker/preview4x2, add widget trống, nút disabled, cold-open không tự phát |
+| Q2–Q4 playback/artwork | **BLOCKED** | AVD chưa account QA đăng nhập; app khóa cả mở tệp trước đăng nhập. Bìa thật lên launcher/performer/pause-resume/skip/next Telegram/Deck có bài chưa chứng minh |
+| Q5 | Một phần | Resize4→3 cột, hai ids2/3 tồn tại trên hai Home page; chưa đổi bài/chữ lớn/API30/31 |
+| Q6 | **BLOCKED** | Chưa phiên phát để kiểm xóa widget cuối giữ music/thêm lại bài; kéo thử chưa xóa qua dumpsys, không ghi PASS |
+| Ảnh Drive | Xong | Tổng hợp6 khung +6 gốc, owner-only/shared=false/bytes khớp; tổng hợp mở Ni và authenticated fetch thành công |
+| Tải APK Drive | **BLOCKED — CHƯA BÀN GIAO** | Upload owner-only xong, authenticated fetch403 cannotDownloadAbusiveFile. Không coi link APK là tải được, không retry abuse/public/hosting khác |
+| Cleanup | Xong tài nguyên không cần | AVD và file tạm đã dọn; retained rõ bên dưới, không job nhiệm vụ chạy |
+
+## APK / bằng chứng
+- **QA CANDIDATE — CHƯA NGHIỆM THU**: Debug thường `app.melovault.player`, vc121 / `0.6.96-beta`, config=true, 33.839.028B.
+- SHA256 `3C37DBE24337443E417F0B53CC27198FE3AE8D28048C84615586BB3B16221F75`; certificate `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8`. Tiny→Ni→installed AVD hash khớp, apksigner verify đạt.
+- Ni candidate: `docs/plans/artifacts/2026-11-03-widget-dang-phat/MeloVault-widget-QA-v121-49ed94c-3C37DBE2.apk`.
+- Tiny clone/candidate: `C:/Bots/MeloVault-WIDGET-IsolatedQA-20261103-49ed94c`, `app/build/outputs/apk/shareable/debug/app-shareable-debug.apk`; sạch/detach49ed94c.
+- Tiny device `DESKTOP-HNP4GVR`, DC id `9c7f081b-6e1c-4221-ac78-da470bab1e5d`. Build r2 PID19436 đã kết thúc exit0; log/exit/metadata giữ tại `C:/Bots/_qa_temp/widget-20261103-49ed94c-r2.*`; không build đang chạy.
+- Source bundle Ni `widget-49ed94c-20261103.bundle`,13.829.530B, SHA256 `08AE1D6CC063D529A067D3E9F5D6A731D4D97F19273C281A67744D452DBA58B3`, git bundle verify đạt; bản chuyển tạm Tiny đã dọn.
+- Logs Ni/XML/manifest/ảnh/source hash/Drive metadata/cleanup proof: `docs/plans/artifacts/2026-11-03-widget-dang-phat/` (không commit). Lượt test/build chưa đạt trước được ghi đúng trong báo cáo, không tính xanh.
+- [Drive riêng tư](https://drive.google.com/drive/folders/1n7KhjK_3mr3LlBJ74ZHaD6ZhrVuO7K8g), [ảnh tổng hợp](https://drive.google.com/file/d/1L5oFn0s003lQXao2Ibt3mWwxOb5ucuY2/view?usp=drivesdk). Chi tiết link APK bị chặn ở apk-test.
+- **Chưa xác nhận âm thanh thực hoặc bìa thật lên launcher.** Tests JVM, MediaSession NONE và ảnh empty không thay thế QA đang phát.
+
+## Cleanup / ownership
+- AVD mới riêng `MeloVault_Widget_20261103` / emulator-5586 / API36 / Pixel Launcher đã emu kill đúng tên, đợi transport biến mất, xóa directory/ini qua avdmanager sau kiểm đường dẫn không reparse/outside root. ADB không còn serial này; hai widget/app/media thử xóa cùng AVD.
+- `AVD_SCREEN_END=OFF` đo trước kill, `AVD_DELETED=true`; `SONY_SCREEN_END=không dùng`, `SHANLING_SCREEN_END=không dùng, đã bán`. Không đo/suy trạng thái màn Sony.
+- Đã dọn ba APK Ni vừa tạo cho compile (thường Release/.open Debug/Personal Debug), UI tap temp; Tiny symbolic link config + bundle chuyển tạm +2 wrapper build. Kiểm link đúng trước xóa, config gốc Tiny vẫn còn, clone nguồn sạch.
+- Giữ có chủ đích source clone/candidate Tiny, candidate/bundle Ni, test XML/log/manifest/ảnh/metadata và fixture A/B vô danh để sơ bộ/tiếp tục gate B. APK Drive bị chặn giữ private như hồ sơ lỗi, không gọi tải được. Không giữ emulator/server/watcher/tunnel/test job.
+- Không dừng daemon Gradle/Kotlin/ADB dùng chung, xóa config nguồn/dữ liệu người dùng/APK cũ/AVD khác, hoặc tác động EQ. `cleanup-verified-20261103.json` ghi kiểm Ni; log/exit Tiny còn để audit.
+
+## File chưa commit và bước phiên mới
+- Source49ed94c đã khóa. Lúc viết checkpoint chỉ thay hồ sơ TASK_ID, prompt sơ bộ và chỉ mục HANDOFF; sẽ commit explicit các file này. Phiên mới kiểm Git sạch/commit hồ sơ và `git diff 49ed94c..HEAD -- app/src app/build.gradle` phải rỗng, không nhận file lạ.
+- Bước kế được giao: **phiên sơ bộ mới** đọc prompt liên kết, kiểm nhanh source/diff/log/metadata và ghi đúng giới hạn BLOCKED. Không cần chạy lại toàn bộ gate khi source không đổi; không sửa code/build hoặc tự ghi PASS.
+- Để hoàn tất B sau này: cần môi trường QA đăng nhập do chủ dự án giao (không phải Sony EQ), thực hiện Q2–Q4/QA bìa thật/Q6, và giải quyết việc Drive chặn tải theo chỉ thị riêng. Không tự đăng nhập/chuyển TDLib, đổi auth/package/cert/version/hosting để né gate.
