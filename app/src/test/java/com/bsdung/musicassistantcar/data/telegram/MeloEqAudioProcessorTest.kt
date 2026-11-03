@@ -192,12 +192,12 @@ class MeloEqAudioProcessorTest {
 
     @Test
     fun bandsNearNyquistAreSkippedWithoutError() {
-        // At 32 kHz the 16 kHz band is above 0.45 x sample rate: skipped, only the -12 dB preamp remains.
+        // At 32 kHz the 16 kHz band is above 0.45 x sample rate: skipped, so there is no filter and no preamp either.
         val p = processor(32000, 1, C.ENCODING_PCM_FLOAT, custom(9 to 12))
         val src = sine(1000.0, 32000, 0.5, 0.4)
         val out = run(p, src, 1, C.ENCODING_PCM_FLOAT)
         assertTrue(out.all { it.isFinite() })
-        assertEquals(-12.0, gainDb(src, out), 0.2)
+        assertEquals(0.0, gainDb(src, out), 0.2)
     }
 
     @Test
@@ -254,6 +254,34 @@ class MeloEqAudioProcessorTest {
         val lines = ArrayList<String>()
         val p = MeloEqAudioProcessor().also { it.log = { line -> lines.add(line) } }
         p.settings = Settings(true, Preset.BASS_UP)
-        assertTrue(lines.single().contains("enabled=true preset=bass_up") && lines.single().contains("preampDb=-6"))
+        val line = lines.single()
+        assertTrue(line, line.contains("enabled=true preset=bass_up") && line.contains("preampDb=-"))
+    }
+
+    @Test
+    fun aFullScaleToneAtTheLoudestPointOfTheCurveIsNotClipped() {
+        val settings = Settings(true, Preset.BASS_UP)
+        val sr = 44100
+        // Find the frequency where the combined response peaks.
+        val gains = settings.gains()
+        val coeffs = MeloEqPolicy.BANDS_HZ.indices.filter { gains[it] != 0 }.map {
+            MeloEqPolicy.Biquad.peaking(MeloEqPolicy.BANDS_HZ[it].toDouble(), gains[it].toDouble(), MeloEqPolicy.Q, sr.toDouble())
+        }
+        var bestF = 20.0
+        var best = Double.NEGATIVE_INFINITY
+        var f = 20.0
+        while (f < 2000.0) {
+            val v = coeffs.sumOf { MeloEqPolicy.Biquad.magnitudeDb(it, f, sr.toDouble()) }
+            if (v > best) { best = v; bestF = f }
+            f *= 1.01
+        }
+        val p = processor(sr, 1, C.ENCODING_PCM_FLOAT, settings)
+        val src = sine(bestF, sr, 3.0, 0.98)
+        val out = run(p, src, 1, C.ENCODING_PCM_FLOAT)
+        val settled = out.drop(out.size / 2)
+        val peak = settled.maxOf { abs(it) }
+        assertTrue("peak=$peak at $bestF Hz", peak <= 1.0 && peak > 0.8)
+        // Not flat-topped: the loudest sample is not stuck at full scale.
+        assertTrue(settled.count { abs(it) >= 0.9999 } == 0)
     }
 }

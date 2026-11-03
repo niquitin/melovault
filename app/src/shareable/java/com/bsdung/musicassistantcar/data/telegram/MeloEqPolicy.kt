@@ -68,8 +68,42 @@ internal object MeloEqPolicy {
         /** Off, or on with every bar at 0 dB: the processor passes the audio through byte for byte. */
         fun isBypass(): Boolean = !enabled || isFlat()
 
-        /** Automatic input trim, so the loudest boost cannot push the signal past full scale. */
-        fun preampDb(): Double = -(gains().maxOrNull() ?: 0).coerceAtLeast(0).toDouble()
+        /**
+         * Automatic input trim: minus the highest point of the combined response, so a steady tone at
+         * full scale cannot be pushed past it. Neighbouring boosts overlap, so this is more than the
+         * largest single bar (Tăng bass: 6 dB bar, about 9 dB of trim).
+         */
+        fun preampDb(sampleRate: Int = REFERENCE_SAMPLE_RATE): Double = -peakBoostDb(gains(), sampleRate)
+    }
+
+    /** Sample rate used for the preamp shown in logs and tests; the processor passes the stream's own. */
+    const val REFERENCE_SAMPLE_RATE = 48_000
+
+    /** Bands at or above this share of the sample rate are skipped (the filter turns unstable near Nyquist). */
+    const val MAX_BAND_FRACTION = 0.45
+
+    /** A band costs CPU and counts towards the preamp only when it is moved and below the limit. */
+    fun bandIsUsed(hz: Int, gainDb: Int, sampleRate: Int): Boolean =
+        gainDb != 0 && hz < sampleRate * MAX_BAND_FRACTION
+
+    /**
+     * Highest level (dB, 0 when nothing is boosted) of the ten filters in series, found on a
+     * 1/24-octave grid from 20 Hz to 20 kHz. Below 0.1 dB counts as 0.
+     */
+    fun peakBoostDb(gains: List<Int>, sampleRate: Int): Double {
+        val rate = sampleRate.toDouble()
+        val used = BANDS_HZ.indices.filter { bandIsUsed(BANDS_HZ[it], gains[it], sampleRate) }
+            .map { Biquad.peaking(BANDS_HZ[it].toDouble(), gains[it].toDouble(), Q, rate) }
+        if (used.isEmpty()) return 0.0
+        val top = minOf(20_000.0, rate * 0.49)
+        val step = 2.0.pow(1.0 / 24.0)
+        var peak = 0.0
+        var f = 20.0
+        while (f <= top) {
+            peak = maxOf(peak, used.sumOf { Biquad.magnitudeDb(it, f, rate) })
+            f *= step
+        }
+        return if (peak < 0.1) 0.0 else peak
     }
 
     // --- preferences -------------------------------------------------------------------------

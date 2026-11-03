@@ -77,12 +77,61 @@ class MeloEqPolicyTest {
     }
 
     @Test
-    fun preampFollowsLoudestBoost() {
-        assertEquals(-6.0, Settings(true, Preset.BASS_UP).preampDb(), 0.0)
-        assertEquals(0.0, Settings(true, Preset.BASS_DOWN).preampDb(), 0.0)
+    fun preampTrimsNothingWhenNothingIsBoosted() {
         assertEquals(0.0, Settings(true, Preset.FLAT).preampDb(), 0.0)
-        assertEquals(-5.0, Settings(true, Preset.ROCK).preampDb(), 0.0)
-        assertEquals(-12.0, Settings(true, Preset.CUSTOM, List(10) { 12 }).preampDb(), 0.0)
+        assertEquals(0.0, Settings(true, Preset.BASS_DOWN).preampDb(), 0.0)
+        assertEquals(0.0, Settings(true, Preset.CUSTOM, List(10) { -12 }).preampDb(), 0.0)
+    }
+
+    @Test
+    fun preampOfASingleBoostedBandIsItsGain() {
+        for (band in intArrayOf(0, 3, 5, 8)) {
+            val values = MutableList(10) { 0 }.also { it[band] = 6 }
+            assertEquals("band $band", -6.0, Settings(true, Preset.CUSTOM, values).preampDb(), 0.3)
+        }
+    }
+
+    @Test
+    fun preampCoversOverlappingBoosts() {
+        // Neighbouring bars add up in the overlap, so the trim is deeper than the largest bar alone.
+        val bassUp = Settings(true, Preset.BASS_UP).preampDb()
+        assertTrue("bass_up $bassUp", bassUp < -6.5 && bassUp > -12.0)
+        val allUp = Settings(true, Preset.CUSTOM, List(10) { 12 }).preampDb()
+        assertTrue("all +12 $allUp", allUp < -12.0 && allUp > -40.0)
+        // Rock's +5 / +4 bass bars overlap too.
+        assertTrue(Settings(true, Preset.ROCK).preampDb() < -5.0)
+    }
+
+    @Test
+    fun preampKeepsTheCombinedPeakAtOrBelowZeroDb() {
+        val sets = Preset.entries.map { Settings(true, it, Preset.ROCK.gains) } +
+            Settings(true, Preset.CUSTOM, listOf(6, 5, 4, 2, 0, 4, 0, 0, 0, 0)) +
+            Settings(true, Preset.CUSTOM, listOf(12, -12, 12, -12, 12, -12, 12, -12, 12, -12)) +
+            Settings(true, Preset.CUSTOM, listOf(0, 0, 0, 0, 12, 12, 0, 0, 0, 0))
+        for (sr in intArrayOf(32000, 44100, 48000, 96000)) {
+            for (s in sets) {
+                val gains = s.gains()
+                val coeffs = MeloEqPolicy.BANDS_HZ.indices
+                    .filter { MeloEqPolicy.bandIsUsed(MeloEqPolicy.BANDS_HZ[it], gains[it], sr) }
+                    .map { Biquad.peaking(MeloEqPolicy.BANDS_HZ[it].toDouble(), gains[it].toDouble(), MeloEqPolicy.Q, sr.toDouble()) }
+                var worst = Double.NEGATIVE_INFINITY
+                var f = 20.0
+                while (f < minOf(20000.0, sr * 0.49)) {
+                    worst = maxOf(worst, coeffs.sumOf { Biquad.magnitudeDb(it, f, sr.toDouble()) })
+                    f *= 1.013 // finer than the 1/24-octave grid used by the preamp
+                }
+                assertTrue("sr=$sr ${s.preset} peak=$worst preamp=${s.preampDb(sr)}", worst + s.preampDb(sr) <= 0.1)
+            }
+        }
+    }
+
+    @Test
+    fun bandsAboveTheLimitAreNotUsed() {
+        assertFalse(MeloEqPolicy.bandIsUsed(16000, 6, 32000))
+        assertTrue(MeloEqPolicy.bandIsUsed(16000, 6, 44100))
+        assertFalse(MeloEqPolicy.bandIsUsed(1000, 0, 44100))
+        // A skipped band must not add to the preamp.
+        assertEquals(0.0, MeloEqPolicy.peakBoostDb(listOf(0, 0, 0, 0, 0, 0, 0, 0, 0, 12), 32000), 0.0)
     }
 
     @Test

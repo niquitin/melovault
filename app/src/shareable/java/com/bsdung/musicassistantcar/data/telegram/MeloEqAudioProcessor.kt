@@ -36,7 +36,7 @@ internal class MeloEqAudioProcessor : BaseAudioProcessor() {
             field = value
             log?.invoke(
                 "settings enabled=${value.enabled} preset=${value.preset.key} " +
-                    "gains=${value.gains().joinToString(",")} preampDb=${value.preampDb().toInt()}"
+                    "gains=${value.gains().joinToString(",")} preampDb=${"%.1f".format(value.preampDb())}"
             )
         }
 
@@ -169,7 +169,7 @@ internal class MeloEqAudioProcessor : BaseAudioProcessor() {
         val gains = s.gains()
         for (b in 0 until MeloEqPolicy.BAND_COUNT) {
             val hz = MeloEqPolicy.BANDS_HZ[b]
-            val on = gains[b] != 0 && hz < sampleRate * MAX_BAND_FRACTION
+            val on = MeloEqPolicy.bandIsUsed(hz, gains[b], sampleRate)
             if (on) {
                 coeffs[b] = MeloEqPolicy.Biquad.peaking(hz.toDouble(), gains[b].toDouble(), MeloEqPolicy.Q, sampleRate.toDouble())
             } else {
@@ -181,7 +181,7 @@ internal class MeloEqAudioProcessor : BaseAudioProcessor() {
             }
             active[b] = on
         }
-        preampTarget = 10.0.pow(s.preampDb() / 20.0)
+        preampTarget = 10.0.pow(s.preampDb(sampleRate) / 20.0)
         appliedSettings = s
         appliedSampleRate = sampleRate
     }
@@ -254,8 +254,6 @@ internal class MeloEqAudioProcessor : BaseAudioProcessor() {
 
     private companion object {
         const val MAX_CHANNELS = 8
-        /** Bands at or above this share of the sample rate are skipped (the filter turns unstable near Nyquist). */
-        const val MAX_BAND_FRACTION = 0.45
         /** The preamp change ramps over 1/50 s (20 ms), or the buffer if shorter. */
         const val RAMP_DIVISOR = 50
         const val STATS_SECONDS = 10
