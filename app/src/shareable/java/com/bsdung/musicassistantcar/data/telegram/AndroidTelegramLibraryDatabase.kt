@@ -39,6 +39,7 @@ class AndroidTelegramLibraryDatabase(
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         // SQLiteOpenHelper wraps this in one transaction: a killed upgrade leaves version 1 intact.
         if (oldVersion < 2) migrateToV2(db)
+        if (oldVersion < 3 && newVersion >= 3) TelegramLibrarySql.MIGRATE_2_TO_3.forEach(db::execSQL)
     }
 
     private fun migrateToV2(db: SQLiteDatabase) {
@@ -83,32 +84,8 @@ class AndroidTelegramLibraryDatabase(
         try {
             for (song in songs) {
                 if (song.accountId != accountId) continue
-                val values = ContentValues().apply {
-                    put(TelegramLibrarySql.COL_ACCOUNT_ID, song.accountId)
-                    put(TelegramLibrarySql.COL_CHAT_ID, song.chatId)
-                    put(TelegramLibrarySql.COL_MESSAGE_ID, song.messageId)
-                    put(TelegramLibrarySql.COL_SONG_KEY, song.songKey)
-                    put(TelegramLibrarySql.COL_FILE_ID, song.fileId)
-                    put(TelegramLibrarySql.COL_TITLE, song.title)
-                    put(TelegramLibrarySql.COL_FILENAME, song.filename)
-                    put(TelegramLibrarySql.COL_PERFORMER, song.performer)
-                    put(TelegramLibrarySql.COL_DURATION_SECONDS, song.durationSeconds)
-                    put(TelegramLibrarySql.COL_FILE_SIZE, song.fileSize)
-                    put(TelegramLibrarySql.COL_MIME_TYPE, song.mimeType)
-                    put(TelegramLibrarySql.COL_MEDIA_TYPE, song.mediaType)
-                    put(TelegramLibrarySql.COL_DATE, song.date)
-                    put(TelegramLibrarySql.COL_LAST_SEEN_AT_MS, song.lastSeenAtMs)
-                    put(TelegramLibrarySql.COL_SOURCE_TITLE, song.sourceTitle)
-                    put(TelegramLibrarySql.COL_IS_DELETED, if (song.isDeleted) 1 else 0)
-                    put(TelegramLibrarySql.COL_SEARCH_KEY, TelegramSearchPolicy.songSearchKey(song.title, song.performer, song.filename))
-                }
-                val rowId = db.insertWithOnConflict(
-                    TelegramLibrarySql.TABLE_SONGS,
-                    null,
-                    values,
-                    SQLiteDatabase.CONFLICT_REPLACE
-                )
-                if (rowId != -1L) count++
+                db.execSQL(TelegramLibrarySql.UPSERT_SONG_SQL, TelegramLibrarySql.songArgs(song))
+                count++
             }
             db.setTransactionSuccessful()
         } finally {
@@ -124,38 +101,15 @@ class AndroidTelegramLibraryDatabase(
         items: Collection<IndexedTelegramSong>,
         checkpoint: TelegramSyncState
     ): Int {
+        require(accountId == this.accountId && checkpoint.accountId == accountId)
         val db = writableDatabase
         var count = 0
         db.beginTransactionNonExclusive()
         try {
             for (song in items) {
                 if (song.accountId != accountId) continue
-                val values = ContentValues().apply {
-                    put(TelegramLibrarySql.COL_ACCOUNT_ID, song.accountId)
-                    put(TelegramLibrarySql.COL_CHAT_ID, song.chatId)
-                    put(TelegramLibrarySql.COL_MESSAGE_ID, song.messageId)
-                    put(TelegramLibrarySql.COL_SONG_KEY, song.songKey)
-                    put(TelegramLibrarySql.COL_FILE_ID, song.fileId)
-                    put(TelegramLibrarySql.COL_TITLE, song.title)
-                    put(TelegramLibrarySql.COL_FILENAME, song.filename)
-                    put(TelegramLibrarySql.COL_PERFORMER, song.performer)
-                    put(TelegramLibrarySql.COL_DURATION_SECONDS, song.durationSeconds)
-                    put(TelegramLibrarySql.COL_FILE_SIZE, song.fileSize)
-                    put(TelegramLibrarySql.COL_MIME_TYPE, song.mimeType)
-                    put(TelegramLibrarySql.COL_MEDIA_TYPE, song.mediaType)
-                    put(TelegramLibrarySql.COL_DATE, song.date)
-                    put(TelegramLibrarySql.COL_LAST_SEEN_AT_MS, song.lastSeenAtMs)
-                    put(TelegramLibrarySql.COL_SOURCE_TITLE, song.sourceTitle)
-                    put(TelegramLibrarySql.COL_IS_DELETED, if (song.isDeleted) 1 else 0)
-                    put(TelegramLibrarySql.COL_SEARCH_KEY, TelegramSearchPolicy.songSearchKey(song.title, song.performer, song.filename))
-                }
-                val rowId = db.insertWithOnConflict(
-                    TelegramLibrarySql.TABLE_SONGS,
-                    null,
-                    values,
-                    SQLiteDatabase.CONFLICT_REPLACE
-                )
-                if (rowId != -1L) count++
+                db.execSQL(TelegramLibrarySql.UPSERT_SONG_SQL, TelegramLibrarySql.songArgs(song))
+                count++
             }
 
             val stateValues = ContentValues().apply {
@@ -190,7 +144,8 @@ class AndroidTelegramLibraryDatabase(
         offset: Int,
         limit: Int,
         sort: SongSort,
-        fromKey: String?
+        fromKey: String?,
+        forumTopicId: Int?
     ): List<IndexedTelegramSong> {
         val db = readableDatabase
         val selectionArgs = mutableListOf<String>()
@@ -200,6 +155,12 @@ class AndroidTelegramLibraryDatabase(
         if (chatId != null) {
             selection.append(" AND ${TelegramLibrarySql.COL_CHAT_ID} = ?")
             selectionArgs.add(chatId.toString())
+        }
+
+        require(forumTopicId == null || (chatId != null && forumTopicId > 0))
+        if (forumTopicId != null) {
+            selection.append(" AND ${TelegramLibrarySql.COL_FORUM_TOPIC_ID} = ?")
+            selectionArgs.add(forumTopicId.toString())
         }
 
         if (!fromKey.isNullOrEmpty()) {
@@ -239,7 +200,8 @@ class AndroidTelegramLibraryDatabase(
         accountId: Long,
         chatId: Long?,
         searchQuery: String?,
-        fromKey: String?
+        fromKey: String?,
+        forumTopicId: Int?
     ): Int {
         val db = readableDatabase
         val selectionArgs = mutableListOf<String>()
@@ -249,6 +211,12 @@ class AndroidTelegramLibraryDatabase(
         if (chatId != null) {
             selection.append(" AND ${TelegramLibrarySql.COL_CHAT_ID} = ?")
             selectionArgs.add(chatId.toString())
+        }
+
+        require(forumTopicId == null || (chatId != null && forumTopicId > 0))
+        if (forumTopicId != null) {
+            selection.append(" AND ${TelegramLibrarySql.COL_FORUM_TOPIC_ID} = ?")
+            selectionArgs.add(forumTopicId.toString())
         }
 
         if (!fromKey.isNullOrEmpty()) {
@@ -366,21 +334,11 @@ class AndroidTelegramLibraryDatabase(
         try {
             for (source in sources) {
                 if (source.accountId != accountId) continue
-                val values = ContentValues().apply {
-                    put(TelegramLibrarySql.COL_ACCOUNT_ID, source.accountId)
-                    put(TelegramLibrarySql.COL_CHAT_ID, source.chatId)
-                    put(TelegramLibrarySql.COL_TITLE, source.title)
-                    put(TelegramLibrarySql.COL_TYPE, source.type)
-                    put(TelegramLibrarySql.COL_TRACK_COUNT, source.trackCount)
-                    put(TelegramLibrarySql.COL_LAST_UPDATED_AT_MS, source.lastUpdatedAtMs)
-                }
-                val rowId = db.insertWithOnConflict(
-                    TelegramLibrarySql.TABLE_SOURCES,
-                    null,
-                    values,
-                    SQLiteDatabase.CONFLICT_REPLACE
-                )
-                if (rowId != -1L) count++
+                db.execSQL(TelegramLibrarySql.UPSERT_SOURCE_SQL, arrayOf(
+                    source.accountId, source.chatId, source.title, source.type, source.trackCount,
+                    source.lastUpdatedAtMs, source.isForum?.let { if (it) 1 else 0 }, source.accountId, source.chatId,
+                ))
+                count++
             }
             db.setTransactionSuccessful()
         } finally {
@@ -496,6 +454,75 @@ class AndroidTelegramLibraryDatabase(
         )
     }
 
+    override fun getForumTopics(accountId: Long, chatId: Long, query: String?, offset: Int, limit: Int): List<IndexedTelegramForumTopic> {
+        val where = StringBuilder("account_id = ? AND chat_id = ? AND is_hidden = 0")
+        val args = mutableListOf(accountId.toString(), chatId.toString())
+        TelegramSearchPolicy.whereClause(query)?.let { where.append(" AND ").append(it.sql); args.addAll(it.args) }
+        val result = mutableListOf<IndexedTelegramForumTopic>()
+        readableDatabase.query(TelegramLibrarySql.TABLE_FORUM_TOPICS, null, where.toString(), args.toTypedArray(), null, null,
+            "is_pinned DESC, sort_order DESC, forum_topic_id DESC LIMIT ${limit.coerceAtLeast(1)} OFFSET ${offset.coerceAtLeast(0)}").use { c ->
+            while (c.moveToNext()) {
+                fun index(name: String) = c.getColumnIndexOrThrow(name)
+                result.add(IndexedTelegramForumTopic(accountId, chatId, c.getInt(index("forum_topic_id")), c.getString(index("title")),
+                    c.getInt(index("is_general")) != 0, c.getInt(index("is_hidden")) != 0, c.getInt(index("is_closed")) != 0,
+                    c.getInt(index("is_pinned")) != 0, c.getLong(index("sort_order")), c.getLong(index("last_updated_at_ms"))))
+            }
+        }
+        return result
+    }
+
+    override fun getForumTopicCounts(accountId: Long, chatId: Long): Map<Int, Int> = linkedMapOf<Int, Int>().apply {
+        readableDatabase.rawQuery(TelegramLibraryDao.FORUM_TOPIC_COUNTS_SQL, arrayOf(accountId.toString(), chatId.toString())).use { c ->
+            while (c.moveToNext()) put(c.getInt(0), c.getInt(1))
+        }
+    }
+
+    override fun commitForumTopics(accountId: Long, chatId: Long, topics: Collection<IndexedTelegramForumTopic>,
+        checkpoint: TelegramSyncState?, isCurrent: () -> Boolean): Boolean {
+        require(accountId == this.accountId && topics.all { it.accountId == accountId && it.chatId == chatId })
+        require(checkpoint == null || (checkpoint.accountId == accountId && checkpoint.syncScope == TelegramLibraryDao.forumCatalogueScope(chatId)))
+        if (!isCurrent()) return false
+        val db = writableDatabase
+        db.beginTransactionNonExclusive()
+        try {
+            if (!isCurrent()) return false
+            topics.forEach { db.execSQL(TelegramLibrarySql.UPSERT_FORUM_TOPIC_SQL, TelegramLibrarySql.forumTopicArgs(it)) }
+            checkpoint?.let(::updateSyncState)
+            if (!isCurrent()) return false
+            db.setTransactionSuccessful()
+            return true
+        } finally { db.endTransaction() }
+    }
+
+    override fun getForumHistoryState(accountId: Long, chatId: Long, forumTopicId: Int): TelegramForumHistoryState? {
+        readableDatabase.rawQuery("SELECT * FROM ${TelegramLibrarySql.TABLE_FORUM_HISTORY} WHERE account_id=? AND chat_id=? AND forum_topic_id=?",
+            arrayOf(accountId.toString(), chatId.toString(), forumTopicId.toString())).use { c ->
+            if (!c.moveToFirst()) return null
+            fun value(name: String) = c.getLong(c.getColumnIndexOrThrow(name))
+            return TelegramForumHistoryState(accountId, chatId, forumTopicId, value("older_cursor"), value("older_complete") != 0L,
+                value("newest_message_id"), value("refresh_cursor"), value("refresh_until_message_id"), value("refresh_pending") != 0L,
+                value("retry_after_ms"))
+        }
+    }
+
+    override fun commitForumHistoryPage(state: TelegramForumHistoryState, songs: Collection<IndexedTelegramSong>,
+        isCurrent: () -> Boolean): Boolean {
+        require(state.accountId == accountId && songs.all {
+            it.accountId == state.accountId && it.chatId == state.chatId && it.forumTopicId == state.forumTopicId
+        })
+        if (!isCurrent()) return false
+        val db = writableDatabase
+        db.beginTransactionNonExclusive()
+        try {
+            if (!isCurrent()) return false
+            songs.forEach { db.execSQL(TelegramLibrarySql.UPSERT_SONG_SQL, TelegramLibrarySql.songArgs(it)) }
+            db.execSQL(TelegramLibrarySql.UPSERT_FORUM_HISTORY_SQL, TelegramLibrarySql.forumHistoryArgs(state))
+            if (!isCurrent()) return false
+            db.setTransactionSuccessful()
+            return true
+        } finally { db.endTransaction() }
+    }
+
     override fun getLatestSongDate(accountId: Long, mediaType: String?): Long {
         val db = readableDatabase
         val selectionArgs = mutableListOf<String>()
@@ -557,6 +584,8 @@ class AndroidTelegramLibraryDatabase(
                 "${TelegramLibrarySql.COL_ACCOUNT_ID} = ?",
                 arrayOf(accountId.toString())
             )
+            db.delete(TelegramLibrarySql.TABLE_FORUM_TOPICS, "account_id = ?", arrayOf(accountId.toString()))
+            db.delete(TelegramLibrarySql.TABLE_FORUM_HISTORY, "account_id = ?", arrayOf(accountId.toString()))
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
@@ -580,7 +609,10 @@ class AndroidTelegramLibraryDatabase(
             date = cursor.getLong(cursor.getColumnIndexOrThrow(TelegramLibrarySql.COL_DATE)),
             lastSeenAtMs = cursor.getLong(cursor.getColumnIndexOrThrow(TelegramLibrarySql.COL_LAST_SEEN_AT_MS)),
             sourceTitle = cursor.getString(cursor.getColumnIndexOrThrow(TelegramLibrarySql.COL_SOURCE_TITLE)),
-            isDeleted = cursor.getInt(cursor.getColumnIndexOrThrow(TelegramLibrarySql.COL_IS_DELETED)) != 0
+            isDeleted = cursor.getInt(cursor.getColumnIndexOrThrow(TelegramLibrarySql.COL_IS_DELETED)) != 0,
+            forumTopicId = cursor.getColumnIndexOrThrow(TelegramLibrarySql.COL_FORUM_TOPIC_ID).let {
+                if (cursor.isNull(it)) null else cursor.getInt(it)
+            }
         )
     }
 
@@ -591,7 +623,8 @@ class AndroidTelegramLibraryDatabase(
             title = cursor.getString(cursor.getColumnIndexOrThrow(TelegramLibrarySql.COL_TITLE)),
             type = cursor.getString(cursor.getColumnIndexOrThrow(TelegramLibrarySql.COL_TYPE)),
             trackCount = cursor.getInt(cursor.getColumnIndexOrThrow(TelegramLibrarySql.COL_TRACK_COUNT)),
-            lastUpdatedAtMs = cursor.getLong(cursor.getColumnIndexOrThrow(TelegramLibrarySql.COL_LAST_UPDATED_AT_MS))
+            lastUpdatedAtMs = cursor.getLong(cursor.getColumnIndexOrThrow(TelegramLibrarySql.COL_LAST_UPDATED_AT_MS)),
+            isForum = cursor.getColumnIndexOrThrow(TelegramLibrarySql.COL_IS_FORUM).let { if (cursor.isNull(it)) null else cursor.getInt(it) != 0 }
         )
     }
 

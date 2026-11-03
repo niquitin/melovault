@@ -13,8 +13,9 @@ Thực thi: Codex, GPT-6 (model/effort chi tiết không được cung cấp), p
 |---|---|---|
 | S1 hợp đồng | Xong | 11/11 test Debug passed, 0 skipped/fail/error; fixture/parser/cursor có cả boundary inclusive/exclusive. |
 | S1 Sony | Xong trong phạm vi đọc API | Lượt 5 `OK (1 test)`: cùng một forum có 14 topic/3 trang/General/end không lặp; hai topic có seed 1 tin → rỗng, hai trang đầu đúng phạm vi; nguồn thường đọc được. Binary khớp repo. |
-| S2 | Bắt đầu | Migration cộng thêm v3 đã được chủ dự án chốt; giữ khóa/playlist/tệp. |
-| S3–S4 | Chưa làm | Sau kiểm migration/DAO. |
+| S2 | Xong ở mã/JVM SQLite | Migration cộng thêm; DAO giữ metadata đã biết; songs + tiến độ atomic. 30/30 test chọn lọc, 0 skipped/fail/error. Chưa nâng DB thật Sony. |
+| S3 | Bắt đầu | Thu nhận metadata/quét lịch sử có budget/cancel/refresh riêng. |
+| S4 | Chưa làm | Sau luồng dữ liệu S3. |
 | S5 | Chưa làm | Chưa có test/build/candidate mới. |
 
 Nguồn hợp đồng: [schema chính thức đúng revision](https://github.com/tdlib/td/blob/c15d3f5a5de6e3ba5839822c451152e5e18bb700/td/generate/scheme/td_api.tl). Các thống kê máy thật chỉ được ghi sau khi chạy; fixture không thay bằng chứng TDLib/Sony.
@@ -34,3 +35,11 @@ Nguồn hợp đồng: [schema chính thức đúng revision](https://github.com
 - Lượt 4 trên `67b6634`: Tiny build 31 giây; APK bộ kiểm SHA `BD00A48BD0776D771B474670CC7BB4D3BF805FA2388893BA7FF299A757A28F4D`, 428.605 byte, cert khớp. Catalogue 14 topic/3 trang/General/end không lặp; lịch sử nguồn thường đọc 1 tin; topic đầu có seed 1 tin → trang rỗng, đầu lịch sử 9→0. Sau đó seed topic thứ hai trả 404 làm assertion dừng (3,236 giây), chưa PASS toàn probe; `SONY_SCREEN_END=OFF`. Lượt 5 cho phép bỏ qua seed 400/404 đã xóa, tối đa 6 mẫu như cũ; lỗi khác vẫn dừng. Probe được chuyển sang opt-in `-e forumReadProbe true` để kiểm connected thông thường không tự đọc tài khoản thật.
 - **S1 lượt 5, `35ba26b`: OK (1 test).** Catalogue 14 topic/3 trang/có General/end=true/cursor repeated=false; nguồn thường trả 1 message. Hai topic cùng forum: seed 1 tin rồi rỗng ở mỗi topic, 2 terminal singleton; đầu lịch sử 9→0 và 50→50; 109 message đầu đúng quan hệ, 0 thiếu; 24 yêu cầu tổng. Bỏ qua 3 seed đã xóa (404), không sửa Telegram. `inclusive_probes=0` là quan sát thực; nhánh chống boundary lặp được kiểm bằng fixture, không tự coi chưa thấy lặp là lỗi TDLib.
 - Binary trong APK đang cài và `.so` ở repo có cùng SHA `2E09562262268A1363939E720BE5519187533113E021A558CC6FA89FB4E23D28`. Lượt 5 bundle SHA `1B4C0C06E54146D53AB4A734CE7FC069E7C9D288DF9E63897F1C5E0770609C34` khớp hai đầu; Tiny build 32 giây. APK bộ kiểm 429.055 byte, SHA `D843378259755AB00232FC4824B3832C811DD7EFDF8E517101CB90261332FB35`, cert khớp; bản sao riêng `C:/Bots/_qa_temp/forum-s1-r5-20261103-35ba26b/probe-r5.apk`. Log `probe.log`, cleanup `screen-end.txt` cùng thư mục; **SONY_SCREEN_END=OFF**. Không có build/probe còn chạy sau S1. Chưa thay app/DB trên Sony, chưa QA UI tính năng.
+
+## S2 · Schema/DAO và bảo toàn dữ liệu
+
+- `TelegramLibrarySql/Entities/Dao`: DB v3 thêm topic nullable trên bài, isForum nullable trên nguồn, bảng metadata topic và bảng hai cursor lịch sử/head refresh. Catalogue dùng scope riêng trong sync-state. Cài mới và nâng v1/v2 có đường cộng thêm; không đổi PK/songKey, bảng/format playlist, cache hay owner/session.
+- SQLite ghi qua COALESCE + truy vấn bản ghi cũ trong cùng statement để phản hồi thiếu metadata không xóa topic/isForum đã biết; không đòi UPSERT SQLite mới hơn Android 8. Hai đường ghi bài dùng cùng statement. Quan hệ mới tường minh cập nhật đúng một PK.
+- DAO SQLite và in-memory lọc topic ở list/count/search/paging, yêu cầu đi kèm chat; count nhiều topic bằng một GROUP BY. Catalogue chỉ upsert, không suy xóa từ trang thiếu. Songs + tiến độ history/head hoặc topics + catalogue checkpoint cùng transaction, guard cancellation trước/sau; in-memory đồng bộ tương đương.
+- `TelegramForumDatabaseTest`: 7 test, SQLite JDBC thật; fixture legacy v1/v2 giữ 2 tài khoản/số bài/songKey/lookup playlist theo key/fileId/filename, NULL cho bài cũ; ghi lại thiếu metadata, đổi topic tường minh, tristate nguồn, 2.000 bản ghi account/chat/topic, covering index, rollback, in-memory paging/search/cancel/foreign items. Không phải bằng chứng nâng DB thật Sony.
+- Ni đầu 29/30, lỗi duy nhất assertion schema version cũ (=2); đã cập nhật sang v3 và kiểm thêm cột topic. Lượt sau `:app:testShareableDebugUnitTest --tests '*TelegramForumDatabaseTest' --tests '*TelegramLibraryDaoTest' --tests '*TelegramLibrarySqlSchemaTest' --tests '*TelegramSearchPerformanceTest' --console=plain` → **30/30 passed**, 0 skipped/fail/error, BUILD SUCCESSFUL 7 giây. Log `scratch/chu-de-telegram/s2-ni-r2.log`, exit 0; `git diff --check` sạch. Full Debug/Release và assemble chờ S4.
