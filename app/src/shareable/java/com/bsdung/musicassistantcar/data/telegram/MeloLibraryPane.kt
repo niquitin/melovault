@@ -109,6 +109,11 @@ internal class MeloLibraryPane(
     private val sourcesScroll = ScrollView(context)
     private val sourcesBox = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
     private val sourceList = ListView(context)
+    private val forumCatalogue = MeloForumCatalogueView(context, c, host)
+    private val forumActions = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; visibility = View.GONE }
+    private val forumStatus = c.text("", s.secondaryText, p.textSecondary, maxLines = 3)
+    private val forumMore = c.chip("Tìm thêm trong chủ đề", false) { host.loadMoreForum() }
+    private val forumRefresh = c.chip("Làm mới", false) { host.refreshForum() }
     private sealed class SourceItem {
         object Header : SourceItem()
         data class Channel(val row: SourceRow) : SourceItem()
@@ -289,6 +294,13 @@ internal class MeloLibraryPane(
         listStatus.addView(retry)
         listContent.addView(listStatus)
         listContent.addView(listFrame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        forumActions.addView(forumStatus)
+        forumActions.addView(LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            addView(forumMore); addView(forumRefresh)
+        })
+        view.addView(forumActions, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        view.addView(forumCatalogue.view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         view.addView(listContent, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         view.addView(namedIndexHolder, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         if (layer == NewLayer.TWO_PANE) {
@@ -393,6 +405,7 @@ internal class MeloLibraryPane(
      */
     private fun saveScrollAnchor() {
         val snap = snapshot ?: return
+        if (snap.forumTopics != null) { forumCatalogue.savePosition(); return }
         val key = groupKey ?: return
         if (snap.browseLoadState != MeloBrowseUiPolicy.LoadState.READY) return
         if (snap.showingSources) {
@@ -465,20 +478,48 @@ internal class MeloLibraryPane(
         }
         val presentation = MeloBrowseUiPolicy.present(
             snap.browseScope, snap.sourceTitle, snap.browseLoadState,
-            if (snap.showingSources) snap.sources.count { it.chatId != 0L } else snap.rows.size, snap.query
+            if (snap.showingSources) snap.sources.count { it.chatId != 0L } else snap.rows.size, snap.query, snap.forumHistoryComplete
         )
         fullHint = presentation.hint
         fitSearchHint()
         scopeNote.text = presentation.scopeLabel
+        forumCatalogue.view.visibility = View.GONE
+        forumActions.visibility = if (snap.forumStatus != null) View.VISIBLE else View.GONE
+        forumStatus.text = snap.forumStatus.orEmpty()
+        forumMore.text = if (snap.forumTopics != null) "Tìm thêm chủ đề" else "Tìm thêm trong chủ đề"
+        forumMore.visibility = if (snap.forumTopics == null && snap.forumCanLoadMore) View.VISIBLE else View.GONE
+        forumRefresh.visibility = if (snap.forumTopics == null) View.VISIBLE else View.GONE
+        forumMore.isEnabled = !snap.forumLoading
+        forumRefresh.isEnabled = !snap.forumLoading
         statusText.text = presentation.message.orEmpty()
         retry.visibility = if (presentation.retry) View.VISIBLE else View.GONE
         listStatus.visibility = if (!snap.showingSources && presentation.message != null) View.VISIBLE else View.GONE
         listStatus.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             if (snap.rows.isEmpty()) 0 else ViewGroup.LayoutParams.WRAP_CONTENT,
             if (snap.rows.isEmpty()) 1f else 0f)
+        chipHolder.visibility = View.VISIBLE
         renderChips(snap)
         renderSourceCards(snap)
         header.post { fitHeader() }
+        if (snap.forumTopics != null) {
+            groupTitle.text = snap.sourceTitle ?: "Chủ đề Telegram"
+            playAll.visibility = View.GONE
+            sortChip.visibility = View.GONE
+            chipHolder.visibility = View.GONE
+            genreHolder.visibility = View.GONE
+            genreStripHolder.visibility = View.GONE
+            noteWanted = false
+            namedBack.visibility = View.GONE
+            namedShuffle.visibility = View.GONE
+            namedMore.visibility = View.GONE
+            namedIndexHolder.visibility = View.GONE
+            sourcesScroll.visibility = View.GONE
+            sourceList.visibility = View.GONE
+            listContent.visibility = View.GONE
+            forumCatalogue.render(snap)
+            applyTrim()
+            return
+        }
         // Nhiều Playlist có tên: the Playlist tab is an index first; "Yêu thích" and one playlist are level 2.
         val named = host.named()?.takeIf { snap.mode == Mode.PLAYLIST && !snap.showingSources && !snap.local }
         val namedScreen = named?.screen()
@@ -869,8 +910,9 @@ internal class MeloLibraryPane(
         })
         if (!snap.showingSources) genreStripHolder.addView(strip {
             if (snap.browseScope.chatId != null) {
-                addView(c.chip("Tất cả trong kênh", snap.mode == Mode.ALL) { host.filterInSource(Mode.ALL) })
-                addView(c.chip("Đã tải trong kênh", snap.mode == Mode.DOWNLOADED) { host.filterInSource(Mode.DOWNLOADED) })
+                val place = if (snap.browseScope.kind == MeloBrowseUiPolicy.Kind.FORUM_TOPIC) "chủ đề" else "kênh"
+                addView(c.chip("Tất cả trong $place", snap.mode == Mode.ALL) { host.filterInSource(Mode.ALL) })
+                addView(c.chip("Đã tải trong $place", snap.mode == Mode.DOWNLOADED) { host.filterInSource(Mode.DOWNLOADED) })
             }
             MeloLibraryPolicy.GenreChip.entries.forEach { genre ->
                 addView(c.chip(genre.label, MeloLibraryPolicy.activeGenre(snap.query) == genre) { applyGenre(genre) })

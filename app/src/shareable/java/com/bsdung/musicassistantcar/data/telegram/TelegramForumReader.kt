@@ -90,7 +90,7 @@ internal class TelegramForumReader(
             it.isGeneral, it.isHidden, it.isClosed, it.isPinned, it.order, clock()) }
         if (query.isBlank()) {
             // Hidden General may be absent from the list: verify a previously visible General directly.
-            if (cursor.isEnd) dao.getForumTopics(accountId, chatId, limit = Int.MAX_VALUE).firstOrNull { it.isGeneral }
+            if (cursor.isEnd) dao.getVisibleGeneralTopic(accountId, chatId)
                 ?.takeIf { cached -> page.topics.none { it.id == cached.forumTopicId } }
                 ?.let { topic(accountId, chatId, it.forumTopicId, isCurrent) }
             val scope = TelegramLibraryDao.forumCatalogueScope(chatId)

@@ -210,6 +210,18 @@ class InMemoryTelegramLibraryDao : TelegramLibraryDao {
         .groupingBy { it.forumTopicId!! }.eachCount()
 
     @Synchronized
+    override fun getForumTopic(accountId: Long, chatId: Long, topicId: Int) = topics[Triple(accountId, chatId, topicId)]
+
+    @Synchronized
+    override fun getVisibleGeneralTopic(accountId: Long, chatId: Long) = topics.values.firstOrNull {
+        it.accountId == accountId && it.chatId == chatId && it.isGeneral && !it.isHidden
+    }
+
+    @Synchronized
+    override fun getForumHistoryStates(accountId: Long, chatId: Long) = forumHistory.values
+        .filter { it.accountId == accountId && it.chatId == chatId }.associateBy { it.forumTopicId }
+
+    @Synchronized
     override fun commitForumTopics(accountId: Long, chatId: Long, topics: Collection<IndexedTelegramForumTopic>,
         checkpoint: TelegramSyncState?, isCurrent: () -> Boolean): Boolean {
         require(topics.all { it.accountId == accountId && it.chatId == chatId })

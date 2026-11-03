@@ -18,6 +18,12 @@ internal interface MeloScreenHost {
     fun filterInSource(mode: Mode) = setMode(mode)
     fun closeSources() = openSource(null)
     fun selectedBrowseSource(): Long? = null
+    fun backWithinForum(): Boolean = false
+    fun openForumTopic(topicId: Int) = Unit
+    fun openAllForumMusic() = Unit
+    fun loadMoreForum() = Unit
+    fun refreshForum() = Unit
+    fun saveTopicPosition(topicId: Int?, offsetPx: Int) = Unit
 
     /** "Nhạc trên máy": opens the device music list; asks for audio access only here (the owner tapped it). */
     fun openLocal()
@@ -199,7 +205,8 @@ internal interface MeloScreenHost {
         val download: MeloDownloadUiPolicy.Presentation? = null
     )
 
-    data class SourceRow(val chatId: Long, val title: String, val count: Int)
+    data class SourceRow(val chatId: Long, val title: String, val count: Int, val hasTopics: Boolean = false)
+    data class ForumTopicRow(val id: Int, val title: String, val detail: String)
 
     /** The remembered last song of this account; [art] only when a cover is already in memory. */
     data class Resume(val songKey: Long, val title: String, val sourceTitle: String?, val art: Bitmap?)
@@ -232,7 +239,13 @@ internal interface MeloScreenHost {
         /** True only when the current query has no further page. */
         val browseComplete: Boolean = true,
         val playing: Boolean = false,
-        val buffering: Boolean = false
+        val buffering: Boolean = false,
+        /** Non-null only on the topic catalogue. It is a browse screen, never a playback queue. */
+        val forumTopics: List<ForumTopicRow>? = null,
+        val forumStatus: String? = null,
+        val forumCanLoadMore: Boolean = false,
+        val forumLoading: Boolean = false,
+        val forumHistoryComplete: Boolean = true
     )
 
     data class NowPlaying(

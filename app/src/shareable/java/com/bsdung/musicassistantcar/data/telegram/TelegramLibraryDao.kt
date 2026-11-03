@@ -109,6 +109,9 @@ interface TelegramLibraryDao {
     fun updateSyncState(state: TelegramSyncState)
 
     fun getForumTopics(accountId: Long, chatId: Long, query: String? = null, offset: Int = 0, limit: Int = 50): List<IndexedTelegramForumTopic>
+    fun getForumTopic(accountId: Long, chatId: Long, topicId: Int): IndexedTelegramForumTopic?
+    fun getVisibleGeneralTopic(accountId: Long, chatId: Long): IndexedTelegramForumTopic?
+    fun getForumHistoryStates(accountId: Long, chatId: Long): Map<Int, TelegramForumHistoryState>
     fun getForumTopicCounts(accountId: Long, chatId: Long): Map<Int, Int>
     /** Additive metadata refresh: missing rows in a partial page never delete cached topics. */
     fun commitForumTopics(

@@ -471,6 +471,33 @@ class AndroidTelegramLibraryDatabase(
         return result
     }
 
+    private fun mapForumTopic(c: Cursor): IndexedTelegramForumTopic {
+        fun index(name: String) = c.getColumnIndexOrThrow(name)
+        return IndexedTelegramForumTopic(c.getLong(index("account_id")), c.getLong(index("chat_id")), c.getInt(index("forum_topic_id")),
+            c.getString(index("title")), c.getInt(index("is_general")) != 0, c.getInt(index("is_hidden")) != 0,
+            c.getInt(index("is_closed")) != 0, c.getInt(index("is_pinned")) != 0, c.getLong(index("sort_order")), c.getLong(index("last_updated_at_ms")))
+    }
+
+    override fun getForumTopic(accountId: Long, chatId: Long, topicId: Int): IndexedTelegramForumTopic? =
+        readableDatabase.rawQuery("SELECT * FROM telegram_forum_topics WHERE account_id=? AND chat_id=? AND forum_topic_id=?",
+            arrayOf(accountId.toString(), chatId.toString(), topicId.toString())).use { if (it.moveToFirst()) mapForumTopic(it) else null }
+
+    override fun getVisibleGeneralTopic(accountId: Long, chatId: Long): IndexedTelegramForumTopic? =
+        readableDatabase.rawQuery("SELECT * FROM telegram_forum_topics WHERE account_id=? AND chat_id=? AND is_general=1 AND is_hidden=0 LIMIT 1",
+            arrayOf(accountId.toString(), chatId.toString())).use { if (it.moveToFirst()) mapForumTopic(it) else null }
+
+    override fun getForumHistoryStates(accountId: Long, chatId: Long): Map<Int, TelegramForumHistoryState> = linkedMapOf<Int, TelegramForumHistoryState>().apply {
+        readableDatabase.rawQuery("SELECT * FROM telegram_forum_history WHERE account_id=? AND chat_id=?",
+            arrayOf(accountId.toString(), chatId.toString())).use { c ->
+            while (c.moveToNext()) {
+                fun value(name: String) = c.getLong(c.getColumnIndexOrThrow(name))
+                val id = value("forum_topic_id").toInt()
+                put(id, TelegramForumHistoryState(accountId, chatId, id, value("older_cursor"), value("older_complete") != 0L,
+                    value("newest_message_id"), value("refresh_cursor"), value("refresh_until_message_id"), value("refresh_pending") != 0L, value("retry_after_ms")))
+            }
+        }
+    }
+
     override fun getForumTopicCounts(accountId: Long, chatId: Long): Map<Int, Int> = linkedMapOf<Int, Int>().apply {
         readableDatabase.rawQuery(TelegramLibraryDao.FORUM_TOPIC_COUNTS_SQL, arrayOf(accountId.toString(), chatId.toString())).use { c ->
             while (c.moveToNext()) put(c.getInt(0), c.getInt(1))
