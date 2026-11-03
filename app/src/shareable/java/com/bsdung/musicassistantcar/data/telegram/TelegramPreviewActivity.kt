@@ -102,6 +102,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val sourceTitle: String? = null,
         /** A saved Playlist entry the library does not know yet (E96 P0). Shown, removable, never played or queued. */
         val placeholder: Boolean = false,
+        val forumTopicId: Int? = null,
     ) {
         val genuineMessageId: Long get() = if (rawMessageId > 0L) rawMessageId else messageId
     }
@@ -7701,29 +7702,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun parseTelegramSong(message: JSONObject, fallbackChatId: Long): Song? {
-        val content = message.optJSONObject("content") ?: return null
-        val mediaType = content.optString("@type")
-        val attachment = when (mediaType) {
-            "messageAudio" -> content.optJSONObject("audio")
-            "messageDocument" -> content.optJSONObject("document")
-            else -> null
-        } ?: return null
-        val file = attachment.optJSONObject(
-            if (mediaType == "messageAudio") "audio" else "document"
-        ) ?: return null
-        val filename = attachment.optString("file_name", "audio")
-        val title = attachment.optString("title").ifBlank { filename }
-        val audioExtension = listOf(".flac", ".mp3", ".m4a", ".wav",
-            ".ogg", ".opus", ".aac")
-        if (mediaType != "messageAudio" &&
-            audioExtension.none { filename.endsWith(it, ignoreCase = true) }) return null
-        val messageId = message.optLong("id")
-        val chatId = message.optLong("chat_id").takeIf { it != 0L } ?: fallbackChatId
-        val fileId = file.optInt("id")
-        if (messageId <= 0L || chatId == 0L || fileId <= 0) return null
-        val selfChatId = savedChatId.takeIf { it != 0L }
-            ?: (library.authorizedUser()?.value ?: 0L)
-        val key = TelegramSongKey.forMessage(chatId, messageId, selfChatId)
+        val account = library.authorizedUser()?.value ?: return null
+        val self = savedChatId.takeIf { it != 0L } ?: account
+        val parsed = TelegramSongMessageParser.parse(message, account, self, fallbackChatId) ?: return null
+        val file = TelegramSongMessageParser.file(message) ?: return null
+        val fileId = parsed.fileId
+        val key = parsed.songKey
+        val chatId = parsed.chatId
         val local = file.optJSONObject("local")
         val factOwner = library.authorizedUser()?.value ?: 0L
         runOnUiThread {
@@ -7741,15 +7726,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
             }
         }
-        val performer = attachment.optString("performer").takeIf { it.isNotBlank() }
-        val duration = attachment.optInt("duration")
-        return Song(fileId, title, filename, key, chatId,
-            file.optLong("size").takeIf { it > 0 }
-                ?: file.optLong("expected_size").takeIf { it > 0 } ?: -1L,
-            rawMessageId = messageId,
-            performer = performer,
-            durationSeconds = duration,
-            sourceTitle = sourceNames[chatId])
+        return Song(fileId, parsed.title, parsed.filename, key, chatId, parsed.fileSize,
+            rawMessageId = parsed.messageId, performer = parsed.performer, durationSeconds = parsed.durationSeconds,
+            sourceTitle = sourceNames[chatId], forumTopicId = parsed.forumTopicId)
     }
 
     private fun resetSource(modeAllChats: Boolean) {
@@ -8085,7 +8064,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         mediaType = mType,
                         date = rawDate,
                         lastSeenAtMs = now,
-                        sourceTitle = sourceNames[song.chatId]
+                        sourceTitle = sourceNames[song.chatId],
+                        performer = song.performer,
+                        durationSeconds = song.durationSeconds,
+                        fileSize = song.expectedSize,
+                        forumTopicId = song.forumTopicId
                     )
                 )
             }
