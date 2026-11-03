@@ -508,6 +508,7 @@ internal class MeloLibraryPane(
             chipHolder.visibility = View.GONE
             genreHolder.visibility = View.GONE
             genreStripHolder.visibility = View.GONE
+            genreStripWanted = false
             noteWanted = false
             namedBack.visibility = View.GONE
             namedShuffle.visibility = View.GONE
@@ -672,7 +673,7 @@ internal class MeloLibraryPane(
     private fun trimParts(): List<Pair<View, Boolean>> = listOf(
         scopeNote to scopeNote.text.isNotBlank(),
         note to noteWanted,
-        sourceCardsHolder to (sourceRowVisible && !collapsed),
+        sourceCardsHolder to (sourceRowVisible && !collapsed && snapshot?.forumTopics == null),
         genreStripHolder to genreStripWanted
     )
 
@@ -700,7 +701,7 @@ internal class MeloLibraryPane(
         var fixed = 0
         for (i in 0 until view.childCount) {
             val child = view.getChildAt(i)
-            if (child === listContent || child === sourcesScroll || child === sourceList ||
+            if (child === listContent || child === sourcesScroll || child === sourceList || child === forumCatalogue.view ||
                 child.visibility == View.GONE || partViews.any { it === child }) continue
             fixed += naturalHeight(child, width)
         }
@@ -1278,10 +1279,10 @@ internal class MeloLibraryPane(
         background = c.roundedBackground(p.surface, stroke = p.border)
         isClickable = true
         isFocusable = true
-        contentDescription = "${source.title}, ${source.count} bài"
+        val facts = MeloLibraryPolicy.sourcePresentation(source, host.selectedBrowseSource())
+        contentDescription = "${source.title}, ${facts.detail}"
         addView(c.text(source.title, s.titleText, p.text, bold = true, maxLines = 2))
-        addView(c.text(if (source.count > 0) "${MeloComponentPolicy.formatCount(source.count)} bài" else "Chưa có nhạc",
-            s.secondaryText, p.textSecondary).apply { setPadding(0, s.gap / 2, 0, 0) })
+        addView(c.text(facts.detail, s.secondaryText, p.textSecondary, maxLines = 2).apply { setPadding(0, s.gap / 2, 0, 0) })
         setOnClickListener { host.openSource(source.chatId) }
     }
 }

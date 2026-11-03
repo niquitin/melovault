@@ -1927,6 +1927,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun updateSyncHeaderSubtitle() {
         if (!::syncSubtitle.isInitialized) return
+        if (isForumCatalogue()) {
+            syncSubtitle.text = listOfNotNull(selectedChatId?.let(::sourceTitleOf), forumCountLabel).joinToString(" · ")
+            scheduleMeloLibraryRefresh()
+            return
+        }
         if (filterOnlyDownloaded && offlineSummary != null && !(allChatsMode && browseSources && !playlistMode)) {
             syncSubtitle.text = offlineSummary
             return
@@ -5188,6 +5193,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 sourcesAdapter.clear()
                 sourcesAdapter.addAll(listOf("Tất cả nhạc của nhóm · $fullCount bài") + rows.map { "${it.title}\n${it.detail}" } +
                     listOfNotNull(if (forumCanLoadMore) "Tìm thêm chủ đề…" else null, "Làm mới chủ đề"))
+                updateSyncHeaderSubtitle()
                 scheduleMeloLibraryRefresh()
                 if (query.isNotBlank() && !forumCatalogueComplete && !forumSearchRequested && !forumBusy) {
                     forumSearchRequested = true
