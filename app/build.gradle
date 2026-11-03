@@ -155,6 +155,7 @@ android {
     compileSdk 36
 
     defaultConfig {
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         applicationId 'com.bsdung.musicassistantcar'
         minSdk 26
         targetSdk 36
