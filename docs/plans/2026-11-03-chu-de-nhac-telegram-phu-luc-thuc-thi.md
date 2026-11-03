@@ -99,3 +99,10 @@ Nguồn hợp đồng: [schema chính thức đúng revision](https://github.com
 - Native test bổsung: B đangcóbài→backcatalogue→gọionTouchModeChanged(true) trênListViews thậtđangattached→mởlạiB→queuevẫngiữ. Đây là sựkiệnAndroidthậtđãgâycrash, khôngchỉhostnavigation. Chưa có sourcecommit/bảnAPK mới tại mốc này.
 - Gate Ni đangchạy session25122, `scratch/chu-de-telegram/ni-hidden-list-r7.*`; chờexit/XMLtrước, khôngchạytrùng. Filemãchưacommit củaCodex: MeloLibraryPane.kt vàTelegramForumFeatureDeviceTest.kt. SonyOFF, chưa cóTinybuild mới.
 - Gate ListViewR7 hoàn tất: BUILD SUCCESSFUL2m30/exit0, Debug/Release mỗi loại2741passed/21skipped/0failed/error,205suites/2762defined, assemble3APK xanh. Chưa khẳng định caSonyhếtcrash khi chưa chạy bản mới.
+
+
+## Chốt source e55ca7e
+
+Ni R7:2741passed/21skipped/0failed mỗi variant, assemble3APK xanh2m30. Tiny1m14/configtrue; APK SHA 71809F4C96788F84A1A00FEA04B7446A8DF01426D6BE08D6D184D234BEC90820,33878126B; cài-r/pullhashkhớp, baselineDB3/25568/2yêuthích. NativeFeature32,144s OK1test; touch_mode_after_back=true,metadata/Q9đúng,queue226/NextA/browseBgiữqueue,DownloadedB0,xoay/recreateđúng. ManualgetUI hiểu hint nhưtext gâyguardfail, ảnhM5thựcblank; đãtouchmởlạiLUSH bằngđúngtọađộ XML/ảnh trêncùngPID, queryNamkhôiphục, khôngFATAL. Không dùng nguồn04cócrash làm bảncuối.
+
+APK e55 Drivefile1BZqzp5ggmvGN8fa8iVjBffy_dV4NJQDV/parent1lIIvjxchi691qKSZ0wY47zpJ0Dtc3Kgs: upload/size/privateownerđúng, fetch403cannotDownloadAbusiveFile; khôngnéwarning. Photosfolder19HhP87flEHXyImJ43UpB6xFqnFplmA7G:10PNGđãverifyprivate/bytes,linkindexmới. Rootcollagee55 SHA C3794F31E99A1E00AF53D858D4139385EC03A4EF3DDB72AB299105593D1BE113; collage04 nguyênSHA8A1…A3ED đãchuyểnvàoqa-04aa5ba/00_tong_hop.png, khôngghiđè. Nguồnkhôngđổisau e55ca7e; chỉchốthồsơ.
