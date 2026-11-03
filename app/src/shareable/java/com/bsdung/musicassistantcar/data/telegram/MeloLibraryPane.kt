@@ -321,8 +321,8 @@ internal class MeloLibraryPane(
     }
 
     /** A pending anchor survives a row refresh; without this the list re-syncs to the row it showed before. */
-    private fun refreshRows() {
-        adapter.notifyDataSetChanged()
+    private fun refreshRows(notify: Boolean = true) {
+        if (notify) adapter.notifyDataSetChanged()
         songRestore.afterRefresh()?.let { list.setSelectionFromTop(it.index, it.offsetPx) }
     }
 
@@ -453,6 +453,9 @@ internal class MeloLibraryPane(
         playFeedbackView.refresh()
         val snap = host.snapshot()
         snapshot = snap
+        // Hidden lists remain attached and receive touch-mode callbacks. Their count must agree
+        // with the new snapshot before a catalogue/index early return or a scroll reset.
+        adapter.notifyDataSetChanged()
         val pendingPlay = playAllWhenLoaded?.let { MeloLibraryPolicy.pendingBrowsePlay(it, snap) }
         if (pendingPlay == MeloLibraryPolicy.BrowsePlayDecision.CANCEL) playAllWhenLoaded = null
         val browseKey = snap.browseOwnerId.takeIf { it > 0L }?.let { MeloBrowseState.Key(it, snap.browseScope) }
@@ -579,7 +582,7 @@ internal class MeloLibraryPane(
             bar.visibility = if (showBar) View.VISIBLE else View.GONE
             list.setPadding(0, 0, if (showBar) bar.barWidthPx else 0, 0)
             if (!showBar) bar.setActive(null)
-            refreshRows()
+            refreshRows(notify = false)
             if (rowArtEnabled) {
                 lastArtFirst = -1
                 list.post { requestVisibleArt() }

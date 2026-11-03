@@ -4,6 +4,9 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.database.sqlite.SQLiteOpenHelper
 import android.os.Bundle
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ListView
 import androidx.media3.session.MediaController
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -41,6 +44,14 @@ class TelegramForumFeatureDeviceTest {
     }
     private fun field(activity: TelegramPreviewActivity, name: String): Any? = TelegramPreviewActivity::class.java
         .getDeclaredField(name).apply { isAccessible = true }.get(activity)
+
+    /** Android delivers touch-mode changes to attached lists even when their parent is GONE. */
+    private fun touchModeOnAttachedLists(view: View): Int {
+        var count = 0
+        if (view is ListView) { view.onTouchModeChanged(true); count++ }
+        if (view is ViewGroup) for (i in 0 until view.childCount) count += touchModeOnAttachedLists(view.getChildAt(i))
+        return count
+    }
 
     @Test fun browsePlayAndRestoreExistingForum() {
         val args = InstrumentationRegistry.getArguments()
@@ -169,6 +180,13 @@ class TelegramForumFeatureDeviceTest {
             val atB = ui { host!!.nowPlaying() }
             report("browse_B queue_unchanged=true playing=${atB?.playing == true} position_ms=${atB?.positionMs ?: 0}")
             stage("Q5_B_queue_A")
+            ui { assertTrue(host!!.backWithinForum()) }
+            await("catalogue after B with populated song rows") { ready() && snap().forumTopics != null }
+            assertTrue("real ListView touch-mode coverage missing", ui { touchModeOnAttachedLists(activity.window.decorView) } > 0)
+            ui { host!!.openForumTopic(b) }
+            await("touching catalogue then reopening B") { ready() && snap().browseScope.forumTopicId == b && snap().rows.isNotEmpty() }
+            assertEquals("returning through catalogue changed queue", queueA, queue())
+            report("touch_mode_after_back=true")
             ui { (field(activity, "player") as? MediaController)?.pause() }
             ui { host!!.filterInSource(MeloCompactPolicy.Mode.DOWNLOADED) }
             await("Downloaded stays in B") { ready() && snap().browseScope.forumTopicId == b && snap().browseScope.downloadedOnly }
