@@ -91,3 +91,17 @@ Việc: git log b90834f..HEAD --oneline và git diff --stat; đọc kỹ MeloEqA
 Ghi docs/plans/2026-11-02-bo-chinh-am-eq-nghiem-thu-so-bo.md: SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN / CẦN SỬA / BLOCKED, kèm phạm vi và giới hạn (CHƯA XÁC NHẬN ÂM THANH THỰC).
 Kết thúc: "Đã dừng, chờ chủ dự án nghiệm thu." + cách phản hồi ĐẠT / Yêu cầu sửa.
 ```
+
+## Checkpoint 4 — 03/11/2026, chỉnh preamp (yêu cầu “Chỉnh preamp” của chủ dự án)
+
+**Cập nhật: HEAD mã = `cade4dc` (thay `e2faf85`); Checkpoint 3 và prompt sơ bộ bên trên đọc theo commit/APK này.**
+
+1. **Việc:** preamp tự động nay = −đỉnh của đáp tuyến gộp 10 dải (trước: −thanh dương lớn nhất), tính theo sample rate luồng; dải bị bỏ qua gần Nyquist không còn trừ preamp. Chỉ sửa `MeloEqPolicy.kt`, `MeloEqAudioProcessor.kt` và 2 file test. Chi tiết, bảng số: [báo cáo](2026-11-02-bo-chinh-am-eq-bao-cao.md) mục 11.
+2. **Kết quả:** Tăng bass −6 → −7,1 dB; Rock −5 → −5,8 dB; một thanh +6 vẫn −6 dB; chỉ cắt/Phẳng 0. Trên Sony, 4 cửa sổ 10 s mỗi cấu hình đều `clipped=0` (trước 104–215 và 0–22). Bật EQ nhỏ hơn bản trước khoảng 1 dB.
+3. **Gate Ni (`cade4dc`):** 203 suite, **2759 test** mỗi biến thể, 21 skipped, 0 lỗi; mọi assemble xanh; `git diff --check` sạch.
+4. **APK:** vc121 `0.6.96-beta`, 33.828.974 B, SHA-256 `76D1F355095C6E4E98A28F703BDB196BFEE1E562F1780393DF9E419F3B9BDB6C`, cert `eecd3df7…fce8`, build Tiny từ bundle `CABF62E1…8540` (khớp), cài một lệnh `install -r` → Success. Drive owner-only: [apk-test](2026-11-02-bo-chinh-am-eq-apk-test.md), [hình](2026-11-02-bo-chinh-am-eq-hinh-nghiem-thu.md). Nhãn **QA CANDIDATE — CHƯA NGHIỆM THU**; candidate `e2faf85` còn trên Drive, **đã được thay thế**.
+5. **Chưa kiểm chứng:** **CHƯA XÁC NHẬN ÂM THANH THỰC**; xoay ngang/chữ lớn; FLAC/hi-res, Nhạc trên máy, tai nghe/Bluetooth, máy khác; QA lại trên máy chỉ gồm bật/mẫu/kéo thanh/Đặt lại + log (Q1–Q7 đầy đủ làm trên `e2faf85`). Cosmetic: log Debug in `-0,0` cho Phẳng.
+6. **Sony:** `SONY_SCREEN_END` Display State=OFF; EQ Tắt, Phẳng; Hẹn giờ không đụng; nhạc tạm dừng (do QA phát); app ở màn hình chính.
+7. **Chưa merge/push** (chủ dự án chưa ĐẠT).
+
+**Bước tiếp:** chủ dự án nghe thử rồi trả lời `ĐẠT 2026-11-02-bo-chinh-am-eq — cade4dc/76D1F355` hoặc `Yêu cầu sửa 2026-11-02-bo-chinh-am-eq: <lỗi>` (ví dụ muốn to hơn thì giảm độ trừ preamp, hoặc chỉnh giá trị mẫu). **Đã dừng. Mở phiên mới để nghiệm thu sơ bộ nhanh** (dùng prompt ở Checkpoint 3 với HEAD mã `cade4dc`).

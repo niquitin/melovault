@@ -1,7 +1,7 @@
 # 2026-11-02-bo-chinh-am-eq — Báo cáo thực thi
 
 Vai: thực thi (Claude Code, Sonnet 5.5). Nhánh `dot/2026-11-02-bo-chinh-am-eq`, worktree `D:\Bots\_worktrees\MeloVault-eq`, baseline `b90834f`, HEAD đầu phiên `297d635` (commit kế hoạch).
-Phạm vi: **Chặng 1 (S0–S7)** trên Ni (mục 1–5) và **Chặng 2 (S8–S11)** trên Tiny + Sony cùng phiên theo lời chủ dự án “Làm ngay đây” (mục 6–9). HEAD cuối: `e2faf85` (commit mã `7353587` + 1 sửa giao diện sau QA).
+Phạm vi: **Chặng 1 (S0–S7)** trên Ni (mục 1–5) và **Chặng 2 (S8–S11)** trên Tiny + Sony cùng phiên theo lời chủ dự án “Làm ngay đây” (mục 6–9). HEAD mã cuối: `cade4dc` (mã EQ `7353587` + sửa hàng mẫu `e2faf85` + chỉnh preamp `cade4dc`, mục 11).
 
 ## 1. Kết quả theo bước
 
@@ -111,3 +111,43 @@ Xem [apk-test](2026-11-02-bo-chinh-am-eq-apk-test.md) và [hình](2026-11-02-bo-
 - Hiệu ứng hệ thống Sony (Dolby/ClearAudio+): không đổi; nếu đang bật thì cộng thêm lên EQ của app.
 - Thanh trượt tô từ trái sang thumb (cả quanh mức 0) và công tắc dùng màu hệ thống (xanh) — chưa theo màu nhấn; chip phía sau bảng chỉ cập nhật sau khi đóng bảng. Đều là chi tiết thẩm mỹ, chưa sửa.
 - Release/`.open`/Personal chạy trên máy: chưa.
+
+---
+
+# Chỉnh preamp (03/11/2026, yêu cầu “Chỉnh preamp” của chủ dự án sau báo cáo mục 7)
+
+## 11. Thay đổi và kết quả
+
+Vấn đề: preamp cũ = −(thanh dương lớn nhất). Các thanh kề nhau cộng lại trong vùng chồng nên đỉnh đáp tuyến cao hơn thanh lớn nhất, nên bài to vẫn bị cắt biên (Tăng bass + 1 kHz +4: 104–215 mẫu / 10 s; Rock: 0–22).
+
+Sửa (commit `cade4dc`, chỉ `MeloEqPolicy.kt` + `MeloEqAudioProcessor.kt` + test):
+- `MeloEqPolicy.peakBoostDb(gains, sampleRate)`: đỉnh của 10 bộ lọc nối tiếp trên lưới 1/24 quãng tám, 20 Hz–20 kHz, dùng chính công thức biquad; dưới 0,1 dB coi là 0. `Settings.preampDb(sampleRate)` = −đỉnh đó. Processor tính theo sample rate của luồng đang phát.
+- Dải bị bỏ qua gần Nyquist (≥ 0,45·sr, vd 16 kHz ở 32 kHz) **không còn** kéo preamp xuống (trước đây vẫn trừ 12 dB dù dải không chạy). Quy tắc “dải nào được dùng” gom về `MeloEqPolicy.bandIsUsed`, dùng chung cho processor và preamp.
+- Log Debug ghi `preampDb` một số lẻ (vd `-7,1`). Gốc: dòng Phẳng hiện `-0,0` (số không âm) — chỉ là cách in log Debug, không ảnh hưởng âm thanh, chưa sửa.
+
+| Mẫu (tại 48 kHz, từ log Sony) | Preamp cũ | Preamp mới |
+|---|---|---|
+| Tăng bass (6/5/4/2) | −6 dB | **−7,1 dB** |
+| Tăng bass + 1 kHz +4 | −6 dB | **−7,1 dB** (1 kHz xa dải bass nên không đổi đỉnh) |
+| Rock | −5 dB | **−5,8 dB** |
+| Phẳng / Giảm bass / chỉ cắt | 0 | 0 |
+| Một thanh +6 | −6 dB | −6 dB (±0,3) |
+
+Số đo trên Sony (Debug, cùng bài MP3 44,1 kHz, 4 cửa sổ 10 s mỗi cấu hình, log `logcat_meloeq_preamp.txt`):
+
+| Cấu hình | RMS vào | RMS ra | Mẫu bị chặn biên (mới) | (cũ, bản `e2faf85`) |
+|---|---|---|---|---|
+| Tăng bass + 1 kHz +4 | −8,7…−8,9 dB | −10,3…−10,9 dB | **0, 0, 0, 0** | 104–215 |
+| Rock | −7,6…−8,5 dB | −9,6…−10,7 dB | **0, 0, 0, 0** | 0–22 |
+
+Hai lượt không nhất thiết trùng đoạn nhạc (bài #3 dài 1 giờ), nên đây là bằng chứng kỹ thuật chứ không phải so sánh tuyệt đối; test JVM mới chứng minh đỉnh tổng ≤ 0 dB ở 32/44,1/48/96 kHz cho mọi mẫu và vài cấu hình cực đoan. Chi phí đổi lại: bật EQ **nhỏ hơn khoảng 1 dB** so với bản trước (có thể bù bằng âm lượng máy).
+
+Test mới: `MeloEqPolicyTest` 16 → 20 (preamp không trừ gì khi chỉ cắt; một thanh = gain; chồng nhiều thanh sâu hơn thanh lớn nhất; đỉnh gộp + preamp ≤ 0,1 dB ở 4 sample rate; dải bị bỏ qua không trừ preamp) và `MeloEqAudioProcessorTest` 13 → 14 (sin 0,98 FS ở tần số đỉnh của Tăng bass: không phẳng đỉnh, không cắt, ≤ 1,0). Test cũ “dải 16 kHz ở 32 kHz → −12 dB” đổi thành 0 dB cho đúng hành vi mới.
+
+Gate Ni trên `cade4dc`: `:app:testShareableDebugUnitTest :app:testShareableReleaseUnitTest` BUILD SUCCESSFUL, mỗi biến thể **203 suite, 2759 test, 21 skipped, 0 fail, 0 error**; `assembleShareableDebug/Release`, `-PmeloOpen=true` Debug, `assemblePersonalDebug` BUILD SUCCESSFUL; `git diff --check` sạch (`p-*.log`).
+
+Tiny build `cade4dc` BUILD SUCCESSFUL 3m08s; APK 33.828.974 B, SHA-256 `76D1F355…DB6C`, vc121, cert `eecd3df7…fce8`; cài một lệnh `adb install -r` → Success. Việc QA lại trên máy chỉ gồm bật/chọn mẫu/kéo thanh/đặt lại và đọc log (không lặp Q1–Q7 đầy đủ; Q1–Q7 làm trên `e2faf85`, phần giao diện không đổi). Không crash (`logcat -b crash` không có dòng của app). `SONY_SCREEN_END`: màn tắt bằng `keyevent 223` trong `finally`, `Display State=OFF`; EQ về **Tắt, Phẳng**; nhạc **tạm dừng** (do QA phát); Hẹn giờ không đụng.
+
+APK/ảnh: xem [apk-test](2026-11-02-bo-chinh-am-eq-apk-test.md) và [hình](2026-11-02-bo-chinh-am-eq-hinh-nghiem-thu.md) (Drive owner-only, `cade4dc`).
+
+Chưa kiểm: **CHƯA XÁC NHẬN ÂM THANH THỰC**; xoay ngang/chữ lớn; FLAC/hi-res, “Nhạc trên máy”, tai nghe/Bluetooth, máy khác; đo lại CPU với mã mới (tính preamp chỉ chạy khi đổi cài đặt, nên không đổi chi phí mỗi buffer).

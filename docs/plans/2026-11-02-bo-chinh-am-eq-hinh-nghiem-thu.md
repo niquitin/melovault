@@ -16,3 +16,17 @@
 | Log | [logcat_meloeq.txt](https://drive.google.com/file/d/13CeyOcp16Gz8CcjaCt2iROOA1fFI8cgI/view?usp=drivesdk) · [m_eq_on_rock.txt](https://drive.google.com/file/d/1DkUX6wSt-ycNneKX9eZKGU7-ZMpG9Jn5/view?usp=drivesdk) · [m_eq_off.txt](https://drive.google.com/file/d/1rBV-ryj2l0857Rh6G4_pPbQdFZ5f0qJ-/view?usp=drivesdk) | Log `MeloEq` (cấu hình, đổi cài đặt, RMS vào/ra, chặn biên, µs/buffer) và mẫu CPU `top` khi EQ Bật (Rock) / Tắt |
 
 Giới hạn: không có ảnh Q6 (chuyển bài/tua, ảnh bìa người) và ảnh xoay ngang/chữ lớn (CHƯA KIỂM). Tải bằng trình duyệt chưa thử.
+
+## Bản chỉnh preamp — commit `cade4dc` (03/11/2026)
+
+Candidate hiện hành. Drive owner-only (`get_file_permissions` đã kiểm cho thư mục, `hinh` và APK). Thư mục: [MeloVault-EQ-QA-CANDIDATE-20261103-vc121-cade4dc](https://drive.google.com/drive/folders/1xUoRJImQ3leE0rZYEj_rGWhCdYifn9w8) · [hinh](https://drive.google.com/drive/folders/1gEW-d6S53JwM41VsftAQwUHQJSw9ntjb). Ảnh tổng hợp ở trên (bản `e2faf85`) cũng có trong thư mục này: [00_tong_hop_ban_e2faf85.png](https://drive.google.com/file/d/1vodmKCQMzg0Xv01nYqWYWFhG8tgptX5B/view?usp=drivesdk).
+
+| Bước | Ảnh / tệp | Nội dung |
+|---|---|---|
+| Mở bảng | [21_p_panel.png](https://drive.google.com/file/d/1KQKcIGE0uajkvjtOZwbRy1Vs7GJIl56t/view?usp=drivesdk) | Bảng EQ sau khi cài bản mới (Tắt, Phẳng) |
+| Tăng bass + 1 kHz +4 | [22_p_bass_custom.png](https://drive.google.com/file/d/1FoYOKw1Kb3bOFjKg1sX8LpQ23gSeKmEh/view?usp=drivesdk) | Cấu hình từng bị cắt biên; hàng mẫu cuộn tới “Tùy chỉnh” |
+| Rock | [23_p_rock.png](https://drive.google.com/file/d/1fKBf510HZWSEzHBJwt-sYr9_sHhJuT-C/view?usp=drivesdk) | Mẫu Rock |
+| Trả về | [24_p_reset_off.png](https://drive.google.com/file/d/1Bzkr9U06L7MjbXUKQigZsG4svQE8grhU/view?usp=drivesdk) | Đặt lại, Tắt |
+| Log | [logcat_meloeq_preamp.txt](https://drive.google.com/file/d/1Ld-6g05qzAvLBnsmbUt-U164Kv4dd8uB/view?usp=drivesdk) · [logcat_meloeq_ban_e2faf85.txt](https://drive.google.com/file/d/173vnajwn2Edvla8KaQipGjdJlEMcpzR3/view?usp=drivesdk) | `preampDb` và số mẫu bị chặn biên, bản mới và bản trước |
+
+Giới hạn: ảnh bìa người thật và ảnh thư viện không upload; chỉ có ảnh bảng EQ. Tải bằng trình duyệt chưa thử.
