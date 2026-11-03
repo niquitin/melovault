@@ -176,6 +176,17 @@ object TelegramLibrarySql {
         VALUES (?,?,?,?,?,?,COALESCE(?,(SELECT is_forum FROM $TABLE_SOURCES WHERE account_id=? AND chat_id=?)))
     """.trimIndent()
 
+    // Source maintenance must update its fields in place: REPLACE would erase forum/type metadata.
+    val ENSURE_SOURCE_SQL = """
+        INSERT OR IGNORE INTO $TABLE_SOURCES (account_id,chat_id,title,last_updated_at_ms) VALUES (?,?,?,?)
+    """.trimIndent()
+    val UPDATE_SOURCE_TITLE_SQL = """
+        UPDATE $TABLE_SOURCES SET title=?,last_updated_at_ms=? WHERE account_id=? AND chat_id=?
+    """.trimIndent()
+    val UPDATE_SOURCE_COUNT_SQL = """
+        UPDATE $TABLE_SOURCES SET track_count=?,last_updated_at_ms=? WHERE account_id=? AND chat_id=?
+    """.trimIndent()
+
     val UPSERT_FORUM_HISTORY_SQL = """
         INSERT OR REPLACE INTO $TABLE_FORUM_HISTORY
         (account_id,chat_id,forum_topic_id,older_cursor,older_complete,newest_message_id,refresh_cursor,

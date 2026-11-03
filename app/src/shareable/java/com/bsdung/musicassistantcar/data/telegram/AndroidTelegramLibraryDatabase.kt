@@ -350,28 +350,13 @@ class AndroidTelegramLibraryDatabase(
     override fun updateSourceTitle(accountId: Long, chatId: Long, title: String) {
         val db = writableDatabase
         val now = System.currentTimeMillis()
-        val values = ContentValues().apply {
-            put(TelegramLibrarySql.COL_ACCOUNT_ID, accountId)
-            put(TelegramLibrarySql.COL_CHAT_ID, chatId)
-            put(TelegramLibrarySql.COL_TITLE, title)
-            put(TelegramLibrarySql.COL_LAST_UPDATED_AT_MS, now)
-        }
-        // Try update first
-        val rows = db.update(
-            TelegramLibrarySql.TABLE_SOURCES,
-            values,
-            "${TelegramLibrarySql.COL_ACCOUNT_ID} = ? AND ${TelegramLibrarySql.COL_CHAT_ID} = ?",
-            arrayOf(accountId.toString(), chatId.toString())
-        )
-        if (rows == 0) {
-            values.put(TelegramLibrarySql.COL_TRACK_COUNT, 0)
-            values.put(TelegramLibrarySql.COL_TYPE, "unknown")
-            db.insertWithOnConflict(
-                TelegramLibrarySql.TABLE_SOURCES,
-                null,
-                values,
-                SQLiteDatabase.CONFLICT_REPLACE
-            )
+        db.beginTransactionNonExclusive()
+        try {
+            db.execSQL(TelegramLibrarySql.ENSURE_SOURCE_SQL, arrayOf(accountId, chatId, title, now))
+            db.execSQL(TelegramLibrarySql.UPDATE_SOURCE_TITLE_SQL, arrayOf(title, now, accountId, chatId))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
         }
     }
 
@@ -392,19 +377,9 @@ class AndroidTelegramLibraryDatabase(
                     val count = cursor.getInt(1)
                     val sourceTitle = cursor.getString(2) ?: "Chat $chatId"
 
-                    val values = ContentValues().apply {
-                        put(TelegramLibrarySql.COL_ACCOUNT_ID, accountId)
-                        put(TelegramLibrarySql.COL_CHAT_ID, chatId)
-                        put(TelegramLibrarySql.COL_TITLE, sourceTitle)
-                        put(TelegramLibrarySql.COL_TRACK_COUNT, count)
-                        put(TelegramLibrarySql.COL_LAST_UPDATED_AT_MS, System.currentTimeMillis())
-                    }
-                    db.insertWithOnConflict(
-                        TelegramLibrarySql.TABLE_SOURCES,
-                        null,
-                        values,
-                        SQLiteDatabase.CONFLICT_REPLACE
-                    )
+                    val now = System.currentTimeMillis()
+                    db.execSQL(TelegramLibrarySql.ENSURE_SOURCE_SQL, arrayOf(accountId, chatId, sourceTitle, now))
+                    db.execSQL(TelegramLibrarySql.UPDATE_SOURCE_COUNT_SQL, arrayOf(count, now, accountId, chatId))
                 }
             }
             db.setTransactionSuccessful()

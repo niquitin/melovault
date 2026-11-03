@@ -123,6 +123,13 @@ class TelegramForumFeatureDeviceTest {
             }
             assertTrue(snap().forumTopics.orEmpty().map { it.id }.containsAll(listOf(a, b)))
             stage("Q2_catalogue")
+            db.recomputeSourceTrackCounts(owner)
+            assertEquals("count maintenance erased confirmed forum state", true, db.getSources(owner).firstOrNull { it.chatId == chat }?.isForum)
+            ui { host!!.showSources() }
+            await("forum badge after source count refresh") { ready() && snap().showingSources && snap().sources.any { it.chatId == chat && it.hasTopics } }
+            stage("Q9_sources_badge")
+            ui { host!!.openSource(chat) }
+            await("cached forum reopens catalogue") { ready() && snap().forumTopics != null }
             val groupBefore = db.getSongCount(owner, chat)
             ui { host!!.openAllForumMusic(); host!!.setQuery("") }
             await("all group music includes legacy rows") { ready() && snap().browseScope.kind == MeloBrowseUiPolicy.Kind.CHANNEL }

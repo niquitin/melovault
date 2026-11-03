@@ -94,6 +94,32 @@ class TelegramForumDatabaseTest {
         assertEquals(initial.songKey, db.scalar("SELECT song_key FROM telegram_songs"))
     }
 
+    @Test fun sourceMaintenancePreservesForumTypeIdentityAndOtherAccount() = database().use { db ->
+        db.fresh()
+        db.execute(TelegramLibrarySql.UPSERT_SOURCE_SQL, arrayOf(11L, -1001L, "Known title", "supergroup", 1, 1L, 1, 11L, -1001L))
+        db.execute(TelegramLibrarySql.UPSERT_SOURCE_SQL, arrayOf(12L, -1001L, "Other account", "channel", 77, 1L, 0, 12L, -1001L))
+        repeat(2) {
+            db.execute(TelegramLibrarySql.ENSURE_SOURCE_SQL, arrayOf(11L, -1001L, "Stale song title", 2L))
+            db.execute(TelegramLibrarySql.UPDATE_SOURCE_COUNT_SQL, arrayOf(226, 2L, 11L, -1001L))
+            assertEquals(1L, db.scalar("SELECT COUNT(*) FROM telegram_sources WHERE account_id=11 AND title='Known title' AND type='supergroup' AND is_forum=1 AND track_count=226"))
+        }
+        db.execute(TelegramLibrarySql.ENSURE_SOURCE_SQL, arrayOf(11L, -1001L, "Renamed", 3L))
+        db.execute(TelegramLibrarySql.UPDATE_SOURCE_TITLE_SQL, arrayOf("Renamed", 3L, 11L, -1001L))
+        assertEquals(1L, db.scalar("SELECT COUNT(*) FROM telegram_sources WHERE account_id=11 AND title='Renamed' AND type='supergroup' AND is_forum=1 AND track_count=226"))
+        assertEquals(1L, db.scalar("SELECT COUNT(*) FROM telegram_sources WHERE account_id=12 AND title='Other account' AND type='channel' AND is_forum=0 AND track_count=77"))
+        db.execute(TelegramLibrarySql.ENSURE_SOURCE_SQL, arrayOf(11L, -1002L, "New source", 4L))
+        db.execute(TelegramLibrarySql.UPDATE_SOURCE_COUNT_SQL, arrayOf(5, 4L, 11L, -1002L))
+        assertEquals(1L, db.scalar("SELECT COUNT(*) FROM telegram_sources WHERE chat_id=-1002 AND is_forum IS NULL AND track_count=5"))
+        val memory = InMemoryTelegramLibraryDao()
+        memory.upsertSources(listOf(IndexedTelegramSource(11, -1001, "Known", type = "supergroup", isForum = true)))
+        memory.upsertSongs(listOf(song()))
+        memory.recomputeSourceTrackCounts(11)
+        memory.updateSourceTitle(11, -1001, "Renamed")
+        assertEquals(true, memory.getSources(11).single().isForum)
+        assertEquals("supergroup", memory.getSources(11).single().type)
+        assertEquals(1, memory.getSources(11).single().trackCount)
+    }
+
     @Test fun sourceUnknownStateIsPreservedAndConfirmedFalseCanReplaceTrue() = database().use { db ->
         db.fresh()
         fun write(value: Int?) = db.execute(TelegramLibrarySql.UPSERT_SOURCE_SQL, arrayOf(11, -1001, "Nguồn", "supergroup", 2, 1, value, 11, -1001))
