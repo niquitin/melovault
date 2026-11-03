@@ -11,11 +11,11 @@
 |---|---|---|
 | Khảo sát | Xong | Đã đọc luồng quét, parser WAV/document, DAO v2, phạm vi browse, đường phát, schema TDLib ghim và tên phương thức trong binary. Checkout chính có dữ liệu của việc cũ, tài liệu nằm ở worktree sạch riêng từ nhánh tích hợp. |
 | Thiết kế | Xong, phạm vi đã chốt | Chat chủ dự án: “Chốt migration v3 theo kế hoạch, thực thi tiếp S1–S5”. |
-| S1 hợp đồng | Đang làm | Thêm `TelegramForumContract`, 9 test JVM + fixture tổng hợp hai trang và probe instrumentation read-only. Schema chính thức đúng revision đã đối chiếu. Test/build Ni đang chạy, chưa có kết quả. |
-| S1 Sony | Đang làm | Tiny online; Sony authorized, XQ-AS52/Sony; màn OFF; app sẵn có Debug vc121/0.6.96-beta, player paused. Probe dùng owner/hub có sẵn, không tạo TDLib client hoặc đăng nhập mới; chưa cài/chạy probe. |
+| S1 hợp đồng | Đang làm | `4377f07`: 9/9 test passed, không skipped/fail/error; Ni AndroidTest build xanh. Đang bổ sung test ID=1 và giữ trạng thái stalled, chạy Ni lại trong `scratch/chu-de-telegram/s1-contract-r2.log`. |
+| S1 Sony | Đang làm | Probe lần 1 đọc 1.200 message/24 trang hai topic đúng metadata, không thiếu/mâu thuẫn. Chưa tới trang cuối trong ngân sách; assertion BLOCKED, không phải schema mismatch. Đang chọn hai mẫu gần ngày tạo hơn, tối đa 80 trang/topic và gửi thống kê qua runner. App Sony giữ candidate EQ `cade4dc`, SHA `76D1F355…DB6C`, vc121/config=true/cert khớp; chỉ cài bộ AndroidTest. Màn đã OFF. |
 | S2–S5 | Chưa làm | Chưa đổi DB, giao diện hay hàng đợi. Chờ bằng chứng TDLib S1 trước tích hợp. |
 
-**Git và tiến trình.** Phần đang sửa đều do Codex phiên này: `app/build.gradle` (runner AndroidTest), contract, test JVM/resources, `app/src/androidTestShareable/` (probe) và báo cáo/checkpoint. Không đổi bí mật, package, signer, versionCode, owner/session. Gradle Ni: `:app:testShareableDebugUnitTest --tests '*TelegramForumContractTest' :app:assembleShareableDebugAndroidTest --console=plain`, log `scratch/chu-de-telegram/s1-ni.log`, exit `scratch/chu-de-telegram/s1-ni.exit` (chỉ xuất khi xong); session công cụ `37890`. Chưa có build/cài đang chạy trên Tiny. Không wake/mở UI Sony; `SONY_SCREEN_END=OFF` ở kiểm tra đầu phiên.
+**Git và tiến trình.** Commit S1 đầu `4377f07`; phần sửa tiếp đều do Codex: contract/test (biên ID=1, order dạng số), fixture kết thúc rỗng đúng native, probe chọn mẫu/ngân sách/giữ thống kê, báo cáo/checkpoint. Ni session cũ `37890` đã xong exit 0; lượt test bổ sung session `72992`, log/exit `scratch/chu-de-telegram/s1-contract-r2.*`. Tiny build/probe lượt 1 đã xong; clone `C:/Bots/MeloVault-FORUM-S1-IsolatedQA-20261103-4377f07`, logs `C:/Bots/_qa_temp/forum-s1-20261103-4377f07/`; chưa có lượt 2 đang chạy. Không đổi bí mật, package, signer, versionCode, owner/session hoặc DB. `SONY_SCREEN_END=OFF` sau `finally`, có file `screen-end.txt`.
 
 **Prompt cho phiên thực thi tiếp theo**
 

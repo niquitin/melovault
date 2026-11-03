@@ -96,4 +96,11 @@ class TelegramForumContractTest {
         assertFalse(bad.complete)
         assertEquals(1, contract.historyPage(history(message(9000000003L)), -10001L, 71, 9000000002L).rejected)
     }
+
+    @Test fun smallestPossibleBoundaryNeverRestartsFromNewest() {
+        val page = contract.historyPage(history(message(1)), -10001L, 71, 1)
+        assertTrue(page.stalled)
+        assertFalse(page.complete)
+        assertEquals(1L, page.nextMessageId)
+    }
 }

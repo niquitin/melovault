@@ -26,7 +26,7 @@ internal object TelegramForumContract {
     data class HistoryPage(
         /** Includes non-music messages: paging must advance through text, photos and service messages too. */
         val messages: List<JSONObject>, val nextMessageId: Long, val complete: Boolean,
-        val boundaryProbe: Boolean, val rejected: Int,
+        val boundaryProbe: Boolean, val rejected: Int, val stalled: Boolean = false,
     )
 
     private fun int32(json: JSONObject, key: String): Int? = json.opt(key)?.toString()?.toLongOrNull()
@@ -69,7 +69,7 @@ internal object TelegramForumContract {
             val id = requireNotNull(int32(info, "forum_topic_id"))
             topics[id] = Topic(id, info.getString("name"), info.getBoolean("is_general"),
                 info.getBoolean("is_hidden"), info.getBoolean("is_closed"), item.getBoolean("is_pinned"),
-                item.getString("order").toLong())
+                item.get("order").toString().toLong())
         }
         // All three fields are required: a malformed reply is never mistaken for end-of-list.
         val next = ListCursor(json.getInt("next_offset_date"), json.getLong("next_offset_message_id"),
@@ -101,7 +101,8 @@ internal object TelegramForumContract {
         if (items.length() == 0) return HistoryPage(emptyList(), fromMessageId, true, false, 0)
         // A one-message inclusive boundary is not proof of completion. Ask immediately below its RAW id.
         val probe = fromMessageId > 0L && oldest == fromMessageId
-        val next = if (probe) (oldest - 1L).coerceAtLeast(0L) else oldest
+        if (probe && oldest <= 1L) return HistoryPage(emptyList(), fromMessageId, false, false, 0, stalled = true)
+        val next = if (probe) oldest - 1L else oldest
         return HistoryPage(accepted.values.toList(), next, false, probe, 0)
     }
 }

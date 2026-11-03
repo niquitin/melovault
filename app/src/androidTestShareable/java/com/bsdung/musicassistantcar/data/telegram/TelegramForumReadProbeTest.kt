@@ -1,6 +1,7 @@
 package com.bsdung.musicassistantcar.data.telegram
 
 import android.content.Intent
+import android.os.Bundle
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -22,6 +23,10 @@ class TelegramForumReadProbeTest {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         val hub = TdlibSyncHub(ShareableTdlibOwner)
         var requests = 0
+        fun report(value: String) {
+            Log.i("MeloForumProbe", value)
+            instrumentation.sendStatus(0, Bundle().apply { putString("forum_probe", value) })
+        }
         try {
             val deadline = System.currentTimeMillis() + 50_000
             while (ShareableTdlibOwner.authorizedAccount() == null && System.currentTimeMillis() < deadline) Thread.sleep(100)
@@ -94,7 +99,7 @@ class TelegramForumReadProbeTest {
                 }
                 if (topics.size >= 2) { forumChat = chatId; forumTopics = topics.values.toList() }
             }
-            Log.i("MeloForumProbe", "catalogue pages=$cataloguePages visible=${forumTopics.size} general=$generalSeen end=$catalogueEnd repeated=$cursorRepeated regular=$regular")
+            report("catalogue pages=$cataloguePages visible=${forumTopics.size} general=$generalSeen end=$catalogueEnd repeated=$cursorRepeated regular=$regular")
             assertTrue("BLOCKED: no existing forum with two visible topics in bounded discovery", forumChat != 0L)
             assertTrue("BLOCKED: no regular source in bounded discovery", regular)
             var finished = 0
@@ -102,12 +107,16 @@ class TelegramForumReadProbeTest {
             var matched = 0
             var missing = 0
             var historyPages = 0
-            // Older list entries are often small enough to prove the terminal boundary within the read budget.
-            for (row in forumTopics.takeLast(2)) {
+            // Prefer topics whose last message is near their creation date; bound all work explicitly.
+            val samples = forumTopics.sortedBy { row ->
+                val created = row.getJSONObject("info").optLong("creation_date")
+                (row.optJSONObject("last_message")?.optLong("date") ?: created) - created
+            }.take(2)
+            for (row in samples) {
                 val topicId = row.getJSONObject("info").getInt("forum_topic_id")
                 var from = 0L
                 val seen = HashSet<Long>()
-                for (pageIndex in 0 until 12) {
+                for (pageIndex in 0 until 80) {
                     val page = call("getForumTopicHistory") {
                         it.put("chat_id", forumChat).put("forum_topic_id", topicId).put("from_message_id", from)
                             .put("offset", 0).put("limit", 50)
@@ -136,9 +145,9 @@ class TelegramForumReadProbeTest {
                         from--
                     } else from = oldest
                 }
-                Log.i("MeloForumProbe", "history unique=${seen.size}")
+                report("history unique=${seen.size}")
             }
-            Log.i("MeloForumProbe", "result topics=2 history_pages=$historyPages terminal=$finished singleton_probes=$singletonProbes matched=$matched missing=$missing requests=$requests")
+            report("result topics=2 history_pages=$historyPages terminal=$finished singleton_probes=$singletonProbes matched=$matched missing=$missing requests=$requests")
             assertTrue("BLOCKED: terminal history not proven within budget", finished == 2)
         } finally {
             hub.close()
