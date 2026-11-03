@@ -1,4 +1,18 @@
 # Bàn giao — Widget Đang phát
+## Checkpoint sơ bộ · 03/11/2026 · Codex
+
+**SƠ BỘ: CẦN SỬA. Chặng B vẫn BLOCKED.** HEAD nhận bàn giao `8d78b19`, source APK `49ed94c`. Phiên sơ bộ đã kết thúc trên nhánh nhiệm vụ. [Biên bản, vị trí mã và cách kiểm lại](2026-11-03-widget-dang-phat-nghiem-thu-so-bo.md).
+
+| Bước | Trạng thái | Bằng chứng / việc còn lại |
+|---|---|---|
+| Đối chiếu source/APK và gate Ni | Xong | SHA-256 candidate Ni khớp Tiny. Đếm lại XML, đối chiếu manifest bốn biến thể, ảnh và metadata lưu tại Ni. |
+| Điều khiển và khởi động nguội | Cần sửa | Đổi metadata cùng bài xóa chặn NEXT sớm (đã kiểm helper Debug). Khi cấu hình queue đến trước lúc service tồn tại, bài Telegram chờ phát có thể thiếu owner/queue ở widget (phân tích tĩnh). |
+| B / tải APK | BLOCKED | Thiếu QA đăng nhập cho Q2–Q4, Q5 có bài và Q6. Ảnh hiện có chỉ bao phủ phần trống. Drive owner-only trả 403 cannotDownloadAbusiveFile. |
+| Bàn giao chủ dự án | Chờ quyết định | Nếu giao sửa, phiên thực thi mới đọc hai mục trong biên bản, kiểm lại trên cùng nhánh và cần môi trường QA được cấp. |
+
+Phiên sơ bộ chỉ đổi biên bản và checkpoint này, không có job nhiệm vụ để tiếp quản. Lấy SHA hồ sơ bằng lệnh trong bảng định danh dưới đây.
+
+## Lịch sử bàn giao thực thi
 Checkpoint cuối phiên thực thi · 03/11/2026 · Codex; model/effort không được công cụ phiên cung cấp. Code/build/QA đã dừng; chỉ hoàn tất commit hồ sơ và kiểm Git. Không agent phụ hoặc tác vụ nền nhiệm vụ.
 
 **A hoàn tất gate Ni; B BLOCKED ở QA bài đang phát và tải APK Drive. Chưa nghiệm thu, merge hoặc push.**
