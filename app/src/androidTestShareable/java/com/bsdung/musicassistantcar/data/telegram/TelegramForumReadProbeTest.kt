@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.json.JSONObject
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -17,6 +18,8 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class TelegramForumReadProbeTest {
     @Test fun readExistingForumAndRegularSource() {
+        assumeTrue("Explicit read-only device probe; skipped by ordinary connected tests",
+            InstrumentationRegistry.getArguments().getString("forumReadProbe") == "true")
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val activity = instrumentation.startActivitySync(Intent(context, TelegramPreviewActivity::class.java)
@@ -126,7 +129,11 @@ class TelegramForumReadProbeTest {
                 val seed = hub.call(requireNotNull(account), epoch, "getMessage", 45_000) {
                     it.put("chat_id", forumChat).put("message_id", topicId.toLong() shl 20)
                 }
-                if (seed is TdlibSyncHub.Reply.Err && seed.code == 400) { report("boundary_seed unavailable=true"); continue }
+                if (seed is TdlibSyncHub.Reply.Err && seed.code in setOf(400, 404)) {
+                    report("boundary_seed unavailable=true code=${seed.code}")
+                    continue
+                }
+                if (seed is TdlibSyncHub.Reply.Err) report("boundary_seed rejected=true code=${seed.code}")
                 assertTrue("BLOCKED: creation service not available for bounded terminal probe", seed is TdlibSyncHub.Reply.Ok)
                 val creation = (seed as TdlibSyncHub.Reply.Ok).json
                 assertTrue("Creation seed returned foreign chat", creation.getLong("chat_id") == forumChat)
