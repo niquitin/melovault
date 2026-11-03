@@ -89,6 +89,26 @@ import org.json.JSONObject
  * a Telegram user session.
  */
 class TelegramPreviewActivity : AppCompatActivity() {
+    private var pendingWidgetPlayer = false
+
+    private fun receiveWidgetIntent(incoming: Intent?) {
+        pendingWidgetPlayer = incoming?.getBooleanExtra(MeloWidgetPolicy.EXTRA_OPEN_PLAYER, false) == true
+        incoming?.removeExtra(MeloWidgetPolicy.EXTRA_OPEN_PLAYER)
+    }
+
+    private fun openPendingWidgetPlayer() {
+        if (!pendingWidgetPlayer || player == null) return
+        pendingWidgetPlayer = false
+        if (ShareablePlaybackService.widgetCanOpenPlayer()) showFullPlayer()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        receiveWidgetIntent(intent)
+        openPendingWidgetPlayer()
+    }
+
     private data class Song(
         val fileId: Int,
         val title: String,
@@ -773,6 +793,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             putString(MeloLocalSourcePolicy.EXTRA_MIME, song.mimeType)
             putLong(MeloLocalSourcePolicy.EXTRA_SIZE, song.sizeBytes)
             putLong(MeloLocalSourcePolicy.EXTRA_DURATION, song.durationMs)
+            song.trustedPerformer?.let { putString(MeloWidgetPolicy.EXTRA_PERFORMER, it) }
         }
         return MediaItem.Builder()
             .setMediaId(MeloLocalSourcePolicy.mediaIdOf(song.mediaStoreId))
@@ -1142,6 +1163,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        receiveWidgetIntent(intent)
         PlaylistSyncForeground.install(application, noBackupFilesDir)
         setTheme(R.style.Theme_MeloVault_Shareable)
         val prefs = getSharedPreferences(UiThemePolicy.PREFS_NAME, Context.MODE_PRIVATE)
@@ -1466,6 +1488,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     pendingPlayback = null
                     startPlayback(controller, pending.items, pending.startIndex, pending.positionMs)
                 }
+                openPendingWidgetPlayer()
             }
 
             override fun onFailure(t: Throwable) {
@@ -1474,12 +1497,18 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }, ContextCompat.getMainExecutor(this))
     }
 
-    private fun mediaItem(uri: Uri, title: String, mediaId: String, artist: String? = null): MediaItem =
+    private fun mediaItem(uri: Uri, title: String, mediaId: String, artist: String? = null,
+                          performer: String? = null): MediaItem =
         MediaItem.Builder()
             .setMediaId(mediaId)
             .setUri(uri)
             .setMediaMetadata(MediaMetadata.Builder().setTitle(title)
-                .setArtist(MeloMediaControlPolicy.fallbackArtist(artist)).build())
+                .setArtist(MeloMediaControlPolicy.fallbackArtist(artist))
+                .setExtras(Bundle().apply {
+                    MeloWidgetPolicy.trustedPerformer(performer)?.let {
+                        putString(MeloWidgetPolicy.EXTRA_PERFORMER, it)
+                    }
+                }).build())
             .build()
 
     private fun enqueuePlayback(uri: Uri, title: String) {
@@ -1497,7 +1526,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val selected = queueSongOrder.indexOfFirst { it.messageId == song.messageId }
         if (selected < 0) {
             enqueueItems(listOf(mediaItem(Uri.fromFile(target), song.title,
-                "telegram:${song.messageId}", song.sourceTitle ?: sourceNames[song.chatId])), 0, startPositionMs)
+                "telegram:${song.messageId}", song.sourceTitle ?: sourceNames[song.chatId], song.performer)), 0, startPositionMs)
             return
         }
         fun playableAt(index: Int): MediaItem? {
@@ -1508,7 +1537,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 cachedSongPaths.remove(item.messageId)
                 return null
             }
-            return mediaItem(Uri.fromFile(file), item.title, "telegram:${item.messageId}", item.sourceTitle ?: sourceNames[item.chatId])
+            return mediaItem(Uri.fromFile(file), item.title, "telegram:${item.messageId}", item.sourceTitle ?: sourceNames[item.chatId], item.performer)
         }
         val orderIds = queueSongOrder.map { it.messageId }
         val indices = TelegramContiguousQueuePolicy.indices(orderIds, song.messageId) {
@@ -1520,7 +1549,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         val contiguous = indices.mapNotNull { index ->
             if (index == selected) mediaItem(Uri.fromFile(target), song.title,
-                "telegram:${song.messageId}", song.sourceTitle ?: sourceNames[song.chatId])
+                "telegram:${song.messageId}", song.sourceTitle ?: sourceNames[song.chatId], song.performer)
             else playableAt(index)
         }
         enqueueItems(contiguous, indices.indexOf(selected).coerceAtLeast(0), startPositionMs)
@@ -1538,7 +1567,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             ) } ?: "mp3"
         val progressive = mediaItem(
             TelegramProgressiveCache.makeUri(song.fileId, ext),
-            song.title, "telegram:${song.messageId}", song.sourceTitle ?: sourceNames[song.chatId]
+            song.title, "telegram:${song.messageId}", song.sourceTitle ?: sourceNames[song.chatId], song.performer
         )
         enqueueItems(listOf(progressive), 0)
     }
@@ -4158,14 +4187,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
             entry.messageId, entry.fileId, entry.title,
             cachedSongPaths[entry.messageId], entry.filename,
             entry.chatId, entry.expectedSize, entry.genuineMessageId,
-            MeloMediaControlPolicy.fallbackArtist(entry.sourceTitle ?: sourceNames[entry.chatId])
+            MeloMediaControlPolicy.fallbackArtist(entry.sourceTitle ?: sourceNames[entry.chatId]),
+            entry.performer,
         )
     }
 
     /** The Song the UI already knows for a service track (duration, source); otherwise one built from the track. */
     private fun songOfTrack(track: ShareablePlaybackService.QueueTrack, known: Map<Long, Song>): Song =
         known[track.messageId] ?: Song(track.fileId, track.title, track.filename.ifBlank { track.title },
-            track.messageId, track.chatId, track.expectedSize, rawMessageId = track.genuineMessageId)
+            track.messageId, track.chatId, track.expectedSize, rawMessageId = track.genuineMessageId,
+            performer = track.performer)
 
     /** Source order of the queue the service holds; [queueSongOrder] is the play order (they differ while Shuffle is on). */
     private fun serviceBaseSongs(): List<Song> {
@@ -8291,7 +8322,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         if (target.isFile && TelegramAccountStoragePolicy.isOwnedFile(filesRoot, target)) {
             controller.addMediaItem(
                 (controller.currentMediaItemIndex + 1).coerceAtMost(controller.mediaItemCount),
-                mediaItem(Uri.fromFile(target), song.title, mediaId, song.sourceTitle ?: sourceNames[song.chatId])
+                mediaItem(Uri.fromFile(target), song.title, mediaId, song.sourceTitle ?: sourceNames[song.chatId], song.performer)
             )
         }
     }

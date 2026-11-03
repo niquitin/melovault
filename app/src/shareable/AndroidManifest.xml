@@ -27,6 +27,14 @@
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </service>
+        <receiver android:name=".data.telegram.MeloNowPlayingWidgetProvider"
+                  android:exported="false" android:label="@string/widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                       android:resource="@xml/melo_now_playing_widget_info" />
+        </receiver>
         <!-- UI lab (docs/ui-spec.md step 1): screen info + device emulation, own prefs only. -->
         <activity android:name=".data.telegram.MeloUiLabActivity"
                   android:exported="false"

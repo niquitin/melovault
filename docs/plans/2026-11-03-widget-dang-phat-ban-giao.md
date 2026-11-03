@@ -1,5 +1,17 @@
 # Bàn giao — Widget Đang phát
-Checkpoint 0 · 03/11/2026 · Codex lập kế hoạch. Chủ dự án đã chọn widget Đang phát gồm bìa, tên bài, ca sĩ và ba nút điều khiển. Chủ dự án giao model khác thực thi.
+Checkpoint A hoàn tất · 03/11/2026 · Codex thực thi, phiên đang hoạt động; không có agent phụ. Chuẩn bị commit source rồi tiếp B.
+
+- HEAD bắt đầu/commit kế hoạch: `192170642163c69229c8945b54c26f7ac2d5a80f`; baseline `b90834f44457b60a9732e59e59c1bc9c971368c3`.
+- Git sạch khi bắt đầu; fetch `github` thành công; ahead 1 / behind 0 so với nhánh tích hợp remote, chưa có upstream.
+- [Báo cáo thực thi](2026-11-03-widget-dang-phat-bao-cao.md). A0–A7 xong gate Ni; chưa QA launcher/Telegram/âm thanh thật. Source commit sẽ chứa checkpoint này; lấy SHA bằng git log thay vì tự tham chiếu.
+- Chưa commit: bốn lớp widget mới, manifest, LocalSourcePolicy, PlaybackService, PreviewActivity, tài nguyên Shareable, test policy và hai hồ sơ. Đối chiếu danh sách bằng git status/diff; không nhận thay đổi ngoài danh sách này.
+- Targeted đã BUILD SUCCESSFUL, 12 test / 0 skipped / 0 lỗi. Full lượt 2 BUILD SUCCESSFUL: mỗi Debug/Release 202 suite, 2.737 test / 2.716 passed / 21 skipped / 0 failure/error, log `a7-tests-r2-20261103.log`. Hai lượt thất bại trước đã lưu lý do trong báo cáo.
+- Assemble Shareable Debug/Release BUILD SUCCESSFUL 2m13s; .open 26s; Personal 28s. `telegram.config.valid=false` trên Ni; không cài/bàn giao các APK Ni. Merged manifests đã đối chiếu: widget có ở Shareable/.open, vắng Personal, exported=false, không quyền mới. Không còn Gradle job nhiệm vụ đang chạy.
+- Bước tiếp: commit explicit source/test/hồ sơ, ghi SHA nguồn; bundle chỉ nhánh widget, kiểm hash Ni/Tiny; clone Tiny cô lập, build cấu hình an toàn tại Tiny; gate APK rồi QA trên AVD riêng. Chưa có bundle/candidate Tiny.
+- Tài nguyên QA chuẩn bị: AVD mới `MeloVault_Widget_20261103`, serial riêng `emulator-5586`, launcher process Ni PID `22620`, no-window/no-audio/no-snapshot; Android API 36 x86_64. Chưa cài app. Không dùng AVD cũ.
+- Fixtures vô danh trong `artifacts/.../fixtures/`: âm thử A có ảnh nhúng hình vuông vàng/xanh/tím và tag ca sĩ `Nghe si QA A`; âm thử B thiếu bìa/ca sĩ. Không phải nhạc/dữ liệu người dùng; phải dọn khỏi AVD sau QA, giữ ảnh/log cần nghiệm thu.
+- Sony không dùng. Shanling đã bán theo luật gốc mới hơn; nội dung nhắc Shanling trong kế hoạch là lỗi thời. B chỉ QA trên môi trường riêng khi có đủ gate; không thay launcher/bản EQ.
+- Cleanup: chưa tạo tài nguyên tạm. Model/effort không được công cụ phiên cung cấp, không tự suy đoán.
 
 | Mục | Trạng thái |
 |---|---|

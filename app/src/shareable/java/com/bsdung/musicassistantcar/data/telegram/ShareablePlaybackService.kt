@@ -39,12 +39,31 @@ class ShareablePlaybackService : MediaSessionService() {
         val expectedSize: Long = -1L,
         val rawMessageId: Long = 0L,
         val artist: String? = null,
+        val performer: String? = null,
     ) {
         val genuineMessageId: Long get() = if (rawMessageId > 0L) rawMessageId else messageId
     }
 
     companion object {
         private var serviceRef: WeakReference<ShareablePlaybackService>? = null
+
+        /** Widget never starts/binds this service. All entry points run on the existing player looper. */
+        internal fun refreshWidget(): Boolean {
+            if (Looper.myLooper() != Looper.getMainLooper()) return false
+            val widget = serviceRef?.get()?.widgetSession ?: return false
+            widget.refresh(force = true)
+            return true
+        }
+
+        internal fun dispatchWidget(action: MeloWidgetPolicy.Action, token: String): Boolean {
+            if (Looper.myLooper() != Looper.getMainLooper()) return false
+            val widget = serviceRef?.get()?.widgetSession ?: return false
+            widget.dispatch(action, token)
+            return true
+        }
+
+        internal fun widgetCanOpenPlayer(): Boolean = Looper.myLooper() == Looper.getMainLooper() &&
+            serviceRef?.get()?.widgetSession?.canOpenPlayer() == true
 
         // Internal same-process API; never expose these details via an Intent.
         internal fun configureTelegramQueue(
@@ -122,6 +141,20 @@ class ShareablePlaybackService : MediaSessionService() {
     private var pendingRequestTag: String? = null
     private var queueGeneration = 0L
     private var sessionPlayer: NextAwarePlayer? = null
+    private var widgetSession: MeloWidgetSession? = null
+    private var widgetAwaitingOwnerItem = false
+
+    private fun widgetOwner(): MeloWidgetSession.Owner? {
+        val account = expectedAccount ?: return null
+        if (account != ShareableTdlibOwner.authorizedAccount()) return null
+        return allowedRoot?.let { MeloWidgetSession.Owner(account, ShareableTdlibOwner.authEpoch(), it) }
+    }
+
+    private fun widgetItemAuthorized(item: MediaItem): Boolean = when {
+        item.mediaId.startsWith("telegram:") -> !widgetAwaitingOwnerItem && widgetOwner() != null &&
+            queueTracks.any { "telegram:${it.messageId}" == item.mediaId }
+        else -> MeloLocalSourcePolicy.idOfMediaId(item.mediaId) != null || item.mediaId == "picked:audio"
+    }
     /** Message id of the song a user press on Next asked for; lifts the prefetch gates for it only. */
     private var userNextMessageId: Long? = null
     private var sleepDeadline: Long? = null
@@ -254,6 +287,7 @@ class ShareablePlaybackService : MediaSessionService() {
         player.setShuffleOrder(ShuffleOrder.UnshuffledShuffleOrder(0))
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                widgetAwaitingOwnerItem = false
                 requestNextIfMissing()
                 sessionPlayer?.refreshCommands()
             }
@@ -280,6 +314,7 @@ class ShareablePlaybackService : MediaSessionService() {
             }
         })
         sessionPlayer = NextAwarePlayer(player)
+        widgetSession = MeloWidgetSession(this, sessionPlayer!!, ::widgetOwner, ::widgetItemAuthorized)
 
         val intent = Intent(this, TelegramPreviewActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -338,6 +373,7 @@ class ShareablePlaybackService : MediaSessionService() {
             clearQueue()
             return
         }
+        if (!sameOwner) widgetAwaitingOwnerItem = true
         clearQueue()
         expectedAccount = accountId
         allowedRoot = root.canonicalFile
@@ -351,6 +387,7 @@ class ShareablePlaybackService : MediaSessionService() {
         queueTracks = playIds.mapNotNull { byId[it] }
         shuffleLog("configure", shuffleOn, queueTracks.size)
         sessionPlayer?.refreshCommands()
+        widgetSession?.refreshNow()
     }
 
     private fun nextSeed(): Long = SystemClock.elapsedRealtimeNanos() xor System.nanoTime()
@@ -514,6 +551,7 @@ class ShareablePlaybackService : MediaSessionService() {
         localBaseIds = emptyList()
         shuffleSeed = 0L
         sessionPlayer?.refreshCommands()
+        widgetSession?.refreshNow()
     }
 
     private fun nextTrack(): QueueTrack? {
@@ -693,6 +731,11 @@ class ShareablePlaybackService : MediaSessionService() {
     private fun metadataFor(next: QueueTrack): MediaMetadata = MediaMetadata.Builder()
         .setTitle(next.title)
         .setArtist(MeloMediaControlPolicy.fallbackArtist(next.artist))
+        .setExtras(android.os.Bundle().apply {
+            MeloWidgetPolicy.trustedPerformer(next.performer)?.let {
+                putString(MeloWidgetPolicy.EXTRA_PERFORMER, it)
+            }
+        })
         .build()
 
     private fun insertNext(next: QueueTrack, local: File) {
@@ -742,6 +785,8 @@ class ShareablePlaybackService : MediaSessionService() {
         mediaSession
 
     override fun onDestroy() {
+        widgetSession?.close()
+        widgetSession = null
         TelegramProgressiveCache.clear()
         clearQueue()
         main.removeCallbacksAndMessages(null)
