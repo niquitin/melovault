@@ -98,7 +98,11 @@ class MeloBrowseUiPolicyTest {
     }
 
     @Test fun emptyWithQueryAndEmptyWithoutQueryHaveDifferentMessagesForEveryScope() {
-        val scopes = Kind.entries.map { Scope(it, if (it == Kind.CHANNEL) -11 else null) }
+        val scopes = Kind.entries.map { kind -> when (kind) {
+            Kind.CHANNEL, Kind.FORUM_TOPICS -> Scope(kind, -11L)
+            Kind.FORUM_TOPIC -> Scope(kind, -11L, forumTopicId = 71)
+            else -> Scope(kind)
+        } }
         scopes.forEach { scope ->
             assertTrue(present(scope).message!!.startsWith("Chưa có"))
             assertTrue(present(scope, query = "  nhạc  ").message!!.startsWith("Không tìm thấy"))

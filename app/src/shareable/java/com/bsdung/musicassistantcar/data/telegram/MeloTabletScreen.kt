@@ -115,6 +115,7 @@ internal class MeloTabletScreen(
 
     private val backCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
+            if (host.backWithinForum()) return
             val snap = snapshot
             if (showingQueue) closeQueue()
             else if (snap?.showingSources == true) host.closeSources()

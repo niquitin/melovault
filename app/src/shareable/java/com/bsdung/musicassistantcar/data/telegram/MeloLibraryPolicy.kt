@@ -175,7 +175,7 @@ internal object MeloLibraryPolicy {
     fun sourcePresentation(source: MeloScreenHost.SourceRow, selectedChatId: Long?): SourcePresentation =
         SourcePresentation(source.chatId == selectedChatId,
             (if (source.count >= 0) "${MeloComponentPolicy.formatCount(source.count)} bài" else "Chưa rõ số bài") +
-                if (source.chatId == selectedChatId) " · Đang duyệt" else "")
+                (if (source.chatId == selectedChatId) " · Đang duyệt" else "") + (if (source.hasTopics) " · Có chủ đề  ›" else ""))
 
     enum class BrowsePlayDecision { WAIT, PLAY, CANCEL }
     fun pendingBrowsePlay(request: MeloBrowseUiPolicy.Request, snapshot: MeloScreenHost.Snapshot): BrowsePlayDecision = when {

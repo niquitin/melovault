@@ -55,13 +55,18 @@ internal class MeloCompactScreen(
     private val downloadedLine = c.text("", s.secondaryText, MeloCompactPolicy.DOWNLOADED_LINE_COLOR, maxLines = 2)
     private val list = ListView(context)
     private val adapter = RowsAdapter()
+    private val forumCatalogue = MeloForumCatalogueView(context, c, host)
+    private val forumActions = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; visibility = View.GONE }
+    private val forumMore = c.chip("Tìm thêm", false) { host.loadMoreForum() }
+    private val forumRefresh = c.chip("Làm mới", false) { host.refreshForum() }
+    private var browseKey: String? = null
+    private var pendingAnchor: Pair<Long, Int>? = null
     private val bar = MeloBottomBar(context, c, host, onTab = ::onBarTab, onOpenNowPlaying = ::openNowPlaying)
     private lateinit var searchBar: LinearLayout
     private var nowPage: NowPlayingPage? = null
     private var snapshot: Snapshot? = null
     private var pendingQuery: Runnable? = null
     private var lastQuery = ""
-    private var lastLocal = false
     /** E99 row covers: the list's scroll state (nothing is requested while it is flung) and the first row asked for. */
     private var scrollState = AbsListView.OnScrollListener.SCROLL_STATE_IDLE
     private var lastArtFirst = -1
@@ -72,6 +77,7 @@ internal class MeloCompactScreen(
                 nowPage != null -> closeNowPlaying()
                 searchBar.visibility == View.VISIBLE -> hideSearch()
                 snapshot?.local == true -> host.closeLocal()
+                host.backWithinForum() -> Unit
                 snapshot?.showingSources == false && snapshot?.sourceTitle != null -> host.showSources()
                 else -> { isEnabled = false; backDispatcher.onBackPressed() }
             }
@@ -85,12 +91,15 @@ internal class MeloCompactScreen(
 
     fun attach() {
         backDispatcher.addCallback(backCallback)
+        host.setBrowseCapture(::savePosition)
         if (rowArt) host.setRowArtListener(::refreshVisibleArt)
         onLibraryChanged()
         onPlaybackChanged()
     }
 
     fun detach() {
+        savePosition()
+        host.setBrowseCapture(null)
         backCallback.remove()
         if (rowArt) host.setRowArtListener(null)
         pendingQuery?.let(handler::removeCallbacks)
@@ -127,6 +136,10 @@ internal class MeloCompactScreen(
             })
         }
         libraryPage.addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        libraryPage.addView(forumCatalogue.view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        forumActions.addView(forumMore)
+        forumActions.addView(forumRefresh)
+        libraryPage.addView(forumActions, matchWrap())
         libraryPage.addView(bar.view, matchWrap())
     }
 
@@ -165,9 +178,11 @@ internal class MeloCompactScreen(
             (if (snap.mode == Mode.PLAYLIST) host.named()?.headerTitle() else null)
                 ?: MeloCompactPolicy.headerTitle(snap.mode, snap.sourceTitle, snap.total)
         }
-        if (snap.local != lastLocal) {
-            // The search box belongs to one source: show that source's own query when switching.
-            lastLocal = snap.local
+        val nextKey = "${snap.browseOwnerId}:${snap.browseScope}:${snap.query}:${host.sort()}"
+        val scopeChanged = nextKey != browseKey
+        if (scopeChanged) {
+            browseKey = nextKey
+            pendingAnchor = host.browseContext()?.let { state -> state.anchorSongKey?.let { it to state.offsetPx } }
             pendingQuery?.let(handler::removeCallbacks)
             lastQuery = snap.query
             (searchBar.getChildAt(1) as? TextView)?.let { if (it.text.toString() != snap.query) it.text = snap.query }
@@ -191,17 +206,43 @@ internal class MeloCompactScreen(
             downloadedLine.setOnClickListener(null)
             downloadedLine.isClickable = false
         }
-        note.text = snap.note.orEmpty()
-        note.visibility = if (snap.note.isNullOrBlank()) View.GONE else View.VISIBLE
+        val message = listOfNotNull(snap.forumStatus, snap.note).distinct().joinToString(" · ")
+        note.text = message
+        note.visibility = if (message.isBlank()) View.GONE else View.VISIBLE
+        val catalogue = snap.forumTopics != null
+        list.visibility = if (catalogue) View.GONE else View.VISIBLE
+        if (catalogue) forumCatalogue.render(snap) else forumCatalogue.view.visibility = View.GONE
+        forumActions.visibility = if (snap.browseScope.kind == MeloBrowseUiPolicy.Kind.FORUM_TOPIC) View.VISIBLE else View.GONE
+        forumMore.visibility = if (snap.forumCanLoadMore) View.VISIBLE else View.GONE
+        forumMore.isEnabled = !snap.forumLoading
+        forumRefresh.isEnabled = !snap.forumLoading
         backCallback.isEnabled = nowPage != null || searchBar.visibility == View.VISIBLE ||
             (!snap.showingSources && snap.sourceTitle != null)
         bar.renderTabs(snap.showingSources, snap.mode)
         bar.refreshIdle()
         adapter.notifyDataSetChanged()
+        if (!catalogue) {
+            val wanted = pendingAnchor
+            val index = wanted?.let { pair -> snap.rows.indexOfFirst { it.songKey == pair.first } }
+            if (index != null && index >= 0) list.post {
+                if (browseKey == nextKey) { list.setSelectionFromTop(index, wanted?.second ?: 0); pendingAnchor = null }
+            } else if (wanted != null && snap.rows.size < (snap.total ?: 0)) host.loadMore()
+            else if (scopeChanged) list.setSelection(0)
+        }
         if (rowArt) {
             lastArtFirst = -1
             list.post { requestVisibleArt() }
         }
+    }
+
+    private fun savePosition() {
+        val snap = snapshot ?: return
+        if (snap.forumTopics != null) { forumCatalogue.savePosition(); return }
+        if (pendingAnchor != null) return
+        val first = list.firstVisiblePosition
+        val offset = list.getChildAt(0)?.top ?: 0
+        if (snap.showingSources) host.saveSourcePosition(snap.browseGeneration, snap.sources.getOrNull(first)?.chatId, offset)
+        else host.saveBrowsePosition(snap.browseGeneration, snap.rows.getOrNull(first)?.songKey, offset, 0)
     }
 
     // ---- E99 row covers (teal theme chosen) -----------------------------------------------------------
@@ -298,7 +339,7 @@ internal class MeloCompactScreen(
             setPadding(s.gap * 3 / 2, 0, s.gap, 0)
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
         })
-        addView(c.text("${MeloComponentPolicy.formatCount(source.count)} bài", s.secondaryText, p.textSecondary))
+        addView(c.text("${MeloComponentPolicy.formatCount(source.count)} bài" + if (source.hasTopics) " · Có chủ đề ›" else "", s.secondaryText, p.textSecondary))
         contentDescription = "${source.title}, ${source.count} bài"
         rowGap(this)
     }

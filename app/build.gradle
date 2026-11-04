@@ -4,7 +4,9 @@ plugins {
 }
 
 def localProps = new Properties()
-def localPropsFile = rootProject.file('local.properties')
+// Isolated QA clones may let Gradle consume a config already on the SAME build host,
+// without the agent copying or displaying its contents. Default builds are unchanged.
+def localPropsFile = rootProject.file(project.findProperty('meloLocalPropertiesFile') ?: 'local.properties')
 if (localPropsFile.exists()) {
     localPropsFile.withInputStream { localProps.load(it) }
 }
@@ -155,6 +157,7 @@ android {
     compileSdk 36
 
     defaultConfig {
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         applicationId 'com.bsdung.musicassistantcar'
         minSdk 26
         targetSdk 36

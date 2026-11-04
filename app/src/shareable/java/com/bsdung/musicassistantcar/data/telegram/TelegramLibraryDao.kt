@@ -35,7 +35,8 @@ interface TelegramLibraryDao {
         offset: Int = 0,
         limit: Int = 100,
         sort: SongSort = SongSort.NEWEST,
-        fromKey: String? = null
+        fromKey: String? = null,
+        forumTopicId: Int? = null
     ): List<IndexedTelegramSong>
 
     /**
@@ -45,7 +46,8 @@ interface TelegramLibraryDao {
         accountId: Long,
         chatId: Long? = null,
         searchQuery: String? = null,
-        fromKey: String? = null
+        fromKey: String? = null,
+        forumTopicId: Int? = null
     ): Int
 
     /**
@@ -106,6 +108,22 @@ interface TelegramLibraryDao {
      */
     fun updateSyncState(state: TelegramSyncState)
 
+    fun getForumTopics(accountId: Long, chatId: Long, query: String? = null, offset: Int = 0, limit: Int = 50): List<IndexedTelegramForumTopic>
+    fun getForumTopic(accountId: Long, chatId: Long, topicId: Int): IndexedTelegramForumTopic?
+    fun getVisibleGeneralTopic(accountId: Long, chatId: Long): IndexedTelegramForumTopic?
+    fun getForumHistoryStates(accountId: Long, chatId: Long): Map<Int, TelegramForumHistoryState>
+    fun getForumTopicCounts(accountId: Long, chatId: Long): Map<Int, Int>
+    /** Additive metadata refresh: missing rows in a partial page never delete cached topics. */
+    fun commitForumTopics(
+        accountId: Long, chatId: Long, topics: Collection<IndexedTelegramForumTopic>,
+        checkpoint: TelegramSyncState? = null, isCurrent: () -> Boolean = { true },
+    ): Boolean
+    fun getForumHistoryState(accountId: Long, chatId: Long, forumTopicId: Int): TelegramForumHistoryState?
+    /** Songs and BOTH history cursors commit together, or not at all (including cancellation). */
+    fun commitForumHistoryPage(
+        state: TelegramForumHistoryState, songs: Collection<IndexedTelegramSong>, isCurrent: () -> Boolean = { true },
+    ): Boolean
+
     /**
      * Gets the newest message timestamp (seconds) for incremental delta calculation.
      */
@@ -122,6 +140,7 @@ interface TelegramLibraryDao {
     fun deleteAccountData(accountId: Long)
 
     companion object {
+        fun forumCatalogueScope(chatId: Long) = "forum_topics:$chatId"
         /** SQLite allows 999 bound variables; one is the account, the rest are keys. */
         const val SONGS_BY_KEYS_CHUNK = 400
 
@@ -142,5 +161,9 @@ interface TelegramLibraryDao {
             "SELECT ${TelegramLibrarySql.COL_CHAT_ID}, COUNT(*) FROM ${TelegramLibrarySql.TABLE_SONGS} " +
                 "WHERE ${TelegramLibrarySql.COL_ACCOUNT_ID} = ? AND ${TelegramLibrarySql.COL_IS_DELETED} = 0 " +
                 "GROUP BY ${TelegramLibrarySql.COL_CHAT_ID}"
+
+        const val FORUM_TOPIC_COUNTS_SQL =
+            "SELECT forum_topic_id, COUNT(*) FROM telegram_songs " +
+                "WHERE account_id = ? AND chat_id = ? AND is_deleted = 0 AND forum_topic_id IS NOT NULL GROUP BY forum_topic_id"
     }
 }

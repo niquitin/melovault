@@ -93,6 +93,12 @@ internal class MeloCarScreen(
 
     private var snapshot: Snapshot? = null
     private var listKey: String? = null
+    private var pendingSongAnchor: Long? = null
+    private var pendingTopicAnchor: Int? = null
+    private val forumNote = c.text("", s.secondaryText, p.textSecondary, maxLines = 2)
+    private val forumActions = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; visibility = View.GONE }
+    private val forumMore = bigButton("Tìm thêm", "Tìm thêm trong chủ đề") { host.loadMoreForum() }
+    private val forumRefresh = bigButton("Làm mới", "Làm mới chủ đề") { host.refreshForum() }
     private var page = 0
     private var searchOpen = false
     private var online = true
@@ -103,6 +109,7 @@ internal class MeloCarScreen(
         override fun handleOnBackPressed() {
             when {
                 searchOpen -> closeSearch()
+                host.backWithinForum() -> Unit
                 snapshot?.showingSources == false && snapshot?.sourceTitle != null -> host.showSources()
                 else -> { isEnabled = false; backDispatcher.onBackPressed() }
             }
@@ -126,12 +133,15 @@ internal class MeloCarScreen(
 
     fun attach() {
         backDispatcher.addCallback(backCallback)
+        host.setBrowseCapture(::savePosition)
         watchNetwork()
         onLibraryChanged()
         onPlaybackChanged()
     }
 
     fun detach() {
+        savePosition()
+        host.setBrowseCapture(null)
         backCallback.remove()
         handler.removeCallbacksAndMessages(null)
         networkCallback?.let { cb ->
@@ -454,7 +464,11 @@ internal class MeloCarScreen(
         header.addView(titles, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         header.addView(listStatus)
         listPane.addView(header, matchWrap())
+        listPane.addView(forumNote, matchWrap())
         listPane.addView(rows, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        forumActions.addView(forumMore, LinearLayout.LayoutParams(0, s.minTouch, 1f))
+        forumActions.addView(forumRefresh, LinearLayout.LayoutParams(0, s.minTouch, 1f))
+        listPane.addView(forumActions, matchWrap())
         val paging = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
         paging.addView(bigButton("▲ Cuộn trang lên", "Trang trước") { turnPage(-1) },
             LinearLayout.LayoutParams(0, s.pageButtonHeight, 1f).apply { marginEnd = s.gap * 2 })
@@ -465,26 +479,44 @@ internal class MeloCarScreen(
 
     private fun perPage(snap: Snapshot) = if (snap.showingSources) MeloCarPolicy.SOURCES_PER_PAGE else MeloCarPolicy.ROWS_PER_PAGE
 
-    private fun itemCount(snap: Snapshot) = if (snap.showingSources) visibleSources(snap).size else snap.rows.size
+    private fun itemCount(snap: Snapshot) = when {
+        snap.forumTopics != null -> snap.forumTopics.size + 2 + if (snap.forumCanLoadMore) 1 else 0
+        snap.showingSources -> visibleSources(snap).size
+        else -> snap.rows.size
+    }
 
     /** Car Telegram page drops the "Các kênh chưa có nhạc" sources. */
     private fun visibleSources(snap: Snapshot) = snap.sources.filter { it.count > 0 }
 
     private fun turnPage(delta: Int) {
         val snap = snapshot ?: return
+        pendingSongAnchor = null
+        pendingTopicAnchor = null
         page = MeloCarPolicy.clampPage(page + delta, itemCount(snap), perPage(snap))
-        if (!snap.showingSources && MeloCarPolicy.shouldLoadMore(page, perPage(snap), snap.rows.size, snap.total)) host.loadMore()
+        if (snap.forumTopics == null && !snap.showingSources && MeloCarPolicy.shouldLoadMore(page, perPage(snap), snap.rows.size, snap.total)) host.loadMore()
         renderList()
     }
 
     fun onLibraryChanged() {
         val snap = host.snapshot()
         snapshot = snap
-        val key = "${snap.showingSources}:${snap.mode}:${snap.sourceTitle}:${snap.query}"
+        val key = "${snap.browseOwnerId}:${snap.browseScope}:${snap.query}:${host.sort()}"
         if (key != listKey) {
             listKey = key
             page = 0
+            pendingQuery?.let(handler::removeCallbacks)
+            if (searchField.text.toString() != snap.query) searchField.setText(snap.query)
+            pendingSongAnchor = host.browseContext()?.anchorSongKey
+            pendingTopicAnchor = host.browseContext()?.topicAnchorId
         }
+        val anchor = if (snap.forumTopics != null) pendingTopicAnchor?.let { id ->
+            if (id == 0) 0 else snap.forumTopics.indexOfFirst { it.id == id }.takeIf { it >= 0 }?.plus(1)
+        } else pendingSongAnchor?.let { key -> snap.rows.indexOfFirst { it.songKey == key }.takeIf { it >= 0 } }
+        if (anchor != null) {
+            page = anchor / perPage(snap)
+            pendingSongAnchor = null
+            pendingTopicAnchor = null
+        } else if (pendingSongAnchor != null && snap.rows.size < (snap.total ?: 0) && snap.forumTopics == null) host.loadMore()
         page = MeloCarPolicy.clampPage(page, itemCount(snap), perPage(snap))
         backCallback.isEnabled = searchOpen || (!snap.showingSources && snap.sourceTitle != null)
         renderNav()
@@ -505,11 +537,64 @@ internal class MeloCarScreen(
         listStatus.text = listOfNotNull(if (online) null else "Mất kết nối", "Trang ${page + 1}/$pages").joinToString(" · ")
         listStatus.setTextColor(if (online) p.textSecondary else p.warning)
         renderPlaylistStatus(snap)
-        if (snap.showingSources) {
+        val message = listOfNotNull(snap.forumStatus, snap.note).distinct().joinToString(" · ")
+        forumNote.text = message
+        forumNote.visibility = if (message.isBlank()) View.GONE else View.VISIBLE
+        forumActions.visibility = if (snap.browseScope.kind == MeloBrowseUiPolicy.Kind.FORUM_TOPIC) View.VISIBLE else View.GONE
+        forumMore.visibility = if (snap.forumCanLoadMore) View.VISIBLE else View.GONE
+        forumMore.isEnabled = !snap.forumLoading
+        forumRefresh.isEnabled = !snap.forumLoading
+        if (snap.forumTopics != null) {
+            renderTopics(snap)
+        } else if (snap.showingSources) {
             rows.removeAllViews()
             renderSources(snap)
         } else {
             renderSongs(snap)
+        }
+    }
+
+    private fun savePosition() {
+        val snap = snapshot ?: return
+        val first = page * perPage(snap)
+        if (snap.forumTopics != null) {
+            if (pendingTopicAnchor == null) host.saveTopicPosition(if (first == 0) 0 else snap.forumTopics.getOrNull(first - 1)?.id, 0)
+        } else if (snap.showingSources) host.saveSourcePosition(snap.browseGeneration, visibleSources(snap).getOrNull(first)?.chatId, 0)
+        else if (pendingSongAnchor == null) host.saveBrowsePosition(snap.browseGeneration, snap.rows.getOrNull(first)?.songKey, 0, 0)
+    }
+
+    private fun renderTopics(snap: Snapshot) {
+        rows.removeAllViews()
+        val topics = snap.forumTopics.orEmpty()
+        val start = page * MeloCarPolicy.ROWS_PER_PAGE
+        for (position in start until minOf(start + MeloCarPolicy.ROWS_PER_PAGE, itemCount(snap))) {
+            val topic = topics.getOrNull(position - 1)
+            val label = when {
+                position == 0 -> "Tất cả nhạc của nhóm ›"
+                topic != null -> topic.title + " ›"
+                position == topics.size + 1 && snap.forumCanLoadMore -> "Tìm thêm chủ đề"
+                else -> "Làm mới chủ đề"
+            }
+            val card = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(s.gap * 2, s.gap / 2, s.gap * 2, s.gap / 2)
+                background = c.roundedBackground(p.surface)
+                addView(c.text(label, s.titleText, p.text, maxLines = 1), matchWrap())
+                if (topic != null) addView(c.text(topic.detail, s.secondaryText, p.textSecondary, maxLines = 1), matchWrap())
+                isEnabled = position <= topics.size || !snap.forumLoading
+                alpha = if (isEnabled) 1f else 0.6f
+                setOnClickListener {
+                    savePosition()
+                    when {
+                        position == 0 -> host.openAllForumMusic()
+                        topic != null -> host.openForumTopic(topic.id)
+                        position == topics.size + 1 && snap.forumCanLoadMore -> host.loadMoreForum()
+                        else -> host.refreshForum()
+                    }
+                }
+            }
+            rows.addView(card, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, s.rowHeight).apply { bottomMargin = s.gap })
         }
     }
 
@@ -611,7 +696,7 @@ internal class MeloCarScreen(
         contentDescription = "$name, ${source.count} bài"
         // Spec asks ≥22sp; on the FYT panel the list title size reads better from 70cm.
         addView(c.text(name, s.titleText, p.text, bold = true, maxLines = 2), matchWrap())
-        addView(c.text("${MeloComponentPolicy.formatCount(source.count)} bài", s.secondaryText, p.textSecondary), matchWrap().apply {
+        addView(c.text("${MeloComponentPolicy.formatCount(source.count)} bài" + if (source.hasTopics) " · Có chủ đề ›" else "", s.secondaryText, p.textSecondary), matchWrap().apply {
             topMargin = s.gap
         })
         setOnClickListener { host.openSource(source.chatId.takeIf { it != 0L }) }
