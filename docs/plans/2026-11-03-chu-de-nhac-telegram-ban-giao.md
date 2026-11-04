@@ -1,8 +1,8 @@
 # Bàn giao nhạc theo chủ đề Telegram
 
-**TASK_ID** `2026-11-03-chu-de-nhac-telegram` · **Codex, thực thi** · Chốt 00:03:20 4/11/2026 (Asia/Saigon).
+**TASK_ID** `2026-11-03-chu-de-nhac-telegram` · **Codex, ghi nhận quyết định chủ dự án** · Cập nhật 04/11/2026 (Asia/Saigon); checkpoint thực thi chốt 00:03:20 cùng ngày.
 
-**Mã và QA đã hoàn tất trong phạm vi ghi nhận. CHỜ CHỦ DỰ ÁN NGHIỆM THU. BLOCKED riêng link tải APK Drive (403).** APK đúng bản đã cài trên Sony và có bản nội bộ; 10 ảnh riêng tư đã được xác minh. Không có quyết định ĐẠT, chưa merge/push.
+**ĐẠT — PASS kèm giới hạn.** Chủ dự án nhắn “Đạt” trong chat 04/11/2026 sau bàn giao bản `e55ca7e` / APK `71809F4C…90820`; [biên bản nghiệm thu](2026-11-03-chu-de-nhac-telegram-nghiem-thu.md). Không có phiên sơ bộ độc lập. **BLOCKED riêng link tải APK Drive (403)** vẫn giữ nguyên; APK đúng bản đã cài trên Sony và có bản nội bộ, 10 ảnh riêng tư đã xác minh. Không có thay đổi mã hoặc QA mới khi ghi nhận quyết định. Merge/push theo chỉ thị thường trực 02/11 được ghi kết quả tại mục đầu `HANDOFF.md` trên nhánh tích hợp.
 
 [Kế hoạch](2026-11-03-chu-de-nhac-telegram.md) · [Báo cáo](2026-11-03-chu-de-nhac-telegram-bao-cao.md) · [APK và lỗi tải](2026-11-03-chu-de-nhac-telegram-apk-test.md) · [Ảnh](2026-11-03-chu-de-nhac-telegram-hinh-nghiem-thu.md) · [Phụ lục lịch sử](2026-11-03-chu-de-nhac-telegram-phu-luc-thuc-thi.md).
 
@@ -40,8 +40,10 @@
 
 **Lịch sử lỗi:** source04aa5ba crash23:42:13/PID8802, số hàng RowsAdapter đổi khi list ẩn; lưu log/exit-info, không xóa lịch sử. e55ca7e đã sửa/kiểm native và chạm thực cùngPID không có FATAL. Manual helper từng đọc hint thành text gâyguardfail, ảnh xác nhận catalogue không bịNam; đã chạm mở lạiB và kiểmquery/PID/log. APK/ảnh candidate cũ không thay bằng chứng bản cuối.
 
-**Prompt cho phiên nghiệm thu sơ bộ mới**
+**Lịch sử: prompt sơ bộ đã bàn giao trước khi chủ dự án quyết định ĐẠT**
+
+Prompt dưới đây chưa được thực hiện trong một phiên sơ bộ độc lập; không còn là bước đang chờ sau quyết định ĐẠT.
 
 > Nghiệm thu sơ bộ nhanh TASK_ID `2026-11-03-chu-de-nhac-telegram`, đúng worktree/nhánh ở checkpoint. Đọc CLAUDE.md mục0, AGENTS.md, quy trình ba vai trò, kế hoạch/báo cáo/checkpoint và hai hồ sơ APK/ảnh. Kiểm Git thực, source APK `e55ca7e932a249504cce83f2338d45e5dede9079`, SHA `71809F4C96788F84A1A00FEA04B7446A8DF01426D6BE08D6D184D234BEC90820`, vc121; commit chốt docs sau source không đổi APK. Đọc diff rủi ro DB/TDLib/cancel/account/queue/ListView cùng test mới và bằng chứng Sony cuối. Không chạy lại toàn bộ Gradle/QA vô cớ. Nếu dùng Sony, kiểm máy/serial/model/đúng APK và màn OFF trong finally; giữ dữ liệu/phiên, không hạ APK/DB hoặc đọc secret/session. Xác nhận phần Drive bị403 riêng, không coi link tải đã bàn giao hoặc né cảnh báo. Ghi kết luận sơ bộ và giới hạn vào `docs/plans/2026-11-03-chu-de-nhac-telegram-nghiem-thu-so-bo.md`; không sửa code/build bản mới trong vai sơ bộ, không PASS chính thức/merge/push. Cần sửa thì bàn giao cho phiên thực thi mới; chủ dự án quyết định ĐẠT hay yêu cầu sửa.
 
-**Thực thi đã dừng tại checkpoint này.** Không tự mở nhiệm vụ hay chuyển vai. Chủ dự án có thể phản hồi `ĐẠT 2026-11-03-chu-de-nhac-telegram — e55ca7e / APK71809F4C…90820` hoặc `Yêu cầu sửa 2026-11-03-chu-de-nhac-telegram: <lỗi>` sau khi nghiệm thu đúng bản/phạm vi.
+**Thực thi đã dừng; chủ dự án đã nghiệm thu ĐẠT.** Giữ toàn bộ giới hạn và bằng chứng trên. Không tự mở nhiệm vụ mới. Lần ghi nhận này chỉ cập nhật hồ sơ và thực hiện merge/push theo chỉ thị thường trực đã lưu trong HANDOFF; không phát hành APK công khai. Kết quả tích hợp xem mục đầu `HANDOFF.md` ở worktree `C:/Users/ntdun/.codex/worktrees/workflow-md-handoff/MeloVault-E91-Shareable`.

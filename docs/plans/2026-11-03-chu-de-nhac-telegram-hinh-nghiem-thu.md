@@ -1,6 +1,6 @@
 # Ảnh kiểm thử nhạc theo chủ đề Telegram
 
-**TASK_ID** `2026-11-03-chu-de-nhac-telegram` · **QA CANDIDATE — CHƯA NGHIỆM THU** · Source `e55ca7e932a249504cce83f2338d45e5dede9079`. Chốt hồ sơ: 00:01:29 4/11/2026 (Asia/Saigon).
+**TASK_ID** `2026-11-03-chu-de-nhac-telegram` · **ĐẠT — PASS kèm giới hạn**, chủ dự án xác nhận “Đạt” trong chat 04/11/2026; [biên bản](2026-11-03-chu-de-nhac-telegram-nghiem-thu.md). Source `e55ca7e932a249504cce83f2338d45e5dede9079`. Chứng cứ chốt 00:01:29 4/11/2026 (Asia/Saigon); lần ghi nhận quyết định không chụp ảnh/QA mới hoặc đổi quyền Drive.
 
 [Thư mục ảnh riêng tư](https://drive.google.com/drive/folders/19HhP87flEHXyImJ43UpB6xFqnFplmA7G) · [Thư mục QA](https://drive.google.com/drive/folders/1lIIvjxchi691qKSZ0wY47zpJ0Dtc3Kgs) · [Hồ sơ APK](2026-11-03-chu-de-nhac-telegram-apk-test.md).
 

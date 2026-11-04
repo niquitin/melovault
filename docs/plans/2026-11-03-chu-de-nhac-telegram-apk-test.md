@@ -1,6 +1,6 @@
 # APK QA nhạc theo chủ đề Telegram
 
-**TASK_ID** `2026-11-03-chu-de-nhac-telegram` · **QA CANDIDATE — CHƯA NGHIỆM THU**. **BLOCKED — CHƯA BÀN GIAO APK qua link tải Drive**. Chốt: 00:01:29 4/11/2026 (Asia/Saigon).
+**TASK_ID** `2026-11-03-chu-de-nhac-telegram` · **APK QA ĐÃ ĐƯỢC CHỦ DỰ ÁN NGHIỆM THU ĐẠT, kèm giới hạn**, theo lời “Đạt” trong chat 04/11/2026; [biên bản](2026-11-03-chu-de-nhac-telegram-nghiem-thu.md). **BLOCKED — CHƯA BÀN GIAO APK qua link tải Drive** vẫn giữ nguyên. Gate kỹ thuật chốt 00:01:29 4/11/2026 (Asia/Saigon); không build/cài/QA lại khi ghi nhận quyết định. Chưa phát hành APK công khai.
 
 | Thuộc tính | Bằng chứng |
 |---|---|
@@ -24,6 +24,6 @@ Bản Tiny: `C:/Bots/_qa_temp/forum-touch-20261103-e55ca7e/MeloVault-forum-QA-vc
 
 Bundle13918905B, SHA7424F726D4ED0CF5A6489D8B079B93DA3D4867C61DF6B260666DB1A67CEC9A7D khớp hai đầu. Source APK e55ca7e; commit chốt tài liệu sau đó không thay mã APK. Không nhận diện bản chỉ qua versionCode vì các candidate cùng121.
 
-Giới hạn: chưa nghe âm thanh thực; Đã tải trong B=0, chưa thử mất mạng; WAV/FLAC document kiểm bằng fixture, Sony lượt này phátMP3; Gọn/Car compile, chưa QA thiết bị tương ứng/FYT. Không hạ APK/DB để rollback; dùng bản sửa tiến trên DB v3, giữ dữ liệu/tệp/playlist/phiên. Không merge/push/phát hành công khai.
+Giới hạn: chưa nghe âm thanh thực; Đã tải trong B=0, chưa thử mất mạng; WAV/FLAC document kiểm bằng fixture, Sony lượt này phátMP3; Gọn/Car compile, chưa QA thiết bị tương ứng/FYT. Không hạ APK/DB để rollback; dùng bản sửa tiến trên DB v3, giữ dữ liệu/tệp/playlist/phiên. Kết quả merge/push sau ĐẠT xem HANDOFF; chưa phát hành APK công khai.
 
 Các APK982eeee,33b16f9,04aa5ba là lịch sử, đã được thay bằng e55ca7e sau sửa UI/metadata/crash; không dùng chúng để nghiệm thu bản cuối. Xem [phụ lục](2026-11-03-chu-de-nhac-telegram-phu-luc-thuc-thi.md). SONY_SCREEN_END=OFF.

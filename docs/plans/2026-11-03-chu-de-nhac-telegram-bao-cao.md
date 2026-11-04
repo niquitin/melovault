@@ -2,7 +2,7 @@ Thực thi: Codex, GPT-6 (không có thông tin chi tiết model/effort), phiên
 
 # Báo cáo nhạc theo chủ đề Telegram
 
-**TASK_ID** `2026-11-03-chu-de-nhac-telegram` · **CHỜ CHỦ DỰ ÁN NGHIỆM THU**. Mã, gate Ni, build Tiny và QA Sony đã hoàn tất ở phạm vi bên dưới. **BLOCKED riêng link tải APK Drive (HTTP403)**; APK hợp lệ đã cài trên Sony và có bản nội bộ đúng SHA. Chưa có ĐẠT, chưa merge/push.
+**TASK_ID** `2026-11-03-chu-de-nhac-telegram` · **ĐẠT — PASS kèm giới hạn** theo lời “Đạt” của chủ dự án trong chat 04/11/2026, đúng source/APK bên dưới; [biên bản nghiệm thu](2026-11-03-chu-de-nhac-telegram-nghiem-thu.md). Mã, gate Ni, build Tiny và QA Sony đã hoàn tất ở phạm vi ghi nhận. **BLOCKED riêng link tải APK Drive (HTTP403)** vẫn giữ nguyên; APK hợp lệ đã cài trên Sony và có bản nội bộ đúng SHA. Không có QA mới trong lần ghi nhận quyết định.
 
 | Mục | Kết quả |
 |---|---|
@@ -63,7 +63,7 @@ APK Drive đã uploadđủ metadata nhưng fetch raw **403/cannotDownloadAbusive
 - B không có tệp offline đã xác minh; chưa phát offlineB/mất mạng. Không bật airplane/tắt mạng/đổi quyền/account để ép lỗi.
 - WAV/FLAC document có fixture, Sony lượt này phátMP3. giải mã DSD ngoài phạm vi. General/closed/rename/access/flood/callbackcũ có fixture; chỉ một phần quan sát thật.
 - Gọn/Car được nối vàcompile, chưa QA thiết bị tương ứng/FYT. Cold/warm benchmark vàShuffle/Previous thực riêng chưa thực hiện; Next vàqueuemembership đã kiểm.
-- Rollback bằngbản sửa tiến trênDB v3, không hạ APK/DB, giữ playlist/tệp/phiên. Không merge/push/côngkhai.
+- Rollback bằng bản sửa tiến trên DB v3, không hạ APK/DB, giữ playlist/tệp/phiên. Khi chốt thực thi chưa merge/push; kết quả tích hợp sau ĐẠT xem HANDOFF. Chưa phát hành APK công khai.
 - Mỗi lượtUI cleanup 223 + đợi 800 ms + xác minh OFF. **SONY_SCREEN_END=OFF**; không job build/instrument của phiên còn chạy khi chốt.
 
-Chặng tiếp theo là **phiên nghiệm thu sơ bộ mới** theo checkpoint; chủ dự án quyết định ĐẠT/yêu cầu sửa. Không có kết luận PASS chính thức trong phiên thực thi.
+Lịch sử: thực thi đã bàn giao prompt cho phiên sơ bộ mới và không tự ghi PASS. Sau đó chủ dự án quyết định **ĐẠT** trước khi có phiên sơ bộ độc lập. Merge/push theo chỉ thị thường trực 02/11 được ghi kết quả tại mục đầu `HANDOFF.md` trên nhánh tích hợp; không phát hành APK công khai.
