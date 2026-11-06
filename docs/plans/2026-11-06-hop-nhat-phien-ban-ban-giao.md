@@ -1,5 +1,7 @@
 # Bàn giao — 2026-11-06-hop-nhat-phien-ban
 
+**Cập nhật 06/11/2026: chủ dự án đã ĐẠT `7cd4ebb/BF7B23A7`** ([biên bản](2026-11-06-hop-nhat-phien-ban-nghiem-thu.md)); không chạy phiên sơ bộ. Trạng thái merge/push xem mục đầu `HANDOFF.md`. Nhiệm vụ đã nghiệm thu; checkpoint dưới đây giữ làm lịch sử, nhãn "chưa nghiệm thu" và prompt sơ bộ không còn áp dụng.
+
 ## Checkpoint cuối thực thi · 06/11/2026 · Claude Code, Opus 5.5
 
 **QA CANDIDATE — CHƯA NGHIỆM THU.** Thực thi xong, chờ sơ bộ/chủ dự án. Chưa merge, chưa push.

@@ -1,6 +1,6 @@
 # Ảnh kiểm thử — 2026-11-06-hop-nhat-phien-ban
 
-**QA CANDIDATE — CHƯA NGHIỆM THU.** Source `7cd4ebb`, Sony XQ-AS52 `QV725WEQ54`, 06/11/2026.
+**ĐÃ ĐẠT 06/11/2026** ([biên bản](2026-11-06-hop-nhat-phien-ban-nghiem-thu.md)). Source `7cd4ebb`, Sony XQ-AS52 `QV725WEQ54`, 06/11/2026.
 
 [Thư mục ảnh riêng tư](https://drive.google.com/drive/folders/1q5-aIKq_hfr932qK1ucFtlfxLpBEMjfh) · [Thư mục QA](https://drive.google.com/drive/folders/1jCgMBnZgXlBUKdZepRP8T6R6V96yuymq). Thư mục gốc và ảnh tổng hợp đã kiểm: một quyền duy nhất, owner `ntdung.md@gmail.com`. Cần đăng nhập đúng tài khoản; không public.
 

@@ -1,6 +1,6 @@
 # APK test — 2026-11-06-hop-nhat-phien-ban
 
-**QA CANDIDATE — CHƯA NGHIỆM THU.** Bản Debug QA, không phải bản phát hành; chưa merge/push.
+**ĐÃ ĐẠT 06/11/2026** ([biên bản](2026-11-06-hop-nhat-phien-ban-nghiem-thu.md)). Vẫn là bản Debug QA, **không phải bản phát hành**. Tên thư mục và tên file trên Drive giữ nhãn `QA-CANDIDATE` từ lúc tải lên, không đổi.
 
 - Thư mục Drive (owner-only, `ntdung.md@gmail.com`): [MeloVault-HOPNHAT-QA-CANDIDATE-20261106-vc122-7cd4ebb](https://drive.google.com/drive/folders/1jCgMBnZgXlBUKdZepRP8T6R6V96yuymq)
 - APK Debug: [MeloVault-0.6.97-beta-vc122-hop-nhat-7cd4ebb-QA-CANDIDATE-debug.apk](https://drive.google.com/file/d/1auI5QVrt2nQfTWGC8I4ZIm8JNeXoi-zB/view?usp=drivesdk)
