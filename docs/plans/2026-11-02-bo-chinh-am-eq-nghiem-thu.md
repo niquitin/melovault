@@ -1,0 +1,9 @@
+# Nghiệm thu — 2026-11-02-bo-chinh-am-eq
+
+**ĐẠT — PASS kèm giới hạn.** Chủ dự án nhắn “đạt” trong chat 06/11/2026, sau khi tự nghe thử bản `cade4dc`/`76D1F355…DB6C` (đề nghị: `ĐẠT 2026-11-02-bo-chinh-am-eq — cade4dc/76D1F355`). **Không có nghiệm thu sơ bộ độc lập** (chủ dự án quyết định ĐẠT trước khi mở phiên sơ bộ).
+
+- Bản được duyệt: APK Debug vc121 `0.6.96-beta`, SHA-256 `76D1F355095C6E4E98A28F703BDB196BFEE1E562F1780393DF9E419F3B9BDB6C`, source `cade4dc` (mã EQ `7353587`, sửa hàng mẫu `e2faf85`, chỉnh preamp `cade4dc`). Link và chi tiết: [apk-test](2026-11-02-bo-chinh-am-eq-apk-test.md), [hình](2026-11-02-bo-chinh-am-eq-hinh-nghiem-thu.md). Vẫn là QA candidate, **chưa phải bản phát hành**.
+- Kết quả kỹ thuật của agent thực thi (không thay quyết định chủ dự án): gate Ni xanh (2759 test, 21 skipped, 0 lỗi); QA Sony Q1–Q7 PASS (Q6 xoay/chữ lớn chưa kiểm); preamp mới cho `clipped=0` trên Tăng bass và Rock.
+- **Âm thanh thật:** do chủ dự án tự nghe thử rồi ĐẠT (agent không nghe được). Giá trị dB của 9 mẫu giữ như kế hoạch mục 4.3; chủ dự án không yêu cầu chỉnh.
+- **Giới hạn đã vào nhánh tích hợp (chủ dự án chấp nhận khi ĐẠT):** xoay ngang / chữ lớn 1.3 / Teal sáng chưa kiểm; FLAC-hi-res, “Nhạc trên máy”, tai nghe/Bluetooth, máy khác (Y700/S25/FYT) chưa kiểm; Release/`.open`/Personal chạy trên máy chưa kiểm; EQ Bật tốn thêm khoảng 7 điểm phần trăm một nhân trên Sony (Debug, 44,1 kHz) và nhỏ hơn bản trước khoảng 1 dB do preamp; hiệu ứng hệ thống Sony (Dolby/ClearAudio+) nếu bật sẽ cộng thêm; thanh trượt/công tắc dùng màu hệ thống; log Debug in `-0,0` cho Phẳng. Ngoài phạm vi (nhiệm vụ sau): EQ theo đầu ra, dòng EQ trong Cài đặt.
+- Trạng thái merge/push: xem [bàn giao](2026-11-02-bo-chinh-am-eq-ban-giao.md) và mục đầu `HANDOFF.md` (chủ dự án chỉ thị 02/11: sau mỗi ĐẠT agent tự merge và push lên nhánh `source/…` của repo công khai; phát hành APK công khai vẫn chưa làm).

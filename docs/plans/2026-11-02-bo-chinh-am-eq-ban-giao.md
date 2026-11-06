@@ -105,3 +105,7 @@ Kết thúc: "Đã dừng, chờ chủ dự án nghiệm thu." + cách phản h�
 7. **Chưa merge/push** (chủ dự án chưa ĐẠT).
 
 **Bước tiếp:** chủ dự án nghe thử rồi trả lời `ĐẠT 2026-11-02-bo-chinh-am-eq — cade4dc/76D1F355` hoặc `Yêu cầu sửa 2026-11-02-bo-chinh-am-eq: <lỗi>` (ví dụ muốn to hơn thì giảm độ trừ preamp, hoặc chỉnh giá trị mẫu). **Đã dừng. Mở phiên mới để nghiệm thu sơ bộ nhanh** (dùng prompt ở Checkpoint 3 với HEAD mã `cade4dc`).
+
+## Checkpoint 5 — 06/11/2026, chủ dự án ĐẠT
+
+Chủ dự án tự nghe thử và nhắn “đạt” trong chat 06/11/2026 cho bản `cade4dc`/`76D1F355`. Quyết định ghi tại [nghiệm thu](2026-11-02-bo-chinh-am-eq-nghiem-thu.md): **ĐẠT — PASS kèm giới hạn**. Việc kế: merge `--no-ff` vào `feature/e93-03d-y700-offline-cockpit` rồi push fast-forward lên nhánh `source/…` theo chỉ thị 02/11 (trạng thái cập nhật ở mục đầu `HANDOFF.md`). Chưa phát hành APK công khai.
