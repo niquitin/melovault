@@ -1,7 +1,9 @@
 package com.bsdung.musicassistantcar.data.telegram
 
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -14,7 +16,11 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.ShuffleOrder
 import androidx.media3.session.MediaSession
@@ -43,7 +49,12 @@ class ShareablePlaybackService : MediaSessionService() {
         val genuineMessageId: Long get() = if (rawMessageId > 0L) rawMessageId else messageId
     }
 
+    private val eqProcessor = MeloEqAudioProcessor()
+    /** Held strongly: SharedPreferences keeps its listeners weakly. */
+    private var eqPrefsListener: SharedPreferences.OnSharedPreferenceChangeListener? = null
+
     companion object {
+        private const val EQ_LOG_TAG = "MeloEq"
         private var serviceRef: WeakReference<ShareablePlaybackService>? = null
 
         // Internal same-process API; never expose these details via an Intent.
@@ -240,15 +251,47 @@ class ShareablePlaybackService : MediaSessionService() {
     private fun prefetchAllowed(): Boolean =
         MeloNowPlayingPolicy.prefetchEnabled(getSharedPreferences(MeloNowPlayingPolicy.PLAYBACK_PREFS, MODE_PRIVATE))
 
+    /** The only place the equalizer touches the player: a sink whose processor chain is just [eqProcessor]. */
+    private fun eqRenderersFactory() = object : DefaultRenderersFactory(this) {
+        override fun buildAudioSink(
+            context: Context,
+            enableFloatOutput: Boolean,
+            enableAudioTrackPlaybackParams: Boolean,
+        ): AudioSink = DefaultAudioSink.Builder(context)
+            .setEnableFloatOutput(enableFloatOutput)
+            .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+            .setAudioProcessors(arrayOf<AudioProcessor>(eqProcessor))
+            .build()
+    }
+
+    /** One source of truth: the panel writes eq_* preferences, this applies them to the processor. */
+    private fun startEqSettingsSync() {
+        if (BuildConfig.DEBUG) eqProcessor.log = { Log.d(EQ_LOG_TAG, it) }
+        val prefs = getSharedPreferences(MeloEqPolicy.PREFS, MODE_PRIVATE)
+        eqProcessor.settings = MeloEqPolicy.load(prefs)
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { p, key ->
+            if (MeloEqPolicy.isEqKey(key)) {
+                val next = MeloEqPolicy.load(p)
+                if (next != eqProcessor.settings) eqProcessor.settings = next
+            }
+        }
+        eqPrefsListener = listener
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+    }
+
     override fun onCreate() {
         super.onCreate()
         serviceRef = WeakReference(this)
-        val player = ExoPlayer.Builder(this)
+        val builder = ExoPlayer.Builder(this)
             .setMediaSourceFactory(
                 DefaultMediaSourceFactory(TelegramOwnerAudioDataSource.Factory(this)))
             .setAudioAttributes(AudioAttributes.DEFAULT, true)
             .setHandleAudioBecomingNoisy(true)
-            .build()
+        if (MeloEqPolicy.FEATURE_ENABLED) {
+            builder.setRenderersFactory(eqRenderersFactory())
+            startEqSettingsSync()
+        }
+        val player = builder.build()
         exoPlayer = player
         // Shuffle only flips the flag: Media3 keeps the list order, this service decides the play order.
         player.setShuffleOrder(ShuffleOrder.UnshuffledShuffleOrder(0))
@@ -742,6 +785,8 @@ class ShareablePlaybackService : MediaSessionService() {
         mediaSession
 
     override fun onDestroy() {
+        eqPrefsListener?.let { getSharedPreferences(MeloEqPolicy.PREFS, MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(it) }
+        eqPrefsListener = null
         TelegramProgressiveCache.clear()
         clearQueue()
         main.removeCallbacksAndMessages(null)

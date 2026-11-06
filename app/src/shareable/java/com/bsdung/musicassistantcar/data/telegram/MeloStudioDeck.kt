@@ -2,13 +2,16 @@ package com.bsdung.musicassistantcar.data.telegram
 
 import android.app.Activity
 import android.app.Dialog
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Typeface
 import android.media.MediaMetadataRetriever
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -38,7 +41,7 @@ import java.util.concurrent.atomic.AtomicLong
 /**
  * Studio Deck Now Playing (docs/ui-spec.md step 6). Portrait: big cover, title, channel,
  * quality pills, Đảo / Lặp / Lưu, then the queue below. Landscape: player on the left, numbered
- * queue on the right. EQ and Hẹn giờ sit at the top (EQ is not available yet).
+ * queue on the right. EQ and Hẹn giờ sit at the top; the EQ chip opens [MeloEqPanel].
  *
  * E95: the waveform scrubber is gone. The time line and the −30s / Lùi / Phát / Tiến / +60s row
  * form a "bến điều khiển" pinned under the scrolling part, so the controls never leave the screen
@@ -75,6 +78,7 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
     private lateinit var repeat: TextView
     private lateinit var favorite: TextView
     private lateinit var sleep: TextView
+    private lateinit var eqChip: TextView
     private val prefetchSwitch: Switch
     private lateinit var queuePane: MeloQueuePane
     private lateinit var lyricsPane: MeloLyricsPane
@@ -391,9 +395,9 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         }, matchWrap())
         addView(LinearLayout(activity).apply {
             orientation = if (activity.resources.configuration.fontScale > 1.3f) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
-            addView(c.chip("EQ", false) {
-                Toast.makeText(activity, "EQ sắp có trong bản sau", Toast.LENGTH_SHORT).show()
-            }.apply { contentDescription = "Bộ chỉnh âm, sắp có" }, matchWrap())
+            eqChip = c.chip("EQ", false) { openEq() }.apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+            renderEqChip()
+            addView(eqChip, matchWrap())
             sleep = c.chip("Hẹn giờ", false) { showSleepMenu(sleep) }.apply {
                 contentDescription = "Hẹn giờ tắt nhạc"; maxLines = 2
             }
@@ -555,6 +559,29 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
     }
 
     private fun reloadQueue() { queuePane.update() }
+
+    /** Off: the plain "EQ" chip. On: accent fill and "EQ · <preset>" (settings are read from the shared prefs). */
+    private fun renderEqChip() {
+        if (!MeloEqPolicy.FEATURE_ENABLED) {
+            eqChip.contentDescription = "Bộ chỉnh âm, sắp có"
+            return
+        }
+        val eq = MeloEqPolicy.load(activity.getSharedPreferences(MeloEqPolicy.PREFS, Context.MODE_PRIVATE))
+        eqChip.text = MeloEqPolicy.chipLabel(eq)
+        eqChip.contentDescription = MeloEqPolicy.chipDescription(eq)
+        eqChip.isSelected = eq.enabled
+        eqChip.setTextColor(if (eq.enabled) p.onAccent else p.text)
+        eqChip.typeface = if (eq.enabled) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        eqChip.background = if (eq.enabled) c.pill(p.accent) else c.pill(p.surfaceRaised, p.border)
+    }
+
+    private fun openEq() {
+        if (!MeloEqPolicy.FEATURE_ENABLED) {
+            Toast.makeText(activity, "EQ sắp có trong bản sau", Toast.LENGTH_SHORT).show()
+            return
+        }
+        MeloEqPanel(activity, c).show { renderEqChip() }
+    }
 
     private fun showSleepMenu(anchor: View) {
         PopupMenu(activity, anchor).apply {
