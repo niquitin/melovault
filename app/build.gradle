@@ -186,8 +186,8 @@ android {
             // Replace with a managed release key before any public distribution.
             signingConfig signingConfigs.debug
             // Beta-only bump; never alter the existing Personal Stable artifact.
-            versionCode 121
-            versionName '0.6.96'
+            versionCode 122
+            versionName '0.6.97'
             versionNameSuffix meloOpen ? '-open' : '-beta'
             buildConfigField 'boolean', 'PERSONAL_BACKEND_ENABLED', 'false'
             buildConfigField 'String', 'CAR_API_PRIMARY', '""'
