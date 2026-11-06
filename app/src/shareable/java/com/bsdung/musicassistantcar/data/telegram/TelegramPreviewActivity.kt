@@ -520,7 +520,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private var player: MediaController? = null
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var controllerReleased = false
-    private data class PendingPlayback(val items: List<MediaItem>, val startIndex: Int, val positionMs: Long = 0L)
+    /** Source order and chosen song of a Telegram start, kept until the service can take them. */
+    private data class PendingTelegramQueue(val ownerId: Long, val songs: List<Song>, val selectedId: Long)
+    private data class PendingPlayback(val items: List<MediaItem>, val startIndex: Int, val positionMs: Long = 0L,
+                                       val telegramQueue: PendingTelegramQueue? = null)
     private var pendingPlayback: PendingPlayback? = null
 
     // E100: the Telegram song this account listened to last ("Nghe tiếp"); numbers in melovault_resume, never names or paths.
@@ -1730,7 +1733,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 updateCockpitPlayer()
                 pendingPlayback?.let { pending ->
                     pendingPlayback = null
-                    startPlayback(controller, pending.items, pending.startIndex, pending.positionMs)
+                    if (pending.telegramQueue == null || handOffTelegramQueue(pending.telegramQueue)) {
+                        startPlayback(controller, pending.items, pending.startIndex, pending.positionMs)
+                    } else {
+                        nowPlayingTitle.text = "Chọn một bài hát để bắt đầu"
+                        showMessage("Không phát được bài vừa chọn vì phiên Telegram đã thay đổi. Hãy chọn lại bài.")
+                    }
                 }
                 openPendingWidgetPlayer()
             }
@@ -1764,13 +1772,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // Playback queue follows only the selected source (and visible title
         // filter), never silently jumps into a different Telegram channel.
         // The service owns the order: it gets the source order and gives back the play order (Shuffle).
-        configureTelegramQueueFor(song)
+        val telegramQueue = configureTelegramQueueFor(song)
         // Only contiguous cached neighbors may enter Media3's transport queue:
         // skipping a missing file to jump to a distant cached song is incorrect.
         val selected = queueSongOrder.indexOfFirst { it.messageId == song.messageId }
         if (selected < 0) {
             enqueueItems(listOf(mediaItem(Uri.fromFile(target), song.title,
-                "telegram:${song.messageId}", song.sourceTitle ?: sourceNames[song.chatId], song.performer)), 0, startPositionMs)
+                "telegram:${song.messageId}", song.sourceTitle ?: sourceNames[song.chatId], song.performer)), 0, startPositionMs, telegramQueue)
             return
         }
         fun playableAt(index: Int): MediaItem? {
@@ -1796,7 +1804,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 "telegram:${song.messageId}", song.sourceTitle ?: sourceNames[song.chatId], song.performer)
             else playableAt(index)
         }
-        enqueueItems(contiguous, indices.indexOf(selected).coerceAtLeast(0), startPositionMs)
+        enqueueItems(contiguous, indices.indexOf(selected).coerceAtLeast(0), startPositionMs, telegramQueue)
     }
 
     private fun enqueueProgressivePlayback(song: Song) {
@@ -1804,7 +1812,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         // The Media3 source waits only for missing bytes; do not wait for the
         // full mix or silently pretend the file is fully cached.
         // The service owns the order: it gets the source order and gives back the play order (Shuffle).
-        configureTelegramQueueFor(song)
+        val telegramQueue = configureTelegramQueueFor(song)
         val ext = song.filename.substringAfterLast('.', "mp3")
             .lowercase().takeIf { it in setOf(
                 "mp3", "flac", "wav", "m4a", "ogg", "opus", "aac"
@@ -1813,15 +1821,33 @@ class TelegramPreviewActivity : AppCompatActivity() {
             TelegramProgressiveCache.makeUri(song.fileId, ext),
             song.title, "telegram:${song.messageId}", song.sourceTitle ?: sourceNames[song.chatId], song.performer
         )
-        enqueueItems(listOf(progressive), 0)
+        enqueueItems(listOf(progressive), 0, telegramQueue = telegramQueue)
     }
 
-    private fun enqueueItems(items: List<MediaItem>, startIndex: Int, startPositionMs: Long = 0L) {
+    private fun enqueueItems(items: List<MediaItem>, startIndex: Int, startPositionMs: Long = 0L,
+                             telegramQueue: PendingTelegramQueue? = null) {
         if (items.isEmpty()) return
         nowPlayingTitle.text = items[startIndex].mediaMetadata.title ?: ""
         val controller = player
         if (controller != null) startPlayback(controller, items, startIndex, startPositionMs)
-        else pendingPlayback = PendingPlayback(items, startIndex, startPositionMs)
+        else pendingPlayback = PendingPlayback(items, startIndex, startPositionMs, telegramQueue)
+    }
+
+    /**
+     * The service did not exist when the song was chosen, so it never received the queue. Hands it
+     * over now and rechecks the owner, before anything plays. False means the song must not start.
+     */
+    private fun handOffTelegramQueue(queue: PendingTelegramQueue): Boolean {
+        val owner = library.authorizedUser()?.value
+        fun serviceIds() = owner?.let { id ->
+            ShareablePlaybackService.currentTelegramQueue(id).map { it.messageId }
+        }.orEmpty()
+        if (owner == queue.ownerId && queue.selectedId !in serviceIds()) {
+            ShareablePlaybackService.configureTelegramQueue(owner, filesRoot, queueTracksOf(queue.songs), queue.selectedId)
+        }
+        if (!MeloWidgetPolicy.mayStartPendingTelegram(queue.ownerId, owner, serviceIds(), queue.selectedId)) return false
+        syncTelegramQueueFromService(queue.songs)
+        return true
     }
 
     private fun startPlayback(controller: MediaController, items: List<MediaItem>,
@@ -4461,8 +4487,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
     /**
      * Gives the service the source order for [song] (the visible list, or the queue's own source order when [song]
      * is not in it) and reads the play order back. The UI never computes the order itself.
+     * Returns what [handOffTelegramQueue] needs when the service is not up yet.
      */
-    private fun configureTelegramQueueFor(song: Song) {
+    private fun configureTelegramQueueFor(song: Song): PendingTelegramQueue? {
         val captured = activePlayForumQueue?.takeIf {
             it.ownerId == library.authorizedUser()?.value && it.selectedKey == song.messageId
         }
@@ -4475,6 +4502,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             ShareablePlaybackService.configureTelegramQueue(owner.value, filesRoot, queueTracksOf(base), song.messageId)
         }
         syncTelegramQueueFromService(base)
+        return library.authorizedUser()?.let { PendingTelegramQueue(it.value, base, song.messageId) }
     }
 
     /** Reads the play order from the service (Shuffle already applied) into [queueSongOrder]; [pool] holds fresher Songs. */

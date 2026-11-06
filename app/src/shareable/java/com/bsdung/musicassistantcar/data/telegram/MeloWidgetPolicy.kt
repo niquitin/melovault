@@ -75,16 +75,31 @@ internal object MeloWidgetPolicy {
     fun intentIdentity(widgetId: Int, action: Action, token: String): String =
         "melovault-widget://control/$widgetId/${action.name}/$token"
 
+    /**
+     * A Telegram song chosen before the service existed may start only for the owner who chose it,
+     * and only once the service queue holds it. Otherwise it would play without an owner or queue.
+     */
+    fun mayStartPendingTelegram(chosenOwner: Long, currentOwner: Long?, serviceQueue: List<Long>, songId: Long): Boolean =
+        chosenOwner == currentOwner && songId in serviceQueue
+
     class Generation(private val newToken: () -> String = { UUID.randomUUID().toString() }) {
         private var key: Any? = null
+        private var fenceKey: Any? = null
         var token: String = newToken()
             private set
         private var nextAt: Long? = null
 
-        fun update(currentKey: Any?): Boolean {
-            if (key == currentKey) return false
+        /**
+         * [currentKey] is everything on screen: any change rotates the token, which rejects late
+         * artwork and clicks from the old render. [currentFenceKey] is only the song and its owner:
+         * new metadata for the same song must not reopen a Next press that is still in flight.
+         */
+        fun update(currentKey: Any?, currentFenceKey: Any? = currentKey): Boolean {
+            if (key == currentKey && fenceKey == currentFenceKey) return false
+            if (fenceKey != currentFenceKey) nextAt = null
             key = currentKey
-            invalidate()
+            fenceKey = currentFenceKey
+            token = newToken()
             return true
         }
 

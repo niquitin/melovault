@@ -88,6 +88,52 @@ class MeloWidgetPolicyTest {
         assertTrue(generation.takeNext(token, MeloWidgetPolicy.NEXT_FENCE_MS + 1))
     }
 
+    @Test fun sameSongMetadataUpdateKeepsNextFenceAndRejectsOldToken() {
+        val generation = MeloWidgetPolicy.Generation()
+        generation.update("A/title1", "A")
+        val first = generation.token
+        assertTrue(generation.takeNext(first, 0))
+        assertFalse(generation.takeNext(first, 20))
+
+        // Title or cover of A arrives while B is still resolving: the widget redraws with a new token.
+        assertTrue(generation.update("A/title2", "A"))
+        val redrawn = generation.token
+        assertNotEquals(first, redrawn)
+        assertFalse(generation.takeNext(first, 100))
+        assertFalse("a redraw must not allow a second Next inside the window", generation.takeNext(redrawn, 100))
+        assertFalse(generation.takeNext(redrawn, MeloWidgetPolicy.NEXT_FENCE_MS - 1))
+        assertTrue(generation.takeNext(redrawn, MeloWidgetPolicy.NEXT_FENCE_MS))
+    }
+
+    @Test fun nextFenceReopensForAnotherSongOwnerOrEmptyState() {
+        for ((changedKey, changedFence) in listOf("B/title" to "B", "A/owner2" to "A/owner2", null to null)) {
+            val generation = MeloWidgetPolicy.Generation()
+            generation.update("A/title", "A")
+            assertTrue(generation.takeNext(generation.token, 0))
+            assertTrue(generation.update(changedKey, changedFence))
+            assertTrue(generation.takeNext(generation.token, 1))
+        }
+    }
+
+    @Test fun playerErrorStillClearsFenceAfterMetadataUpdate() {
+        val generation = MeloWidgetPolicy.Generation()
+        generation.update("A/title1", "A")
+        assertTrue(generation.takeNext(generation.token, 0))
+        generation.update("A/title2", "A")
+        generation.clearNext()
+        assertTrue(generation.takeNext(generation.token, 1))
+    }
+
+    @Test fun pendingTelegramSongStartsOnlyForItsOwnerWithSongInServiceQueue() {
+        assertTrue(MeloWidgetPolicy.mayStartPendingTelegram(1L, 1L, listOf(7L, 8L), 8L))
+        // The service refused or lost the queue: playing now would leave the widget without an owner.
+        assertFalse(MeloWidgetPolicy.mayStartPendingTelegram(1L, 1L, emptyList(), 8L))
+        assertFalse(MeloWidgetPolicy.mayStartPendingTelegram(1L, 1L, listOf(7L), 8L))
+        // Signed out or switched account while the controller was connecting.
+        assertFalse(MeloWidgetPolicy.mayStartPendingTelegram(1L, null, listOf(8L), 8L))
+        assertFalse(MeloWidgetPolicy.mayStartPendingTelegram(1L, 2L, listOf(8L), 8L))
+    }
+
     @Test fun changedItemRejectsLateArtworkAndTransport() {
         val generation = MeloWidgetPolicy.Generation()
         generation.update("A")

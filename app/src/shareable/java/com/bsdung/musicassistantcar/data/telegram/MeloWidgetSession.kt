@@ -23,6 +23,7 @@ internal class MeloWidgetSession(
 ) : Player.Listener {
     internal data class Owner(val account: Long, val epoch: Long, val root: File)
     private data class Key(val item: MediaItem, val metadata: MediaMetadata, val owner: Owner?)
+    private data class NextFence(val mediaId: String, val owner: Owner?)
     private data class Render(val view: MeloWidgetPolicy.View, val token: String, val cover: Bitmap?)
     private val context = context.applicationContext
     private val main = Handler(player.applicationLooper)
@@ -100,7 +101,7 @@ internal class MeloWidgetSession(
         val item = player.currentMediaItem
         val key = if (state.open == MeloWidgetPolicy.Open.PLAYER && item != null)
             Key(item, player.mediaMetadata, if (item.mediaId.startsWith("telegram:")) telegramOwner() else null) else null
-        val changed = generation.update(key)
+        val changed = generation.update(key, key?.let { NextFence(it.item.mediaId, it.owner) })
         if (changed) cancelArtwork()
         val value = Render(state, generation.token, cover)
         if (renderGate.needsRender(value, force || changed)) {
