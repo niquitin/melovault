@@ -1,13 +1,10 @@
 # HANDOFF — MeloVault (Shareable Preview)
-## Checkpoint nhiệm vụ 03/11/2026 — WIDGET ĐANG PHÁT (CHƯA TÍCH HỢP)
+## Checkpoint nhiệm vụ 06/11/2026 — WIDGET ĐANG PHÁT (CHƯA TÍCH HỢP)
 
-- `2026-11-03-widget-dang-phat`, nhánh `dot/2026-11-03-widget-dang-phat`, source `49ed94c` từ baseline `b90834f`; **chặng A xong gate Ni, chặng B BLOCKED**, chưa nghiệm thu/merge/push.
-- Mỗi Debug/Release: 2.737 test / 2.716 đạt / 21 skipped / 0 lỗi; build Debug/Release/.open/Personal xanh. Tiny Debug vc121/0.6.96-beta config=true, SHA `3C37DBE2…221F75`, cài AVD riêng thành công.
-- Q1 và Q5 phần trống đã kiểm; Q2–Q4 playback/bìa thật và Q6 có bài BLOCKED vì AVD chưa phiên QA đăng nhập. Sony giữ EQ không dùng; Shanling đã bán. Drive APK owner-only bị chặn tải403; ảnh riêng tư tải được. Không coi đây là bản đã bàn giao tải APK hoặc nghiệm thu chức năng.
-- [Kế hoạch](docs/plans/2026-11-03-widget-dang-phat.md) · [Báo cáo](docs/plans/2026-11-03-widget-dang-phat-bao-cao.md) · [Checkpoint](docs/plans/2026-11-03-widget-dang-phat-ban-giao.md) · [APK](docs/plans/2026-11-03-widget-dang-phat-apk-test.md) · [Ảnh](docs/plans/2026-11-03-widget-dang-phat-hinh-nghiem-thu.md) · [Prompt sơ bộ mới](docs/plans/2026-11-03-widget-dang-phat-prompt-nghiem-thu-so-bo.md).
-- Cleanup: AVD/app/widget/media nhiệm vụ đã xóa; APK Ni kiểm biên dịch, link config Tiny và file chuyển tạm đã dọn; giữ source/candidate/log/ảnh/fixture để sơ bộ và tiếp B khi đủ điều kiện. Không tài nguyên test nhiệm vụ đang chạy.
-
-## Cập nhật tích hợp 06/11/2026 — BỘ CHỈNH ÂM (EQ) MERGED (ƯU TIÊN CAO NHẤT)
+- `2026-11-03-widget-dang-phat`, nhánh `dot/2026-11-03-widget-dang-phat`, source `be61487` từ baseline `f82185b` (vc122 đã ĐẠT). **QA CANDIDATE — CHƯA NGHIỆM THU**, chưa sơ bộ lại, chưa merge/push. Đã sửa 2 lỗi của biên bản sơ bộ.
+- Mỗi Debug/Release: 2.812 test / 2.791 đạt / 21 skipped / 0 lỗi; build Debug/Release/AndroidTest/.open/Personal xanh. Tiny Debug vc122/0.6.97-beta config=true, SHA `58BD55F0…FD07`, đang cài Sony.
+- Q1–Q6 có bài đã kiểm trên Sony, gồm bìa thật, ca sĩ, Tạm dừng/Phát, Tiếp/Bài trước, B chưa tải, hai widget, gỡ widget cuối, widget cũ sau khi tiến trình chết. Giới hạn: chưa xác nhận âm thanh thực, chữ lớn, API 30; launcher Xperia mặc định 3×3 thay vì 4×2.
+- [Kế hoạch](docs/plans/2026-11-03-widget-dang-phat.md) · [Báo cáo](docs/plans/2026-11-03-widget-dang-phat-bao-cao.md) · [Checkpoint](docs/plans/2026-11-03-widget-dang-phat-ban-giao.md) · [APK](docs/plans/2026-11-03-widget-dang-phat-apk-test.md) · [Ảnh](docs/plans/2026-11-03-widget-dang-phat-hinh-nghiem-thu.md) · [Prompt sơ bộ mới](docs/plans/2026-11-03-widget-dang-phat-prompt-nghiem-thu-so-bo.md) · [Nghiệm thu](docs/plans/2026-11-03-widget-dang-phat-nghiem-thu.md).
 
 ## Cập nhật tích hợp 06/11/2026 — BẢN GỘP vc122 / 0.6.97 MERGED (ƯU TIÊN CAO NHẤT)
 

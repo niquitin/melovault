@@ -1,5 +1,34 @@
 # Bàn giao — Widget Đang phát
-## Checkpoint sơ bộ · 03/11/2026 · Codex
+
+## Checkpoint cuối REWORK · 06/11/2026 · Claude Code, Opus 5.5
+
+**QA CANDIDATE — CHƯA NGHIỆM THU.** Thực thi xong, chờ sơ bộ và chủ dự án. Chưa merge, chưa push.
+
+| Mục | Giá trị |
+|---|---|
+| Worktree / nhánh | `C:/Users/ntdun/.codex/worktrees/melovault-widget/MeloVault-E91-Shareable` / `dot/2026-11-03-widget-dang-phat` |
+| Baseline | `f82185ba2ef17fce97d4680de2cd2dc86b2e1b4a` (vc122 đã ĐẠT) |
+| Source APK | `be61487dc387b05db6798cdaf74ae222b07e7eef`; các commit sau chỉ là hồ sơ. Kiểm: `git diff be61487..HEAD -- app/` phải rỗng |
+| APK | vc122 / `0.6.97-beta`, 33.937.332 B, SHA-256 `58BD55F0B5C22A256E6572516C277A3049A617F853A1830B30280F70AD48FD07`, đang cài trên Sony |
+| File chưa commit | Không (artifact private bị `.gitignore`) |
+| Job còn chạy | Không có job của nhiệm vụ. Daemon Gradle không dừng |
+| Sony | Widget QA đã gỡ, nhạc tạm dừng, `SONY_SCREEN_END`: Display State=OFF |
+
+| Bước | Trạng thái |
+|---|---|
+| Tích hợp `42be21c`, `f82185b`, giải xung đột | Xong |
+| Sửa lỗi 1 (chặn Tiếp), lỗi 2 (bài chờ kết nối) | Xong, kiểm JVM và Sony |
+| Gate Ni, build Tiny, gate APK, cài Sony | Xong |
+| Q1–Q6 có bài trên Sony | Xong, [báo cáo](2026-11-03-widget-dang-phat-bao-cao.md) mục REWORK |
+| Ảnh, APK trên Drive owner-only | Xong; tải APK bằng trình duyệt chưa thử |
+| Sơ bộ độc lập | Chưa làm. [Prompt](2026-11-03-widget-dang-phat-prompt-nghiem-thu-so-bo.md) |
+| Nghiệm thu chủ dự án | Chờ, [biên bản](2026-11-03-widget-dang-phat-nghiem-thu.md) |
+
+**Việc sau ĐẠT:** ghi `*-nghiem-thu.md`, merge `--no-ff` vào `feature/e93-03d-y700-offline-cockpit` trong worktree `C:\Users\ntdun\.codex\worktrees\workflow-md-handoff\MeloVault-E91-Shareable`, cập nhật mục đầu `HANDOFF.md`, rồi push theo chỉ thị 02/11. Kiểm lại nhánh tích hợp vì có thể đã đi tiếp sau `f82185b`. Không đụng `main`, không đẩy `dot/*`.
+
+**Cần chủ dự án để ý:** widget trên launcher Xperia mặc định 3×3, cao và trống nhiều ở giữa, chỉ kéo được ngang. Kế hoạch ghi 4×2. Chưa sửa vì ngoài phạm vi 2 lỗi.
+
+## Checkpoint sơ bộ · 03/11/2026 · Codex (lịch sử)
 
 **SƠ BỘ: CẦN SỬA. Chặng B vẫn BLOCKED.** HEAD nhận bàn giao `8d78b19`, source APK `49ed94c`. Phiên sơ bộ đã kết thúc trên nhánh nhiệm vụ. [Biên bản, vị trí mã và cách kiểm lại](2026-11-03-widget-dang-phat-nghiem-thu-so-bo.md).
 

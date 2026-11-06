@@ -1,6 +1,78 @@
-Thực thi: Codex, model/effort không được công cụ phiên cung cấp; phiên 03/11/2026, chặng A → B.
+Thực thi: Codex phiên 03/11/2026, chặng A → B (model/effort không được công cụ phiên cung cấp); REWORK: Claude Code, Opus 5.5, phiên 06/11/2026.
 
 # Báo cáo widget Đang phát
+
+## REWORK 06/11/2026 — Claude Code, Opus 5.5
+
+**QA CANDIDATE — CHƯA NGHIỆM THU.** Sửa 2 lỗi trong [biên bản sơ bộ](2026-11-03-widget-dang-phat-nghiem-thu-so-bo.md), tích hợp bản vc122 đã ĐẠT, QA có bài trên Sony. Chưa sơ bộ lại, chưa merge, chưa push. Phần dưới mục này là lịch sử phiên 03/11; kết quả BLOCKED ở đó đã được thay bằng bảng QA sau.
+
+| Mục | Kết quả |
+|---|---|
+| Source APK | `be61487dc387b05db6798cdaf74ae222b07e7eef` |
+| Baseline tích hợp | `f82185b` (vc122 đã ĐẠT, gồm EQ và chủ đề Telegram) |
+| Commit | Merge `0506f37` (`42be21c`), sửa lỗi `467e699`, merge `be61487` (`f82185b`) |
+| Xung đột | `ShareablePlaybackService.onDestroy` giữ cả dọn widget và gỡ listener EQ; `HANDOFF.md` giữ cả hai phần |
+| Phiên bản | vc122 / `0.6.97`, giống hệt `7cd4ebb` nên merge không xung đột. Không nâng lên vc123 |
+| APK | [hồ sơ APK](2026-11-03-widget-dang-phat-apk-test.md): 33.937.332 B, SHA-256 `58BD55F0B5C22A256E6572516C277A3049A617F853A1830B30280F70AD48FD07` |
+
+### Hai lỗi đã sửa
+
+1. **Đổi metadata cùng bài mở sớm chặn Tiếp.** `MeloWidgetPolicy.Generation.update` nhận thêm khóa chặn riêng. Khóa hiển thị (item, metadata, owner) vẫn đổi token, nên token cũ và ảnh đến muộn vẫn bị từ chối. Khóa chặn chỉ gồm `mediaId` và owner (`MeloWidgetSession.NextFence`), nên cùng bài đổi tiêu đề hoặc bìa không xóa mốc 2 giây. Đổi bài, đổi owner, về trạng thái trống hoặc lỗi player vẫn mở chặn.
+2. **Widget báo trống khi bài Telegram bắt đầu từ yêu cầu chờ kết nối.** `PendingPlayback` giữ thêm `PendingTelegramQueue` (owner, nguồn, bài chọn). Khi controller nối xong, `TelegramPreviewActivity.handOffTelegramQueue` chuyển queue cho service, đọc lại rồi mới phát. Owner đổi hoặc service từ chối thì không phát và báo chọn lại bài (`MeloWidgetPolicy.mayStartPendingTelegram`). Kiểm tra quyền của widget giữ nguyên. Không cần sửa logic trong `ShareablePlaybackService.kt`, ngoài phần giải xung đột.
+
+### Gate Ni
+
+Mỗi biến thể `testShareableDebugUnitTest` / `testShareableReleaseUnitTest`: **208 suite, 2.812 test, 2.791 đạt, 21 skipped, 0 failure, 0 error** (đếm từ XML, trên `467e699`). `MeloWidgetPolicyTest` 16 test (+4). `assembleShareableDebug` + `assembleShareableRelease` + `assembleShareableDebugAndroidTest`, `-PmeloOpen=true assembleShareableDebug`, `assemblePersonalDebug`: BUILD SUCCESSFUL. `git diff --check` sạch. `git diff 467e699 be61487 -- app/` rỗng, nên gate vẫn áp dụng cho source APK. Log: `docs/plans/artifacts/2026-11-03-widget-dang-phat/rework-20261106/ni-*.log` (không commit). Merged manifest sau gate: Shareable Release và Shareable Debug (thư mục này mang kết quả lượt `-PmeloOpen=true` chạy sau cùng) đúng 1 provider, `exported=false`; Personal Debug không có provider. APK thường trên Sony chạy widget thật ở QA.
+
+### Build Tiny
+
+Bundle 14.083.514 B, SHA-256 `34E1B06C913B09579F06F1DD5515562DC53BB9547340DFD25D59F41B4FECE33B`, khớp Ni/Tiny, `git bundle verify` đạt. Clone cô lập `C:\Bots\MeloVault-WIDGET-IsolatedQA-20261106-be61487`, detach đúng source. `telegram.config.valid=true`, BUILD SUCCESSFUL 2m39s. Gate APK kiểm package, version, cert. `adb install -r` Success, APK pull từ máy khớp SHA.
+
+### QA Sony
+
+Sony XQ-AS52 `QV725WEQ54`, Android 12, launcher Xperia. Trước cài: vc122 (bản đã ĐẠT), nhạc tạm dừng, màn OFF, 0 widget MeloVault.
+
+| Q | Thao tác | Kết quả thực tế | Trạng thái |
+|---|---|---|---|
+| Sửa 2 | `MeloWidgetFixesDeviceTest` chạy riêng: dừng service, chọn bài, nối lại controller | `pending_without_service=true`, `handoff_ok=true queue=200 state=3`, `widgetCanOpenPlayer` true. Bài chọn trong lúc service vắng mặt lên đúng owner và queue | PASS |
+| Sửa 1 | Cùng test: bấm Tiếp, đổi metadata A, bấm lại bằng token cũ rồi token mới, trong một khối main thread | Token đổi; token cũ và token mới đều không tạo lượt Tiếp thứ hai (`nextAt` giữ nguyên) | PASS |
+| Q1 | Bộ chọn, kéo ra Home | Đúng tên và preview; trống, 3 nút tắt | PASS |
+| Q2 | Bài có bìa và ca sĩ; Tạm dừng/Phát từ widget; phím media và nút trong app | `( NHÓM THÁNG )…` / `MINH QUANG` có bìa thật; `Total Immersion` / `Akira Inoue` có bìa thật. Tạm dừng tại 54.319 ms, 2 giây sau vẫn 54.319, Phát tiếp 54.435. Nút không mở Activity. Phím media và nút app đổi đúng biểu tượng widget | PASS |
+| Q3 | Tiếp, Bài trước, biên, bấm nhanh, B chưa tải, bài cục bộ | Đúng thứ tự trong Đã tải; bài đầu tắt Bài trước, bài cuối tắt Tiếp. Bấm Tiếp 2 lần nhanh chỉ sang 1 bài (đã đối chiếu bằng Bài trước). B chưa tải phát được (`QUÁ BẢNH…`, vị trí tăng). B thiếu bìa/ca sĩ không giữ của A (`#3 Up` có bìa → `#Bản nháp 1` nốt nhạc, `Chưa rõ ca sĩ`) | PASS |
+| Q4 | Chạm thẻ khi đang phát, khi tạm dừng; Back | Mở Studio Deck đúng bài; tạm dừng giữ nguyên 20.511 ms, không tự phát; Back về danh sách | PASS |
+| Q5 | Hai widget, kéo rộng, đổi bài và tạm dừng từ từng bản | Hai bản cùng bài, cùng nút; bản rộng đổi bố cục, chữ không đè nút; gỡ một bản, bản kia vẫn điều khiển được | PASS, xem giới hạn |
+| Q6 | Gỡ widget cuối khi đang phát, thêm lại | Sau gỡ `widgets=0`, nhạc vẫn chạy (14.809 → 21.063 ms); thêm lại hiện đúng bài, nút Tạm dừng, vị trí 35.981 ms | PASS |
+| Vòng đời | Kết thúc tiến trình bằng lượt instrumentation bị bỏ qua, bấm Phát trên widget cũ, rồi chạm thẻ | Widget cũ còn nội dung tới khi có tác động (giới hạn đã biết). Bấm Phát: không có MediaSession, widget về trống. Chạm thẻ: mở app, không tự phát | PASS |
+
+Log crash của app: `fatal=0` trong suốt lượt QA. Ảnh: [hồ sơ ảnh](2026-11-03-widget-dang-phat-hinh-nghiem-thu.md).
+
+**Một lần đọc kết quả cần giải thích:** ở nhạc trên máy, Tiếp từ `Bee Moved` đến `Total Immersion` qua `ringtone`, bài dài 940 ms theo MediaStore, nên tự chuyển ngay. Không phải widget nhảy 2 bài.
+
+**Một lần test không đạt, chỉ do cách chạy:** chạy cả lớp `MeloWidgetFixesDeviceTest` thì test bài chờ báo `BLOCKED/FAIL: playback service gone`, vì Activity của test trước còn giữ controller nên service không dừng. Test Tiếp vẫn đạt. Chạy riêng test bài chờ thì `OK (1 test)`. Khi chạy lại phải chạy từng test một, hoặc sửa test để đóng Activity.
+
+### Quan sát chưa sửa (ngoài phạm vi 2 lỗi)
+
+- **Kích thước trên Xperia:** bộ chọn báo 3×3 thay vì 4×2 như kế hoạch, widget cao và trống nhiều ở giữa. Chỉ kéo được ngang (`resizeMode=horizontal`), không thu nhỏ dưới 3 cột. Chủ dự án nên xem bằng mắt.
+- Bìa sát mép trái vùng nội dung của widget.
+- Bài có trùng tên liền nhau trên widget khó phân biệt (`Qua Cam Làm Giàu.mp3` lần Tiếp cuối). Vị trí về 0 cho thấy đã chuyển bài.
+- Khi chạm thẻ để mở app sau lúc tiến trình mới khởi động, bài `Nghe tiếp` hiện ở mini player, widget vẫn trống cho tới khi phát thật. Đúng với thiết kế không tự phát.
+
+### Chưa kiểm chứng
+
+- **CHƯA XÁC NHẬN ÂM THANH THỰC.**
+- Lần chọn bài thật trong khe nhỏ trước khi controller nối xong không tái hiện được bằng tay. Lỗi 2 được kiểm bằng test dừng service rồi đi qua đúng đường mã.
+- Đếm yêu cầu TDLib thực khi Tiếp sang B chưa tải. Lỗi 1 kiểm ở cổng chặn, không đếm gói TDLib.
+- Chữ lớn, TalkBack, API 30 (chỉ có Android 12), màn cũ (chỉ Studio Deck), Shuffle, Y700/S25/FYT, Release/`.open` chạy trên máy.
+- Thời gian phản hồi chỉ quan sát: widget đã đúng ở lần chụp sau 1–1,5 giây, chưa đo riêng.
+- Tải APK từ Drive bằng trình duyệt chưa thử.
+
+### Trạng thái cuối Sony
+
+Bản đang cài: candidate widget `58BD55F0…` vc122, không còn là `BF7B23A7…`. Widget QA đã gỡ, Home về như ảnh đầu. Nhạc tạm dừng. `app.melovault.player.test` vẫn còn trên máy như các lần QA trước. Vài bài phát thử từ Telegram có thể đã vào cache TDLib; không xóa gì. Đã chạy `logcat -c` trước test. Không đổi tài khoản, không reset. **`SONY_SCREEN_END`: Display State=OFF.**
+
+---
+
+## Lịch sử phiên 03/11/2026
 
 **A hoàn tất gate Ni; B BLOCKED ở QA playback và tải APK Drive. QA CANDIDATE — CHƯA NGHIỆM THU.** Chủ dự án chưa quyết định ĐẠT; phiên này không thực hiện vai sơ bộ, merge hoặc push.
 

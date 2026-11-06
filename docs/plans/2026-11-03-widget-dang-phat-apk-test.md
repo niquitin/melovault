@@ -1,5 +1,36 @@
 # APK QA — Widget Đang phát
 
+## Candidate hiện tại · 06/11/2026 · **QA CANDIDATE — CHƯA NGHIỆM THU**
+
+- Thư mục Drive (owner-only, `ntdung.md@gmail.com`): [MeloVault-WIDGET-QA-CANDIDATE-20261106-vc122-be61487](https://drive.google.com/drive/folders/1rVqHjK2cuTqXV-6D1GBy9jmywbtjNwZr)
+- APK Debug: [MeloVault-0.6.97-beta-vc122-widget-be61487-QA-CANDIDATE-debug.apk](https://drive.google.com/file/d/1boRUlxxaXwkf-00P2Dk5K8_5PElN1cqN/view?usp=drivesdk)
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Loại | Debug QA, biến thể `shareable` thường (không `.open`) |
+| Package | `app.melovault.player` |
+| versionCode / versionName | **122 / `0.6.97-beta`**, cùng số với bản đã ĐẠT `BF7B23A7…`; phân biệt bằng SHA |
+| Source | `be61487dc387b05db6798cdaf74ae222b07e7eef`, nhánh `dot/2026-11-03-widget-dang-phat`, baseline `f82185b` |
+| Build | Tiny, clone cô lập `C:\Bots\MeloVault-WIDGET-IsolatedQA-20261106-be61487`; bundle SHA-256 `34E1B06C913B09579F06F1DD5515562DC53BB9547340DFD25D59F41B4FECE33B` khớp hai đầu; BUILD SUCCESSFUL 2m39s |
+| Byte | 33.937.332 |
+| SHA-256 | `58BD55F0B5C22A256E6572516C277A3049A617F853A1830B30280F70AD48FD07` |
+| Cert SHA-256 | `eecd3df7e946bdc8cf0404ad4bb9695e2815cea09ff8eb2ea51dd4edf1c3fce8` (cùng cert bản đang cài, cài đè thành công) |
+| Telegram config | true (không in giá trị) |
+| File thật | Tiny `C:\Bots\_qa_temp\widget-20261106-rework\`; Ni `docs/plans/artifacts/2026-11-03-widget-dang-phat/rework-20261106/`; Drive mount `Z:\MeloVault_QA\MeloVault-WIDGET-QA-CANDIDATE-20261106-vc122-be61487\` (SHA-256 cả ba khớp) |
+| Test JVM | Debug/Release mỗi biến thể 208 suite, 2.812 test, 2.791 đạt, 21 skipped, 0 lỗi; assemble Shareable Debug/Release/AndroidTest, `.open` Debug, Personal Debug xanh |
+| Thiết bị đã test | Sony XQ-AS52 `QV725WEQ54` Android 12, `adb install -r`, APK pull từ máy khớp SHA. Chi tiết: [báo cáo](2026-11-03-widget-dang-phat-bao-cao.md) |
+| Kiểm Drive | Thư mục, thư mục ảnh, APK, ảnh tổng hợp: một quyền duy nhất, owner. Kích thước APK khớp. **Tải bằng trình duyệt chưa thử**; connector không trả SHA Drive |
+
+APK kiểm thử thiết bị đi kèm (không dành cho người dùng): `widget-device-tests-be61487.apk`, 454.447 B, SHA-256 `DBA4F80FF70864CCA2B5AB869CE50B685215C7238F14893F40F9B5CAC302F8C6`, chỉ trên Tiny/Sony.
+
+Lưu ý tải: APK widget 03/11 từng bị 403 `cannotDownloadAbusiveFile` trên tài khoản Drive khác. Nếu gặp lại, ghi BLOCKED riêng phần tải; không né cảnh báo, không mở quyền công khai. Bản đúng SHA đã cài sẵn trên Sony.
+
+Rollback: gỡ widget khỏi Home. Không hạ APK/DB, không xóa dữ liệu; cài lại `BF7B23A7…` được vì cùng vc122 và cùng cert nếu chủ dự án yêu cầu.
+
+**CHƯA XÁC NHẬN ÂM THANH THỰC.** Các phần chưa kiểm khác: [báo cáo](2026-11-03-widget-dang-phat-bao-cao.md).
+
+## Lịch sử candidate 03/11/2026 (đã thay thế, source `49ed94c`)
+
 03/11/2026 · **QA CANDIDATE — CHƯA NGHIỆM THU**.
 
 **BLOCKED — CHƯA BÀN GIAO APK TẢI ĐƯỢC.** Upload Drive hoàn tất và metadata owner-only đã đọc lại, nhưng thử tải authenticated trả HTTP403, reason `cannotDownloadAbusiveFile`: “This file has been identified as malware or spam and cannot be downloaded.” Không retry với acknowledgeAbuse, không né cảnh báo, không đổi quyền/public hoặc upload nơi khác.

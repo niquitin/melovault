@@ -1,5 +1,27 @@
 # Ảnh QA — Widget Đang phát
 
+## Bộ ảnh hiện tại · 06/11/2026 · **QA CANDIDATE — CHƯA NGHIỆM THU**
+
+Source `be61487`, Sony XQ-AS52 `QV725WEQ54`, launcher Xperia. [Thư mục ảnh riêng tư](https://drive.google.com/drive/folders/134rSpPWMrzsURARUMaeEYKGjn89UNofp) · [Thư mục QA](https://drive.google.com/drive/folders/1rVqHjK2cuTqXV-6D1GBy9jmywbtjNwZr). Thư mục và ảnh tổng hợp đã kiểm: một quyền duy nhất, owner `ntdung.md@gmail.com`. Cần đăng nhập đúng tài khoản; không public.
+
+| Mốc | Liên kết | Byte |
+|---|---|---:|
+| Ảnh tổng hợp 8 mốc (SHA-256 `F1819126E8CB4747EE3DBA2AB0CCAE7BDEFF4CBBC35A4FDBCC09BE5CBD3EC29D`) | [00_tong_hop.png](https://drive.google.com/file/d/160jhV7kqhhthtYaE1VxwK--KgacBdCo2/view?usp=drivesdk) | 1.275.492 |
+| Q1 bộ chọn widget | [05-picker-preview.png](https://drive.google.com/file/d/1fbu-sfFgq3c3PfU_d2igUSiDXf-Ow2cS/view?usp=drivesdk) | 127.899 |
+| Q1 trống, nút tắt | [06-added.png](https://drive.google.com/file/d/1q1Lkgg54gqmey7Fi4skRkTfzHptQohMB/view?usp=drivesdk) | 1.492.117 |
+| Q2 tạm dừng từ widget | [12-q2-paused.png](https://drive.google.com/file/d/1a0KWUwF0p2jJBTmD8s60twnqtu4Q0TCa/view?usp=drivesdk) | 1.494.029 |
+| Q3 Tiếp 2 lần sang B chưa tải | [30-q3-uncached-B-1s.png](https://drive.google.com/file/d/1fcxkF1WOXOq9GNe6TbmKvysN4wobxabk/view?usp=drivesdk) | 1.494.059 |
+| Q3 bìa + ca sĩ thật, bài cuối tắt Tiếp | [63-q3-local-last.png](https://drive.google.com/file/d/13coV-7vTuky4MWcAtYgfKRWuKCJnnTV7/view?usp=drivesdk) | 1.516.454 |
+| Q5 kéo rộng, đổi bố cục | [44-q5-wide.png](https://drive.google.com/file/d/1xpQ5qaxedCt-zMdIPU9P32DDEpZA7mMq/view?usp=drivesdk) | 1.265.209 |
+| Q6 thêm lại, nhạc không đứt | [51-q6-readded.png](https://drive.google.com/file/d/1Y_CjsfPA9KSL4pGL0yObQ6j5A-Dc5yRY/view?usp=drivesdk) | 1.490.324 |
+| Bấm widget cũ: trống, không tự phát | [57-q6-after-stale-tap.png](https://drive.google.com/file/d/166lV0tFa0quxFvoD0AZKVi_Bk2pgMA4e/view?usp=drivesdk) | 1.494.783 |
+
+Không đưa lên Drive ảnh có bìa nhạc có thể là người thật (`17`, `19`, `22`, `25`). Các ảnh đó cùng toàn bộ log ở `docs/plans/artifacts/2026-11-03-widget-dang-phat/rework-20261106/sony/` trên Ni (không commit) và `C:\Bots\_qa_temp\widget-20261106-rework\` trên Tiny. Q4 mở Studio Deck đang ở nhóm ảnh này nên không có link Drive; kết quả ghi trong [báo cáo](2026-11-03-widget-dang-phat-bao-cao.md).
+
+Ảnh không chứng minh âm thanh: **CHƯA XÁC NHẬN ÂM THANH THỰC**. `SONY_SCREEN_END`: Display State=OFF.
+
+## Bộ ảnh lịch sử 03/11/2026 (AVD, source `49ed94c`)
+
 03/11/2026 · source `49ed94ccbd73abb2d9443828ede26c205e1e9e56` · **QA CANDIDATE — CHƯA NGHIỆM THU**.
 
 - [Thư mục Drive Ni N owner-only](https://drive.google.com/drive/folders/1n7KhjK_3mr3LlBJ74ZHaD6ZhrVuO7K8g).
