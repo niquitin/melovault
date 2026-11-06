@@ -8,13 +8,14 @@ internal class MeloBrowseState(private val capacity: Int = 16) {
     data class Context(
         val query: String = "", val sort: SongSort = SongSort.NEWEST, val letterFloor: String? = null,
         val anchorSongKey: Long? = null, val offsetPx: Int = 0, val sourceScrollY: Int = 0,
-        val sourceAnchorChatId: Long? = null, val sourceOffsetPx: Int = 0
+        val sourceAnchorChatId: Long? = null, val sourceOffsetPx: Int = 0,
+        val topicAnchorId: Int? = null, val topicOffsetPx: Int = 0
     )
     enum class DeckTab { QUEUE }
     data class Deck(val tab: DeckTab = DeckTab.QUEUE, val songKey: Long? = null,
         val offsetPx: Int = 0, val bodyScrollY: Int = 0)
     data class Saved(val active: Key, val sourcesReturn: Key?, val localReturn: Key?,
-        val contexts: List<Pair<Key, Context>>, val deck: Deck = Deck())
+        val contexts: List<Pair<Key, Context>>, val deck: Deck = Deck(), val topicsReturn: Key? = null)
     data class Pending(val key: Key, val generation: Long, val context: Context)
     class QueryDraft(initial: String = "") {
         var committed: String = initial
@@ -57,6 +58,7 @@ internal class MeloBrowseState(private val capacity: Int = 16) {
         private set
     var sourcesReturn: Key? = null
     var localReturn: Key? = null
+    var topicsReturn: Key? = null
     var deck: Deck = Deck()
 
     init { require(capacity > 0) }
@@ -74,7 +76,8 @@ internal class MeloBrowseState(private val capacity: Int = 16) {
     fun query(key: Key, query: String) {
         val old = contexts[key] ?: Context()
         if (query != old.query) put(key, old.copy(query = query, letterFloor = null,
-            anchorSongKey = null, offsetPx = 0, sourceScrollY = 0, sourceAnchorChatId = null, sourceOffsetPx = 0))
+            anchorSongKey = null, offsetPx = 0, sourceScrollY = 0, sourceAnchorChatId = null, sourceOffsetPx = 0,
+            topicAnchorId = null, topicOffsetPx = 0))
     }
     fun sort(key: Key, sort: SongSort, floor: String? = null) {
         val old = contexts[key] ?: Context()
@@ -106,17 +109,24 @@ internal class MeloBrowseState(private val capacity: Int = 16) {
     fun sourcePosition(key: Key, chatId: Long?, offsetPx: Int) {
         contexts[key]?.let { put(key, it.copy(sourceAnchorChatId = chatId, sourceOffsetPx = offsetPx)) }
     }
+    fun topicPosition(key: Key, topicId: Int?, offsetPx: Int) {
+        contexts[key]?.let { put(key, it.copy(topicAnchorId = topicId, topicOffsetPx = offsetPx)) }
+    }
 
     fun save(): Saved? {
         val key = active ?: return null
-        val keys = listOfNotNull(key, sourcesReturn, localReturn).distinct().filter { it.ownerId == key.ownerId }
+        val forumParents = if (key.scope.kind in setOf(MeloBrowseUiPolicy.Kind.FORUM_TOPIC, MeloBrowseUiPolicy.Kind.FORUM_TOPICS) ||
+            (topicsReturn != null && topicsReturn?.scope?.chatId == key.scope.chatId)) listOf(Key(key.ownerId, MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.SOURCES))) else emptyList()
+        val counterpart = if (key.scope.kind == MeloBrowseUiPolicy.Kind.FORUM_TOPIC) key.copy(scope = key.scope.copy(downloadedOnly = !key.scope.downloadedOnly)) else null
+        val keys = (listOfNotNull(key, sourcesReturn, localReturn, topicsReturn, counterpart) + forumParents).distinct().filter { it.ownerId == key.ownerId }
         return Saved(key, sourcesReturn, localReturn, keys.mapNotNull { k ->
             contexts[k]?.let { k to it.copy(query = it.query.take(512), letterFloor = it.letterFloor?.take(512)) }
-        }, deck)
+        }, deck, topicsReturn)
     }
     fun restore(saved: Saved, verifiedOwner: Long): Boolean {
         if (verifiedOwner <= 0L || saved.active.ownerId != verifiedOwner ||
-            saved.contexts.size > 3 || saved.contexts.any { it.first.ownerId != verifiedOwner } ||
+            saved.contexts.size > 8 || saved.contexts.map { it.first }.distinct().size != saved.contexts.size ||
+            saved.contexts.any { it.first.ownerId != verifiedOwner } ||
             saved.contexts.none { it.first == saved.active }) return false
         clear()
         saved.contexts.forEach { (key, context) ->
@@ -126,14 +136,19 @@ internal class MeloBrowseState(private val capacity: Int = 16) {
         active = saved.active
         sourcesReturn = saved.sourcesReturn?.takeIf { it.ownerId == verifiedOwner && contexts.containsKey(it) }
         localReturn = saved.localReturn?.takeIf { it.ownerId == verifiedOwner && contexts.containsKey(it) }
+        topicsReturn = saved.topicsReturn?.takeIf { it.ownerId == verifiedOwner && contexts.containsKey(it) }
         deck = saved.deck.copy(bodyScrollY = saved.deck.bodyScrollY.coerceAtLeast(0))
         return true
     }
-    fun clear() { contexts.clear(); active = null; sourcesReturn = null; localReturn = null; deck = Deck() }
+    fun clear() { contexts.clear(); active = null; sourcesReturn = null; localReturn = null; topicsReturn = null; deck = Deck() }
 
     companion object {
-        fun decodeKey(ownerId: Long, kind: String?, chatId: Long?, downloadedOnly: Boolean): Key? = runCatching {
-            Key(ownerId, MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.valueOf(requireNotNull(kind)), chatId, downloadedOnly))
+        fun decodeKey(ownerId: Long, kind: String?, chatId: Long?, downloadedOnly: Boolean, forumTopicId: Int? = null): Key? = runCatching {
+            val decoded = MeloBrowseUiPolicy.Kind.valueOf(requireNotNull(kind))
+            val safeKind = if (decoded == MeloBrowseUiPolicy.Kind.FORUM_TOPIC && forumTopicId == null) MeloBrowseUiPolicy.Kind.CHANNEL else decoded
+            Key(ownerId, MeloBrowseUiPolicy.Scope(safeKind, chatId,
+                downloadedOnly && !(decoded == MeloBrowseUiPolicy.Kind.FORUM_TOPIC && forumTopicId == null),
+                forumTopicId.takeIf { safeKind == MeloBrowseUiPolicy.Kind.FORUM_TOPIC }))
         }.getOrNull()
 
         /** Missing in an early page is pending, not an instruction to jump to row zero. */

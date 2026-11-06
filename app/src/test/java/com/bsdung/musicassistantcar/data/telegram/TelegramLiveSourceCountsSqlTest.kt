@@ -88,7 +88,7 @@ class TelegramLiveSourceCountsSqlTest {
     }
 
     @Test
-    fun planUsesTheExistingChatIndexAndNeedsNoTableRead() {
+    fun planUsesACoveringChatIndexAndNeedsNoTableRead() {
         val plan = StringBuilder()
         connection.createStatement().use { stmt ->
             stmt.executeQuery("EXPLAIN QUERY PLAN " + TelegramLibraryDao.LIVE_SOURCE_COUNTS_SQL.replace("?", "100")).use { rs ->
@@ -96,16 +96,17 @@ class TelegramLiveSourceCountsSqlTest {
             }
         }
         val text = plan.toString()
-        assertTrue("plan: $text", text.contains("idx_tg_songs_chat"))
-        assertTrue("covering index expected, plan: $text", text.contains("COVERING INDEX idx_tg_songs_chat"))
+        assertTrue("covering index expected, plan: $text", listOf("idx_tg_songs_chat", "idx_tg_songs_topic").any {
+            text.contains("COVERING INDEX $it")
+        })
         assertFalse("no full table scan, plan: $text", text.contains("SCAN telegram_songs\n") || text.contains("SCAN TABLE telegram_songs"))
-        // No index was added for it: the schema keeps exactly the four song indexes of before E95.
+        // v3 adds the topic index for scoped browsing; SQLite may choose either covering index here.
         val indexes = mutableSetOf<String>()
         connection.createStatement().use { stmt ->
             stmt.executeQuery("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='${TelegramLibrarySql.TABLE_SONGS}' AND name LIKE 'idx_%'").use { rs ->
                 while (rs.next()) indexes.add(rs.getString(1))
             }
         }
-        assertEquals(setOf("idx_tg_songs_chat", "idx_tg_songs_date", "idx_tg_songs_title", "idx_tg_songs_key"), indexes)
+        assertEquals(setOf("idx_tg_songs_chat", "idx_tg_songs_date", "idx_tg_songs_title", "idx_tg_songs_key", "idx_tg_songs_topic"), indexes)
     }
 }

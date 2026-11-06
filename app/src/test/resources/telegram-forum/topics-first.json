@@ -1,0 +1,11 @@
+{
+  "@type": "forumTopics",
+  "total_count": 3,
+  "topics": [
+    {"@type":"forumTopic","info":{"@type":"forumTopicInfo","chat_id":-10001,"forum_topic_id":1,"name":"General","is_general":true,"is_hidden":true,"is_closed":true},"is_pinned":false,"order":"900000000000000001"},
+    {"@type":"forumTopic","info":{"@type":"forumTopicInfo","chat_id":-10001,"forum_topic_id":71,"name":"Nhạc thử","is_general":false,"is_hidden":false,"is_closed":true},"is_pinned":true,"order":"900000000000000002"}
+  ],
+  "next_offset_date":1700000000,
+  "next_offset_message_id":9000000001,
+  "next_offset_forum_topic_id":71
+}

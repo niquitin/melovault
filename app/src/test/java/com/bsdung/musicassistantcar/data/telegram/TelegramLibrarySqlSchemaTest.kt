@@ -247,7 +247,8 @@ class TelegramLibrarySqlSchemaTest {
     fun newTableHasSearchKeyColumn() {
         val cols = dump(connection, "PRAGMA table_info(telegram_songs)", 2).map { it[1] }
         assertTrue(cols.contains("search_key"))
-        assertEquals(2, TelegramLibrarySql.DATABASE_VERSION)
+        assertTrue(cols.contains("forum_topic_id"))
+        assertEquals(3, TelegramLibrarySql.DATABASE_VERSION)
     }
 
     @Test

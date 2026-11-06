@@ -21,11 +21,14 @@ data class IndexedTelegramSong(
     val lastSeenAtMs: Long = System.currentTimeMillis(),
     val sourceTitle: String? = null,
     val isDeleted: Boolean = false,
+    /** Unknown for legacy rows or messages without forum metadata. Never part of song identity. */
+    val forumTopicId: Int? = null,
 ) {
     init {
         require(accountId > 0L) { "Invalid Telegram account ID: $accountId" }
         require(chatId != 0L) { "Invalid chat ID: $chatId" }
         require(messageId > 0L) { "Invalid message ID: $messageId" }
+        require(forumTopicId == null || forumTopicId > 0)
     }
 }
 
@@ -39,10 +42,34 @@ data class IndexedTelegramSource(
     val type: String = "unknown",
     val trackCount: Int = 0,
     val lastUpdatedAtMs: Long = System.currentTimeMillis(),
+    /** null = not checked; false/true only after a confirmed supergroup response. */
+    val isForum: Boolean? = null,
 ) {
     init {
         require(accountId > 0L) { "Invalid Telegram account ID: $accountId" }
         require(chatId != 0L) { "Invalid chat ID: $chatId" }
+    }
+}
+
+data class IndexedTelegramForumTopic(
+    val accountId: Long, val chatId: Long, val forumTopicId: Int, val title: String,
+    val isGeneral: Boolean = false, val isHidden: Boolean = false, val isClosed: Boolean = false,
+    val isPinned: Boolean = false, val order: Long = 0L,
+    val lastUpdatedAtMs: Long = System.currentTimeMillis(),
+) {
+    init { require(accountId > 0L && chatId != 0L && forumTopicId > 0) }
+}
+
+/** Independent older-history and head-refresh cursors. Neither changes the global scan checkpoint. */
+data class TelegramForumHistoryState(
+    val accountId: Long, val chatId: Long, val forumTopicId: Int,
+    val olderCursor: Long = 0L, val olderComplete: Boolean = false, val newestMessageId: Long = 0L,
+    val refreshCursor: Long = 0L, val refreshUntilMessageId: Long = 0L, val refreshPending: Boolean = false,
+    val retryAfterMs: Long = 0L,
+) {
+    init {
+        require(accountId > 0L && chatId != 0L && forumTopicId > 0)
+        require(olderCursor >= 0L && newestMessageId >= 0L && refreshCursor >= 0L && refreshUntilMessageId >= 0L)
     }
 }
 

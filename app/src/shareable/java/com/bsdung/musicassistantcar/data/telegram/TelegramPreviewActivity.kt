@@ -122,6 +122,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val sourceTitle: String? = null,
         /** A saved Playlist entry the library does not know yet (E96 P0). Shown, removable, never played or queued. */
         val placeholder: Boolean = false,
+        val forumTopicId: Int? = null,
     ) {
         val genuineMessageId: Long get() = if (rawMessageId > 0L) rawMessageId else messageId
     }
@@ -175,6 +176,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private val apiStore by lazy { TelegramApiCredentialStore(applicationContext) }
     private var apiOperationPending = false
     companion object {
+        // Old requests can outlive an Activity while the service owns TDLib. Never reuse a tag after recreation.
+        private val forumRequestSequence = java.util.concurrent.atomic.AtomicLong()
         // Serialize reads/writes even across Activity recreation during a save.
         private val apiExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
         // The fallback requires process shutdown, not just Activity recreation.
@@ -293,6 +296,224 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private val downloadedCountGeneration = java.util.concurrent.atomic.AtomicLong(0L)
     private var browseSources = false
     private var selectedChatId: Long? = null
+    private var forumCatalogueChatId: Long? = null
+    private var selectedForumTopic: Pair<Long, Int>? = null
+    private var selectedForumTopicTitle: String? = null
+    private val forumSourceStates = java.util.concurrent.ConcurrentHashMap<Pair<Long, Long>, Boolean>()
+    private val forumReadGeneration = java.util.concurrent.atomic.AtomicLong()
+    private val pendingForumReads = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.CompletableFuture<JSONObject>>()
+    private val forumExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "MeloVault-Forum") }
+    private var forumRenderContext: Triple<Long, MeloBrowseUiPolicy.Scope, String>? = null
+    private var forumRows: List<MeloScreenHost.ForumTopicRow> = emptyList()
+    private var forumBusy = false
+    private var forumLoadOperation: String? = null
+    private var forumError: String? = null
+    private var forumCountLabel = "Chưa lập chỉ mục"
+    private var forumCanLoadMore = true
+    private var forumCacheHasMore = false
+    private var forumVisibleLimit = 50
+    private var forumHistoryState: TelegramForumHistoryState? = null
+    private var forumCatalogueComplete = false
+    private var forumSearchKey: Triple<Long, Long, String>? = null
+    private val forumSearchRows = linkedMapOf<Int, IndexedTelegramForumTopic>()
+    private var forumSearchCursor = TelegramForumContract.ListCursor()
+    private var forumSearchComplete = false
+    private var forumSearchRequested = false
+    private val forumRetryAt = java.util.concurrent.ConcurrentHashMap<Long, Long>()
+    private data class PreparedForumQueue(val ownerId: Long, val selectedKey: Long, val songs: List<Song>)
+    private val forumQueueGeneration = java.util.concurrent.atomic.AtomicLong()
+    private var activePlayForumQueue: PreparedForumQueue? = null
+    private var lastPlayForumQueue: PreparedForumQueue? = null
+
+    private fun activeForumTopicId(): Int? = selectedForumTopic?.takeIf {
+        allChatsMode && !browseSources && !playlistMode && !localMode && it.first == selectedChatId
+    }?.second
+    private fun isForumCatalogue(): Boolean = allChatsMode && !browseSources && !playlistMode && !localMode &&
+        selectedChatId != null && selectedChatId == forumCatalogueChatId
+
+    private fun cancelForumRead() {
+        forumReadGeneration.incrementAndGet()
+        forumBusy = false
+        forumLoadOperation = null
+    }
+
+    /** Correlates through the ONE owner; a late or cancelled answer cannot reach generic UI handlers. */
+    private fun requestForum(json: JSONObject, current: () -> Boolean): TelegramForumReader.Reply {
+        val tag = "forumRead:${forumRequestSequence.incrementAndGet()}"
+        val future = java.util.concurrent.CompletableFuture<JSONObject>()
+        pendingForumReads[tag] = future
+        try {
+            if (!current()) return TelegramForumReader.Reply.Cancelled
+            send(json.getString("@type"), tag) { target ->
+                json.keys().forEach { key -> if (key != "@type" && key != "@extra") target.put(key, json.get(key)) }
+            }
+            val deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(30)
+            while (!future.isDone && current() && System.nanoTime() < deadline) {
+                try { future.get(100, java.util.concurrent.TimeUnit.MILLISECONDS) }
+                catch (_: java.util.concurrent.TimeoutException) { }
+            }
+            if (!current()) return TelegramForumReader.Reply.Cancelled
+            if (!future.isDone) return TelegramForumReader.Reply.Timeout
+            val response = future.get()
+            if (response.optString("@type") != "error") return TelegramForumReader.Reply.Ok(response)
+            val code = response.optInt("code")
+            val kind = TdlibSyncErrors.kindOf(code, response.optString("message"))
+            return TelegramForumReader.Reply.Error(code, kind.second, kind.first in setOf(
+                SyncErrorKind.CHANNEL_MISSING, SyncErrorKind.UNAUTHORIZED, SyncErrorKind.SESSION_REVOKED))
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            return TelegramForumReader.Reply.Cancelled
+        } catch (_: java.util.concurrent.CancellationException) { return TelegramForumReader.Reply.Cancelled }
+        catch (_: Exception) { return TelegramForumReader.Reply.Timeout }
+        finally { pendingForumReads.remove(tag) }
+    }
+
+    private fun launchForumRead(operation: String,
+        work: (TelegramForumReader, MeloBrowseState.Key, () -> Boolean) -> Unit) {
+        val key = browseKey() ?: return
+        val db = libraryDb ?: return
+        if (forumBusy && forumLoadOperation == operation) return
+        if ((forumRetryAt[key.ownerId] ?: 0L) > System.currentTimeMillis()) {
+            forumError = MeloForumUiPolicy.errorText(TelegramForumReader.Error.WAIT)
+            scheduleMeloLibraryRefresh()
+            return
+        }
+        val epoch = ShareableTdlibOwner.authEpoch()
+        val token = forumReadGeneration.incrementAndGet()
+        val current = { !isDestroyed && !isFinishing && !Thread.currentThread().isInterrupted && auth.isReady() &&
+            library.authorizedUser()?.value == key.ownerId && ShareableTdlibOwner.authEpoch() == epoch &&
+            forumReadGeneration.get() == token && browseKey() == key }
+        forumBusy = true
+        forumLoadOperation = operation
+        forumError = null
+        scheduleMeloLibraryRefresh()
+        forumExecutor.execute {
+            val started = android.os.SystemClock.elapsedRealtime()
+            try {
+                if (current()) work(TelegramForumReader(db, ::requestForum), key, current)
+            } catch (failure: TelegramForumReader.ReadFailure) {
+                if (failure.retryAtMs > 0L) forumRetryAt[key.ownerId] = failure.retryAtMs
+                if (current() && failure.reason != TelegramForumReader.Error.CANCELLED) runOnUiThread {
+                    if (current()) forumError = MeloForumUiPolicy.errorText(failure.reason)
+                }
+            } catch (_: Exception) {
+                if (current()) runOnUiThread { if (current()) forumError = MeloForumUiPolicy.errorText(TelegramForumReader.Error.STORAGE) }
+            } finally {
+                runOnUiThread {
+                    if (current()) {
+                        forumBusy = false
+                        forumLoadOperation = null
+                        refreshSongRows()
+                        android.util.Log.i("MeloForum", "operation=$operation ms=${android.os.SystemClock.elapsedRealtime() - started}")
+                    }
+                }
+            }
+        }
+    }
+
+    private fun openTelegramSource(chatId: Long?) {
+        if (!auth.isReady()) return
+        val account = library.authorizedUser()?.value ?: return
+        forumVisibleLimit = 50
+        forumError = null
+        if (chatId == null) { navigateBrowse(MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.LIBRARY)); return }
+        val known = forumSourceStates[account to chatId]
+        navigateBrowse(MeloBrowseUiPolicy.Scope(if (known == true) MeloBrowseUiPolicy.Kind.FORUM_TOPICS else MeloBrowseUiPolicy.Kind.CHANNEL, chatId))
+        if (known == true) return // catalogue response proves current access; do not enumerate supergroups at startup
+        launchForumRead("source") { reader, key, current ->
+            val state = reader.discover(account, chatId, sourceTitleOf(chatId), current)
+            if (!current()) return@launchForumRead
+            forumSourceStates[account to chatId] = state == TelegramForumContract.ForumState.FORUM
+            runOnUiThread {
+                if (current()) {
+                    if (state == TelegramForumContract.ForumState.FORUM) navigateBrowse(MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.FORUM_TOPICS, chatId))
+                    else if (meloBrowse.topicsReturn?.scope?.chatId == chatId) meloBrowse.topicsReturn = null
+                }
+            }
+        }
+    }
+
+    private fun loadForumCatalogue(more: Boolean = false) {
+        if (!isForumCatalogue()) return
+        val query = songFilter.text?.toString()?.trim().orEmpty()
+        val chat = selectedChatId ?: return
+        launchForumRead(if (query.isBlank()) "catalogue" else "topic_search") { reader, key, current ->
+            if (!more) {
+                val state = reader.discover(key.ownerId, chat, sourceTitleOf(chat), current)
+                forumSourceStates[key.ownerId to chat] = state == TelegramForumContract.ForumState.FORUM
+                if (state != TelegramForumContract.ForumState.FORUM) {
+                    runOnUiThread {
+                        if (current()) {
+                            meloBrowse.topicsReturn = null
+                            navigateBrowse(MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.CHANNEL, chat))
+                        }
+                    }
+                    return@launchForumRead
+                }
+            }
+            val cursor = if (!more) TelegramForumContract.ListCursor() else if (query.isBlank()) reader.catalogueCursor(key.ownerId, chat) else forumSearchCursor
+            val result = reader.catalogue(key.ownerId, chat, cursor, query, current)
+            runOnUiThread {
+                if (!current()) return@runOnUiThread
+                if (query.isNotBlank()) {
+                    if (!more) forumSearchRows.clear()
+                    result.topics.filterNot { it.isHidden }.forEach { forumSearchRows[it.forumTopicId] = it }
+                    forumSearchCursor = result.cursor
+                    forumSearchComplete = result.complete
+                    forumSearchRequested = true
+                }
+                if (result.stalled) forumError = MeloForumUiPolicy.errorText(TelegramForumReader.Error.STALLED)
+            }
+        }
+    }
+
+    private fun loadForumHistory(refresh: Boolean) {
+        val topic = activeForumTopicId() ?: return
+        val chat = selectedChatId ?: return
+        launchForumRead("history") { reader, key, current ->
+            val info = reader.topic(key.ownerId, chat, topic, current)
+            if (info.isHidden) {
+                runOnUiThread { if (current()) { navigateBrowse(MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.FORUM_TOPICS, chat)); showMessage("Chủ đề đã được ẩn.") } }
+                return@launchForumRead
+            }
+            runOnUiThread { if (current()) selectedForumTopicTitle = info.title }
+            val result = reader.history(key.ownerId, chat, topic, sourceTitleOf(chat), refresh, isCurrent = current, onPage = {
+                runOnUiThread { if (current()) refreshSongRows() }
+            })
+            if (result.error != null && result.error != TelegramForumReader.Error.CANCELLED) {
+                if (result.state.retryAfterMs > 0L) forumRetryAt[key.ownerId] = result.state.retryAfterMs
+                runOnUiThread { if (current()) forumError = MeloForumUiPolicy.errorText(result.error) }
+            }
+            android.util.Log.i("MeloForum", "history pages=${result.pages} complete=${!result.hasMore} error=${result.error?.name ?: "none"}")
+        }
+    }
+
+    private fun backWithinForum(): Boolean {
+        val scope = browseKey()?.scope ?: return false
+        val parent = meloBrowse.topicsReturn?.scope
+        return when {
+            scope.kind == MeloBrowseUiPolicy.Kind.FORUM_TOPIC -> {
+                navigateBrowse(MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.FORUM_TOPICS, scope.chatId)); true
+            }
+            scope.kind == MeloBrowseUiPolicy.Kind.FORUM_TOPICS -> {
+                val saved = meloBrowse.sourcesReturn
+                navigateBrowse(MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.SOURCES))
+                meloBrowse.sourcesReturn = saved
+                true
+            }
+            scope.kind in setOf(MeloBrowseUiPolicy.Kind.CHANNEL, MeloBrowseUiPolicy.Kind.DOWNLOADED) && parent != null && parent.chatId == scope.chatId -> {
+                navigateBrowse(parent); true
+            }
+            else -> false
+        }
+    }
+
+    private fun forumStatusText(): String? = when {
+        isForumCatalogue() || activeForumTopicId() != null -> listOfNotNull(forumCountLabel,
+            "Đang đọc Telegram…".takeIf { forumBusy }, forumError).joinToString("\n")
+        selectedChatId != null -> forumError
+        else -> null
+    }
     private val sourceNames = java.util.concurrent.ConcurrentHashMap<Long, String>()
     private val requestedSourceNames =
         java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
@@ -479,7 +700,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val owner = library.authorizedUser()?.value?.takeIf { it > 0L } ?: return null
         val scope = if (localMode) MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.LOCAL)
             else MeloBrowseUiPolicy.scope(allChatsMode && browseSources && !playlistMode,
-                playlistMode, filterOnlyDownloaded, allChatsMode, selectedChatId)
+                playlistMode, filterOnlyDownloaded, allChatsMode, selectedChatId, activeForumTopicId(), isForumCatalogue())
         return MeloBrowseState.Key(owner, scope)
     }
 
@@ -508,6 +729,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun applyBrowseContext(key: MeloBrowseState.Key) {
+        val previous = browseKey()?.scope
+        cancelForumRead()
         val state = meloBrowse.activate(key, librarySort())
         browseSortOverride = state.sort
         applyingMeloBrowse = true
@@ -522,6 +745,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 playlistMode = key.scope.kind == MeloBrowseUiPolicy.Kind.PLAYLIST
                 filterOnlyDownloaded = key.scope.kind == MeloBrowseUiPolicy.Kind.DOWNLOADED || key.scope.downloadedOnly
                 selectedChatId = key.scope.chatId
+                forumCatalogueChatId = key.scope.chatId.takeIf { key.scope.kind == MeloBrowseUiPolicy.Kind.FORUM_TOPICS }
+                selectedForumTopic = key.scope.forumTopicId?.let { key.scope.chatId!! to it }
+                if (previous?.chatId != key.scope.chatId || previous?.forumTopicId != key.scope.forumTopicId) selectedForumTopicTitle = null
                 letterFloor = state.letterFloor
                 if (songFilter.text?.toString() != state.query) songFilter.setText(state.query)
             }
@@ -529,23 +755,32 @@ class TelegramPreviewActivity : AppCompatActivity() {
         updateFilterChipsUi()
         updatePlaylistButtons()
         if (localMode) scheduleMeloLibraryRefresh() else refreshSongRows()
+        if (key.scope.kind == MeloBrowseUiPolicy.Kind.FORUM_TOPICS) {
+            if (songFilter.text?.isBlank() != false) loadForumCatalogue()
+        } else if (key.scope.kind == MeloBrowseUiPolicy.Kind.FORUM_TOPIC &&
+            (previous?.chatId != key.scope.chatId || previous?.forumTopicId != key.scope.forumTopicId || forumHistoryState == null)) {
+            loadForumHistory(refresh = true)
+        }
     }
 
     private fun encodeBrowseState(saved: MeloBrowseState.Saved): Bundle {
         fun key(key: MeloBrowseState.Key) = Bundle().apply {
             putLong("owner", key.ownerId); putString("kind", key.scope.kind.name)
             key.scope.chatId?.let { putLong("chat", it) }; putBoolean("downloaded", key.scope.downloadedOnly)
+            key.scope.forumTopicId?.let { putInt("forumTopic", it) }
         }
         return Bundle().apply {
             putBundle("active", key(saved.active))
             saved.sourcesReturn?.let { putBundle("sourcesReturn", key(it)) }
             saved.localReturn?.let { putBundle("localReturn", key(it)) }
+            saved.topicsReturn?.let { putBundle("topicsReturn", key(it)) }
             putParcelableArrayList("contexts", ArrayList(saved.contexts.map { (id, state) ->
                 key(id).apply {
                     putString("query", state.query); putString("sort", state.sort.name)
                     putString("floor", state.letterFloor); state.anchorSongKey?.let { putLong("anchor", it) }
                     putInt("offset", state.offsetPx); putInt("sourceY", state.sourceScrollY)
                     state.sourceAnchorChatId?.let { putLong("sourceAnchor", it) }; putInt("sourceOffset", state.sourceOffsetPx)
+                    state.topicAnchorId?.let { putInt("topicAnchor", it) }; putInt("topicOffset", state.topicOffsetPx)
                 }
             }))
             saved.deck.songKey?.let { putLong("deckKey", it) }
@@ -556,16 +791,19 @@ class TelegramPreviewActivity : AppCompatActivity() {
     @Suppress("DEPRECATION")
     private fun decodeBrowseState(bundle: Bundle): MeloBrowseState.Saved? = runCatching {
         fun key(value: Bundle) = requireNotNull(MeloBrowseState.decodeKey(value.getLong("owner"), value.getString("kind"),
-            value.getLong("chat").takeIf { value.containsKey("chat") }, value.getBoolean("downloaded")))
+            value.getLong("chat").takeIf { value.containsKey("chat") }, value.getBoolean("downloaded"),
+            value.getInt("forumTopic").takeIf { value.containsKey("forumTopic") }))
         MeloBrowseState.Saved(key(requireNotNull(bundle.getBundle("active"))),
             bundle.getBundle("sourcesReturn")?.let(::key), bundle.getBundle("localReturn")?.let(::key),
-            bundle.getParcelableArrayList<Bundle>("contexts").orEmpty().take(4).map { item ->
+            bundle.getParcelableArrayList<Bundle>("contexts").orEmpty().take(8).map { item ->
                 key(item) to MeloBrowseState.Context(item.getString("query").orEmpty().take(512),
                     SongSort.valueOf(requireNotNull(item.getString("sort"))), item.getString("floor")?.take(512),
                     item.getLong("anchor").takeIf { item.containsKey("anchor") }, item.getInt("offset"), item.getInt("sourceY"),
-                    item.getLong("sourceAnchor").takeIf { item.containsKey("sourceAnchor") }, item.getInt("sourceOffset"))
+                    item.getLong("sourceAnchor").takeIf { item.containsKey("sourceAnchor") }, item.getInt("sourceOffset"),
+                    item.getInt("topicAnchor").takeIf { item.containsKey("topicAnchor") }, item.getInt("topicOffset"))
             }, MeloBrowseState.Deck(songKey = bundle.getLong("deckKey").takeIf { bundle.containsKey("deckKey") },
-                offsetPx = bundle.getInt("deckOffset"), bodyScrollY = bundle.getInt("deckY")))
+                offsetPx = bundle.getInt("deckOffset"), bodyScrollY = bundle.getInt("deckY")),
+            bundle.getBundle("topicsReturn")?.let(::key))
     }.getOrNull()
 
     private fun restorePendingBrowse(owner: Long) {
@@ -1196,6 +1434,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                if (backWithinForum()) return
                 if (browseSources && (phoneScreen != null || tabletScreen != null)) { meloHost.closeSources(); return }
                 if (localMode) {
                     closeLocalMusic()
@@ -1332,6 +1571,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     override fun onPause() {
+        cancelForumRead()
         SyncRuntime.unlisten(this)
         overflowMenu.dismiss()
         if (downloadedCountScheduled) android.util.Log.w("MeloVaultCount", "stage=pause_cancels_pending")
@@ -1382,6 +1622,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
         }
         if (auth.isReady()) {
+            if (!forumBusy) {
+                if (isForumCatalogue() && songFilter.text?.isBlank() != false) loadForumCatalogue()
+                else if (activeForumTopicId() != null) loadForumHistory(refresh = true)
+            }
             recheckDownloadUi()
             refreshLocalCount()
             val user = library.authorizedUser()?.value ?: 0L
@@ -1589,6 +1833,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun clearPlaybackSession() {
+        forumQueueGeneration.incrementAndGet()
+        activePlayForumQueue = null
+        lastPlayForumQueue = null
         ShareablePlaybackService.clearTelegramQueue()
         cachedSongPaths.clear()
         queueSongOrder = emptyList()
@@ -1709,6 +1956,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun updateSyncHeaderSubtitle() {
         if (!::syncSubtitle.isInitialized) return
+        if (isForumCatalogue()) {
+            syncSubtitle.text = listOfNotNull(selectedChatId?.let(::sourceTitleOf), forumCountLabel).joinToString(" · ")
+            scheduleMeloLibraryRefresh()
+            return
+        }
         if (filterOnlyDownloaded && offlineSummary != null && !(allChatsMode && browseSources && !playlistMode)) {
             syncSubtitle.text = offlineSummary
             return
@@ -2186,12 +2438,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             isClickable = true
             isFocusable = true
             setOnClickListener {
-                selectedChatId = source.chatId
-                browseSources = false
-                playlistMode = false
-                songFilter.text?.clear()
-                refreshSongRows()
-                updatePlaylistButtons()
+                openTelegramSource(source.chatId)
             }
         }
 
@@ -2235,7 +2482,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
 
         val badgeView = TextView(this).apply {
-            text = TelegramVaultBentoPolicy.formatTrackCount(source.trackCount)
+            text = TelegramVaultBentoPolicy.formatTrackCount(source.trackCount) + if (source.isForum == true) " · Có chủ đề  ›" else ""
             textSize = 11.5f
             if (source.trackCount > 0) {
                 setTextColor(accent)
@@ -3606,12 +3853,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 imm?.hideSoftInputFromWindow(songFilter.windowToken, 0)
                 songFilter.clearFocus()
             }
-            if (allChatsMode && browseSources && !playlistMode) {
+            if (isForumCatalogue()) {
+                when {
+                    position == 0 -> meloHost.openAllForumMusic()
+                    position <= forumRows.size -> forumRows.getOrNull(position - 1)?.let { meloHost.openForumTopic(it.id) }
+                    position == forumRows.size + 1 && forumCanLoadMore -> meloHost.loadMoreForum()
+                    else -> meloHost.refreshForum()
+                }
+            } else if (allChatsMode && browseSources && !playlistMode) {
                 visibleSourceIds.getOrNull(position)?.let { source ->
-                    selectedChatId = source.takeIf { it != 0L }
-                    browseSources = false
-                    songFilter.text?.clear()
-                    refreshSongRows()
+                    openTelegramSource(source.takeIf { it != 0L })
                 }
             } else {
                 playShownSong(position)
@@ -4212,7 +4463,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
      * is not in it) and reads the play order back. The UI never computes the order itself.
      */
     private fun configureTelegramQueueFor(song: Song) {
-        val base = TelegramQueueRetentionPolicy.forSelected(
+        val captured = activePlayForumQueue?.takeIf {
+            it.ownerId == library.authorizedUser()?.value && it.selectedKey == song.messageId
+        }
+        val base = captured?.songs ?: TelegramQueueRetentionPolicy.forSelected(
             if (filterOnlyDownloaded) offlineQueueSongs(song.messageId) else shownSongs.filterNot { it.placeholder },
             serviceBaseSongs(), song.messageId
         ) { it.messageId }.ifEmpty { listOf(song) }
@@ -4494,7 +4748,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun offlineSong(it: IndexedTelegramSong) = Song(
         it.fileId, it.title, it.filename, it.songKey, it.chatId, it.fileSize,
         rawMessageId = it.messageId, performer = it.performer,
-        durationSeconds = it.durationSeconds, sourceTitle = it.sourceTitle
+        durationSeconds = it.durationSeconds, sourceTitle = it.sourceTitle, forumTopicId = it.forumTopicId
     )
 
     private fun offlineRepresentative(group: TelegramOfflineLibrary.Group): Song = offlineSong(
@@ -4525,7 +4779,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             shownSongs = shownSongs.toMutableList().also { it[index] = song }
             if (::adapter.isInitialized) adapter.notifyDataSetChanged()
         }
-        downloadAndPlay(song)
+        playSongFromBrowse(song)
     }
 
     private fun playOfflineGroup(group: TelegramOfflineLibrary.Group) {
@@ -4560,7 +4814,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
     private fun discoverOffline(
         db: TelegramLibraryDao, account: Long, chat: Long?, query: String,
-        playlist: Boolean, favorites: Set<Long>, generation: Long
+        playlist: Boolean, favorites: Set<Long>, generation: Long, forumTopicId: Int? = null
     ) {
         val sortForScan = activeSort()
         val root = filesRoot
@@ -4573,6 +4827,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         updateSyncHeaderSubtitle()
         offlineExecutor.execute {
             try {
+                val topicHistory = if (forumTopicId != null && chat != null) db.getForumHistoryState(account, chat, forumTopicId) else null
                 fun publish(snapshot: TelegramOfflineLibrary.Snapshot) {
                     val groups = sortGroups(TelegramOfflineLibrary.groups(snapshot.entries), sortForScan)
                     runOnUiThread {
@@ -4585,6 +4840,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
                             return@runOnUiThread
                         }
                         offlineGroups = groups
+                        if (forumTopicId != null) {
+                            forumHistoryState = topicHistory
+                            forumCountLabel = if (snapshot.finished) "${groups.size} bài đã tải" else "Đang kiểm tra tệp đã tải…"
+                            forumCanLoadMore = topicHistory?.olderComplete != true || topicHistory?.refreshPending == true
+                        }
                         if (snapshot.finished && chat == null && query.isBlank() && !playlist) {
                             downloadedLibraryTotal = groups.size
                             storeDownloadedCount(account, groups.size)
@@ -4622,7 +4882,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 val snapshot = TelegramOfflineLibrary.scan(account, root,
                     page = { offset, limit ->
                         // Apply playlist selection AFTER pagination, never truncate the account index.
-                        db.getSongs(account, chatId = chat, searchQuery = query.takeIf { it.isNotBlank() }, offset = offset, limit = limit)
+                        db.getSongs(account, chatId = chat, searchQuery = query.takeIf { it.isNotBlank() }, offset = offset, limit = limit, forumTopicId = forumTopicId)
                     },
                     resolve = { rows ->
                         val eligible = rows.filter { !playlist || it.songKey in favorites }
@@ -4919,6 +5179,61 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
     }
 
+    private fun refreshForumCatalogueRows(db: TelegramLibraryDao, request: MeloBrowseUiPolicy.Request, query: String) {
+        val chat = request.scope.chatId ?: return
+        val limit = forumVisibleLimit
+        val remote = if (forumSearchKey == Triple(request.ownerId, chat, query)) forumSearchRows.values.toList() else emptyList()
+        executeBrowseQuery(request) {
+            val cached = db.getForumTopics(request.ownerId, chat, query, limit = limit + 1)
+            val counts = db.getForumTopicCounts(request.ownerId, chat)
+            val histories = db.getForumHistoryStates(request.ownerId, chat)
+            val checkpoint = db.getSyncState(request.ownerId, TelegramLibraryDao.forumCatalogueScope(chat))
+            val fullCount = db.getSongCount(request.ownerId, chat)
+            val merged = (cached + remote).distinctBy { it.forumTopicId }.filterNot { it.isHidden }
+                .sortedWith(compareByDescending<IndexedTelegramForumTopic> { it.isPinned }.thenByDescending { it.order }.thenByDescending { it.forumTopicId })
+            val rows = merged.take(limit).map {
+                val detail = MeloForumUiPolicy.countLabel(counts[it.forumTopicId] ?: 0, histories[it.forumTopicId]) +
+                    (if (it.isPinned) " · Ghim" else "") + (if (it.isClosed) " · Đã đóng" else "")
+                MeloScreenHost.ForumTopicRow(it.forumTopicId, it.title, detail)
+            }
+            runOnUiThread {
+                if (!currentBrowseRequest(request) || !isForumCatalogue()) return@runOnUiThread
+                forumRows = rows
+                val wanted = meloBrowse.get(MeloBrowseState.Key(request.ownerId, request.scope))?.topicAnchorId
+                if (wanted != null && wanted != 0 && rows.none { it.id == wanted } && cached.size > limit) {
+                    forumVisibleLimit += 50
+                    refreshSongRows()
+                    return@runOnUiThread
+                }
+                forumCatalogueComplete = checkpoint?.status == TelegramSyncState.STATUS_COMPLETE
+                forumCacheHasMore = merged.size > limit
+                forumCanLoadMore = forumCacheHasMore || if (query.isBlank()) !forumCatalogueComplete else !forumCatalogueComplete && !forumSearchComplete
+                forumCountLabel = if (query.isNotBlank()) "Đã tìm thấy ${merged.size} chủ đề" else if (forumCatalogueComplete) "Chủ đề Telegram" else "Danh sách chủ đề chưa đầy đủ"
+                browseLoadState = MeloBrowseUiPolicy.LoadState.READY
+                browseTotal = fullCount
+                totalCountForCurrentView = fullCount
+                shownSongs = emptyList()
+                libraryTitle.text = sourceTitleOf(chat)
+                songFilter.hint = "Tìm tên chủ đề…"
+                filterChipsRow.visibility = View.GONE
+                if (::sourceViewModeToggle.isInitialized) sourceViewModeToggle.visibility = View.GONE
+                if (::hideZeroSourcesToggle.isInitialized) hideZeroSourcesToggle.visibility = View.GONE
+                bentoScrollView.visibility = View.GONE
+                tracks.visibility = View.VISIBLE
+                tracks.adapter = sourcesAdapter
+                sourcesAdapter.clear()
+                sourcesAdapter.addAll(listOf("Tất cả nhạc của nhóm · $fullCount bài") + rows.map { "${it.title}\n${it.detail}" } +
+                    listOfNotNull(if (forumCanLoadMore) "Tìm thêm chủ đề…" else null, "Làm mới chủ đề"))
+                updateSyncHeaderSubtitle()
+                scheduleMeloLibraryRefresh()
+                if (query.isNotBlank() && !forumCatalogueComplete && !forumSearchRequested && !forumBusy) {
+                    forumSearchRequested = true
+                    loadForumCatalogue()
+                }
+            }
+        }
+    }
+
     private fun refreshSongRows() {
         if (!::sourcesAdapter.isInitialized || !::songFilter.isInitialized) return
         rememberBrowseContext()
@@ -4934,6 +5249,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val isBrowseSources = allChatsMode && browseSources && !playlistMode
         val isPlaylist = playlistMode
         val currentChatId = selectedChatId
+        val currentTopicId = activeForumTopicId()
+        val topicsCatalogue = isForumCatalogue()
         val isAllChats = allChatsMode
         val currentFavIds = favoriteIds.toSet()
         // Playlist order is the saved order. The copies are taken here, on the calling thread, so the
@@ -4948,7 +5265,24 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val currentFloor = letterFloor.takeIf { currentSort == SongSort.NAME }
 
         val request = MeloBrowseUiPolicy.Request(userId, generation,
-            MeloBrowseUiPolicy.scope(isBrowseSources, isPlaylist, filterOnlyDownloaded, isAllChats, currentChatId))
+            MeloBrowseUiPolicy.scope(isBrowseSources, isPlaylist, filterOnlyDownloaded, isAllChats, currentChatId, currentTopicId, topicsCatalogue))
+        val context = Triple(userId, request.scope, q)
+        if (forumRenderContext != context) {
+            val previous = forumRenderContext
+            cancelForumRead()
+            forumError = null
+            forumRows = emptyList()
+            forumVisibleLimit = 50
+            if (previous?.first != userId || previous?.second?.chatId != currentChatId || previous?.second?.forumTopicId != currentTopicId) forumHistoryState = null
+            forumRenderContext = context
+        }
+        if (topicsCatalogue && currentChatId != null && forumSearchKey != Triple(userId, currentChatId, q)) {
+            forumSearchKey = Triple(userId, currentChatId, q)
+            forumSearchRows.clear()
+            forumSearchCursor = TelegramForumContract.ListCursor()
+            forumSearchComplete = false
+            forumSearchRequested = false
+        }
         val keepRows = MeloBrowseUiPolicy.canKeepRows(browseRequest, request)
         if (!keepRows) {
             shownSongs = emptyList()
@@ -4961,11 +5295,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
         browseTotal = null
         scheduleMeloLibraryRefresh()
 
+        if (topicsCatalogue && db != null && userId > 0L) {
+            refreshForumCatalogueRows(db, request, q)
+            return
+        }
+
         offlineSummary = null
         if (!keepRows || !filterOnlyDownloaded) offlineGroups = emptyList()
         offlineVisibleLimit = 200
         if (filterOnlyDownloaded && !isBrowseSources && db != null && userId > 0L) {
-            discoverOffline(db, userId, currentChatId, q, isPlaylist, currentFavIds, generation)
+            discoverOffline(db, userId, currentChatId, q, isPlaylist, currentFavIds, generation, currentTopicId)
             return
         }
 
@@ -5067,13 +5406,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     Pair(shown, shown.size)
                 } else if (isAllChats && db != null && userId > 0L) {
                     val filterQuery = q.takeIf { it.isNotBlank() }
-                    val count = db.getSongCount(userId, chatId = currentChatId, searchQuery = filterQuery)
+                    val count = db.getSongCount(userId, chatId = currentChatId, searchQuery = filterQuery, forumTopicId = currentTopicId)
                     floorCount = if (currentFloor != null) {
-                        db.getSongCount(userId, chatId = currentChatId, searchQuery = filterQuery, fromKey = currentFloor)
+                        db.getSongCount(userId, chatId = currentChatId, searchQuery = filterQuery, fromKey = currentFloor, forumTopicId = currentTopicId)
                     } else count
                     val page = db.getSongs(
                         userId, chatId = currentChatId, searchQuery = filterQuery, offset = 0, limit = 200,
-                        sort = currentSort, fromKey = currentFloor
+                        sort = currentSort, fromKey = currentFloor, forumTopicId = currentTopicId
                     )
                         .map {
                             Song(
@@ -5081,12 +5420,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
                                 rawMessageId = it.messageId,
                                 performer = it.performer,
                                 durationSeconds = it.durationSeconds,
-                                sourceTitle = it.sourceTitle
+                                sourceTitle = it.sourceTitle,
+                                forumTopicId = it.forumTopicId
                             )
                         }
                     Pair(page, count)
                 } else if (currentChatId != null) {
-                    val chatSongs = songs.filter { it.chatId == currentChatId }
+                    val chatSongs = songs.filter { it.chatId == currentChatId && (currentTopicId == null || it.forumTopicId == currentTopicId) }
                     val filtered = if (q.isBlank()) chatSongs else chatSongs.filter {
                         MeloComponentPolicy.matchesSearch(q, it.title, it.performer, it.filename)
                     }
@@ -5107,11 +5447,19 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
                 val sourceCount = if (db != null && userId > 0L) db.getSources(userId).size else songs.map { it.chatId }.distinct().size
 
+                val topicHistory = if (currentTopicId != null && db != null && currentChatId != null) db.getForumHistoryState(userId, currentChatId, currentTopicId) else null
+                val topicInfo = if (currentTopicId != null && db != null && currentChatId != null) db.getForumTopic(userId, currentChatId, currentTopicId) else null
                 val withDurationCount = finalSongs.count { it.durationSeconds > 0 }
                 android.util.Log.i("MeloVault", "SongItemCard duration audit: $withDurationCount of ${finalSongs.size} displayed songs have positive duration metadata")
 
                 runOnUiThread {
                     if (!currentBrowseRequest(request)) return@runOnUiThread
+                    if (currentTopicId != null) {
+                        forumHistoryState = topicHistory
+                        selectedForumTopicTitle = topicInfo?.title ?: selectedForumTopicTitle
+                        forumCountLabel = MeloForumUiPolicy.countLabel(totalDisplayCount, topicHistory)
+                        forumCanLoadMore = topicHistory?.olderComplete != true || topicHistory?.refreshPending == true
+                    }
                     currentAuthoritativeSourceCount = sourceCount
                     floorCountForCurrentView = floorCount
                     browseLoadState = when {
@@ -5144,6 +5492,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         isPlaylist && playlistUnreadable -> "PLAYLIST  ·  KHÔNG ĐỌC ĐƯỢC DỮ LIỆU ĐÃ LƯU"
                         isPlaylist -> "PLAYLIST  ·  BÀI ĐÃ LƯU (${shownSongs.size})"
                         !isAllChats -> "THƯ VIỆN NHẠC  ·  SAVED MESSAGES (${shownSongs.size})"
+                        currentTopicId != null && chatId != null -> "‹ ${sourceTitleOf(chatId)} · ${selectedForumTopicTitle ?: "Chủ đề"} · $forumCountLabel"
                         chatId != null -> "‹ " + (sourceNames[chatId] ?: "Nguồn Telegram $chatId") + " ($totalDisplayCount bài)"
                         else -> "THƯ VIỆN NHẠC  ·  TẤT CẢ TELEGRAM ($totalDisplayCount bài)"
                     }
@@ -5926,7 +6275,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun meloChannelRowsOf(sources: List<IndexedTelegramSource>): List<MeloScreenHost.SourceRow> =
         TelegramVaultBentoPolicy.distinctSourcesByChatId(sources)
             .filter { it.chatId != 0L }
-            .map { MeloScreenHost.SourceRow(it.chatId, sourceTitleOf(it.chatId), it.trackCount) }
+            .map {
+                it.isForum?.let { state -> forumSourceStates[it.accountId to it.chatId] = state }
+                MeloScreenHost.SourceRow(it.chatId, sourceTitleOf(it.chatId), it.trackCount, it.isForum == true)
+            }
 
     /** One-time background load of the channel list when a screen asks before any list was built. */
     private fun requestMeloChannels() {
@@ -6000,7 +6352,47 @@ class TelegramPreviewActivity : AppCompatActivity() {
     private fun playShownSong(index: Int) {
         val group = offlineGroups.getOrNull(index).takeIf { filterOnlyDownloaded }
         if (group != null && group.entries.size > 1) playOfflineGroup(group)
-        else shownSongs.getOrNull(index)?.let { downloadAndPlay(it) }
+        else shownSongs.getOrNull(index)?.let(::playSongFromBrowse)
+    }
+
+    private fun playSongFromBrowse(song: Song) {
+        if (activeForumTopicId() != null && selectedChatId == song.chatId) prepareForumPlayback(song)
+        else downloadAndPlay(song)
+    }
+
+    /** Capture a complete, filtered index snapshot on a worker; navigating elsewhere does not replace this play intent. */
+    private fun prepareForumPlayback(selected: Song? = null, shuffle: Boolean = false, resumeFromMs: Long = 0L) {
+        val owner = library.authorizedUser()?.value ?: return
+        val chat = selectedChatId ?: return
+        val topic = activeForumTopicId() ?: return
+        val db = libraryDb ?: return
+        val epoch = ShareableTdlibOwner.authEpoch()
+        val localEpoch = localPlayEpoch
+        val token = forumQueueGeneration.incrementAndGet()
+        val query = songFilter.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+        val sort = activeSort()
+        val offline = filterOnlyDownloaded
+        val offlineRows = if (offline) TelegramOfflinePlayPolicy.queueEntries(offlineGroups, selected?.messageId ?: 0L).map { it.song } else emptyList()
+        val partial = forumHistoryState?.olderComplete != true || forumHistoryState?.refreshPending == true
+        executeOnDb {
+            try {
+                val indexed = if (offline) offlineRows else db.getSongs(owner, chatId = chat, searchQuery = query, limit = Int.MAX_VALUE, sort = sort, forumTopicId = topic)
+                val pool = MeloForumUiPolicy.queue(indexed, owner, chat, topic).map(::offlineSong)
+                val song = selected?.let { wanted -> pool.firstOrNull { it.messageId == wanted.messageId } }
+                    ?: if (selected == null) { if (shuffle) pool.randomOrNull() else pool.firstOrNull() } else null
+                runOnUiThread {
+                    if (!auth.isReady() || library.authorizedUser()?.value != owner || ShareableTdlibOwner.authEpoch() != epoch ||
+                        token != forumQueueGeneration.get() || localEpoch != localPlayEpoch || isDestroyed) return@runOnUiThread
+                    if (song == null) { toast("Chưa có bài phù hợp để phát."); return@runOnUiThread }
+                    if (shuffle) player?.shuffleModeEnabled = true
+                    if (partial) toast("Phát ${pool.size} bài đã tìm thấy trong chủ đề.")
+                    downloadAndPlay(song, resumeFromMs, PreparedForumQueue(owner, song.messageId, pool))
+                    android.util.Log.i("MeloForum", "queue indexed=${pool.size} partial=$partial downloaded=$offline")
+                }
+            } catch (_: Exception) {
+                runOnUiThread { if (library.authorizedUser()?.value == owner && token == forumQueueGeneration.get() && !isDestroyed) toast("Chưa chuẩn bị được hàng đợi. Thử lại.") }
+            }
+        }
     }
 
     private val meloHost = object : MeloScreenHost {
@@ -6056,12 +6448,14 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 else -> shownSongs.map(::telegramRow)
             }
             val sources = visibleSourceCounts.takeIf { requestIsCurrent }.orEmpty().map { (chatId, count) ->
-                MeloScreenHost.SourceRow(chatId, if (chatId == 0L) "Tất cả nguồn" else sourceTitleOf(chatId), count)
+                MeloScreenHost.SourceRow(chatId, if (chatId == 0L) "Tất cả nguồn" else sourceTitleOf(chatId), count,
+                    forumSourceStates[saveOwner to chatId] == true)
             }
             val total = MeloBrowseUiPolicy.authoritativeCount(loadState, browseTotal)
             val sourceTitle = when {
                 playlistMode -> null
                 !allChatsMode -> "Saved Messages"
+                activeForumTopicId() != null -> selectedChatId?.let { sourceTitleOf(it) } + " · " + (selectedForumTopicTitle ?: "Chủ đề")
                 else -> selectedChatId?.let { sourceTitleOf(it) }
             }
             return MeloScreenHost.Snapshot(
@@ -6080,13 +6474,20 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 sort = sort,
                 letterFloor = letterFloor.takeIf { sort == SongSort.NAME },
                 selectedChatId = selectedChatId.takeIf { allChatsMode && !playlistMode },
-                browseScope = MeloBrowseUiPolicy.scope(showingSources, playlistMode, filterOnlyDownloaded, allChatsMode, selectedChatId),
+                browseScope = MeloBrowseUiPolicy.scope(showingSources, playlistMode, filterOnlyDownloaded, allChatsMode, selectedChatId,
+                    activeForumTopicId(), isForumCatalogue()),
                 browseLoadState = loadState,
                 browseOwnerId = browseRequest?.ownerId ?: 0L,
                 browseGeneration = browseRequest?.generation ?: 0L,
                 browseComplete = loadState == MeloBrowseUiPolicy.LoadState.READY &&
                     (showingSources || (total != null && rows.size >=
-                        if (letterFloor != null && !filterOnlyDownloaded && !playlistMode) floorCountForCurrentView else total))
+                        if (letterFloor != null && !filterOnlyDownloaded && !playlistMode) floorCountForCurrentView else total)),
+                forumTopics = forumRows.takeIf { isForumCatalogue() },
+                forumStatus = forumStatusText(),
+                forumCanLoadMore = (isForumCatalogue() || activeForumTopicId() != null) && forumCanLoadMore,
+                forumLoading = forumBusy,
+                forumHistoryComplete = if (isForumCatalogue()) forumCatalogueComplete else activeForumTopicId() == null ||
+                    (forumHistoryState?.olderComplete == true && forumHistoryState?.refreshPending == false)
             )
         }
 
@@ -6199,6 +6600,12 @@ class TelegramPreviewActivity : AppCompatActivity() {
         override fun filterInSource(mode: MeloCompactPolicy.Mode) {
             if (!auth.isReady()) return
             val chat = selectedChatId.takeIf { allChatsMode }
+            val topic = activeForumTopicId()
+            if (topic != null && chat != null && mode != MeloCompactPolicy.Mode.PLAYLIST) {
+                navigateBrowse(MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.FORUM_TOPIC, chat,
+                    mode == MeloCompactPolicy.Mode.DOWNLOADED, topic))
+                return
+            }
             navigateBrowse(when (mode) {
                 MeloCompactPolicy.Mode.ALL -> if (chat == null) MeloLibraryPolicy.tabScope(MeloLibraryPolicy.TabKind.ALL)
                     else MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.CHANNEL, chat)
@@ -6221,10 +6628,36 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
 
         override fun openSource(chatId: Long?) {
-            if (!auth.isReady()) return
-            if (phoneScreen == null && tabletScreen == null) { legacyOpenSource(chatId); return }
-            navigateBrowse(if (chatId == null) MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.LIBRARY)
-                else MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.CHANNEL, chatId))
+            openTelegramSource(chatId)
+        }
+
+        override fun backWithinForum() = this@TelegramPreviewActivity.backWithinForum()
+        override fun openForumTopic(topicId: Int) {
+            val chat = selectedChatId ?: return
+            val owner = library.authorizedUser()?.value ?: return
+            meloBrowse.topicsReturn = MeloBrowseState.Key(owner, MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.FORUM_TOPICS, chat))
+            navigateBrowse(MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.FORUM_TOPIC, chat, forumTopicId = topicId))
+        }
+        override fun openAllForumMusic() {
+            val chat = selectedChatId ?: return
+            val owner = library.authorizedUser()?.value ?: return
+            meloBrowse.topicsReturn = MeloBrowseState.Key(owner, MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.FORUM_TOPICS, chat))
+            navigateBrowse(MeloBrowseUiPolicy.Scope(MeloBrowseUiPolicy.Kind.CHANNEL, chat))
+        }
+        override fun saveTopicPosition(topicId: Int?, offsetPx: Int) {
+            browseKey()?.takeIf { it.scope.kind == MeloBrowseUiPolicy.Kind.FORUM_TOPICS }?.let { meloBrowse.topicPosition(it, topicId, offsetPx) }
+        }
+        override fun loadMoreForum() {
+            if (forumBusy) return
+            if (isForumCatalogue()) {
+                forumVisibleLimit += 50
+                if (forumCacheHasMore) refreshSongRows() else loadForumCatalogue(more = true)
+            } else loadForumHistory(refresh = false)
+        }
+        override fun refreshForum() {
+            if (isForumCatalogue()) loadForumCatalogue()
+            else if (activeForumTopicId() != null) loadForumHistory(refresh = true)
+            else selectedChatId?.let(::openTelegramSource)
         }
 
         private fun legacySetMode(mode: MeloCompactPolicy.Mode) {
@@ -6278,6 +6711,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
         override fun retryBrowse() {
             if (!auth.isReady()) return
+            if (isForumCatalogue() || activeForumTopicId() != null || (selectedChatId != null && forumError != null)) {
+                refreshForum()
+                return
+            }
             if (localMode) {
                 localMusic.load(force = true) { scheduleMeloLibraryRefresh() }
                 scheduleMeloLibraryRefresh()
@@ -6305,7 +6742,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
             if (!auth.isReady() || !playUi.canRetry(attempt, owner)) return
             val remembered = lastPlayTarget?.takeIf { it.first.messageId == attempt.songKey }
             val song = remembered?.first ?: songForSave(attempt.songKey) ?: return
-            downloadAndPlay(song, remembered?.second ?: 0L)
+            downloadAndPlay(song, remembered?.second ?: 0L, lastPlayForumQueue?.takeIf {
+                it.ownerId == library.authorizedUser()?.value && it.selectedKey == song.messageId
+            })
         }
 
         override fun openSongMenu(index: Int, anchor: View) {
@@ -6481,6 +6920,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 playLocal(if (shuffle) kotlin.random.Random.nextInt(shown.size) else 0)
                 return
             }
+            if (activeForumTopicId() != null) {
+                if (shownSongs.isNotEmpty()) prepareForumPlayback(shuffle = shuffle)
+                return
+            }
             if (shownSongs.isEmpty()) return
             // Same path as tapping a row: the queue is the list on screen.
             if (shuffle) player?.shuffleModeEnabled = true
@@ -6505,6 +6948,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
 
         override fun canPlayAll(): Boolean {
             if (!auth.isReady()) return false
+            if (isForumCatalogue()) return false
             if (localMode) return localMusic.shown().isNotEmpty()
             if (namedDetailOnScreen()) return namedDetailItems().any {
                 it.kind == MeloNamedPlaylistPolicy.DetailKind.TELEGRAM || it.kind == MeloNamedPlaylistPolicy.DetailKind.LOCAL
@@ -6760,6 +7204,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         )
 
     private fun loadMoreSongsIfNeeded() {
+        if (isForumCatalogue()) return
         // A refresh owns the list until its current query completes. Paging never hides existing rows.
         if (browseLoadState != MeloBrowseUiPolicy.LoadState.READY || !currentBrowseRequest(browseRequest)) return
         if (filterOnlyDownloaded && !(allChatsMode && browseSources && !playlistMode) &&
@@ -6784,15 +7229,16 @@ class TelegramPreviewActivity : AppCompatActivity() {
                     val nextOffset = shownSongs.size
                     val q = songFilter.text?.toString()?.trim().orEmpty().takeIf { it.isNotBlank() }
                     val currentChat = selectedChatId
+                    val currentTopic = activeForumTopicId()
                     executeBrowseQuery(request) {
-                        val count = db.getSongCount(userId, chatId = currentChat, searchQuery = q)
+                        val count = db.getSongCount(userId, chatId = currentChat, searchQuery = q, forumTopicId = currentTopic)
                         val floorCount = if (floor != null) {
-                            db.getSongCount(userId, chatId = currentChat, searchQuery = q, fromKey = floor)
+                            db.getSongCount(userId, chatId = currentChat, searchQuery = q, fromKey = floor, forumTopicId = currentTopic)
                         } else count
                         val more = if (nextOffset < floorCount) {
                             db.getSongs(
                                 userId, chatId = currentChat, searchQuery = q, offset = nextOffset, limit = 200,
-                                sort = sort, fromKey = floor
+                                sort = sort, fromKey = floor, forumTopicId = currentTopic
                             )
                         } else emptyList()
                         val mapped = more.map {
@@ -6801,7 +7247,8 @@ class TelegramPreviewActivity : AppCompatActivity() {
                                 rawMessageId = it.messageId,
                                 performer = it.performer,
                                 durationSeconds = it.durationSeconds,
-                                sourceTitle = it.sourceTitle
+                                sourceTitle = it.sourceTitle,
+                                forumTopicId = it.forumTopicId
                             )
                         }
                         runOnUiThread {
@@ -6902,11 +7349,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 1 -> {
                     val entry = manyVersions?.entries?.firstOrNull { it.song.songKey == song.messageId }
                     if (manyVersions != null && entry != null) playOfflineEntry(manyVersions, entry)
-                    else downloadAndPlay(song)
+                    else playSongFromBrowse(song)
                 }
                 2 -> addToUpcomingQueue(song)
                 3 -> toggleFavoriteSong(song)
-                4 -> downloadAndPlay(song)
+                4 -> playSongFromBrowse(song)
                 5 -> showSongDetailsDialog(song, isDownloaded)
                 6 -> manyVersions?.let { showOfflineVersions(it) }
                 7 -> addSongToPlaylist(song)
@@ -7186,6 +7633,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
             rowArtLoaderLazy?.onTdlibEvent(result)
             return
         }
+        if (tag.startsWith("forumRead:")) {
+            pendingForumReads.remove(tag)?.complete(result)
+            return
+        }
         if (tag.startsWith("offlineLocal:")) {
             pendingOffline.remove(tag)?.complete(result)
             return
@@ -7377,7 +7828,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         if (allChatsMode && browseSources) {
                             refreshSongRows()
                         } else if (allChatsMode && selectedChatId == chatId) {
-                            libraryTitle.text = cleanTitle
+                            libraryTitle.text = cleanTitle + if (activeForumTopicId() != null) " · ${selectedForumTopicTitle ?: "Chủ đề"}" else ""
                         }
                     }
                 }
@@ -7732,29 +8183,13 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     private fun parseTelegramSong(message: JSONObject, fallbackChatId: Long): Song? {
-        val content = message.optJSONObject("content") ?: return null
-        val mediaType = content.optString("@type")
-        val attachment = when (mediaType) {
-            "messageAudio" -> content.optJSONObject("audio")
-            "messageDocument" -> content.optJSONObject("document")
-            else -> null
-        } ?: return null
-        val file = attachment.optJSONObject(
-            if (mediaType == "messageAudio") "audio" else "document"
-        ) ?: return null
-        val filename = attachment.optString("file_name", "audio")
-        val title = attachment.optString("title").ifBlank { filename }
-        val audioExtension = listOf(".flac", ".mp3", ".m4a", ".wav",
-            ".ogg", ".opus", ".aac")
-        if (mediaType != "messageAudio" &&
-            audioExtension.none { filename.endsWith(it, ignoreCase = true) }) return null
-        val messageId = message.optLong("id")
-        val chatId = message.optLong("chat_id").takeIf { it != 0L } ?: fallbackChatId
-        val fileId = file.optInt("id")
-        if (messageId <= 0L || chatId == 0L || fileId <= 0) return null
-        val selfChatId = savedChatId.takeIf { it != 0L }
-            ?: (library.authorizedUser()?.value ?: 0L)
-        val key = TelegramSongKey.forMessage(chatId, messageId, selfChatId)
+        val account = library.authorizedUser()?.value ?: return null
+        val self = savedChatId.takeIf { it != 0L } ?: account
+        val parsed = TelegramSongMessageParser.parse(message, account, self, fallbackChatId) ?: return null
+        val file = TelegramSongMessageParser.file(message) ?: return null
+        val fileId = parsed.fileId
+        val key = parsed.songKey
+        val chatId = parsed.chatId
         val local = file.optJSONObject("local")
         val factOwner = library.authorizedUser()?.value ?: 0L
         runOnUiThread {
@@ -7772,15 +8207,9 @@ class TelegramPreviewActivity : AppCompatActivity() {
                 }
             }
         }
-        val performer = attachment.optString("performer").takeIf { it.isNotBlank() }
-        val duration = attachment.optInt("duration")
-        return Song(fileId, title, filename, key, chatId,
-            file.optLong("size").takeIf { it > 0 }
-                ?: file.optLong("expected_size").takeIf { it > 0 } ?: -1L,
-            rawMessageId = messageId,
-            performer = performer,
-            durationSeconds = duration,
-            sourceTitle = sourceNames[chatId])
+        return Song(fileId, parsed.title, parsed.filename, key, chatId, parsed.fileSize,
+            rawMessageId = parsed.messageId, performer = parsed.performer, durationSeconds = parsed.durationSeconds,
+            sourceTitle = sourceNames[chatId], forumTopicId = parsed.forumTopicId)
     }
 
     private fun resetSource(modeAllChats: Boolean) {
@@ -7965,6 +8394,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         val user = library.authorizedUser()?.value ?: 0L
         if (user <= 0L) return
         autoRecoveryPolicy.recordScanDispatched(user)
+        val preserveForumScope = isForumCatalogue() || activeForumTopicId() != null
         setNavigationCollapsed(false)
         if (forceRestart) {
             globalScanGeneration++
@@ -7976,7 +8406,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             allChatsMode = true
             globalScanLoading = true
         }
-        browseSources = browseAfter
+        if (!preserveForumScope) browseSources = browseAfter
         runOnUiThread { globalSearch.isEnabled = false }
 
         val db = getOrInitDatabase(user)
@@ -8116,7 +8546,11 @@ class TelegramPreviewActivity : AppCompatActivity() {
                         mediaType = mType,
                         date = rawDate,
                         lastSeenAtMs = now,
-                        sourceTitle = sourceNames[song.chatId]
+                        sourceTitle = sourceNames[song.chatId],
+                        performer = song.performer,
+                        durationSeconds = song.durationSeconds,
+                        fileSize = song.expectedSize,
+                        forumTopicId = song.forumTopicId
                     )
                 )
             }
@@ -8328,7 +8762,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     /** [resumeFromMs] only counts when the file is fully downloaded; a growing (progressive) file always starts at 0. */
-    private fun downloadAndPlay(song: Song, resumeFromMs: Long = 0L) {
+    private fun downloadAndPlay(song: Song, resumeFromMs: Long = 0L, forumQueue: PreparedForumQueue? = null) {
         if (song.placeholder) {
             // A saved song this device's library does not list (yet) has no message to open.
             toast("Bài này chưa có trong thư viện máy. Hãy chờ đồng bộ thư viện xong rồi thử lại.")
@@ -8336,12 +8770,15 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         if (!auth.isReady()) return
         val owner = library.authorizedUser()?.value ?: return
+        forumQueueGeneration.incrementAndGet()
         val attempt = playUi.begin(owner, song.messageId)
         if (attempt == null) {
             scheduleMeloLibraryRefresh()
             playUi.presentation(owner)?.takeIf { it.phase == MeloPlayUiState.Phase.ERROR }?.let { toast(it.text) }
             return
         }
+        activePlayForumQueue = forumQueue
+        lastPlayForumQueue = forumQueue
         lastPlayTarget = song to resumeFromMs
         val effectiveChatId = if (song.chatId != 0L) song.chatId else (savedChatId.takeIf { it != 0L } ?: (library.authorizedUser()?.value ?: 0L))
         val rawMsgId = song.genuineMessageId
@@ -8540,6 +8977,10 @@ class TelegramPreviewActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        cancelForumRead()
+        pendingForumReads.values.forEach { it.cancel(false) }
+        pendingForumReads.clear()
+        forumExecutor.shutdownNow()
         SyncRuntime.unlisten(this)
         detachMeloLayer()
         if (::mainRoot.isInitialized) {
