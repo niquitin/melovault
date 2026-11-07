@@ -919,7 +919,11 @@ internal class MeloLibraryPane(
                 addView(c.chip("Đã tải trong $place", snap.mode == Mode.DOWNLOADED) { host.filterInSource(Mode.DOWNLOADED) })
             }
             MeloLibraryPolicy.GenreChip.entries.forEach { genre ->
-                addView(c.chip(genre.label, MeloLibraryPolicy.activeGenre(snap.query) == genre) { applyGenre(genre) })
+                addView(c.chip(genre.label, MeloLibraryPolicy.activeGenre(snap.query) == genre) {
+                    // Read the box at tap time: the chip was built from an older snapshot.
+                    applyGenre(MeloLibraryPolicy.toggledGenre(
+                        MeloLibraryPolicy.activeGenre(searchField.text.toString()), genre))
+                })
             }
         })
         genreStripWanted = genreStripHolder.childCount > 0

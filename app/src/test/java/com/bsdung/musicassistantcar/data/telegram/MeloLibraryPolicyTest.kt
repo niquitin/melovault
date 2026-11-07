@@ -376,4 +376,20 @@ class MeloLibraryPolicyTest {
         assertNull(MeloLibraryPolicy.activeGenre(""))
         assertNull(MeloLibraryPolicy.activeGenre("chillout mix"))
     }
+
+    @Test
+    fun tappingTheActiveGenreChipTurnsTheFilterOff() {
+        val a = MeloLibraryPolicy.GenreChip.CHILLOUT
+        val b = MeloLibraryPolicy.GenreChip.LAKHOUSE
+        assertNull(MeloLibraryPolicy.toggledGenre(a, a))
+        assertEquals(a, MeloLibraryPolicy.toggledGenre(null, a))
+        assertEquals(b, MeloLibraryPolicy.toggledGenre(a, b))
+    }
+
+    @Test
+    fun toggledGenreReadsTheBoxTextAsTheActiveChip() {
+        val tapped = MeloLibraryPolicy.GenreChip.CHILLOUT
+        assertNull(MeloLibraryPolicy.toggledGenre(MeloLibraryPolicy.activeGenre(" Chillout "), tapped))
+        assertEquals(tapped, MeloLibraryPolicy.toggledGenre(MeloLibraryPolicy.activeGenre("chillout mix"), tapped))
+    }
 }

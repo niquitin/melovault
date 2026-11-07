@@ -761,7 +761,7 @@ internal class MeloComponents(
     /** The search bar and its text field, so a caller never has to dig the field out of the bar's children. */
     class SearchBar(val view: LinearLayout, val field: EditText)
 
-    /** Search field: hint with the real song count, instant results, filter button at the end. */
+    /** Search field: hint with the real song count, instant results, filter button at the end (only if [onFilter] is set). */
     fun searchBar(totalSongs: Int?, onQuery: ((String) -> Unit)? = null, onFilter: (() -> Unit)? = null): LinearLayout =
         searchBarWithField(totalSongs, onQuery, onFilter).view
 
@@ -803,13 +803,17 @@ internal class MeloComponents(
             })
         }
         bar.addView(field)
-        if (teal) {
-            bar.addView(vectorButton(R.drawable.ic_tune, "Bộ lọc", palette.textSecondary) { onFilter?.invoke() })
-        } else {
-            bar.addView(iconButton("☰", "Bộ lọc", width = sizes.minTouch, height = sizes.minTouch) { onFilter?.invoke() }.apply {
-                background = null
-                setTextColor(palette.textSecondary)
-            })
+        // 07/11/2026: the filter button exists only when a caller gives it something to open. The default
+        // style used to draw a dead button (no handler), so it is gone there instead of doing nothing.
+        if (onFilter != null) {
+            if (teal) {
+                bar.addView(vectorButton(R.drawable.ic_tune, "Bộ lọc", palette.textSecondary) { onFilter.invoke() })
+            } else {
+                bar.addView(iconButton("☰", "Bộ lọc", width = sizes.minTouch, height = sizes.minTouch) { onFilter.invoke() }.apply {
+                    background = null
+                    setTextColor(palette.textSecondary)
+                })
+            }
         }
         return SearchBar(bar, field)
     }
