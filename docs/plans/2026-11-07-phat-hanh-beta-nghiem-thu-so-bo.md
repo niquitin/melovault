@@ -54,3 +54,9 @@ Q4–Q7 (phát, bộ lọc/ngang, widget, EQ trên bản `.open`), âm thanh th�
 6. Nếu được: nhờ một người bạn tải từ Drive và cài trên máy khác.
 
 Phản hồi: `ĐẠT 2026-11-07-phat-hanh-beta — a0694c0 / 54AB04C8…2CCF` hoặc `Yêu cầu sửa 2026-11-07-phat-hanh-beta: <lỗi>`.
+
+## Vòng 2 · 07/11/2026 · Q4–Q7 — BLOCKED trên Sony, chuyển chủ dự án tự thử
+
+Phiên phụ "Kiểm Q4–Q7 bản .open trên Sony" kiểm lại máy `QV725WEQ54`: hai gói không đổi (`.open` vc122 15:37:52, `app.melovault.player` 14:11:34), bản `.open` vẫn ở màn Nhập số điện thoại, màn đã tắt (`Display State=OFF`). Agent không nhập số/mã nên Q4–Q8 trên Sony **BLOCKED**.
+
+Chủ dự án không ở cạnh Sony, **quyết định tự thử Q4–Q7 trên điện thoại riêng** bằng APK trên Drive (`54AB04C8…2CCF`, link trong [apk-test](2026-11-07-phat-hanh-beta-apk-test.md)). Đó là phần nghiệm thu chính thức của chủ dự án, không phải bằng chứng agent. Kết luận sơ bộ giữ nguyên: **SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN** trong phạm vi vòng 1; Q4–Q7 do chủ dự án xác nhận. Không đổi Sony, không commit ảnh mới.
