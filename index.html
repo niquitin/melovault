@@ -37,7 +37,7 @@
           <a class="button button-primary" href="#tai-apk">Xem bản tải <span aria-hidden="true">↗</span></a>
           <a class="button button-secondary" href="#tinh-nang">Khám phá tính năng <span aria-hidden="true">↓</span></a>
         </div>
-        <p class="fine-print hero-note">Bản thử nghiệm đang được hoàn thiện. Trải nghiệm có thể khác nhau giữa các thiết bị.</p>
+        <p class="fine-print hero-note">Bản thử nghiệm đang được hoàn thiện. Trải nghiệm có thể khác nhau giữa các thiết bị. MeloVault là ứng dụng không chính thức, dùng Telegram API. Không liên kết với Telegram.</p>
       </div>
       <div class="hero-art" aria-hidden="true">
         <div class="art-caption">MELOVAULT <span>ÂM NHẠC CỦA BẠN</span></div>
@@ -55,7 +55,9 @@
         <article class="feature-card"><span class="card-number" aria-hidden="true">03</span><h3>Nhạc trên máy</h3><p>Mở mục Nhạc trên máy hoặc chọn Mở tệp nhạc để nghe tệp có sẵn trên thiết bị.</p></article>
         <article class="feature-card"><span class="card-number" aria-hidden="true">04</span><h3>Bài đã tải</h3><p>Xem các bài đã tải để nghe khi không có mạng. Tệp cần được tải đủ và còn trên thiết bị.</p></article>
         <article class="feature-card"><span class="card-number" aria-hidden="true">05</span><h3>Nghe tiếp khi bạn muốn</h3><p>Ở giao diện Gọn, Điện thoại dọc và Tablet dọc, bạn có thể bấm Nghe tiếp cho bài Telegram gần đây. Bài đã tải đủ tiếp tục từ vị trí cũ; bài chưa tải bắt đầu từ đầu. App không tự phát khi mở.</p></article>
-        <article class="feature-card"><span class="card-number" aria-hidden="true">06</span><h3>Cài đặt dễ tìm</h3><p>Tùy chỉnh tại Giao diện &amp; màu sắc, Thiết bị &amp; màn hình và Nâng cao.</p></article>
+        <article class="feature-card"><span class="card-number" aria-hidden="true">06</span><h3>Cài đặt dễ tìm</h3><p>Tùy chỉnh tại Giao diện &amp; màu sắc và Màn Đang phát; xem phiên bản và giấy phép mã nguồn mở ở Giới thiệu.</p></article>
+        <article class="feature-card"><span class="card-number" aria-hidden="true">07</span><h3>Bộ chỉnh âm</h3><p>Bật EQ và chọn mẫu âm thanh có sẵn trên màn Đang phát; tắt đi là trở về âm thanh gốc.</p></article>
+        <article class="feature-card"><span class="card-number" aria-hidden="true">08</span><h3>Widget Đang phát</h3><p>Đặt widget lên màn hình chính để xem bài đang nghe và bấm Trước, Phát/Tạm dừng, Tiếp mà không cần mở app.</p></article>
       </div>
       <p class="fine-print section-note">Một số bố cục và thao tác vẫn cần được kiểm thử thêm trên thiết bị thực tế.</p>
     </section>
@@ -73,7 +75,7 @@
 
     <section id="tai-apk" class="section container" aria-labelledby="download-title">
       <div class="download-panel">
-        <div class="download-intro"><p class="eyebrow">03 / BẢN THỬ NGHIỆM</p><h2 id="download-title">Tải bản thử nghiệm</h2><p>APK dành cho người tham gia thử nghiệm MeloVault trên Android.</p><div id="download-action"><button class="button button-primary download-button" type="button" disabled>Bản test đang chờ phát hành</button></div><p id="download-status" class="fine-print" role="status">Liên kết và thông tin bản tải sẽ xuất hiện tại đây khi sẵn sàng.</p><noscript><p class="notice">Thông tin bản tải cần JavaScript. Nội dung hướng dẫn vẫn có thể đọc bình thường.</p></noscript></div>
+        <div class="download-intro"><p class="eyebrow">03 / BẢN THỬ NGHIỆM</p><h2 id="download-title">Tải bản thử nghiệm</h2><p>APK MeloVault cho Android, ai cũng có thể tải về dùng thử.</p><div id="download-action"><button class="button button-primary download-button" type="button" disabled>Bản test đang chờ phát hành</button></div><p id="download-status" class="fine-print" role="status">Liên kết và thông tin bản tải sẽ xuất hiện tại đây khi sẵn sàng.</p><noscript><p class="notice">Thông tin bản tải cần JavaScript. Nội dung hướng dẫn vẫn có thể đọc bình thường.</p></noscript></div>
         <div class="release-info">
           <dl class="release-grid">
             <div><dt>Phiên bản</dt><dd id="release-version">Chưa công bố</dd></div>
@@ -84,7 +86,7 @@
           </dl>
           <div class="release-notes"><h3>Ghi chú bản tải</h3><div id="release-notes"><p>Chưa công bố</p></div></div>
         </div>
-        <p class="download-disclaimer fine-print">Đây là bản thử nghiệm, chưa phải bản ổn định. Liên kết tải mở dịch vụ lưu trữ bên ngoài.</p>
+        <p class="download-disclaimer fine-print">Đây là bản thử nghiệm, chưa phải bản ổn định, và được ký bằng khóa tạm: khi có bản ổn định, bạn có thể phải gỡ bản này rồi cài lại (mất danh sách phát và cài đặt trong app). Liên kết tải mở GitHub.</p>
       </div>
     </section>
 
@@ -123,17 +125,18 @@ Lỗi có lặp lại không: …</textarea>
         <details><summary>MeloVault chạy trên thiết bị nào?</summary><p>Ứng dụng dành cho Android; tài liệu hiện ghi mức tối thiểu Android 8.0. Khả năng hoạt động của từng thiết bị cần được kiểm thử.</p></details>
         <details><summary>Tôi có cần tài khoản Telegram không?</summary><p>Có, nếu muốn nghe nhạc từ Telegram. Ứng dụng cũng có mục Nhạc trên máy và Mở tệp nhạc.</p></details>
         <details><summary>Có nghe khi không có mạng được không?</summary><p>Có với bài đã tải đủ và còn trên thiết bị. Bài chưa tải cần kết nối mạng; không phải mọi bài trong thư viện đều đã sẵn sàng nghe offline.</p></details>
-        <details><summary>Cập nhật có cần gỡ bản cũ không?</summary><p>Không. Hãy cài đè bản phù hợp. Nếu Android từ chối cập nhật, dừng lại và báo người phụ trách test.</p></details>
+        <details><summary>Cập nhật có cần gỡ bản cũ không?</summary><p>Với các bản thử nghiệm tiếp theo thì không: hãy cài đè. Nếu Android từ chối cập nhật, dừng lại và báo người phụ trách test. Riêng bản ổn định sau này sẽ ký bằng khóa khác, nên có thể phải gỡ bản thử nghiệm trước khi cài.</p></details>
         <details><summary>Vì sao chưa tải được APK?</summary><p>Bản test có thể đang chờ phát hành. Khi có bản tải hợp lệ, nút Tải APK sẽ được bật.</p></details>
-        <details><summary>Đã có EQ hoặc nhạc từ Drive/OneDrive chưa?</summary><p>Các tính năng này chưa được cung cấp trong bản Shareable theo tài liệu hiện tại.</p></details>
+        <details><summary>Đã có EQ hoặc nhạc từ Drive/OneDrive chưa?</summary><p>Đã có bộ chỉnh âm (EQ) trên màn Đang phát. Nhạc từ Drive/OneDrive chưa có.</p></details>
+        <details><summary>MeloVault có phải ứng dụng của Telegram không?</summary><p>Không. MeloVault là ứng dụng không chính thức, dùng Telegram API để đọc nhạc từ tài khoản của bạn. Không liên kết với Telegram.</p></details>
       </div>
     </section>
 
     <section id="quyen-rieng-tu" class="section container" aria-labelledby="privacy-title">
-      <div class="privacy-panel"><p class="eyebrow">THÔNG TIN CỦA BẠN</p><h2 id="privacy-title">Quyền riêng tư</h2><p>Trang giới thiệu này không yêu cầu đăng nhập Telegram, không thu thập báo cáo tự động và không dùng công cụ theo dõi.</p><p>Ứng dụng dùng tài khoản Telegram của bạn để truy cập nguồn nhạc; dữ liệu phiên, chỉ mục và tệp đã tải được xử lý trên thiết bị. Kết nối Telegram và dịch vụ lưu trữ APK chịu chính sách của các dịch vụ tương ứng.</p><p>Không nhập mã đăng nhập hay mật khẩu Telegram trên trang web này. Chỉ chia sẻ thông tin lỗi đã loại bỏ dữ liệu riêng tư.</p></div>
+      <div class="privacy-panel"><p class="eyebrow">THÔNG TIN CỦA BẠN</p><h2 id="privacy-title">Quyền riêng tư</h2><p>Trang giới thiệu này không yêu cầu đăng nhập Telegram, không thu thập báo cáo tự động và không dùng công cụ theo dõi.</p><p>Ứng dụng dùng tài khoản Telegram của bạn để truy cập nguồn nhạc; dữ liệu phiên, chỉ mục và tệp đã tải được xử lý trên thiết bị. Kết nối Telegram và dịch vụ lưu trữ APK chịu chính sách của các dịch vụ tương ứng.</p><p>Lời nhạc từ LRCLIB chỉ chạy khi bạn đồng ý (ở tab Lời nhạc hoặc trong Cài đặt). Khi đó app gửi tên bài, ca sĩ, album và thời lượng của bài đang nghe tới LRCLIB (lrclib.net) để tìm lời; có thể tắt lại trong Cài đặt.</p><p>Không nhập mã đăng nhập hay mật khẩu Telegram trên trang web này. Chỉ chia sẻ thông tin lỗi đã loại bỏ dữ liệu riêng tư.</p></div>
     </section>
   </main>
 
-  <footer class="site-footer"><div class="container footer-inner"><p>MeloVault · Ứng dụng nghe nhạc Android · Bản thử nghiệm</p><nav aria-label="Điều hướng cuối trang"><a href="#tai-apk">Tải APK</a><a href="#bao-loi">Báo lỗi</a><a href="#quyen-rieng-tu">Quyền riêng tư</a><a href="#dau-trang">Về đầu trang ↑</a></nav></div></footer>
+  <footer class="site-footer"><div class="container footer-inner"><p>MeloVault · Ứng dụng nghe nhạc Android · Bản thử nghiệm · Không chính thức, không liên kết với Telegram</p><nav aria-label="Điều hướng cuối trang"><a href="#tai-apk">Tải APK</a><a href="#bao-loi">Báo lỗi</a><a href="#quyen-rieng-tu">Quyền riêng tư</a><a href="#dau-trang">Về đầu trang ↑</a></nav></div></footer>
 </body>
 </html>
