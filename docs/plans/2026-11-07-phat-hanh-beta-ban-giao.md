@@ -4,6 +4,19 @@
 
 **SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN** (code S1–S4, gate APK tự kiểm lại, cài Sony không đụng `app.melovault.player`, Q1–Q3, Q8). **Q4–Q7 vẫn BLOCKED** chờ chủ dự án đăng nhập bản `.open`. Biên bản: [nghiem-thu-so-bo](2026-11-07-phat-hanh-beta-nghiem-thu-so-bo.md) (7 ghi nhận nhỏ G1–G7, không chặn). Không sửa code, không build, không cài, không đăng; Sony chỉ đọc `dumpsys`, `Display State=OFF`. **CHỜ CHỦ DỰ ÁN NGHIỆM THU.** Sau ĐẠT: làm kế hoạch mục 4 (chuẩn bị đăng; chủ dự án tự bấm Publish/Merge).
 
+### Prompt phiên kiểm Q4–Q7 (chủ dự án giao 07/11/2026)
+
+```text
+MELOVAULT — KIỂM BỔ SUNG Q4–Q7 TRÊN SONY, KHÔNG CODE, KHÔNG BUILD
+TASK_ID: 2026-11-07-phat-hanh-beta; nhánh dot/2026-11-07-phat-hanh-beta; worktree D:\Bots\_worktrees\MeloVault-phat-hanh-beta.
+APK đã cài sẵn trên Sony QV725WEQ54: app.melovault.player.open vc122 0.6.97-open, SHA-256 54AB04C8…2CCF, source a0694c0. Không cài lại.
+Đọc: CLAUDE.md, kế hoạch mục S7, báo cáo S7, nghiem-thu-so-bo.md vòng 1.
+Bước 0: kiểm adb/serial/model và gói .open vẫn vc122 lastUpdateTime 15:37:52, app.melovault.player vẫn 14:11:34. Mở .open, chụp màn: nếu còn màn nhập số điện thoại thì tắt màn, nhờ chủ dự án tự đăng nhập trên Sony và chờ họ báo xong; agent KHÔNG nhập số/mã.
+Q4 phát bài đã tải, tạm dừng, Tiếp; Q5 chip lọc bấm lại để bỏ lọc, không còn ☰, xoay ngang Đang phát; Q6 widget của bản .open (thêm ra Home theo mẹo Xperia, Phát/Tạm dừng/Tiếp/Trước, chạm thẻ; không gỡ widget của app.melovault.player); Q7 EQ bật/tắt. Bằng chứng: ảnh + dumpsys media_session; ghi CHƯA XÁC NHẬN ÂM THANH THỰC; Q8 lại crash buffer.
+Cấm: uninstall, pm clear, xóa dữ liệu/TDLib, đổi tài khoản, đụng app.melovault.player. Ảnh không lộ tên bài/kênh khi commit. finally: trả xoay tự động, tắt màn, SONY_SCREEN_END.
+Ghi vòng 2 vào nghiem-thu-so-bo.md, cập nhật bàn giao, commit tài liệu; kết luận SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN / CẦN SỬA / BLOCKED. Không push, không đăng.
+```
+
 ## Checkpoint cuối thực thi · 07/11/2026 · Claude Code, Sonnet 5.5, phiên GỘP (S0–S8)
 
 **Thực thi xong về kỹ thuật. Chờ phiên nghiệm thu sơ bộ mới, rồi chủ dự án nghiệm thu.** Q4–Q7 BLOCKED vì Sony chưa đăng nhập bản `.open`. Chưa đăng, chưa tag, chưa Release.
