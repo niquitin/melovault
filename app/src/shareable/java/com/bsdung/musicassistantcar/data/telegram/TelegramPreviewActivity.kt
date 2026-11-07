@@ -3240,7 +3240,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         overflowButton = overflow
         topBar.addView(overflow, LinearLayout.LayoutParams(dp(49), dp(47)))
         note = TextView(this).apply {
-            text = "TELEGRAM  ·  NHẠC CÁ NHÂN  ·  PREVIEW"
+            text = MeloPublicBuildPolicy.eyebrow(BuildConfig.MELO_OPEN_BUILD)
             textSize = 10f
             letterSpacing = 0.12f
             setTextColor(accent)

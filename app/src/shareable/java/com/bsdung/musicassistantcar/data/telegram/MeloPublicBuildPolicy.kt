@@ -19,6 +19,12 @@ internal object MeloPublicBuildPolicy {
     private const val PRIVATE_REGISTRATION = "Tài khoản mới cần đăng ký; bản Preview chưa hỗ trợ."
     private const val OPEN_REGISTRATION = "Tài khoản mới cần đăng ký bằng ứng dụng Telegram chính thức trước."
 
+    private const val PRIVATE_EYEBROW = "TELEGRAM  ·  NHẠC CÁ NHÂN  ·  PREVIEW"
+    private const val OPEN_EYEBROW = "TELEGRAM  ·  NHẠC CỦA BẠN  ·  KHÔNG CHÍNH THỨC"
+
+    /** The small capital line under the title: always on screen, so it is where the open build says it is unofficial. */
+    fun eyebrow(openBuild: Boolean): String = if (openBuild) OPEN_EYEBROW else PRIVATE_EYEBROW
+
     /** First text of the header's second line, before the library fills it with counts. */
     fun headerSubtitle(openBuild: Boolean): String = if (openBuild) OPEN_SUBTITLE else PRIVATE_SUBTITLE
 

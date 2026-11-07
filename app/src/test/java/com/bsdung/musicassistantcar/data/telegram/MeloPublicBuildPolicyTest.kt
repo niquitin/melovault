@@ -18,6 +18,13 @@ class MeloPublicBuildPolicyTest {
         assertEquals("Telegram · Nhạc cá nhân · Preview", MeloPublicBuildPolicy.headerSubtitle(false))
     }
 
+    @Test fun eyebrowOnScreenSaysUnofficialOnlyInOpenBuild() {
+        assertTrue(MeloPublicBuildPolicy.eyebrow(true).contains("KHÔNG CHÍNH THỨC"))
+        assertFalse(MeloPublicBuildPolicy.eyebrow(true).contains("PREVIEW"))
+        assertTrue(MeloPublicBuildPolicy.eyebrow(false).endsWith("PREVIEW"))
+        assertTrue(source("TelegramPreviewActivity.kt").contains("MeloPublicBuildPolicy.eyebrow(BuildConfig.MELO_OPEN_BUILD)"))
+    }
+
     @Test fun qrLoginIsHiddenOnlyInOpenBuild() {
         assertFalse(MeloPublicBuildPolicy.showQrLogin(true))
         assertTrue(MeloPublicBuildPolicy.showQrLogin(false))

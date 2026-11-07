@@ -130,7 +130,10 @@ internal class TelegramLoginPanel(
         secondaryRow.addView(editPhone, LinearLayout.LayoutParams(0, dp(touch), 1f).apply { leftMargin = dp(gap / 2) })
         secondaryRow.addView(back, LinearLayout.LayoutParams(0, dp(touch), 1f))
         if (MeloPublicBuildPolicy.showUnofficialNotice(com.bsdung.musicassistantcar.BuildConfig.MELO_OPEN_BUILD)) {
-            root.addView(unofficialNoticeView(), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(gap * 2) })
+            root.addView(unofficialNoticeView(), LinearLayout.LayoutParams(-1, -2).apply {
+                topMargin = dp(gap * 2)
+                bottomMargin = dp(gap)
+            })
         }
     }
 
