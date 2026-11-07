@@ -1,42 +1,48 @@
 # Bàn giao — Phát hành bản beta cho bạn bè
 
-## Checkpoint lập kế hoạch · 07/11/2026 · Claude Code, Opus 5.5
+## Checkpoint cuối thực thi · 07/11/2026 · Claude Code, Sonnet 5.5, phiên GỘP (S0–S8)
 
-**Kế hoạch xong, chưa code. Widget đã ĐẠT và merge, sẵn sàng mở phiên thực thi.** Bốn quyết định của chủ dự án: [kế hoạch](2026-11-07-phat-hanh-beta.md) mục 1.
+**Thực thi xong về kỹ thuật. Chờ phiên nghiệm thu sơ bộ mới, rồi chủ dự án nghiệm thu.** Q4–Q7 BLOCKED vì Sony chưa đăng nhập bản `.open`. Chưa đăng, chưa tag, chưa Release.
 
 | Mục | Giá trị |
 |---|---|
 | Worktree / nhánh | `D:\Bots\_worktrees\MeloVault-phat-hanh-beta` / `dot/2026-11-07-phat-hanh-beta` |
-| Baseline | Lúc lập kế hoạch `a982a9a`; đã gộp nhánh tích hợp có merge widget `7ce38ec` |
-| Gate trên `7ce38ec` | Debug/Release mỗi loại 208 suite, 2.815 test, 21 skipped, 0 lỗi |
-| File chưa commit | Không |
+| Baseline | `71189c9` (nhánh tích hợp có merge widget `7ce38ec`) |
+| Commit | `9526d35` code S1–S4; `3511ea4` báo cáo + sửa test; **`a0694c0` sửa nhãn Preview = source APK**; sau đó chỉ tài liệu |
+| Gate Ni | Debug/Release mỗi loại 209 suite, 2.824 test, 21 skipped, 0 lỗi (baseline 208 / 2.815) |
+| APK QA | `app.melovault.player.open` vc122 `0.6.97-open`, Release, 31.051.460 B, SHA-256 `54AB04C8A0F4418B379EA2DA19FFE281283D84E4A46B5DE90BE7DD8FDFC42CCF`, cert `eecd3df7…fce8` |
+| Drive (owner-only) | [thư mục](https://drive.google.com/drive/folders/16_4T98kAlVHbHYrSdjDwcRfLPYSCnY-C); hồ sơ [apk-test](2026-11-07-phat-hanh-beta-apk-test.md), [hình](2026-11-07-phat-hanh-beta-hinh-nghiem-thu.md), [báo cáo](2026-11-07-phat-hanh-beta-bao-cao.md) |
+| File chưa commit | Không (artifact bị `.gitignore`) |
 | Job còn chạy | Không |
 
-| Bước | Trạng thái | Việc còn lại |
-|---|---|---|
-| Sơ bộ Widget | Xong: không phát hiện lỗi chặn | [Biên bản](2026-11-03-widget-dang-phat-nghiem-thu-so-bo.md) |
-| Chủ dự án ĐẠT Widget | Xong | [Nghiệm thu](2026-11-03-widget-dang-phat-nghiem-thu.md); merge `7ce38ec`, đã push |
-| S0–S5 | **Xong** (07/11/2026, Sonnet 5.5): gate Ni 209 suite, 2.823 test, 21 skipped, 0 lỗi | [Báo cáo](2026-11-07-phat-hanh-beta-bao-cao.md) |
-| S6–S8 | **Chưa làm** | Build Tiny + gate APK, QA Sony, bàn giao |
-| Sơ bộ, ĐẠT, chuẩn bị đăng | Chưa làm | Kế hoạch mục 4 |
+| Bước | Trạng thái |
+|---|---|
+| S0 | Xong: cây sạch, widget `7ce38ec` đã gộp, nghiệm thu widget ghi ĐẠT |
+| S1 | Xong: nhãn theo `meloOpen` (resValue), giữ khóa debug, vc122 |
+| S2 | Xong. **Kế hoạch bỏ sót nhãn chữ hoa "…PREVIEW" luôn hiện; QA lượt 1 phát hiện, sửa ở `a0694c0`** |
+| S3 | Xong, **lệch kế hoạch có lý do**: Giới thiệu/Giấy phép đã có sẵn từ nhiệm vụ Cài đặt, mở rộng thay vì tạo Activity trùng |
+| S4 | Xong: quy tắc sao lưu riêng cho Shareable; chưa thử `bmgr`/chuyển máy |
+| S5 | Xong |
+| S6 | Xong: gate APK đạt hết (aapt, hash open có/không, apksigner) |
+| S7 | Q1, Q2, Q3, Q8 PASS; **Q4–Q7 BLOCKED** (chưa đăng nhập) |
+| S8 | Xong: Drive owner-only đã kiểm, hồ sơ viết |
+| Sơ bộ, ĐẠT, chuẩn bị đăng | Chưa làm (kế hoạch mục 4) |
 
-**Sony:** đang cài APK widget `58BD55F0…` (`app.melovault.player`), widget để sẵn trên Home, nhạc tạm dừng, Display State=OFF.
+**Sony** `QV725WEQ54`: cài APK QA ở trên cho gói `.open` (từ vc121 lên vc122); `app.melovault.player` (widget candidate `58BD55F0…`) không đổi; Display State=OFF (`SONY_SCREEN_END`).
 
-## Prompt phiên thực thi
+**Quyết định cần chủ dự án (không tự làm):** (1) đăng nhập `.open` trên Sony để có Q4–Q7, hoặc giao phiên QA tiếp; (2) hai nút "Nhập lại mã API" / "Dùng mã API riêng (nâng cao)" trên màn đăng nhập bản open: giữ hay giấu; (3) nhãn "Thử nghiệm" ở Đồng bộ: giữ hay bỏ; (4) rủi ro tin tài trợ Telegram (kế hoạch mục 6).
+
+## Prompt phiên nghiệm thu sơ bộ
 
 ```text
-MELOVAULT — PHIÊN THỰC THI ĐÚNG KẾ HOẠCH
-
-Repo/worktree: D:\Bots\_worktrees\MeloVault-phat-hanh-beta
-TASK_ID: 2026-11-07-phat-hanh-beta
-Nhánh: dot/2026-11-07-phat-hanh-beta
-Kế hoạch đã được chủ dự án CHỐT: docs/plans/2026-11-07-phat-hanh-beta.md
-Bàn giao: docs/plans/2026-11-07-phat-hanh-beta-ban-giao.md
-Baseline: nhánh tích hợp có merge widget 7ce38ec94ec58eb7b96e4acde787775ceddb3319, đã gộp vào nhánh này
-PHIÊN: GỘP (S0–S8), hoặc chủ dự án tách: 1 = S0–S5, 2 = S6–S8
-Lưu ý: Widget đã ĐẠT và merge; S0 chỉ cần kiểm lại. Không tăng versionCode, không tạo khóa ký.
-Tuyệt đối không đăng app.melovault.player. Không công khai gì trong phiên này.
-Làm theo docs/workflow/PROMPT_SONNET.md (Codex: PROMPT_CODEX.md). Trả lời tiếng Việt.
+MELOVAULT — NGHIỆM THU SƠ BỘ NHANH, KHÔNG CODE
+TASK_ID: 2026-11-07-phat-hanh-beta; nhánh dot/2026-11-07-phat-hanh-beta; worktree: D:\Bots\_worktrees\MeloVault-phat-hanh-beta.
+Baseline: 71189c9; HEAD dự kiến: HEAD của nhánh (xem git log; commit sau a0694c0 chỉ là tài liệu); source APK: a0694c05b8df22ef90a01cdd52738528747341b7.
+Kế hoạch: docs/plans/2026-11-07-phat-hanh-beta.md.
+Báo cáo: docs/plans/2026-11-07-phat-hanh-beta-bao-cao.md.
+Bàn giao: docs/plans/2026-11-07-phat-hanh-beta-ban-giao.md.
+APK và SHA-256: Drive owner-only trong docs/plans/2026-11-07-phat-hanh-beta-apk-test.md; app.melovault.player.open vc122 0.6.97-open, SHA-256 54AB04C8A0F4418B379EA2DA19FFE281283D84E4A46B5DE90BE7DD8FDFC42CCF; file Tiny C:\Bots\_qa_temp\beta-20261107\r2\.
+Phạm vi cần kiểm nhanh: MeloPublicBuildPolicy và nơi gắn (nhãn open, ẩn QR/dev tools, dòng không chính thức); resValue app_name; quy tắc sao lưu shareable; danh sách giấy phép so với cây phụ thuộc; gate APK; cài lên Sony không đụng app.melovault.player; Q4–Q7 chỉ kiểm nếu chủ dự án đã đăng nhập bản .open; không đăng gì.
 ```
 
-Đã dừng. Mở phiên mới, chọn model thực thi tiết kiệm hơn theo lựa chọn của chủ dự án.
+Đã dừng. Mở phiên mới để nghiệm thu sơ bộ nhanh.
