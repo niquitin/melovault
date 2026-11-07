@@ -38,6 +38,12 @@ import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicLong
 
+/** Above this font scale the low landscape deck keeps the stacked top bar and the scrolling column. */
+private const val COMPACT_MAX_FONT_SCALE = 1.3f
+
+/** Left column narrower than this (dp): the compact top bar drops its "Đang phát" label. */
+private const val COMPACT_LABEL_MIN_DP = 360
+
 /**
  * Studio Deck Now Playing (docs/ui-spec.md step 6). Portrait: big cover, title, channel,
  * quality pills, Đảo / Lặp / Lưu, then the queue below. Landscape: player on the left, numbered
@@ -60,6 +66,12 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
     private val s get() = c.sizes
     private val p get() = c.palette
     private val layout: DeckLayout
+    /** Two-column deck in a low window (a phone on its side): cover beside the title, EQ / Hẹn giờ on the close row. */
+    private val landscapeCompact: Boolean
+    /** The left column is too narrow (< 360dp) for the "Đang phát" label next to the close, EQ and Hẹn giờ buttons. */
+    private val compactLabelHidden: Boolean
+    /** Row holding the cover and the title block in the compact landscape form; the cover is sized against everything else. */
+    private var fitMediaRow: LinearLayout? = null
     /** Height of the −30s / Lùi / Tiến / +60s buttons (56dp in a tall window, else the 48dp touch minimum). */
     private val transportPx: Int
 
@@ -117,9 +129,15 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         // One profile rule for the library, the settings screen and this deck (sw 560–599 stays consistent).
         val profile = MeloLibraryPolicy.profileFor(metrics.smallestWidthDp)
         c = MeloComponents(activity, MeloDesignTokens.sizes(profile, d.density, d.fontScale, d.physicalPpi))
+        // Not at a large font: the stacked EQ / Hẹn giờ rows of that case need the full-width top bar.
+        landscapeCompact = MeloNowPlayingPolicy.landscapeCompact(layout, metrics.windowHeightDp) &&
+            activity.resources.configuration.fontScale <= COMPACT_MAX_FONT_SCALE
+        // Left column = 45% of the window minus three screen margins (the margins around and between the columns).
+        val columnPx = (metrics.windowWidthDp * d.density - c.sizes.screenMargin * 3) * 0.45f
+        compactLabelHidden = columnPx < COMPACT_LABEL_MIN_DP * d.density
         playFeedbackView = MeloPlayFeedbackView(activity, c, host)
         transportPx = maxOf(c.sizes.minTouch, (MeloNowPlayingPolicy.transportHeightDp(metrics.windowHeightDp) * d.density).toInt())
-        title = c.text("", s.playerTitleText, p.text, bold = true, maxLines = 2)
+        title = c.text("", s.playerTitleText, p.text, bold = true, maxLines = if (landscapeCompact) 3 else 2)
         source = c.text("", s.titleText, p.textSecondary, maxLines = 1)
         qualityChips = MeloQualityChipRow(activity, c, s.minTouch * 2 / 3).apply { visibility = View.GONE }
         qualityNote = c.text("", s.secondaryText, p.textSecondary, maxLines = 3).apply { visibility = View.GONE }
@@ -245,8 +263,24 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         val scroll = ScrollView(activity).apply { isFillViewport = true }
         val player = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         player.addView(topBar(), matchWrap())
-        player.addView(artHost, LinearLayout.LayoutParams(0, 0).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = s.gap })
-        addPlayerBody(player)
+        if (landscapeCompact) {
+            // Low window: cover beside the title, so the Đảo / Lặp / Lưu row keeps its place on screen.
+            val mediaRow = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                isBaselineAligned = false
+            }
+            mediaRow.addView(artHost, LinearLayout.LayoutParams(0, 0).apply { marginEnd = s.gap * 2 })
+            val titleBox = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
+            addTitleBlock(titleBox, titleTopMargin = 0)
+            mediaRow.addView(titleBox, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            player.addView(mediaRow, matchWrap().apply { topMargin = s.gap })
+            fitMediaRow = mediaRow
+            addExtras(player)
+        } else {
+            player.addView(artHost, LinearLayout.LayoutParams(0, 0).apply { gravity = Gravity.CENTER_HORIZONTAL; topMargin = s.gap })
+            addPlayerBody(player)
+        }
         scroll.addView(player)
         val left = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         left.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -334,7 +368,8 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         playerTight = tight
         updateQualityVisibility()
         val top = if (tight) s.gap else s.gap * 2
-        listOf<View>(title, extrasBox).forEach { v ->
+        // In the compact landscape form the title sits beside the cover and has no top margin to trim.
+        (if (landscapeCompact) listOf<View>(extrasBox) else listOf<View>(title, extrasBox)).forEach { v ->
             (v.layoutParams as LinearLayout.LayoutParams).topMargin = top
             v.requestLayout()
         }
@@ -374,6 +409,14 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
                 chip.measuredWidth
             }
             arrangeExtras(MeloNowPlayingPolicy.extrasStacked(inner, widths, s.gap))
+            val mediaRow = fitMediaRow
+            if (landscapeCompact && mediaRow != null) {
+                // Always the tight form; "rest" is everything but the media row, so the cover takes what is left.
+                applyTight(true)
+                val restWithoutMedia = MeloArtFit.restHeight(column, mediaRow, inner)
+                sizeArt(MeloNowPlayingPolicy.artSide(inner / 2, h, restWithoutMedia, s.rowArt))
+                return@post
+            }
             applyTight(false)
             var rest = MeloArtFit.restHeight(column, artHost, inner)
             if (MeloNowPlayingPolicy.playerTight(h, rest, s.rowArt)) {
@@ -384,7 +427,31 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         }
     }
 
-    private fun topBar(): View = LinearLayout(activity).apply {
+    /** Low landscape window: ˅, the "Đang phát" label (if the column is wide enough), EQ and Hẹn giờ on one row. */
+    private fun compactTopBar(): View = LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        isBaselineAligned = false
+        minimumHeight = s.minTouch
+        addView(c.iconButton("˅", "Đóng màn Đang phát") { dismiss() }.apply { background = null; setTextColor(p.text) })
+        if (compactLabelHidden) {
+            addView(View(activity), LinearLayout.LayoutParams(0, 0, 1f))
+        } else {
+            addView(c.text("Đang phát", s.titleText, p.textSecondary, maxLines = 1).apply {
+                ellipsize = TextUtils.TruncateAt.END
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        eqChip = c.chip("EQ", false) { openEq() }.apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+        renderEqChip()
+        addView(eqChip, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        sleep = c.chip("Hẹn giờ", false) { showSleepMenu(sleep) }.apply {
+            contentDescription = "Hẹn giờ tắt nhạc"; maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+        }
+        addView(sleep, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            .apply { marginStart = s.gap })
+    }
+
+    private fun topBar(): View = if (landscapeCompact) compactTopBar() else LinearLayout(activity).apply {
         orientation = LinearLayout.VERTICAL
         addView(LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
@@ -412,13 +479,22 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
     }
 
     private fun addPlayerBody(column: LinearLayout) {
-        column.addView(title, matchWrap().apply { topMargin = s.gap * 2 })
+        addTitleBlock(column, titleTopMargin = s.gap * 2)
+        addExtras(column)
+    }
+
+    /** Title, channel, quality pills, download note and play feedback: the text part of the player block. */
+    private fun addTitleBlock(column: LinearLayout, titleTopMargin: Int) {
+        column.addView(title, matchWrap().apply { topMargin = titleTopMargin })
         column.addView(source, matchWrap().apply { topMargin = s.gap / 2 })
         column.addView(qualityChips, matchWrap().apply { topMargin = s.gap })
         // UI-05: a status line ("Tạm dừng", "Đang kiểm tra…") keeps a full gap from the pills above it.
         column.addView(qualityNote, matchWrap().apply { topMargin = s.gap })
         column.addView(playFeedbackView, matchWrap().apply { topMargin = s.gap / 2 })
+    }
 
+    /** The Đảo / Lặp / Lưu chips (one row, or two when the column is narrow). */
+    private fun addExtras(column: LinearLayout) {
         shuffle = c.chip("⇄ Đảo", false) { host.toggleShuffle(); refresh() }
         repeat = c.chip("↻ Lặp", false) { host.cycleRepeat(); refresh() }
         favorite = c.chip("☆ Lưu", false) { host.toggleFavorite(); refresh() }
@@ -453,7 +529,8 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         artHost.layoutParams = current.apply {
             width = side
             height = side
-            topMargin = s.gap
+            // Beside the title the gap above belongs to the media row, which "rest" already counts.
+            topMargin = if (landscapeCompact) 0 else s.gap
         }
         artKey = null
         artHost.requestLayout()
