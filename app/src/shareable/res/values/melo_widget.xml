@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_name">MeloVault · Đang phát</string>
+    <string name="widget_description">Bìa, bài hát và điều khiển phiên đang phát của MeloVault</string>
+    <string name="widget_default_title">MeloVault</string>
+    <string name="widget_empty_hint">Mở ứng dụng để chọn bài</string>
+    <string name="widget_open_library">Mở MeloVault để chọn bài</string>
+    <string name="widget_open_player">Mở màn Đang phát</string>
+    <string name="widget_previous">Bài trước</string>
+    <string name="widget_next">Bài tiếp</string>
+    <string name="widget_play">Phát</string>
+    <string name="widget_pause">Tạm dừng</string>
+    <string name="widget_replay">Phát lại</string>
+    <style name="MeloWidgetButton">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:minWidth">48dp</item>
+        <item name="android:padding">12dp</item>
+        <item name="android:background">@drawable/melo_widget_button</item>
+        <item name="android:tint">#F8FAFC</item>
+        <item name="android:enabled">false</item>
+        <item name="android:alpha">0.28</item>
+    </style>
+</resources>

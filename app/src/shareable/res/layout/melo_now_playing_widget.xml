@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:padding="8dp"
+    android:background="@drawable/melo_widget_background">
+    <LinearLayout android:id="@+id/widget_header" android:layout_width="match_parent"
+        android:layout_height="0dp" android:layout_weight="1" android:gravity="center_vertical"
+        android:minHeight="56dp" android:orientation="horizontal"
+        android:contentDescription="@string/widget_open_library">
+        <ImageView android:id="@+id/widget_cover" android:layout_width="56dp" android:layout_height="56dp"
+            android:src="@drawable/ic_music_note" android:scaleType="centerCrop"
+            android:importantForAccessibility="no" />
+        <LinearLayout android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+            android:layout_marginStart="12dp" android:orientation="vertical">
+            <TextView android:id="@+id/widget_title" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="@string/widget_default_title" android:textColor="#F8FAFC" android:textSize="16sp"
+                android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
+            <TextView android:id="@+id/widget_performer" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="@string/widget_empty_hint" android:textColor="#CBD5E1" android:textSize="13sp"
+                android:maxLines="1" android:ellipsize="end" />
+        </LinearLayout>
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="48dp" android:orientation="horizontal">
+        <ImageButton android:id="@+id/widget_previous" style="@style/MeloWidgetButton"
+            android:src="@drawable/ic_skip_previous" android:contentDescription="@string/widget_previous" />
+        <ImageButton android:id="@+id/widget_play_pause" style="@style/MeloWidgetButton"
+            android:src="@drawable/ic_play_arrow" android:contentDescription="@string/widget_play" />
+        <ImageButton android:id="@+id/widget_next" style="@style/MeloWidgetButton"
+            android:src="@drawable/ic_skip_next" android:contentDescription="@string/widget_next" />
+    </LinearLayout>
+</LinearLayout>
