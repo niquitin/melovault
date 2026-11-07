@@ -1,5 +1,16 @@
 # HANDOFF — MeloVault (Shareable Preview)
-## Cập nhật tích hợp 07/11/2026 — WIDGET ĐANG PHÁT MERGED (ƯU TIÊN CAO NHẤT)
+## Cập nhật tích hợp 07/11/2026 — BẢN BETA BẠN BÈ (.open) MERGED (ƯU TIÊN CAO NHẤT)
+
+- **2026-11-07-phat-hanh-beta: ĐẠT — PASS kèm giới hạn.** Chủ dự án nhắn "đạt" trong chat 07/11 sau khi tự thử trên điện thoại riêng; [sơ bộ vòng 1–2](docs/plans/2026-11-07-phat-hanh-beta-nghiem-thu-so-bo.md) không phát hiện lỗi chặn (Q4–Q7 trên Sony BLOCKED vì chưa đăng nhập); [biên bản nghiệm thu](docs/plans/2026-11-07-phat-hanh-beta-nghiem-thu.md).
+- Nội dung (chỉ khi `-PmeloOpen=true`): tên launcher `MeloVault` qua `resValue` (bản riêng giữ `MeloVault Preview`), `MeloPublicBuildPolicy` (nhãn và dòng "không chính thức", liên kết Quyền riêng tư, ẩn QR, ẩn công cụ nhà phát triển), danh sách giấy phép theo cây phụ thuộc + toàn văn Apache 2.0/Boost, quy tắc sao lưu riêng cho Shareable (loại DB thư viện và prefs có định danh). Giữ khóa debug tạm của Tiny, vc122.
+- Gate Ni (source `a0694c0`): Debug/Release mỗi biến thể 209 suite, **2.824 test**, 21 skipped, 0 lỗi. Không chạy lại sau merge: nhánh tích hợp `01349d6` là tổ tiên của nhánh nhiệm vụ nên cây sau merge giống nhánh nhiệm vụ.
+- **APK beta:** Release `app.melovault.player.open` vc122 `0.6.97-open`, 31.051.460 B, SHA-256 `54AB04C8A0F4418B379EA2DA19FFE281283D84E4A46B5DE90BE7DD8FDFC42CCF`, cert `eecd3df7…fce8`, không debuggable, không chứa hash cặp API riêng ([apk-test](docs/plans/2026-11-07-phat-hanh-beta-apk-test.md)). Đang cài trên Sony (chưa đăng nhập). **Tuyệt đối không đăng `app.melovault.player`.**
+- **Merge `--no-ff`:** `cce562f`, parent `01349d6` + `7a7d160`, vào `feature/e93-03d-y700-offline-cockpit`; push fast-forward lên `github` `source/feature-e93-03d-y700-offline-cockpit` theo chỉ thị 02/11. Không đụng `main`, không đẩy `dot/*`.
+- **Đăng (kế hoạch mục 4):** agent chuẩn bị Release nháp `v0.6.97-open-beta` và PR trang từ nhánh `site/beta-0.6.97`; **chủ dự án tự bấm Publish Release trước, rồi Merge PR trang**. Trạng thái thực tế ghi ở [bàn giao](docs/plans/2026-11-07-phat-hanh-beta-ban-giao.md).
+- **Giới hạn:** agent chưa có bằng chứng Q4–Q7 và âm thanh thật trên `.open`; sao lưu chưa thử `bmgr`; máy mới cài từ đầu chưa kiểm; rủi ro điều khoản tin tài trợ Telegram chưa chốt; đổi khóa ký sau này bạn bè phải gỡ app. Chấp nhận giữ: hai nút mã API ở màn đăng nhập, nhãn "Thử nghiệm" ở Đồng bộ, ghi nhận G1–G7.
+- Hồ sơ: [kế hoạch](docs/plans/2026-11-07-phat-hanh-beta.md), [báo cáo](docs/plans/2026-11-07-phat-hanh-beta-bao-cao.md). Nhánh `dot/2026-11-07-phat-hanh-beta`, worktree `D:\Bots\_worktrees\MeloVault-phat-hanh-beta` giữ nguyên.
+
+## Cập nhật tích hợp 07/11/2026 — WIDGET ĐANG PHÁT MERGED
 
 - **2026-11-03-widget-dang-phat: ĐẠT — PASS kèm giới hạn.** Chủ dự án nhắn "ĐẠT widget" trong chat 07/11, sau [sơ bộ vòng 2](docs/plans/2026-11-03-widget-dang-phat-nghiem-thu-so-bo.md) kết luận không phát hiện lỗi chặn; [biên bản nghiệm thu](docs/plans/2026-11-03-widget-dang-phat-nghiem-thu.md).
 - Nội dung: widget Đang phát trên Home (bìa, tên, ca sĩ, Trước / Phát-Tạm dừng / Tiếp, chạm thẻ mở màn Đang phát), chỉ ở Shareable; chặn Tiếp 2 giây không bị mở sớm khi đổi metadata; bài chọn lúc service chưa có được chuyển queue và kiểm owner trước khi phát.
