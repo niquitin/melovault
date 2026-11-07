@@ -29,6 +29,18 @@ class MeloNowPlayingPolicyTest {
     }
 
     @Test
+    fun lowLandscapeWindowGetsTheCompactDeck() {
+        assertTrue(MeloNowPlayingPolicy.landscapeCompact(DeckLayout.LANDSCAPE, 411))
+        assertTrue(MeloNowPlayingPolicy.landscapeCompact(DeckLayout.LANDSCAPE, 499))
+        assertFalse(MeloNowPlayingPolicy.landscapeCompact(DeckLayout.LANDSCAPE, 500))
+        assertFalse(MeloNowPlayingPolicy.landscapeCompact(DeckLayout.LANDSCAPE, 642))
+        assertFalse(MeloNowPlayingPolicy.landscapeCompact(DeckLayout.PORTRAIT, 411))
+        // The sideways Sony window is compact; the head unit and tablet windows are not.
+        assertTrue(MeloNowPlayingPolicy.landscapeCompact(MeloNowPlayingPolicy.deckLayout(912, 411), 411))
+        assertFalse(MeloNowPlayingPolicy.landscapeCompact(MeloNowPlayingPolicy.deckLayout(782, 642), 642))
+    }
+
+    @Test
     fun deckIsTwoColumnsWhenWiderThanTallAndAtLeast600dp() {
         // FYT 7870 windows (owner video 2026-10-19) and the Sony sideways window.
         assertEquals(DeckLayout.LANDSCAPE, MeloNowPlayingPolicy.deckLayout(1179, 642))

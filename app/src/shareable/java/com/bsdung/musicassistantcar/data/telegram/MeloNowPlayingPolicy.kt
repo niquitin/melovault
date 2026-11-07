@@ -38,6 +38,13 @@ internal object MeloNowPlayingPolicy {
         if (widthDp > heightDp && widthDp >= MeloScreenPolicy.TABLET_MIN_WIDTH_DP) DeckLayout.LANDSCAPE
         else DeckLayout.PORTRAIT
 
+    /** Two-column window below this height (a phone on its side) gets the cover beside the title. */
+    const val LANDSCAPE_COMPACT_MAX_HEIGHT_DP = 500
+
+    /** True for a two-column deck in a low window; taller landscape windows (tablet, car 642dp) keep the stacked form. */
+    fun landscapeCompact(layout: DeckLayout, windowHeightDp: Int): Boolean =
+        layout == DeckLayout.LANDSCAPE && windowHeightDp < LANDSCAPE_COMPACT_MAX_HEIGHT_DP
+
     enum class SleepOption(val minutes: Int, val label: String) {
         OFF(0, "Tắt hẹn giờ"),
         M15(15, "15 phút"),
