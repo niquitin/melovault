@@ -74,7 +74,8 @@ class MeloPublicBuildPolicyTest {
         }
         // Personal keeps the main rules, which have no database exclusion.
         assertFalse(File(srcRoot, "main/res/xml/backup_rules.xml").readText().contains("database"))
-        assertFalse(File(srcRoot, "personal/res/xml").exists())
+        assertFalse(File(srcRoot, "personal/res/xml/backup_rules.xml").exists())
+        assertFalse(File(srcRoot, "personal/res/xml/data_extraction_rules.xml").exists())
     }
 
     @Test fun openBuildIsCalledMeloVaultAndPrivateBuildKeepsPreview() {

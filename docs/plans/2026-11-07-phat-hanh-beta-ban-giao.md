@@ -16,7 +16,8 @@
 |---|---|---|
 | Sơ bộ Widget | Xong: không phát hiện lỗi chặn | [Biên bản](2026-11-03-widget-dang-phat-nghiem-thu-so-bo.md) |
 | Chủ dự án ĐẠT Widget | Xong | [Nghiệm thu](2026-11-03-widget-dang-phat-nghiem-thu.md); merge `7ce38ec`, đã push |
-| S0–S8 | Chưa làm | Phiên thực thi mới |
+| S0–S5 | **Xong** (07/11/2026, Sonnet 5.5): gate Ni 209 suite, 2.823 test, 21 skipped, 0 lỗi | [Báo cáo](2026-11-07-phat-hanh-beta-bao-cao.md) |
+| S6–S8 | **Chưa làm** | Build Tiny + gate APK, QA Sony, bàn giao |
 | Sơ bộ, ĐẠT, chuẩn bị đăng | Chưa làm | Kế hoạch mục 4 |
 
 **Sony:** đang cài APK widget `58BD55F0…` (`app.melovault.player`), widget để sẵn trên Home, nhạc tạm dừng, Display State=OFF.
