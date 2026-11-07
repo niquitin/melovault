@@ -1,5 +1,19 @@
 # HANDOFF — MeloVault (Shareable Preview)
-## Cập nhật tích hợp 07/11/2026 — SỬA BỘ LỌC, CHIP THỂ LOẠI, ĐANG PHÁT NGANG MERGED (ƯU TIÊN CAO NHẤT)
+## Cập nhật tích hợp 07/11/2026 — WIDGET ĐANG PHÁT MERGED (ƯU TIÊN CAO NHẤT)
+
+- **2026-11-03-widget-dang-phat: ĐẠT — PASS kèm giới hạn.** Chủ dự án nhắn "ĐẠT widget" trong chat 07/11, sau [sơ bộ vòng 2](docs/plans/2026-11-03-widget-dang-phat-nghiem-thu-so-bo.md) kết luận không phát hiện lỗi chặn; [biên bản nghiệm thu](docs/plans/2026-11-03-widget-dang-phat-nghiem-thu.md).
+- Nội dung: widget Đang phát trên Home (bìa, tên, ca sĩ, Trước / Phát-Tạm dừng / Tiếp, chạm thẻ mở màn Đang phát), chỉ ở Shareable; chặn Tiếp 2 giây không bị mở sớm khi đổi metadata; bài chọn lúc service chưa có được chuyển queue và kiểm owner trước khi phát.
+- **Gate chạy lại trên bản gộp** `7ce38ec` (cây khác cả hai nhánh nguồn): Debug/Release mỗi biến thể 208 suite, **2.815 test**, 21 skipped, 0 failures, 0 errors; assemble Shareable Debug/Release, `-PmeloOpen=true` Debug, Personal Debug BUILD SUCCESSFUL.
+- APK được duyệt: Debug vc122 / 0.6.97-beta, 33.937.332 B, SHA-256 `58BD55F0B5C22A256E6572516C277A3049A617F853A1830B30280F70AD48FD07`, source `be61487`, đang cài trên Sony ([apk-test](docs/plans/2026-11-03-widget-dang-phat-apk-test.md), [hình](docs/plans/2026-11-03-widget-dang-phat-hinh-nghiem-thu.md)). **Chưa phải bản phát hành. APK này chưa có các bản sửa ngày 07/11; bản gộp chưa có APK và chưa QA trên máy.**
+- **Merge `--no-ff` thành công:** `7ce38ec94ec58eb7b96e4acde787775ceddb3319`, parent `a982a9a` + `9c42f88`, vào `feature/e93-03d-y700-offline-cockpit`. Xung đột duy nhất ở `HANDOFF.md`; mã tự hợp nhất. Nhánh nguồn và worktree `C:/Users/ntdun/.codex/worktrees/melovault-widget/MeloVault-E91-Shareable` được giữ nguyên.
+- **Push mã 07/11/2026** theo chỉ thị thường trực ngày 02/11: fast-forward lên remote `github`, nhánh **`source/feature-e93-03d-y700-offline-cockpit`** (trước push remote = `a982a9a`; đẩy hai lần, merge rồi đến commit HANDOFF này). Không đụng `main`, không đẩy nhánh `dot/*`.
+- **Đã biết, chủ dự án duyệt khi còn các điểm này:** widget trên launcher Xperia mặc định 3×3, cao và trống nhiều ở giữa, chỉ kéo được ngang; "Nghe tiếp" với bài ngoài danh sách đang hiện có hàng đợi 1 bài, nút Tiếp/Trước tắt và ⏭ trong app không chuyển bài (suy luận không do widget, chưa thử trên APK baseline).
+- **Giới hạn giữ nguyên:** **chưa xác nhận âm thanh thực bởi agent**; chữ lớn, TalkBack, API 30, màn cũ, Shuffle, Y700, S25, FYT, Release và `.open` chạy trên máy chưa kiểm.
+- **Lịch sử git:** đã bỏ tên bài khỏi báo cáo widget, nhưng các commit cũ của nhánh vẫn chứa, và một số hồ sơ công khai trước đây cũng có tên bài. Không viết lại lịch sử.
+- **Việc tiếp:** phát hành beta cho bạn bè, kế hoạch trên nhánh `dot/2026-11-07-phat-hanh-beta` (worktree `D:\Bots\_worktrees\MeloVault-phat-hanh-beta`); chưa code.
+- Hồ sơ: [kế hoạch](docs/plans/2026-11-03-widget-dang-phat.md), [báo cáo](docs/plans/2026-11-03-widget-dang-phat-bao-cao.md), [checkpoint](docs/plans/2026-11-03-widget-dang-phat-ban-giao.md). Nhánh `dot/2026-11-03-widget-dang-phat`.
+
+## Cập nhật tích hợp 07/11/2026 — SỬA BỘ LỌC, CHIP THỂ LOẠI, ĐANG PHÁT NGANG MERGED
 
 - **2026-11-07-sua-bo-loc-dang-phat-ngang: ĐẠT — PASS kèm giới hạn.** Chủ dự án nhắn "ĐẠT, giữ N1" trong chat 07/11, sau [nghiệm thu sơ bộ độc lập](docs/plans/2026-11-07-sua-bo-loc-dang-phat-ngang-nghiem-thu-so-bo.md) kết luận không phát hiện lỗi chặn; [biên bản nghiệm thu](docs/plans/2026-11-07-sua-bo-loc-dang-phat-ngang-nghiem-thu.md).
 - Nội dung: bỏ nút ☰ Bộ lọc ở kiểu mặc định và màn Gọn (Teal giữ; lệch ui-spec có chủ ý, đã ghi vào `docs/ui-spec.md`); chạm lại chip thể loại để bỏ lọc và xóa ô tìm (`MeloLibraryPolicy.toggledGenre`); EQ và Hẹn giờ thẳng hàng; Đang phát cửa sổ ngang cao < 500 dp đặt bìa cạnh tên, EQ và Hẹn giờ cùng hàng nút đóng, tên tối đa 3 dòng (`MeloStudioDeck.landscapeCompact`; font > 1,3 giữ dạng cũ). Không đổi versionCode, service, Media3, DB, TDLib, package, signer.
