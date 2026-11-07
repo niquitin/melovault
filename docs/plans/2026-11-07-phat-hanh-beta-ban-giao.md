@@ -1,5 +1,9 @@
 # Bàn giao — Phát hành bản beta cho bạn bè
 
+## Checkpoint sơ bộ · 07/11/2026 · Claude Code, Opus 5.5, phiên mới
+
+**SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN** (code S1–S4, gate APK tự kiểm lại, cài Sony không đụng `app.melovault.player`, Q1–Q3, Q8). **Q4–Q7 vẫn BLOCKED** chờ chủ dự án đăng nhập bản `.open`. Biên bản: [nghiem-thu-so-bo](2026-11-07-phat-hanh-beta-nghiem-thu-so-bo.md) (7 ghi nhận nhỏ G1–G7, không chặn). Không sửa code, không build, không cài, không đăng; Sony chỉ đọc `dumpsys`, `Display State=OFF`. **CHỜ CHỦ DỰ ÁN NGHIỆM THU.** Sau ĐẠT: làm kế hoạch mục 4 (chuẩn bị đăng; chủ dự án tự bấm Publish/Merge).
+
 ## Checkpoint cuối thực thi · 07/11/2026 · Claude Code, Sonnet 5.5, phiên GỘP (S0–S8)
 
 **Thực thi xong về kỹ thuật. Chờ phiên nghiệm thu sơ bộ mới, rồi chủ dự án nghiệm thu.** Q4–Q7 BLOCKED vì Sony chưa đăng nhập bản `.open`. Chưa đăng, chưa tag, chưa Release.
