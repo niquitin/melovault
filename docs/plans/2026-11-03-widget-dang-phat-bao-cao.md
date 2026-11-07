@@ -37,8 +37,8 @@ Sony XQ-AS52 `QV725WEQ54`, Android 12, launcher Xperia. Trước cài: vc122 (b�
 | Sửa 2 | `MeloWidgetFixesDeviceTest` chạy riêng: dừng service, chọn bài, nối lại controller | `pending_without_service=true`, `handoff_ok=true queue=200 state=3`, `widgetCanOpenPlayer` true. Bài chọn trong lúc service vắng mặt lên đúng owner và queue | PASS |
 | Sửa 1 | Cùng test: bấm Tiếp, đổi metadata A, bấm lại bằng token cũ rồi token mới, trong một khối main thread | Token đổi; token cũ và token mới đều không tạo lượt Tiếp thứ hai (`nextAt` giữ nguyên) | PASS |
 | Q1 | Bộ chọn, kéo ra Home | Đúng tên và preview; trống, 3 nút tắt | PASS |
-| Q2 | Bài có bìa và ca sĩ; Tạm dừng/Phát từ widget; phím media và nút trong app | `( NHÓM THÁNG )…` / `MINH QUANG` có bìa thật; `Total Immersion` / `Akira Inoue` có bìa thật. Tạm dừng tại 54.319 ms, 2 giây sau vẫn 54.319, Phát tiếp 54.435. Nút không mở Activity. Phím media và nút app đổi đúng biểu tượng widget | PASS |
-| Q3 | Tiếp, Bài trước, biên, bấm nhanh, B chưa tải, bài cục bộ | Đúng thứ tự trong Đã tải; bài đầu tắt Bài trước, bài cuối tắt Tiếp. Bấm Tiếp 2 lần nhanh chỉ sang 1 bài (đã đối chiếu bằng Bài trước). B chưa tải phát được (`QUÁ BẢNH…`, vị trí tăng). B thiếu bìa/ca sĩ không giữ của A (`#3 Up` có bìa → `#Bản nháp 1` nốt nhạc, `Chưa rõ ca sĩ`) | PASS |
+| Q2 | Bài có bìa và ca sĩ; Tạm dừng/Phát từ widget; phím media và nút trong app | Một bài Telegram và một bài trên máy, đều đúng tên, ca sĩ và bìa thật. Tạm dừng tại 54.319 ms, 2 giây sau vẫn 54.319, Phát tiếp 54.435. Nút không mở Activity. Phím media và nút app đổi đúng biểu tượng widget | PASS |
+| Q3 | Tiếp, Bài trước, biên, bấm nhanh, B chưa tải, bài cục bộ | Đúng thứ tự trong Đã tải; bài đầu tắt Bài trước, bài cuối tắt Tiếp. Bấm Tiếp 2 lần nhanh chỉ sang 1 bài (đã đối chiếu bằng Bài trước). B chưa tải phát được (vị trí tăng). B thiếu bìa/ca sĩ không giữ của A (A có bìa → B hiện nốt nhạc, `Chưa rõ ca sĩ`) | PASS |
 | Q4 | Chạm thẻ khi đang phát, khi tạm dừng; Back | Mở Studio Deck đúng bài; tạm dừng giữ nguyên 20.511 ms, không tự phát; Back về danh sách | PASS |
 | Q5 | Hai widget, kéo rộng, đổi bài và tạm dừng từ từng bản | Hai bản cùng bài, cùng nút; bản rộng đổi bố cục, chữ không đè nút; gỡ một bản, bản kia vẫn điều khiển được | PASS, xem giới hạn |
 | Q6 | Gỡ widget cuối khi đang phát, thêm lại | Sau gỡ `widgets=0`, nhạc vẫn chạy (14.809 → 21.063 ms); thêm lại hiện đúng bài, nút Tạm dừng, vị trí 35.981 ms | PASS |
@@ -46,7 +46,7 @@ Sony XQ-AS52 `QV725WEQ54`, Android 12, launcher Xperia. Trước cài: vc122 (b�
 
 Log crash của app: `fatal=0` trong suốt lượt QA. Ảnh: [hồ sơ ảnh](2026-11-03-widget-dang-phat-hinh-nghiem-thu.md).
 
-**Một lần đọc kết quả cần giải thích:** ở nhạc trên máy, Tiếp từ `Bee Moved` đến `Total Immersion` qua `ringtone`, bài dài 940 ms theo MediaStore, nên tự chuyển ngay. Không phải widget nhảy 2 bài.
+**Một lần đọc kết quả cần giải thích:** ở nhạc trên máy, Tiếp sang một tệp nhạc chuông dài 940 ms theo MediaStore nên tự chuyển ngay sang bài sau. Không phải widget nhảy 2 bài.
 
 **Một lần test không đạt, chỉ do cách chạy:** chạy cả lớp `MeloWidgetFixesDeviceTest` thì test bài chờ báo `BLOCKED/FAIL: playback service gone`, vì Activity của test trước còn giữ controller nên service không dừng. Test Tiếp vẫn đạt. Chạy riêng test bài chờ thì `OK (1 test)`. Khi chạy lại phải chạy từng test một, hoặc sửa test để đóng Activity.
 
@@ -54,7 +54,7 @@ Log crash của app: `fatal=0` trong suốt lượt QA. Ảnh: [hồ sơ ảnh](
 
 - **Kích thước trên Xperia:** bộ chọn báo 3×3 thay vì 4×2 như kế hoạch, widget cao và trống nhiều ở giữa. Chỉ kéo được ngang (`resizeMode=horizontal`), không thu nhỏ dưới 3 cột. Chủ dự án nên xem bằng mắt.
 - Bìa sát mép trái vùng nội dung của widget.
-- Bài có trùng tên liền nhau trên widget khó phân biệt (`Qua Cam Làm Giàu.mp3` lần Tiếp cuối). Vị trí về 0 cho thấy đã chuyển bài.
+- Bài có trùng tên liền nhau trên widget khó phân biệt (gặp ở lần Tiếp cuối). Vị trí về 0 cho thấy đã chuyển bài.
 - Khi chạm thẻ để mở app sau lúc tiến trình mới khởi động, bài `Nghe tiếp` hiện ở mini player, widget vẫn trống cho tới khi phát thật. Đúng với thiết kế không tự phát.
 
 ### Chưa kiểm chứng

@@ -1,5 +1,9 @@
 # Bàn giao — Widget Đang phát
 
+## Checkpoint nghiệm thu chính thức · 07/11/2026 · Claude Code, Opus 5.5
+
+**ĐẠT — PASS kèm giới hạn**, chủ dự án nhắn "ĐẠT widget". [Biên bản](2026-11-03-widget-dang-phat-nghiem-thu.md). Đã bỏ tên bài trong `-bao-cao.md`. Trạng thái merge/push: mục đầu `HANDOFF.md` trên nhánh tích hợp.
+
 ## Checkpoint sơ bộ sau REWORK · 07/11/2026 · Claude Code, Opus 5.5
 
 **SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN**, vòng 2 của [biên bản](2026-11-03-widget-dang-phat-nghiem-thu-so-bo.md). **CHỜ CHỦ DỰ ÁN NGHIỆM THU.** Chủ dự án muốn gom widget vào bản beta sau khi duyệt. Sony đang cài APK `58BD55F0…`, widget để sẵn trên Home, nhạc tạm dừng, Display State=OFF. **Trước khi merge:** bỏ tên bài trong `-bao-cao.md` (O3), giải xung đột `HANDOFF.md`, chạy lại gate vì bản gộp khác cả hai nhánh.
