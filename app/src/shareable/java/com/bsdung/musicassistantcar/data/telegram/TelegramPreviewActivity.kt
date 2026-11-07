@@ -3224,7 +3224,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         }
         titleColumn.addView(titleHeader)
         syncSubtitle = TextView(this).apply {
-            text = "Telegram · Nhạc cá nhân · Preview"
+            text = MeloPublicBuildPolicy.headerSubtitle(BuildConfig.MELO_OPEN_BUILD)
             textSize = 11f
             setTextColor(subtle)
             maxLines = 1
@@ -3240,7 +3240,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
         overflowButton = overflow
         topBar.addView(overflow, LinearLayout.LayoutParams(dp(49), dp(47)))
         note = TextView(this).apply {
-            text = "TELEGRAM  ·  NHẠC CÁ NHÂN  ·  PREVIEW"
+            text = MeloPublicBuildPolicy.eyebrow(BuildConfig.MELO_OPEN_BUILD)
             textSize = 10f
             letterSpacing = 0.12f
             setTextColor(accent)
@@ -8011,7 +8011,7 @@ class TelegramPreviewActivity : AppCompatActivity() {
             }
             "authorizationStateWaitRegistration" -> {
                 auth.onNativeState(authEpoch, TelegramAuthStep.WAIT_REGISTRATION)
-                showMessage("Tài khoản mới cần đăng ký; bản Preview chưa hỗ trợ.")
+                showMessage(MeloPublicBuildPolicy.waitRegistrationMessage(BuildConfig.MELO_OPEN_BUILD))
             }
             "authorizationStateReady" -> {
                 runOnUiThread {

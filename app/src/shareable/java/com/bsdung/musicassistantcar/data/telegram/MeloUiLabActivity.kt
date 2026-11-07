@@ -232,7 +232,7 @@ class MeloUiLabActivity : AppCompatActivity() {
         title = "Cài đặt"
         // The window is always edge to edge here; render() gives the bars their room explicitly, on every Android version.
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        devUnlocked = MeloSettingsPolicy.loadDevUnlocked(prefs)
+        devUnlocked = MeloPublicBuildPolicy.developerToolsAvailable(BuildConfig.MELO_OPEN_BUILD, MeloSettingsPolicy.loadDevUnlocked(prefs))
         page = Page.fromName(savedInstanceState?.getString(STATE_PAGE) ?: intent.getStringExtra(EXTRA_PAGE), devUnlocked)
         infoExpanded = savedInstanceState?.getBoolean(STATE_INFO_EXPANDED, false) ?: false
         // A sub page goes back to its parent page; only the main page closes the screen.
@@ -307,7 +307,7 @@ class MeloUiLabActivity : AppCompatActivity() {
         val p = components.palette
 
         // The developer tools can be hidden while a saved page or an intent still points at them: fall back to the main page.
-        devUnlocked = MeloSettingsPolicy.loadDevUnlocked(prefs)
+        devUnlocked = MeloPublicBuildPolicy.developerToolsAvailable(BuildConfig.MELO_OPEN_BUILD, MeloSettingsPolicy.loadDevUnlocked(prefs))
         if (page.needsDevTools && !devUnlocked) page = Page.HOME
 
         // Both system bars take the page colour, so the bar area and the page read as one surface in every colour theme.
@@ -731,10 +731,17 @@ class MeloUiLabActivity : AppCompatActivity() {
             rows += row(R.drawable.ic_mail, "Góp ý qua email", subtitle = MeloAboutPolicy.FEEDBACK_EMAIL) { sendFeedback() }
         }
         content.addView(group(null, rows))
-        content.addView(group(null, listOf(
+        val legalRows = mutableListOf(
             row(R.drawable.ic_shield, "Quyền riêng tư") { openPage(Page.PRIVACY) },
             row(R.drawable.ic_description, "Giấy phép mã nguồn mở") { openPage(Page.LICENSES) }
-        )))
+        )
+        if (MeloPublicBuildPolicy.showUnofficialNotice(BuildConfig.MELO_OPEN_BUILD)) {
+            content.addView(note(MeloPublicBuildPolicy.UNOFFICIAL_NOTICE))
+            legalRows.add(1, row(R.drawable.ic_info, "Chính sách riêng tư trên trang web", subtitle = "niquitin.github.io/melovault") {
+                openUrl(MeloPublicBuildPolicy.PRIVACY_URL)
+            })
+        }
+        content.addView(group(null, legalRows))
         content.addView(components.text(MeloAboutPolicy.COPYRIGHT, s.secondaryText, p.textSecondary).apply {
             gravity = Gravity.CENTER
             setPadding(0, s.gap * 2, 0, s.gap)
@@ -742,6 +749,8 @@ class MeloUiLabActivity : AppCompatActivity() {
     }
 
     private fun onVersionTapped() {
+        // The open build has no developer tools: no unlock taps and no counting toast.
+        if (!MeloPublicBuildPolicy.versionTapUnlocksDeveloperTools(BuildConfig.MELO_OPEN_BUILD)) return
         val result = devTaps.tap(SystemClock.elapsedRealtime(), devUnlocked)
         if (result.unlocked) {
             MeloSettingsPolicy.saveDevUnlocked(prefs, true)

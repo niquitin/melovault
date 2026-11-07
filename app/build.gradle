@@ -182,8 +182,11 @@ android {
         shareable {
             dimension 'distribution'
             applicationId meloOpen ? 'app.melovault.player.open' : 'app.melovault.player'
-            // Owner Beta only: preserve the existing on-device signing identity.
-            // Replace with a managed release key before any public distribution.
+            // Launcher label: the open (friends beta) build drops the "Preview" wording.
+            resValue 'string', 'app_name', meloOpen ? 'MeloVault' : 'MeloVault Preview'
+            // Friends beta (owner decision 07/11/2026): temporarily keep the debug signing
+            // identity so installs stay updatable. Replace with a managed release key before
+            // the stable build; users will then have to uninstall and reinstall.
             signingConfig signingConfigs.debug
             // Beta-only bump; never alter the existing Personal Stable artifact.
             versionCode 122

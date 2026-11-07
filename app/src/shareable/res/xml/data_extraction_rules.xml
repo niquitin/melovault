@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Shareable (friends beta) backup rules, Android 12+. Replaces the main rules for this flavor only.
+  Same exclusions as backup_rules.xml, for both cloud backup and device-to-device transfer.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="melovault_secure_token.enc" />
+        <exclude domain="file" path="melovault_token_cleared.flag" />
+        <exclude domain="sharedpref" path="melovault_secure_auth.xml" />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="e91_tdlib_preview.xml" />
+        <exclude domain="sharedpref" path="melovault_resume.xml" />
+        <exclude domain="sharedpref" path="melovault_library_counts.xml" />
+        <exclude domain="sharedpref" path="melovault_local_music.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="melovault_secure_token.enc" />
+        <exclude domain="file" path="melovault_token_cleared.flag" />
+        <exclude domain="sharedpref" path="melovault_secure_auth.xml" />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="e91_tdlib_preview.xml" />
+        <exclude domain="sharedpref" path="melovault_resume.xml" />
+        <exclude domain="sharedpref" path="melovault_library_counts.xml" />
+        <exclude domain="sharedpref" path="melovault_local_music.xml" />
+    </device-transfer>
+</data-extraction-rules>
