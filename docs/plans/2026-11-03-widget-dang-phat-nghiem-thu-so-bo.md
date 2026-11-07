@@ -1,5 +1,67 @@
 # Kiểm tra sơ bộ — Widget Đang phát
 
+## Vòng 2 — sau REWORK · 07/11/2026 · Claude Code, Opus 5.5
+
+**SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN** cho source `be61487`, APK `58BD55F0…FD07`. Không phải nghiệm thu chính thức. Phiên này không tham gia viết mã widget; chủ dự án yêu cầu sơ bộ để gom widget vào bản beta.
+
+| Kiểm | Kết quả |
+|---|---|
+| Git | Cây sạch, HEAD `f8e0b25`, `git diff be61487..HEAD -- app` rỗng, `git diff --check f82185b HEAD` sạch |
+| Test | Đếm lại XML trên Ni: Debug và Release mỗi loại 208 suite, 2.812 test, 21 skipped, 0 failures, 0 errors. Không chạy lại Gradle |
+| APK | Bản trên Tiny và bản pull từ Sony cùng SHA-256 `58BD55F0B5C22A256E6572516C277A3049A617F853A1830B30280F70AD48FD07`, vc122; `adb install -r` Success, nhạc đang tạm dừng trước khi cài |
+| Gộp thử với `a982a9a` | `git merge-tree` chỉ xung đột `HANDOFF.md` |
+
+### Hai lỗi của vòng 1
+
+| Lỗi | Đọc mã | Kết luận |
+|---|---|---|
+| Đổi metadata mở sớm chặn Tiếp | `Generation.update` chỉ xóa `nextAt` khi khóa chặn đổi; khóa chặn chỉ gồm `mediaId` và owner; token vẫn đổi theo khóa hiển thị | Đã sửa theo đọc mã; thử máy dựa trên test của phiên thực thi |
+| Bài chờ kết nối thiếu queue | `handOffTelegramQueue` nạp queue rồi kiểm owner và bài có trong queue trước khi phát; không đạt thì không phát và báo chọn lại | Đã sửa theo đọc mã; thử máy dựa trên test của phiên thực thi |
+
+`ShareablePlaybackService.onDestroy` giữ cả `widgetSession.close()` và gỡ listener EQ.
+
+### Thử trên Sony ở phiên này
+
+Sony `QV725WEQ54`, XQ-AS52, launcher Xperia.
+
+| Thao tác | Kết quả |
+|---|---|
+| Bộ chọn, kéo widget ra Home | Hiện trống, 3 nút tắt, chữ "Mở ứng dụng để chọn bài" |
+| Chạm thẻ khi trống | Mở app, không tự phát |
+| Phát rồi về Home | Đúng bài, bìa thật, nút Tạm dừng |
+| Tạm dừng, Phát từ widget | Đúng: state 2 rồi 3, vị trí giữ nguyên, biểu tượng đổi đúng |
+| Chạm thẻ khi đang phát | Mở Đang phát đúng bài |
+| Chọn bài trong Đã tải, bấm Tiếp rồi Trước từ widget | Đổi đúng bài theo hai chiều, nút bật đúng, đang phát liền mạch |
+| Log crash | 0 dòng FATAL |
+
+### Cần chủ dự án để ý
+
+- **O1 — Kích thước 3×3 (đã biết, chưa sửa):** bộ chọn báo 3×3, widget cao, trống nhiều ở giữa và chỉ kéo được theo chiều ngang; kế hoạch ghi 4×2. Bạn bè sẽ thấy đúng như vậy. Vẫn dùng được.
+- **O2 — "Nghe tiếp" chỉ có 1 bài trong hàng đợi:** sau khi app khởi động lại, tiếp tục bằng "Nghe tiếp" với bài nằm ngoài danh sách đang hiện thì hàng đợi chỉ có đúng 1 bài. Nút Trước, Tiếp trên widget tắt và nút ⏭ trong app cũng không chuyển bài. Widget báo đúng trạng thái. Đường mã này không do widget đổi theo đọc diff (**suy luận, chưa thử trên APK baseline**). Không chặn widget, nhưng bạn bè có thể gặp.
+- **O3 — Tên bài trong hồ sơ:** `-bao-cao.md` mục REWORK có ghi tên bài (dòng Q2, Q3 và hai đoạn sau bảng). Repo công khai nên phải bỏ các tên này trước khi merge, không cần đổi mã.
+- APK này chưa có bản sửa ngày 07/11 (còn ☰, chưa có dạng ngang thấp), vì nhánh dựa trên `f82185b`. Bản gộp sau merge khác cả hai nhánh nên **phải chạy lại gate và QA**.
+
+### Chưa kiểm
+
+**CHƯA XÁC NHẬN ÂM THANH THỰC.** Chữ lớn, TalkBack, API 30, màn cũ, Shuffle, Y700, S25, FYT, Release và `.open` chạy trên máy chưa kiểm ở vòng này.
+
+### Trạng thái Sony khi dừng
+
+APK `58BD55F0…` đang cài, thay `7FB94021…`. **Widget được để lại trên Home** để chủ dự án tự thử; gỡ bằng cách giữ và kéo vào Xóa. Nhạc tạm dừng, xoay tự động. Bài đang chọn khác trước phiên. `SONY_SCREEN_END`: Display State=OFF. Ảnh riêng tư: `C:\Bots\_qa_temp\sobo-suabolocf054637\shots\` trên Tiny.
+
+### Chủ dự án tự thử
+
+1. Nhìn widget trên Home: có chấp nhận khung 3×3 cao và trống cho bạn bè dùng không.
+2. Trong app, chọn một bài ở Đã tải, về Home: đúng bài và bìa.
+3. Bấm Tạm dừng, Phát, Tiếp, Trước trên widget; nghe có tiếng.
+4. Chạm vào thẻ: mở đúng màn Đang phát.
+
+Đã dừng, chờ chủ dự án nghiệm thu: `ĐẠT 2026-11-03-widget-dang-phat — be61487/58BD55F0` hoặc `Yêu cầu sửa 2026-11-03-widget-dang-phat: <lỗi>`.
+
+---
+
+## Vòng 1 — lịch sử
+
 **SƠ BỘ: CẦN SỬA** · 03/11/2026 · Codex (GPT-6), phiên sơ bộ độc lập. Chặng B vẫn **BLOCKED** ở QA có bài và tải APK Drive.
 
 Nhánh `dot/2026-11-03-widget-dang-phat`. Đã kiểm Git đầu phiên trong worktree Ni ghi ở [bàn giao](2026-11-03-widget-dang-phat-ban-giao.md). Cây sạch, không có index.lock, không thấy job/agent khác gắn với nhiệm vụ. Baseline `b90834f44457b60a9732e59e59c1bc9c971368c3` → kế hoạch `1921706` → source APK `49ed94ccbd73abb2d9443828ede26c205e1e9e56` → hồ sơ thực thi `8d78b193a49b2c8c4b7dec196492b42bd451d3d7`. Đã đối chiếu diff baseline–source, diff-check và danh sách file sau source (chỉ Markdown), theo [kế hoạch](2026-11-03-widget-dang-phat.md) và [báo cáo](2026-11-03-widget-dang-phat-bao-cao.md).

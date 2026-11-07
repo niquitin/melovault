@@ -1,5 +1,9 @@
 # Bàn giao — Widget Đang phát
 
+## Checkpoint sơ bộ sau REWORK · 07/11/2026 · Claude Code, Opus 5.5
+
+**SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN**, vòng 2 của [biên bản](2026-11-03-widget-dang-phat-nghiem-thu-so-bo.md). **CHỜ CHỦ DỰ ÁN NGHIỆM THU.** Chủ dự án muốn gom widget vào bản beta sau khi duyệt. Sony đang cài APK `58BD55F0…`, widget để sẵn trên Home, nhạc tạm dừng, Display State=OFF. **Trước khi merge:** bỏ tên bài trong `-bao-cao.md` (O3), giải xung đột `HANDOFF.md`, chạy lại gate vì bản gộp khác cả hai nhánh.
+
 ## Checkpoint cuối REWORK · 06/11/2026 · Claude Code, Opus 5.5
 
 **QA CANDIDATE — CHƯA NGHIỆM THU.** Thực thi xong, chờ sơ bộ và chủ dự án. Chưa merge, chưa push.
