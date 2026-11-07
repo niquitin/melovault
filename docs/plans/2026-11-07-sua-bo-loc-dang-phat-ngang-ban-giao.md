@@ -1,10 +1,35 @@
 # Bàn giao — Sửa nút Bộ lọc, chip thể loại và màn Đang phát khi xoay ngang
 
-## Checkpoint thực thi S0–S6 · 07/11/2026 · Claude Code, Sonnet 5.5
+## Checkpoint cuối thực thi S0–S9 (phiên GỘP) · 07/11/2026 · Claude Code, Sonnet 5.5
 
-**Code và gate Ni xong; S7–S9 (build Tiny, QA Sony, bàn giao) chưa làm.** Commit: S1 `1efb96b`, S2 `701d834`, S3 `20b3011`, S4 `cb13c21`, S5 `233954f`. Gate: Debug và Release đều 207 suite, 2.799 test, 21 skipped, 0 failures, 0 errors; assemble Shareable Debug/Release, `-PmeloOpen=true` và Personal Debug đều xanh; `git diff --check` sạch. Chi tiết: [báo cáo](2026-11-07-sua-bo-loc-dang-phat-ngang-bao-cao.md). Không file chưa commit, không job chạy.
+**Thực thi xong, chờ nghiệm thu sơ bộ ở phiên mới. QA CANDIDATE — CHƯA NGHIỆM THU.** Commit code: S1 `1efb96b`, S2 `701d834`, S3 `20b3011`, S4 `cb13c21`, S5 `233954f`; source APK `f054637` (mã app trùng `233954f`). Gate Ni: Debug và Release đều 207 suite, 2.799 test, 21 skipped, 0 failures, 0 errors; assemble Shareable Debug/Release, `.open` Debug, Personal Debug xanh; `git diff --check` sạch. APK Debug 33.910.894 B, SHA-256 `7FB94021…7A24`, vc122, cert `eecd3df7…fce8`, config true, đã cài `-r` lên Sony `QV725WEQ54` và hash máy khớp. QA Sony Q1–Q6 PASS (Q6 có ghi chú 8 px ở màn dọc). Drive owner-only đã kiểm. **CHƯA XÁC NHẬN ÂM THANH THỰC.** Không file chưa commit, không job chạy, không merge/push.
 
-Bước tiếp (nếu phiên này dừng): S7 — bundle SHA-256, clone cô lập trên Tiny, build có Telegram config, kiểm APK, cài Sony `QV725WEQ54` (thay candidate widget `58BD55F0…`).
+**Bản đang cài trên Sony:** APK nhiệm vụ này (`f054637`, không widget). Candidate widget `58BD55F0…` đã bị thay; bản đó còn ở `C:\Bots\_qa_temp\sua-bo-loc-20261107-f054637\preinstall-installed.apk` trên Tiny. Nhạc đang tạm dừng, màn OFF (`SONY_SCREEN_END`), xoay màn tự động.
+
+Hồ sơ: [báo cáo](2026-11-07-sua-bo-loc-dang-phat-ngang-bao-cao.md) · [apk-test](2026-11-07-sua-bo-loc-dang-phat-ngang-apk-test.md) · [ảnh](2026-11-07-sua-bo-loc-dang-phat-ngang-hinh-nghiem-thu.md).
+
+### Chủ dự án tự thử (Sony, bản vừa cài)
+
+1. Thư viện: ô tìm không còn ☰ ở cuối.
+2. Chạm Mixset rồi chạm lại: lọc bỏ, ô tìm trống.
+3. Mở bài đang phát, xoay ngang: bìa cạnh tên, thấy đủ Đảo/Lặp/Lưu mà không cuộn.
+4. Ở màn ngang đó: EQ và Hẹn giờ thẳng hàng, chạm được.
+5. Xoay dọc lại: màn Đang phát như cũ, nhạc vẫn chạy.
+
+### Prompt phiên nghiệm thu sơ bộ (mở phiên mới, chọn model rồi dán)
+
+```text
+MELOVAULT — NGHIỆM THU SƠ BỘ NHANH, KHÔNG CODE
+TASK_ID: 2026-11-07-sua-bo-loc-dang-phat-ngang; nhánh dot/2026-11-07-sua-bo-loc-dang-phat-ngang; worktree: D:\Bots\_worktrees\MeloVault-sua-bo-loc-dang-phat-ngang.
+Baseline: f82185ba2ef17fce97d4680de2cd2dc86b2e1b4a; HEAD dự kiến: commit mới nhất của nhánh (chỉ thêm tài liệu sau f054637); source APK: f05463709faf532949d58a31ef7a46c67211cfd6 (mã app trùng 233954f).
+Kế hoạch: docs/plans/2026-11-07-sua-bo-loc-dang-phat-ngang.md.
+Báo cáo: docs/plans/2026-11-07-sua-bo-loc-dang-phat-ngang-bao-cao.md.
+Bàn giao: docs/plans/2026-11-07-sua-bo-loc-dang-phat-ngang-ban-giao.md.
+APK và SHA-256: Drive owner-only (link trong 2026-11-07-sua-bo-loc-dang-phat-ngang-apk-test.md), MeloVault-0.6.97-beta-vc122-sua-bo-loc-f054637-QA-CANDIDATE-debug.apk, SHA-256 7FB940219704E78A754971D9773DE5CE93CE18422277C53262EC144890FB7A24, 33.910.894 B, vc122, đã cài trên Sony QV725WEQ54.
+Phạm vi cần kiểm nhanh: D1 bỏ nút ☰ kiểu mặc định (diff MeloComponents.searchBarWithField); D3 chạm lại chip thể loại để bỏ lọc (MeloLibraryPolicy.toggledGenre, MeloLibraryPane.renderChips); D4 căn EQ/Hẹn giờ; D2 dạng ngang thấp (MeloStudioDeck: landscapeCompact, compactTopBar, mediaRow, requestArtFit, sizeArt, applyTight; mốc MeloNowPlayingPolicy.landscapeCompact < 500 dp). Rủi ro: màn dọc và ngang cao (tablet, xe) không đổi; chữ lớn; máy 16:9; tên bài 3 dòng; Teal và Gọn chưa thử. Ngoài phạm vi: hàng Tiếp theo|Lời nhạc ở màn dọc, Yêu thích, EQ clipped, trang Đồng bộ, widget, Teal, tablet, xe.
+```
+
+Đã dừng. Mở phiên mới để nghiệm thu sơ bộ nhanh.
 
 ## Checkpoint lập kế hoạch · 07/11/2026 · Claude Code, Opus 5.5 (lịch sử)
 
@@ -24,7 +49,7 @@ Bước tiếp (nếu phiên này dừng): S7 — bundle SHA-256, clone cô lậ
 |---|---|---|
 | Lập kế hoạch | Xong | Nguyên nhân D1, D3 từ mã; D2 khớp số đo Sony; D4 là suy luận, S3 kiểm lại |
 | S0–S6 code và gate Ni | Xong (07/11/2026) | Xem checkpoint trên cùng và báo cáo |
-| S7–S9 build, QA Sony, bàn giao | Chưa làm | |
+| S7–S9 build, QA Sony, bàn giao | Xong (07/11/2026) | APK `f054637` đã cài Sony, QA Q1–Q6, Drive owner-only; xem checkpoint trên cùng |
 | Sơ bộ, nghiệm thu chủ dự án | Chưa làm | |
 
 ## Trạng thái Sony khi lập kế hoạch
