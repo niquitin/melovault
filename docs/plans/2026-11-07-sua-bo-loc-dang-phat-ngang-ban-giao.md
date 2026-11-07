@@ -1,5 +1,11 @@
 # Bàn giao — Sửa nút Bộ lọc, chip thể loại và màn Đang phát khi xoay ngang
 
+## Checkpoint nghiệm thu sơ bộ · 07/11/2026 · Claude Code, Opus 5.5
+
+**SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN**, có một lỗi nhỏ N1: tên 3 dòng cộng dòng "Tạm dừng" ở dạng ngang thấp làm hàng Đảo/Lặp/Lưu mất đáy 16 px (110/126 px), vuốt 16 px thì lộ đủ. Biên bản: [nghiem-thu-so-bo](2026-11-07-sua-bo-loc-dang-phat-ngang-nghiem-thu-so-bo.md). **CHỜ CHỦ DỰ ÁN NGHIỆM THU**: chủ dự án quyết định ĐẠT hoặc giao REWORK N1 ở phiên thực thi mới. Không sửa mã, không build, không merge, không push.
+
+**Sony khi dừng:** vẫn APK `f054637` (hash máy khớp), EQ Tắt / Phẳng, hẹn giờ tắt, nhạc tạm dừng, xoay tự động, Display State=OFF. Bài đang chọn và hàng đợi khác trước phiên sơ bộ.
+
 ## Checkpoint cuối thực thi S0–S9 (phiên GỘP) · 07/11/2026 · Claude Code, Sonnet 5.5
 
 **Thực thi xong, chờ nghiệm thu sơ bộ ở phiên mới. QA CANDIDATE — CHƯA NGHIỆM THU.** Commit code: S1 `1efb96b`, S2 `701d834`, S3 `20b3011`, S4 `cb13c21`, S5 `233954f`; source APK `f054637` (mã app trùng `233954f`). Gate Ni: Debug và Release đều 207 suite, 2.799 test, 21 skipped, 0 failures, 0 errors; assemble Shareable Debug/Release, `.open` Debug, Personal Debug xanh; `git diff --check` sạch. APK Debug 33.910.894 B, SHA-256 `7FB94021…7A24`, vc122, cert `eecd3df7…fce8`, config true, đã cài `-r` lên Sony `QV725WEQ54` và hash máy khớp. QA Sony Q1–Q6 PASS (Q6 có ghi chú 8 px ở màn dọc). Drive owner-only đã kiểm. **CHƯA XÁC NHẬN ÂM THANH THỰC.** Không file chưa commit, không job chạy, không merge/push.
@@ -50,7 +56,8 @@ Phạm vi cần kiểm nhanh: D1 bỏ nút ☰ kiểu mặc định (diff MeloCo
 | Lập kế hoạch | Xong | Nguyên nhân D1, D3 từ mã; D2 khớp số đo Sony; D4 là suy luận, S3 kiểm lại |
 | S0–S6 code và gate Ni | Xong (07/11/2026) | Xem checkpoint trên cùng và báo cáo |
 | S7–S9 build, QA Sony, bàn giao | Xong (07/11/2026) | APK `f054637` đã cài Sony, QA Q1–Q6, Drive owner-only; xem checkpoint trên cùng |
-| Sơ bộ, nghiệm thu chủ dự án | Chưa làm | |
+| Sơ bộ | Xong (07/11/2026) | Xem checkpoint trên cùng |
+| Nghiệm thu chủ dự án | Chưa làm | |
 
 ## Trạng thái Sony khi lập kế hoạch
 
