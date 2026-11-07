@@ -1,6 +1,12 @@
 # Bàn giao — Sửa nút Bộ lọc, chip thể loại và màn Đang phát khi xoay ngang
 
-## Checkpoint lập kế hoạch · 07/11/2026 · Claude Code, Opus 5.5
+## Checkpoint thực thi S0–S6 · 07/11/2026 · Claude Code, Sonnet 5.5
+
+**Code và gate Ni xong; S7–S9 (build Tiny, QA Sony, bàn giao) chưa làm.** Commit: S1 `1efb96b`, S2 `701d834`, S3 `20b3011`, S4 `cb13c21`, S5 `233954f`. Gate: Debug và Release đều 207 suite, 2.799 test, 21 skipped, 0 failures, 0 errors; assemble Shareable Debug/Release, `-PmeloOpen=true` và Personal Debug đều xanh; `git diff --check` sạch. Chi tiết: [báo cáo](2026-11-07-sua-bo-loc-dang-phat-ngang-bao-cao.md). Không file chưa commit, không job chạy.
+
+Bước tiếp (nếu phiên này dừng): S7 — bundle SHA-256, clone cô lập trên Tiny, build có Telegram config, kiểm APK, cài Sony `QV725WEQ54` (thay candidate widget `58BD55F0…`).
+
+## Checkpoint lập kế hoạch · 07/11/2026 · Claude Code, Opus 5.5 (lịch sử)
 
 **Kế hoạch xong, chưa code.** Bước tiếp: phiên thực thi mới, model do chủ dự án chọn. Quyết định hiệu lực (chủ dự án chốt trong chat 07/11/2026): bỏ nút ☰ ở kiểu mặc định; bìa đặt cạnh tên bài khi ngang thấp; chạm lại chip thể loại để bỏ lọc; sửa cùng chip Hẹn giờ lệch.
 
@@ -17,7 +23,7 @@
 | Bước | Trạng thái | Bằng chứng / việc còn lại |
 |---|---|---|
 | Lập kế hoạch | Xong | Nguyên nhân D1, D3 từ mã; D2 khớp số đo Sony; D4 là suy luận, S3 kiểm lại |
-| S0–S6 code và gate Ni | Chưa làm | |
+| S0–S6 code và gate Ni | Xong (07/11/2026) | Xem checkpoint trên cùng và báo cáo |
 | S7–S9 build, QA Sony, bàn giao | Chưa làm | |
 | Sơ bộ, nghiệm thu chủ dự án | Chưa làm | |
 
