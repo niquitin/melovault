@@ -217,6 +217,9 @@ internal object MeloLibraryPolicy {
         return GenreChip.entries.firstOrNull { it.keyword == q }
     }
 
+    /** Tapping the chip that is already on turns the filter off; any other chip becomes the filter. */
+    fun toggledGenre(active: GenreChip?, tapped: GenreChip): GenreChip? = if (active == tapped) null else tapped
+
     /** Index of the selected chip from the current state: a genre keyword wins, else the mode. */
     fun selectedChip(mode: Mode, query: String, downloadedCount: Int?): Int {
         val list = chips(downloadedCount)
