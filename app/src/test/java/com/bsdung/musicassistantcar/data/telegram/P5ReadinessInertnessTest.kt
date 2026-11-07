@@ -133,7 +133,13 @@ class P5ReadinessInertnessTest {
         }
         val shareable = File(srcRoot, "shareable/AndroidManifest.xml").readText()
         assertEquals("only the three services that already existed", 3, Regex("<service ").findAll(shareable).count())
-        assertFalse(shareable.contains("<receiver"))
+        // The Home widget is an explicit, non-exported receiver, unrelated to sync triggers.
+        // Continue to reject every other receiver (and all boot actions above).
+        val receivers = Regex("<receiver\\b[\\s\\S]*?</receiver>").findAll(shareable).map { it.value }.toList()
+        assertEquals("only the Home widget receiver is allowed", 1, receivers.size)
+        assertTrue(receivers.single().contains("android:name=\".data.telegram.MeloNowPlayingWidgetProvider\""))
+        assertTrue(receivers.single().contains("android:exported=\"false\""))
+        assertTrue(receivers.single().contains("android.appwidget.action.APPWIDGET_UPDATE"))
         val sources = File(srcRoot, "shareable").walkTopDown().filter { it.isFile && it.extension == "kt" }.map { it.readText() }.toList()
         assertFalse("no periodic or one-time sync work request",
             sources.any { it.contains("PeriodicWorkRequest") && it.contains("PlaylistSync") })

@@ -41,7 +41,9 @@ internal object MeloLocalSourcePolicy {
         val sizeBytes: Long,
         val mimeType: String?,
         val searchText: String,
-        val alphaKey: String
+        val alphaKey: String,
+        /** Real MediaStore tag only; artist above deliberately retains its folder fallback. */
+        val trustedPerformer: String? = null,
     ) {
         val key: Long get() = keyOf(mediaStoreId)
     }
@@ -108,7 +110,8 @@ internal object MeloLocalSourcePolicy {
             sizeBytes = sizeBytes.coerceAtLeast(0L),
             mimeType = mimeType?.takeIf { it.isNotBlank() },
             searchText = MeloComponentPolicy.searchKey(listOfNotNull(title, artist, album, folder).joinToString(" ")),
-            alphaKey = MeloAlphabetPolicy.keyOf(title, artist, null)
+            alphaKey = MeloAlphabetPolicy.keyOf(title, artist, null),
+            trustedPerformer = MeloWidgetPolicy.trustedPerformer(rawArtist),
         )
     }
 
