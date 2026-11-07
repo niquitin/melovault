@@ -395,6 +395,8 @@ internal class MeloStudioDeck(private val activity: Activity, private val host: 
         }, matchWrap())
         addView(LinearLayout(activity).apply {
             orientation = if (activity.resources.configuration.fontScale > 1.3f) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            // D4: baseline alignment pushed the 2-line-capable "Hẹn giờ" chip below the 1-line "EQ" chip.
+            isBaselineAligned = false
             eqChip = c.chip("EQ", false) { openEq() }.apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
             renderEqChip()
             addView(eqChip, matchWrap())
