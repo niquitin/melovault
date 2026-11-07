@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Shareable (friends beta) backup rules, Android 6-11. Replaces the main rules for this flavor only; the Personal
+  flavor keeps app/src/main/res/xml/backup_rules.xml. Session, TDLib key, API pair, playlists and lyrics cache are in
+  noBackupFilesDir, which the OS never backs up. What is excluded below is everything else that names an account,
+  channel or song, or that points to data which is not restored with it (docs/plans/2026-11-07-phat-hanh-beta-bao-cao.md).
+-->
+<full-backup-content>
+    <exclude domain="file" path="melovault_secure_token.enc" />
+    <exclude domain="file" path="melovault_token_cleared.flag" />
+    <exclude domain="sharedpref" path="melovault_secure_auth.xml" />
+    <!-- Library index: one database per account, with channel and song names. -->
+    <exclude domain="database" path="." />
+    <!-- Pointer to the TDLib session folder, which is never backed up. -->
+    <exclude domain="sharedpref" path="e91_tdlib_preview.xml" />
+    <exclude domain="sharedpref" path="melovault_resume.xml" />
+    <exclude domain="sharedpref" path="melovault_library_counts.xml" />
+    <exclude domain="sharedpref" path="melovault_local_music.xml" />
+</full-backup-content>

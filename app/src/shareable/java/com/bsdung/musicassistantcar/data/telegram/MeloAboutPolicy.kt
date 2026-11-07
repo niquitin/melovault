@@ -55,11 +55,15 @@ internal object MeloAboutPolicy {
     val LICENSES: List<License> = listOf(
         License("TDLib (Telegram Database Library)", "Boost Software License 1.0", "https://github.com/tdlib/td"),
         License("Bộ giải mã ALAC bằng Java (fgp/AirReceiver)", "BSD 3-Clause", "https://github.com/fgp/AirReceiver"),
-        License("AndroidX (Core, Activity, AppCompat, RecyclerView, WorkManager)", "Apache License 2.0", "https://developer.android.com/jetpack/androidx"),
+        License("AndroidX (Core, Activity, AppCompat, RecyclerView, WorkManager, Lifecycle, Room, Fragment và các phần phụ)", "Apache License 2.0", "https://developer.android.com/jetpack/androidx"),
         License("AndroidX Media3 (ExoPlayer, MediaSession)", "Apache License 2.0", "https://github.com/androidx/media"),
         License("Material Components for Android", "Apache License 2.0", "https://github.com/material-components/material-components-android"),
         License("Coil", "Apache License 2.0", "https://github.com/coil-kt/coil"),
         License("Kotlin", "Apache License 2.0", "https://github.com/JetBrains/kotlin"),
+        License("Kotlin Coroutines", "Apache License 2.0", "https://github.com/Kotlin/kotlinx.coroutines"),
+        License("Guava", "Apache License 2.0", "https://github.com/google/guava"),
+        License("OkHttp và Okio", "Apache License 2.0", "https://github.com/square/okhttp"),
+        License("JetBrains Annotations, JSpecify, Error Prone Annotations", "Apache License 2.0", "https://github.com/jspecify/jspecify"),
         License("Material Icons (một số biểu tượng)", "Apache License 2.0", "https://github.com/google/material-design-icons")
     )
 

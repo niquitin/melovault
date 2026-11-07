@@ -1,13 +1,20 @@
 package com.bsdung.musicassistantcar.data.telegram
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.text.Editable
 import android.text.InputType
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.TextPaint
 import android.text.TextUtils
 import android.text.TextWatcher
 import android.text.method.DigitsKeyListener
+import android.text.method.LinkMovementMethod
+import android.text.style.ClickableSpan
 import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -122,6 +129,37 @@ internal class TelegramLoginPanel(
         secondaryRow.addView(resend, LinearLayout.LayoutParams(0, dp(touch), 1f).apply { rightMargin = dp(gap / 2) })
         secondaryRow.addView(editPhone, LinearLayout.LayoutParams(0, dp(touch), 1f).apply { leftMargin = dp(gap / 2) })
         secondaryRow.addView(back, LinearLayout.LayoutParams(0, dp(touch), 1f))
+        if (MeloPublicBuildPolicy.showUnofficialNotice(com.bsdung.musicassistantcar.BuildConfig.MELO_OPEN_BUILD)) {
+            root.addView(unofficialNoticeView(), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(gap * 2) })
+        }
+    }
+
+    /** Open build only: says the app is unofficial and links to the privacy section of the project page. */
+    private fun unofficialNoticeView(): TextView = TextView(context).apply {
+        textSize = 12f
+        setTextColor(colors.subtle)
+        val link = MeloPublicBuildPolicy.PRIVACY_LINK_LABEL
+        val text = SpannableString("${MeloPublicBuildPolicy.UNOFFICIAL_NOTICE} $link")
+        val start = text.length - link.length
+        text.setSpan(object : ClickableSpan() {
+            override fun onClick(widget: View) {
+                try {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(MeloPublicBuildPolicy.PRIVACY_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                } catch (_: Exception) {
+                    // No browser installed: the notice stays readable, nothing else to do.
+                }
+            }
+
+            override fun updateDrawState(ds: TextPaint) {
+                ds.color = colors.accent
+                ds.isUnderlineText = true
+            }
+        }, start, text.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        this.text = text
+        movementMethod = LinkMovementMethod.getInstance()
+        setLineSpacing(0f, 1.1f)
     }
 
     fun render(content: TelegramLoginStepPolicy.StepContent) {
@@ -136,7 +174,8 @@ internal class TelegramLoginPanel(
         configureInput(content.field)
         toggle.visibility = if (content.showPasswordToggle) View.VISIBLE else View.GONE
         setPasswordRevealed(false)
-        qr.visibility = if (content.showQr) View.VISIBLE else View.GONE
+        qr.visibility =
+            if (content.showQr && MeloPublicBuildPolicy.showQrLogin(com.bsdung.musicassistantcar.BuildConfig.MELO_OPEN_BUILD)) View.VISIBLE else View.GONE
         resend.visibility = if (content.showResend) View.VISIBLE else View.GONE
         editPhone.visibility = if (content.showEditPhone) View.VISIBLE else View.GONE
         back.visibility = if (content.showBack) View.VISIBLE else View.GONE
