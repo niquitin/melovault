@@ -1,5 +1,16 @@
 # Bàn giao — Phát hành bản beta cho bạn bè
 
+## Checkpoint chuẩn bị đăng · 07/11/2026 · Claude Code, Opus 5.5
+
+**ĐẠT** (chủ dự án, chat 07/11) → [nghiệm thu](2026-11-07-phat-hanh-beta-nghiem-thu.md). Merge `cce562f` + HANDOFF `2f04846`, đã push lên `source/feature-e93-03d-y700-offline-cockpit`.
+
+| Việc | Trạng thái |
+|---|---|
+| Release nháp `v0.6.97-open-beta` | **Nháp, pre-release**, target `a0694c0`, tag chưa tạo (GitHub tạo khi Publish). Tệp `MeloVault-0.6.97-open-beta.apk` (31.051.460 B, digest GitHub sha256 `54ab04c8…2ccf` khớp) và `.apk.sha256` |
+| Trang | Nhánh `site/beta-0.6.97` (`0a17c7f`, từ `main` `4e632ad`), [PR #1](https://github.com/niquitin/melovault/pull/1) vào `main`, **chưa merge**, mergeable, không có CI. Xem thử cục bộ: nút tải bật, đủ thông tin, không tràn ngang. Worktree `D:\Bots\_worktrees\MeloVault-site-beta` |
+| Chủ dự án làm | 1) Publish Release nháp; 2) Merge PR #1 (ngược thứ tự thì nút tải 404 tới khi Release lên) |
+| Sau khi chủ dự án báo xong | Tải APK từ nút trên trang, so SHA-256, ghi vào `-nghiem-thu.md` (kế hoạch mục 4 bước 5) |
+
 ## Checkpoint sơ bộ · 07/11/2026 · Claude Code, Opus 5.5, phiên mới
 
 **SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN** (code S1–S4, gate APK tự kiểm lại, cài Sony không đụng `app.melovault.player`, Q1–Q3, Q8). **Q4–Q7 vẫn BLOCKED** chờ chủ dự án đăng nhập bản `.open`. Biên bản: [nghiem-thu-so-bo](2026-11-07-phat-hanh-beta-nghiem-thu-so-bo.md) (7 ghi nhận nhỏ G1–G7, không chặn). Không sửa code, không build, không cài, không đăng; Sony chỉ đọc `dumpsys`, `Display State=OFF`. **CHỜ CHỦ DỰ ÁN NGHIỆM THU.** Sau ĐẠT: làm kế hoạch mục 4 (chuẩn bị đăng; chủ dự án tự bấm Publish/Merge).
