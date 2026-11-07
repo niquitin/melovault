@@ -1,5 +1,9 @@
 # Bàn giao — Sửa nút Bộ lọc, chip thể loại và màn Đang phát khi xoay ngang
 
+## Checkpoint nghiệm thu chính thức · 07/11/2026 · Claude Code, Opus 5.5
+
+**ĐẠT — PASS kèm giới hạn**, chủ dự án nhắn "ĐẠT, giữ N1". N1 giữ nguyên, không sửa. Biên bản: [nghiem-thu](2026-11-07-sua-bo-loc-dang-phat-ngang-nghiem-thu.md). Trạng thái merge/push: mục đầu `HANDOFF.md` trên nhánh tích hợp.
+
 ## Checkpoint nghiệm thu sơ bộ · 07/11/2026 · Claude Code, Opus 5.5
 
 **SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN**, có một lỗi nhỏ N1: tên 3 dòng cộng dòng "Tạm dừng" ở dạng ngang thấp làm hàng Đảo/Lặp/Lưu mất đáy 16 px (110/126 px), vuốt 16 px thì lộ đủ. Biên bản: [nghiem-thu-so-bo](2026-11-07-sua-bo-loc-dang-phat-ngang-nghiem-thu-so-bo.md). **CHỜ CHỦ DỰ ÁN NGHIỆM THU**: chủ dự án quyết định ĐẠT hoặc giao REWORK N1 ở phiên thực thi mới. Không sửa mã, không build, không merge, không push.
@@ -57,7 +61,7 @@ Phạm vi cần kiểm nhanh: D1 bỏ nút ☰ kiểu mặc định (diff MeloCo
 | S0–S6 code và gate Ni | Xong (07/11/2026) | Xem checkpoint trên cùng và báo cáo |
 | S7–S9 build, QA Sony, bàn giao | Xong (07/11/2026) | APK `f054637` đã cài Sony, QA Q1–Q6, Drive owner-only; xem checkpoint trên cùng |
 | Sơ bộ | Xong (07/11/2026) | Xem checkpoint trên cùng |
-| Nghiệm thu chủ dự án | Chưa làm | |
+| Nghiệm thu chủ dự án | ĐẠT (07/11/2026) | "ĐẠT, giữ N1"; xem checkpoint trên cùng |
 
 ## Trạng thái Sony khi lập kế hoạch
 
