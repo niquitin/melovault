@@ -6,8 +6,8 @@ Lập kế hoạch: Claude Code, Opus 5.5, 07/11/2026. **Chưa code.** Phiên th
 |---|---|
 | TASK_ID | `2026-11-07-phat-hanh-beta` |
 | Nhánh / worktree | `dot/2026-11-07-phat-hanh-beta` / `D:\Bots\_worktrees\MeloVault-phat-hanh-beta` |
-| Baseline | `a982a9a7cf9a0b9b912cb6ce6d092473d3195e79` (nhánh tích hợp, đã push) |
-| Gate baseline | Debug/Release mỗi loại 207 suite, 2.799 test, 21 skipped, 0 lỗi |
+| Baseline | Lúc lập kế hoạch `a982a9a`; sau ĐẠT widget đã gộp nhánh tích hợp có merge `7ce38ec` vào nhánh này |
+| Gate baseline | Trên `7ce38ec`: Debug/Release mỗi loại 208 suite, 2.815 test, 21 skipped, 0 lỗi |
 | Kế hoạch gốc được kế thừa | `dot/2026-10-31-chuan-bi-cong-khai-open:docs/plans/2026-10-31-chuan-bi-cong-khai-open.md` (đọc mục 2 và các PD; file này thắng khi khác) |
 
 ## 1. Quyết định của chủ dự án (07/11/2026, trong chat)
