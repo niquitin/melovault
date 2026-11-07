@@ -4,6 +4,8 @@
 
 **SƠ BỘ: KHÔNG PHÁT HIỆN LỖI CHẶN** (code S1–S4, gate APK tự kiểm lại, cài Sony không đụng `app.melovault.player`, Q1–Q3, Q8). **Q4–Q7 vẫn BLOCKED** chờ chủ dự án đăng nhập bản `.open`. Biên bản: [nghiem-thu-so-bo](2026-11-07-phat-hanh-beta-nghiem-thu-so-bo.md) (7 ghi nhận nhỏ G1–G7, không chặn). Không sửa code, không build, không cài, không đăng; Sony chỉ đọc `dumpsys`, `Display State=OFF`. **CHỜ CHỦ DỰ ÁN NGHIỆM THU.** Sau ĐẠT: làm kế hoạch mục 4 (chuẩn bị đăng; chủ dự án tự bấm Publish/Merge).
 
+**Cập nhật vòng 2:** Sony vẫn chưa đăng nhập, Q4–Q7 trên Sony BLOCKED; chủ dự án tự thử Q4–Q7 trên điện thoại riêng bằng APK Drive. Prompt dưới đây chỉ dùng lại nếu sau này cần agent kiểm trên Sony.
+
 ### Prompt phiên kiểm Q4–Q7 (chủ dự án giao 07/11/2026)
 
 ```text
