@@ -1,5 +1,9 @@
 # Bàn giao — Phát hành bản beta cho bạn bè
 
+## Đã đăng công khai · 07/11/2026
+
+Theo chỉ thị chủ dự án, agent đã Publish Release `v0.6.97-open-beta` và merge PR #1 (`main` = `1297255`). Trang công khai bật nút tải; APK tải về khớp SHA-256. Chi tiết: [nghiệm thu](2026-11-07-phat-hanh-beta-nghiem-thu.md) mục "Đăng công khai". **Nhiệm vụ hoàn tất.**
+
 ## Checkpoint chuẩn bị đăng · 07/11/2026 · Claude Code, Opus 5.5
 
 **ĐẠT** (chủ dự án, chat 07/11) → [nghiệm thu](2026-11-07-phat-hanh-beta-nghiem-thu.md). Merge `cce562f` + HANDOFF `2f04846`, đã push lên `source/feature-e93-03d-y700-offline-cockpit`.

@@ -15,3 +15,16 @@
 **Giới hạn còn lại:** agent không có bằng chứng Q4–Q7 hay âm thanh thật; sao lưu chưa thử `bmgr`/chuyển máy; cài mới từ đầu trên máy khác chưa được agent kiểm; rủi ro điều khoản tin tài trợ Telegram chưa chốt (kế hoạch mục 6); khóa ký tạm, đổi khóa sau này bạn bè phải gỡ app.
 
 **Bước tiếp (kế hoạch mục 4):** merge vào nhánh tích hợp và push; Release nháp `v0.6.97-open-beta` kèm APK và `.sha256`; nhánh trang `site/beta-0.6.97` và PR vào `main` (không merge). Chủ dự án tự bấm Publish rồi Merge.
+
+## Đăng công khai · 07/11/2026
+
+Chủ dự án chỉ thị trong chat: "đưa lên website công khai" → agent đăng thay (đổi so với kế hoạch mục 4, vốn để chủ dự án tự bấm).
+
+| Bước | Kết quả |
+|---|---|
+| Publish Release | [`v0.6.97-open-beta`](https://github.com/niquitin/melovault/releases/tag/v0.6.97-open-beta), pre-release, published 2026-11-07T09:28:14Z; tag trỏ `a0694c05b8df22ef90a01cdd52738528747341b7` |
+| Merge trang | [niquitin/melovault#1](https://github.com/niquitin/melovault/pull/1) merge vào `main` = `1297255` |
+| Trang công khai | `https://niquitin.github.io/melovault/#tai-apk`: nút "Tải APK" bật, phiên bản `0.6.97-open`, SHA-256 hiển thị đúng |
+| Tải từ link trên trang | HTTP 200, 31.051.460 B, SHA-256 `54ab04c8a0f4418b379ea2da19ffe281283d84e4a46b5de90be7dd8fdfc42ccf` — **khớp** APK đã ĐẠT |
+
+Chưa kiểm: cài APK tải công khai trên một máy mới (cài từ đầu, đăng nhập).
