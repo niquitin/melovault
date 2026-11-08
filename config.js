@@ -2,15 +2,15 @@
 // Không đưa liên kết riêng tư, credentials hoặc token bí mật vào đây.
 // Sửa cùng lúc với update.json: url = apkUrl, versionName, versionCode, sha256, sizeBytes, releaseDate, notes phải khớp.
 window.MELOVAULT_RELEASE = {
-  url: "https://github.com/niquitin/melovault/releases/download/v0.6.99-open-beta/MeloVault-0.6.99-open-beta.apk",
-  versionName: "0.6.99-open",
-  versionCode: 124,
-  sha256: "77ac3a9e55ba10e428f1348ea62f9459e403a7306d7360657b8ea27aad59199a",
-  sizeBytes: 31104908,
+  url: "https://github.com/niquitin/melovault/releases/download/v0.6.100-open-beta/MeloVault-0.6.100-open-beta.apk",
+  versionName: "0.6.100-open",
+  versionCode: 125,
+  sha256: "6008836b7acda28b225ef6cfc8b0e5ec8c9e6d6cf40216ebddbe58fffdad8216",
+  sizeBytes: 31138237,
   releaseDate: "2026-11-08",
   notes: [
-    "Màn Đang phát hiện ảnh bìa ngay khi mở bài, không phải chờ bài tải xong.",
-    "Đang có bản 0.6.98: cập nhật ngay trong app (Cài đặt → Giới thiệu → Cập nhật ứng dụng), không cần gỡ.",
+    "Thêm giao diện Liquid Glass (thử nghiệm): Cài đặt › Giao diện & màu sắc.",
+    "Nền đổi màu theo ảnh bìa, thanh đáy kính nổi; mặc định vẫn là giao diện cũ.",
     "Đang có bản 0.6.97: phải gỡ bản đó rồi cài bản này một lần (mất dữ liệu trong app).",
     "Ứng dụng không chính thức, dùng Telegram API; không liên kết với Telegram."
   ]
