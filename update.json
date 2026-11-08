@@ -1,19 +1,19 @@
 {
   "schema": 1,
   "packageName": "app.melovault.player.open",
-  "versionCode": 123,
-  "versionName": "0.6.98-open",
-  "apkUrl": "https://github.com/niquitin/melovault/releases/download/v0.6.98-open-beta/MeloVault-0.6.98-open-beta.apk",
-  "sha256": "cc532b21960d644a727fcb56cc258725b196fa9e6de232dc0134ab4b8f65bf22",
+  "versionCode": 124,
+  "versionName": "0.6.99-open",
+  "apkUrl": "https://github.com/niquitin/melovault/releases/download/v0.6.99-open-beta/MeloVault-0.6.99-open-beta.apk",
+  "sha256": "77ac3a9e55ba10e428f1348ea62f9459e403a7306d7360657b8ea27aad59199a",
   "sizeBytes": 31104908,
   "minSdk": 26,
   "releaseDate": "2026-11-08",
   "notes": [
-    "Tự báo khi có bản mới (Cài đặt → Giới thiệu → Cập nhật ứng dụng), chỉ tải khi bạn đồng ý.",
-    "Ký bằng khóa phát hành chính thức: các bản sau cài đè hoặc cập nhật trong app.",
+    "Màn Đang phát hiện ảnh bìa ngay khi mở bài, không phải chờ bài tải xong.",
+    "Đang có bản 0.6.98: cập nhật ngay trong app (Cài đặt → Giới thiệu → Cập nhật ứng dụng), không cần gỡ.",
     "Đang có bản 0.6.97: phải gỡ bản đó rồi cài bản này một lần (mất dữ liệu trong app).",
     "Ứng dụng không chính thức, dùng Telegram API; không liên kết với Telegram."
   ],
-  "releasePage": "https://github.com/niquitin/melovault/releases/tag/v0.6.98-open-beta",
-  "requiresReinstall": true
+  "releasePage": "https://github.com/niquitin/melovault/releases/tag/v0.6.99-open-beta",
+  "requiresReinstall": false
 }
