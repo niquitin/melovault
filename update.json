@@ -1,20 +1,21 @@
 {
   "schema": 1,
   "packageName": "app.melovault.player.open",
-  "versionCode": 129,
-  "versionName": "0.6.104-open",
-  "apkUrl": "https://github.com/niquitin/melovault/releases/download/v0.6.104-open-beta/MeloVault-0.6.104-open-beta.apk",
-  "sha256": "17316293bd2862ecf52572ee5ab3d1212b1151da8b8b23aa49944962db39c553",
-  "sizeBytes": 31242389,
+  "versionCode": 130,
+  "versionName": "0.6.105-open",
+  "apkUrl": "https://github.com/niquitin/melovault/releases/download/v0.6.105-open-beta/MeloVault-0.6.105-open-beta.apk",
+  "sha256": "79a5af039ab378370c1fea4fb687fde7c0cea7a8973079427c0f25200bddc277",
+  "sizeBytes": 31258797,
   "minSdk": 26,
-  "releaseDate": "2026-11-09",
+  "releaseDate": "2026-11-10",
   "notes": [
-    "Mới: xem video nhạc từ kênh Telegram — Thư viện › chip \"Video\" (gộp các kênh nhạc) hoặc mở một kênh › \"Video trong kênh\".",
-    "Chạm video để xem ngay khi đang tải; xoay ngang để xem toàn màn, tua, lùi/tới 10 giây, chuyển video trước/kế.",
-    "Mở video thì nhạc tự tạm dừng.",
+    "Xem video mượt hơn: tua tới đoạn chưa tải thì tải ngay từ đoạn đó, không phải chờ tải tuần tự.",
+    "Video gửi dạng tệp (.mkv, .mp4) cũng hiện trong danh sách (dòng \"Tệp MKV\"); video có bản nhẹ thì chọn chất lượng ở nút trên trình phát (Tự động tiết kiệm dữ liệu khi dùng mạng di động).",
+    "Hình trong hình: bấm Home khi đang xem để tiếp tục xem trong cửa sổ nhỏ.",
+    "Màn dọc có tiêu đề, chú thích và danh sách \"Tiếp theo\"; hết video tự chuyển sang video kế sau 5 giây (tắt được); chạm đúp nửa trái/phải để lùi/tới 10 giây.",
     "Đang có bản 0.6.97: phải gỡ bản đó rồi cài bản này một lần (mất dữ liệu trong app).",
     "Ứng dụng không chính thức, dùng Telegram API; không liên kết với Telegram."
   ],
-  "releasePage": "https://github.com/niquitin/melovault/releases/tag/v0.6.104-open-beta",
+  "releasePage": "https://github.com/niquitin/melovault/releases/tag/v0.6.105-open-beta",
   "requiresReinstall": false
 }
