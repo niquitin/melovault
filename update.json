@@ -1,19 +1,19 @@
 {
   "schema": 1,
   "packageName": "app.melovault.player.open",
-  "versionCode": 134,
-  "versionName": "0.6.109-open",
-  "apkUrl": "https://github.com/niquitin/melovault/releases/download/v0.6.109-open-beta/MeloVault-0.6.109-open-beta.apk",
-  "sha256": "250e5ef6f676c819a4e95176c53f73a16bb6ee840bab9b3732f640a08722c373",
-  "sizeBytes": 31341325,
+  "versionCode": 135,
+  "versionName": "0.6.110-open",
+  "apkUrl": "https://github.com/niquitin/melovault/releases/download/v0.6.110-open-beta/MeloVault-0.6.110-open-beta.apk",
+  "sha256": "6f102ff4b993fa2607d378603db2b62666e7d47d86eed343429a5261fca26905",
+  "sizeBytes": 31390477,
   "minSdk": 26,
   "releaseDate": "2026-11-11",
   "notes": [
-    "Mới: nghe tiếng video nhạc như một bài hát: bấm ⋮ ở video › Nghe như nhạc, hoặc nút tai nghe 🎧 trong trình phát video (nghe tiếp đúng chỗ đang xem).",
-    "Mới: nút Nghe cả danh sách ở mục Video. Tắt màn hình hay đóng app vẫn nghe, có điều khiển trên màn khóa; tiếng video không ghi vào Playlist hay Nghe tiếp.",
+    "Mục Video mở tức thì: app nhớ danh sách video nhạc/phim của các kênh, mở lại là thấy ngay.",
+    "App tự cập nhật danh sách video mới ở nền khi mở app, không làm chậm nghe nhạc.",
     "Đang có bản 0.6.97: phải gỡ bản đó rồi cài bản này một lần (mất dữ liệu trong app).",
     "Ứng dụng không chính thức, dùng Telegram API; không liên kết với Telegram."
   ],
-  "releasePage": "https://github.com/niquitin/melovault/releases/tag/v0.6.109-open-beta",
+  "releasePage": "https://github.com/niquitin/melovault/releases/tag/v0.6.110-open-beta",
   "requiresReinstall": false
 }
