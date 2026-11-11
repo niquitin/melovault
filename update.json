@@ -1,21 +1,20 @@
 {
   "schema": 1,
   "packageName": "app.melovault.player.open",
-  "versionCode": 130,
-  "versionName": "0.6.105-open",
-  "apkUrl": "https://github.com/niquitin/melovault/releases/download/v0.6.105-open-beta/MeloVault-0.6.105-open-beta.apk",
-  "sha256": "79a5af039ab378370c1fea4fb687fde7c0cea7a8973079427c0f25200bddc277",
-  "sizeBytes": 31258797,
+  "versionCode": 131,
+  "versionName": "0.6.106-open",
+  "apkUrl": "https://github.com/niquitin/melovault/releases/download/v0.6.106-open-beta/MeloVault-0.6.106-open-beta.apk",
+  "sha256": "e6d3ebadfa50c74e0c56d13ec6a7fbe57602c7ab34001e2546ee8bd470a80ac9",
+  "sizeBytes": 31291565,
   "minSdk": 26,
-  "releaseDate": "2026-11-10",
+  "releaseDate": "2026-11-11",
   "notes": [
-    "Xem video mượt hơn: tua tới đoạn chưa tải thì tải ngay từ đoạn đó, không phải chờ tải tuần tự.",
-    "Video gửi dạng tệp (.mkv, .mp4) cũng hiện trong danh sách (dòng \"Tệp MKV\"); video có bản nhẹ thì chọn chất lượng ở nút trên trình phát (Tự động tiết kiệm dữ liệu khi dùng mạng di động).",
-    "Hình trong hình: bấm Home khi đang xem để tiếp tục xem trong cửa sổ nhỏ.",
-    "Màn dọc có tiêu đề, chú thích và danh sách \"Tiếp theo\"; hết video tự chuyển sang video kế sau 5 giây (tắt được); chạm đúp nửa trái/phải để lùi/tới 10 giây.",
+    "Video có menu ⋮ ở cuối mỗi dòng (hoặc nhấn giữ dòng): Tải về máy, Tạm dừng / Tiếp tục tải, Xóa khỏi máy, Mở trong Telegram, Chi tiết.",
+    "Mục mới \"Đã tải\" trong Video: xem lại các video đã tải về máy, có tổng dung lượng và nút Xóa tất cả.",
+    "Dòng video không còn ghi tên kênh dạng \"Chat -100…\" khi chưa biết tên.",
     "Đang có bản 0.6.97: phải gỡ bản đó rồi cài bản này một lần (mất dữ liệu trong app).",
     "Ứng dụng không chính thức, dùng Telegram API; không liên kết với Telegram."
   ],
-  "releasePage": "https://github.com/niquitin/melovault/releases/tag/v0.6.105-open-beta",
+  "releasePage": "https://github.com/niquitin/melovault/releases/tag/v0.6.106-open-beta",
   "requiresReinstall": false
 }
