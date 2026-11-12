@@ -2,15 +2,16 @@
 // Không đưa liên kết riêng tư, credentials hoặc token bí mật vào đây.
 // Sửa cùng lúc với update.json: url = apkUrl, versionName, versionCode, sha256, sizeBytes, releaseDate, notes phải khớp.
 window.MELOVAULT_RELEASE = {
-  url: "https://github.com/niquitin/melovault/releases/download/v0.6.112-open-beta/MeloVault-0.6.112-open-beta.apk",
-  versionName: "0.6.112-open",
-  versionCode: 137,
-  sha256: "b025a069b2fa11c58d40ad9a39ae10e2ecc2bd605a8dc9c25677bb42ea41637e",
-  sizeBytes: 31390477,
+  url: "https://github.com/niquitin/melovault/releases/download/v0.6.113-open-beta/MeloVault-0.6.113-open-beta.apk",
+  versionName: "0.6.113-open",
+  versionCode: 138,
+  sha256: "a2da8eeddd758fd02427d3a5bb3404133174c45ae6b9390e2b66fc1f81896a35",
+  sizeBytes: 31406861,
   releaseDate: "2026-11-12",
   notes: [
-    "Mục Video rộng hơn: kéo danh sách xuống thì phần đầu trang (tiêu đề, ô tìm, các tab, nút Video) tự gập lại, thấy nhiều video hơn; kéo lên lại hiện ra.",
-    "Bỏ dòng \"Phạm vi: Video\" thừa ở đầu danh sách Video.",
+    "Mục Video có nút ⏱ lọc theo độ dài: mặc định chỉ hiện video từ 2 phút trở lên, bỏ clip vài giây.",
+    "Chạm nút ⏱ để chọn Mọi độ dài, 1, 2, 3, 5, 10 hoặc 20 phút; app nhớ lựa chọn. \"Đã tải\" không bị lọc.",
+    "Dòng \"N video khớp\" ở ô tìm Thư viện cũng tính theo độ dài đã chọn.",
     "Đang có bản 0.6.97: phải gỡ bản đó rồi cài bản này một lần (mất dữ liệu trong app).",
     "Ứng dụng không chính thức, dùng Telegram API; không liên kết với Telegram."
   ]
