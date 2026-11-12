@@ -1,0 +1,10 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+
+/update.json
+  Cache-Control: no-cache
+  Content-Type: application/json; charset=utf-8
+
+/config.js
+  Cache-Control: no-cache
