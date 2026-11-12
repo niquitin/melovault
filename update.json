@@ -1,20 +1,19 @@
 {
   "schema": 1,
   "packageName": "app.melovault.player.open",
-  "versionCode": 138,
-  "versionName": "0.6.113-open",
-  "apkUrl": "https://github.com/niquitin/melovault/releases/download/v0.6.113-open-beta/MeloVault-0.6.113-open-beta.apk",
-  "sha256": "a2da8eeddd758fd02427d3a5bb3404133174c45ae6b9390e2b66fc1f81896a35",
-  "sizeBytes": 31406861,
+  "versionCode": 139,
+  "versionName": "0.6.114-open",
+  "apkUrl": "https://github.com/niquitin/melovault/releases/download/v0.6.114-open-beta/MeloVault-0.6.114-open-beta.apk",
+  "sha256": "26fb2a197659298bb8e3ea4ec563f8ff9ea743a0e5db3617db3dfaa59414cbd7",
+  "sizeBytes": 31423245,
   "minSdk": 26,
   "releaseDate": "2026-11-12",
   "notes": [
-    "Mục Video có nút ⏱ lọc theo độ dài: mặc định chỉ hiện video từ 2 phút trở lên, bỏ clip vài giây.",
-    "Chạm nút ⏱ để chọn Mọi độ dài, 1, 2, 3, 5, 10 hoặc 20 phút; app nhớ lựa chọn. \"Đã tải\" không bị lọc.",
-    "Dòng \"N video khớp\" ở ô tìm Thư viện cũng tính theo độ dài đã chọn.",
+    "Chuẩn bị nền cho nhiều tài khoản Telegram: app lưu danh sách tài khoản (chưa có nút mới, dùng như cũ).",
+    "Cài đè bản mới vẫn vào thẳng thư viện, không phải đăng nhập lại.",
     "Đang có bản 0.6.97: phải gỡ bản đó rồi cài bản này một lần (mất dữ liệu trong app).",
     "Ứng dụng không chính thức, dùng Telegram API; không liên kết với Telegram."
   ],
-  "releasePage": "https://github.com/niquitin/melovault/releases/tag/v0.6.113-open-beta",
+  "releasePage": "https://github.com/niquitin/melovault/releases/tag/v0.6.114-open-beta",
   "requiresReinstall": false
 }
