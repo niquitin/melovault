@@ -2,17 +2,16 @@
 // Không đưa liên kết riêng tư, credentials hoặc token bí mật vào đây.
 // Sửa cùng lúc với update.json: url = apkUrl, versionName, versionCode, sha256, sizeBytes, releaseDate, notes phải khớp.
 window.MELOVAULT_RELEASE = {
-  url: "https://github.com/niquitin/melovault/releases/download/v0.6.115-open-beta/MeloVault-0.6.115-open-beta.apk",
-  versionName: "0.6.115-open",
-  versionCode: 140,
-  sha256: "bd055a8b6446e0d43c15809c1afd600c64788b93f0ee897f71f881578ce097ce",
+  url: "https://github.com/niquitin/melovault/releases/download/v0.6.116-open-beta/MeloVault-0.6.116-open-beta.apk",
+  versionName: "0.6.116-open",
+  versionCode: 141,
+  sha256: "62edee267b330960448dce101d3ac71c6187250cd82558323997d4411bd7a6d4",
   sizeBytes: 31439629,
   releaseDate: "2026-11-12",
   notes: [
-    "Nhiều tài khoản Telegram: Cài đặt › Tài khoản hiện tài khoản đang dùng và nút \"+ Thêm tài khoản Telegram\" (số điện thoại khác).",
-    "Ở màn đăng nhập thêm tài khoản có nút \"← Quay lại\" (hoặc phím Back) để về tài khoản cũ, thư viện giữ nguyên; thêm hoặc quay lại mất chưa tới 1 giây.",
-    "Đang phát nhạc trên máy thì vẫn phát khi bấm Thêm tài khoản; bài Telegram dừng và \"Nghe tiếp\" nhớ đúng vị trí.",
-    "Nút Đăng xuất ghi rõ tên tài khoản. Chuyển qua lại giữa hai tài khoản đã đăng nhập chưa thử trên máy thật: bạn nào có hai số xin thử và báo giúp.",
+    "Vòng tròn chữ cái của tài khoản ở đầu màn chính (Xanh đêm, Liquid Glass, Teal sáng): chạm để mở bảng \"Tài khoản Telegram\" với \"+ Thêm tài khoản\" và \"Quản lý tài khoản\".",
+    "Giữ vòng tròn để về tài khoản vừa dùng; chưa có tài khoản khác thì báo \"Chưa có tài khoản khác. Chạm để thêm\". Vòng tròn gập cùng đầu trang khi cuộn.",
+    "Chạm tên tài khoản khác trong bảng để chuyển, và giữ vòng tròn khi đã có hai tài khoản: chưa thử trên máy thật, bạn nào có hai số xin thử và báo giúp.",
     "Đang có bản 0.6.97: phải gỡ bản đó rồi cài bản này một lần (mất dữ liệu trong app).",
     "Ứng dụng không chính thức, dùng Telegram API; không liên kết với Telegram."
   ]
