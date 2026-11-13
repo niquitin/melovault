@@ -4,6 +4,19 @@ window.MELOVAULT_CHANGELOG = {
   "schema": 1,
   "versions": [
     {
+      "version": "0.6.119",
+      "versionCode": 144,
+      "date": "2026-11-13",
+      "tag": "v0.6.119-open-beta",
+      "highlight": false,
+      "new": [],
+      "improved": [
+        "Cài đặt có biểu tượng mới đồng bộ: mũi tên, nút chọn, công tắc bật/tắt, đầu trang Đồng bộ"
+      ],
+      "fixed": [],
+      "test": []
+    },
+    {
       "version": "0.6.118",
       "versionCode": 143,
       "date": "2026-11-12",
