@@ -4,6 +4,24 @@ window.MELOVAULT_CHANGELOG = {
   "schema": 1,
   "versions": [
     {
+      "version": "0.6.121",
+      "versionCode": 146,
+      "date": "2026-11-13",
+      "tag": "v0.6.121-open-beta",
+      "highlight": false,
+      "new": [
+        "Nhớ cả bài Nhạc trên máy để nghe tiếp; thẻ đáy ghi bài nghe sau cùng của Telegram hoặc Nhạc trên máy"
+      ],
+      "improved": [
+        "Mở lại app là \"Nghe tiếp\" đúng chỗ đang nghe, kể cả khi app bị tắt lúc đang phát (vị trí được nhớ mỗi 10 giây ngay cả khi màn app đã đóng)",
+        "Thẻ Nghe tiếp hiện thời điểm sẽ phát tiếp, ví dụ \"Nghe tiếp · 12:34 · tên kênh\""
+      ],
+      "fixed": [],
+      "test": [
+        "Bài Telegram chưa tải xong thì Nghe tiếp vẫn phát từ đầu (bản sau sẽ sửa); bản Gọn, máy tính bảng ngang và Car Mode chưa thử trên máy thật, bạn dùng các kiểu này nhớ báo giúp"
+      ]
+    },
+    {
       "version": "0.6.120",
       "versionCode": 145,
       "date": "2026-11-13",
