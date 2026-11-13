@@ -4,6 +4,19 @@ window.MELOVAULT_CHANGELOG = {
   "schema": 1,
   "versions": [
     {
+      "version": "0.6.122",
+      "versionCode": 147,
+      "date": "2026-11-13",
+      "tag": "v0.6.122-open-beta",
+      "highlight": false,
+      "new": [],
+      "improved": [
+        "Giới thiệu có thêm dòng Chính sách quyền riêng tư (trang đầy đủ tiếng Việt và tiếng Anh)."
+      ],
+      "fixed": [],
+      "test": []
+    },
+    {
       "version": "0.6.121",
       "versionCode": 146,
       "date": "2026-11-13",
