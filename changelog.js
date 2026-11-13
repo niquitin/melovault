@@ -4,6 +4,24 @@ window.MELOVAULT_CHANGELOG = {
   "schema": 1,
   "versions": [
     {
+      "version": "0.6.120",
+      "versionCode": 145,
+      "date": "2026-11-13",
+      "tag": "v0.6.120-open-beta",
+      "highlight": false,
+      "new": [
+        "Giữ một kênh ở tab Nguồn để ghim lên đầu danh sách (tối đa 20 kênh, nhớ riêng theo tài khoản)",
+        "Nút \"Ngẫu nhiên\" cạnh \"Phát hết\" phát ngẫu nhiên cả kênh, cả thư viện hoặc cả kết quả tìm đang mở; giữ một kênh còn có \"Phát ngẫu nhiên kênh này\""
+      ],
+      "improved": [
+        "\"Phát hết\" nay phát cả kênh hoặc thư viện đang mở (tối đa 2.000 bài), không còn dừng ở 200 bài đã hiện"
+      ],
+      "fixed": [],
+      "test": [
+        "bản Gọn, máy tính bảng ngang và Car Mode chưa thử trên máy thật; bạn dùng các kiểu này nhớ báo giúp"
+      ]
+    },
+    {
       "version": "0.6.119",
       "versionCode": 144,
       "date": "2026-11-13",
