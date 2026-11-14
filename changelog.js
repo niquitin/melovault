@@ -4,6 +4,19 @@ window.MELOVAULT_CHANGELOG = {
   "schema": 1,
   "versions": [
     {
+      "version": "0.6.124",
+      "versionCode": 149,
+      "date": "2026-11-14",
+      "tag": "v0.6.124-open-beta",
+      "highlight": false,
+      "new": [
+        "Mới: Thêm \"Điều khoản sử dụng\" ở Cài đặt → Giới thiệu và ở màn đăng nhập (trang melovault.pages.dev/terms, có cách gửi khiếu nại bản quyền)."
+      ],
+      "improved": [],
+      "fixed": [],
+      "test": []
+    },
+    {
       "version": "0.6.123",
       "versionCode": 148,
       "date": "2026-11-14",
