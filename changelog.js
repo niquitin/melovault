@@ -4,6 +4,23 @@ window.MELOVAULT_CHANGELOG = {
   "schema": 1,
   "versions": [
     {
+      "version": "0.6.123",
+      "versionCode": 148,
+      "date": "2026-11-14",
+      "tag": "v0.6.123-open-beta",
+      "highlight": false,
+      "new": [
+        "Mới: Dùng thử không cần đăng nhập — nút ở màn đăng nhập mở trình phát với 4 bài mẫu và nhạc trên máy, không cần tài khoản Telegram"
+      ],
+      "improved": [
+        "Link \"Chính sách quyền riêng tư\" ở màn đăng nhập trỏ trang chính sách mới"
+      ],
+      "fixed": [],
+      "test": [
+        "Chạm \"Dùng thử không cần đăng nhập\" rồi phát bài, mở Đang phát, EQ; thoát bằng nút Đăng nhập hoặc Back"
+      ]
+    },
+    {
       "version": "0.6.122",
       "versionCode": 147,
       "date": "2026-11-13",
