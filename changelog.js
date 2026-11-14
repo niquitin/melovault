@@ -4,6 +4,19 @@ window.MELOVAULT_CHANGELOG = {
   "schema": 1,
   "versions": [
     {
+      "version": "0.6.125",
+      "versionCode": 150,
+      "date": "2026-11-14",
+      "tag": "v0.6.125-open-beta",
+      "highlight": false,
+      "new": [],
+      "improved": [],
+      "fixed": [],
+      "test": [
+        "Thử nghiệm: nghe Bộ sưu tập TikTok công khai (dán link ở tab Nguồn)"
+      ]
+    },
+    {
       "version": "0.6.124",
       "versionCode": 149,
       "date": "2026-11-14",
