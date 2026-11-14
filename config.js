@@ -2,14 +2,15 @@
 // Không đưa liên kết riêng tư, credentials hoặc token bí mật vào đây.
 // Sửa cùng lúc với update.json: url = apkUrl, versionName, versionCode, sha256, sizeBytes, releaseDate, notes phải khớp.
 window.MELOVAULT_RELEASE = {
-  url: "https://github.com/niquitin/melovault/releases/download/v0.6.126-open-beta/MeloVault-0.6.126-open-beta.apk",
-  versionName: "0.6.126-open",
-  versionCode: 151,
-  sha256: "1900ce1c42b25651d514d83dbab00539cda6074ddcf76615526e9e71533c4cb5",
-  sizeBytes: 34148673,
+  url: "https://github.com/niquitin/melovault/releases/download/v0.6.127-open-beta/MeloVault-0.6.127-open-beta.apk",
+  versionName: "0.6.127-open",
+  versionCode: 152,
+  sha256: "8e9c8d8eeb7aba0ea392adfc0591ac783fc1c41fcaa5240449c1006b72be8da6",
+  sizeBytes: 34165057,
   releaseDate: "2026-11-14",
   notes: [
-    "Thử nghiệm: bấm Chia sẻ trên TikTok để gửi Bộ sưu tập sang MeloVault, tải cả bộ về nghe offline (⋮), Nghe tiếp bài TikTok",
+    "Đồng bộ Playlist giữa các máy cùng tài khoản Telegram (bật một chạm)",
+    "Thử nghiệm: ở tab Playlist chạm dòng \"Chưa bật đồng bộ\" (hoặc Cài đặt › Đồng bộ giữa các máy) để bật; máy khác cùng tài khoản sẽ tự theo",
     "Đang có bản 0.6.97: phải gỡ bản đó rồi cài bản này một lần (mất dữ liệu trong app).",
     "Ứng dụng không chính thức, dùng Telegram API; không liên kết với Telegram."
   ]
