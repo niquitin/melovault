@@ -4,6 +4,21 @@ window.MELOVAULT_CHANGELOG = {
   "schema": 1,
   "versions": [
     {
+      "version": "0.6.127",
+      "versionCode": 152,
+      "date": "2026-11-14",
+      "tag": "v0.6.127-open-beta",
+      "highlight": false,
+      "new": [
+        "Đồng bộ Playlist giữa các máy cùng tài khoản Telegram (bật một chạm)"
+      ],
+      "improved": [],
+      "fixed": [],
+      "test": [
+        "Thử nghiệm: ở tab Playlist chạm dòng \"Chưa bật đồng bộ\" (hoặc Cài đặt › Đồng bộ giữa các máy) để bật; máy khác cùng tài khoản sẽ tự theo"
+      ]
+    },
+    {
       "version": "0.6.126",
       "versionCode": 151,
       "date": "2026-11-14",
