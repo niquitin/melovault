@@ -1,18 +1,18 @@
 {
   "schema": 1,
   "packageName": "app.melovault.player.open",
-  "versionCode": 150,
-  "versionName": "0.6.125-open",
-  "apkUrl": "https://github.com/niquitin/melovault/releases/download/v0.6.125-open-beta/MeloVault-0.6.125-open-beta.apk",
-  "sha256": "c5cf6f1de2e1b49cf293922357feb9025026b56563ca725e7d0d6f579c9a6126",
-  "sizeBytes": 34132169,
+  "versionCode": 151,
+  "versionName": "0.6.126-open",
+  "apkUrl": "https://github.com/niquitin/melovault/releases/download/v0.6.126-open-beta/MeloVault-0.6.126-open-beta.apk",
+  "sha256": "1900ce1c42b25651d514d83dbab00539cda6074ddcf76615526e9e71533c4cb5",
+  "sizeBytes": 34148673,
   "minSdk": 26,
   "releaseDate": "2026-11-14",
   "notes": [
-    "Thử nghiệm: nghe Bộ sưu tập TikTok công khai (dán link ở tab Nguồn)",
+    "Thử nghiệm: bấm Chia sẻ trên TikTok để gửi Bộ sưu tập sang MeloVault, tải cả bộ về nghe offline (⋮), Nghe tiếp bài TikTok",
     "Đang có bản 0.6.97: phải gỡ bản đó rồi cài bản này một lần (mất dữ liệu trong app).",
     "Ứng dụng không chính thức, dùng Telegram API; không liên kết với Telegram."
   ],
-  "releasePage": "https://github.com/niquitin/melovault/releases/tag/v0.6.125-open-beta",
+  "releasePage": "https://github.com/niquitin/melovault/releases/tag/v0.6.126-open-beta",
   "requiresReinstall": false
 }
