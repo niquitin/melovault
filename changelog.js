@@ -4,6 +4,19 @@ window.MELOVAULT_CHANGELOG = {
   "schema": 1,
   "versions": [
     {
+      "version": "0.6.129",
+      "versionCode": 154,
+      "date": "2026-11-15",
+      "tag": "v0.6.129-open-beta",
+      "highlight": false,
+      "new": [],
+      "improved": [
+        "Đầu Thư viện gọn hơn: bỏ chip thể loại, thêm thẻ TikTok, ba thẻ nguồn bằng nhau"
+      ],
+      "fixed": [],
+      "test": []
+    },
+    {
       "version": "0.6.128",
       "versionCode": 153,
       "date": "2026-11-15",
