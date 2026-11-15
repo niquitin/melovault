@@ -1,18 +1,18 @@
 {
   "schema": 1,
   "packageName": "app.melovault.player.open",
-  "versionCode": 156,
-  "versionName": "0.6.131-open",
-  "apkUrl": "https://github.com/niquitin/melovault/releases/download/v0.6.131-open-beta/MeloVault-0.6.131-open-beta.apk",
-  "sha256": "0aa6d1c9002472831a1ed9c6759efa213bb422b1bc84c0b604f866dda1600ed5",
-  "sizeBytes": 34214869,
+  "versionCode": 157,
+  "versionName": "0.6.132-open",
+  "apkUrl": "https://github.com/niquitin/melovault/releases/download/v0.6.132-open-beta/MeloVault-0.6.132-open-beta.apk",
+  "sha256": "da39e8ea032f945da4354ed35d91228e835626937aaf150f98245d7f21fcf170",
+  "sizeBytes": 34214897,
   "minSdk": 26,
   "releaseDate": "2026-11-15",
   "notes": [
-    "Tab Telegram đổi tên thành Nguồn — nơi gom Telegram, TikTok.",
+    "Xem video TikTok dạng dọc: vuốt lên/xuống đổi video, nút Xem video ở Đang phát, thoát thì nghe tiếp đúng chỗ.",
     "Đang có bản 0.6.97: phải gỡ bản đó rồi cài bản này một lần (mất dữ liệu trong app).",
     "Ứng dụng không chính thức, dùng Telegram API; không liên kết với Telegram."
   ],
-  "releasePage": "https://github.com/niquitin/melovault/releases/tag/v0.6.131-open-beta",
+  "releasePage": "https://github.com/niquitin/melovault/releases/tag/v0.6.132-open-beta",
   "requiresReinstall": false
 }
