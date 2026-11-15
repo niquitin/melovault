@@ -4,6 +4,21 @@ window.MELOVAULT_CHANGELOG = {
   "schema": 1,
   "versions": [
     {
+      "version": "0.6.128",
+      "versionCode": 153,
+      "date": "2026-11-15",
+      "tag": "v0.6.128-open-beta",
+      "highlight": false,
+      "new": [
+        "Đồng bộ Bộ sưu tập TikTok giữa các máy cùng tài khoản Telegram (bộ thêm/xóa ở máy này tự có/mất ở máy kia khi đã bật đồng bộ); bộ cũ trên máy được giữ lại"
+      ],
+      "improved": [],
+      "fixed": [],
+      "test": [
+        "Thêm một Bộ sưu tập TikTok công khai ở một máy, mở app ở máy kia cùng tài khoản và xem tab Nguồn; xóa bộ ở máy này rồi xem máy kia"
+      ]
+    },
+    {
       "version": "0.6.127",
       "versionCode": 152,
       "date": "2026-11-14",
