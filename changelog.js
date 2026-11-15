@@ -4,6 +4,19 @@ window.MELOVAULT_CHANGELOG = {
   "schema": 1,
   "versions": [
     {
+      "version": "0.6.132",
+      "versionCode": 157,
+      "date": "2026-11-15",
+      "tag": "v0.6.132-open-beta",
+      "highlight": false,
+      "new": [
+        "Xem video TikTok dạng dọc: vuốt lên/xuống đổi video, nút Xem video ở Đang phát, thoát thì nghe tiếp đúng chỗ."
+      ],
+      "improved": [],
+      "fixed": [],
+      "test": []
+    },
+    {
       "version": "0.6.131",
       "versionCode": 156,
       "date": "2026-11-15",
