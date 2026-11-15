@@ -4,6 +4,19 @@ window.MELOVAULT_CHANGELOG = {
   "schema": 1,
   "versions": [
     {
+      "version": "0.6.131",
+      "versionCode": 156,
+      "date": "2026-11-15",
+      "tag": "v0.6.131-open-beta",
+      "highlight": false,
+      "new": [],
+      "improved": [
+        "Tab Telegram đổi tên thành Nguồn — nơi gom Telegram, TikTok."
+      ],
+      "fixed": [],
+      "test": []
+    },
+    {
       "version": "0.6.130",
       "versionCode": 155,
       "date": "2026-11-15",
