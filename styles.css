@@ -212,3 +212,10 @@ details[open] summary::after { content: "−"; }
 .tester-steps .button { white-space: normal; text-align: center; max-width: 100%; }
 .tester-pledge { padding: 1rem 1.15rem; border-left: 4px solid currentColor; border-radius: .4rem; background: rgba(128,128,128,.08); }
 #latest-announcement { line-height: 1.65; }
+
+/* QR hỗ trợ Telegram: quét trên thiết bị khác hoặc chạm để mở nhóm. */
+.tester-support-qr { margin: 0.75rem 0 1.5rem; text-align: center; }
+.tester-support-qr p { margin: 0 0 0.75rem; color: var(--muted); font-size: 0.95rem; }
+.tester-support-qr a { display: inline-block; padding: 10px; background: #fff; border-radius: 18px; line-height: 0; box-shadow: 0 8px 24px rgba(0, 0, 0, .14); }
+.tester-support-qr a:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+.tester-support-qr img { display: block; width: min(200px, 58vw); height: auto; image-rendering: pixelated; }
