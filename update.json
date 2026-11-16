@@ -3,7 +3,7 @@
   "packageName": "app.melovault.player.open",
   "versionCode": 157,
   "versionName": "0.6.132-open",
-  "apkUrl": "https://github.com/niquitin/melovault/releases/download/v0.6.132-open-beta/MeloVault-0.6.132-open-beta.apk",
+  "apkUrl": "",
   "sha256": "da39e8ea032f945da4354ed35d91228e835626937aaf150f98245d7f21fcf170",
   "sizeBytes": 34214897,
   "minSdk": 26,
@@ -13,6 +13,6 @@
     "Đang có bản 0.6.97: phải gỡ bản đó rồi cài bản này một lần (mất dữ liệu trong app).",
     "Ứng dụng không chính thức, dùng Telegram API; không liên kết với Telegram."
   ],
-  "releasePage": "https://github.com/niquitin/melovault/releases/tag/v0.6.132-open-beta",
+  "releasePage": "https://melovault.pages.dev/#nhat-ky",
   "requiresReinstall": false
 }

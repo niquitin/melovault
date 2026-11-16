@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <meta name="description" content="Khám phá MeloVault cho Android, xem tính năng và tải bản thử nghiệm khi được phát hành.">
+  <meta name="description" content="Khám phá MeloVault cho Android, tham gia nhóm tester và cài ứng dụng từ Google Play.">
   <title>MeloVault — Nghe nhạc từ Telegram</title>
   <link rel="canonical" href="https://melovault.pages.dev/">
   <link rel="icon" href="data:,">
@@ -23,7 +23,7 @@
       <nav aria-label="Điều hướng chính">
         <a href="#tinh-nang">Tính năng</a>
         <a href="#minh-hoa">Hình ảnh</a>
-        <a href="#tai-apk">Tải APK</a>
+        <a href="#tai-apk">Tham gia tester</a>
         <a href="#nhat-ky">Nhật ký</a>
         <a href="#cai-dat">Cài đặt</a>
         <a href="#bao-loi">Báo lỗi</a>
@@ -39,7 +39,7 @@
         <h1 id="hero-title">Nhạc từ Telegram,<br>trong một thư viện <span>dễ nghe.</span></h1>
         <p class="hero-description">MeloVault giúp bạn duyệt và nghe nhạc từ tài khoản Telegram của mình, tìm bài nhanh và mở nhạc có sẵn trên máy.</p>
         <div class="hero-actions">
-          <a class="button button-primary" href="#tai-apk">Xem bản tải <span aria-hidden="true">↗</span></a>
+          <a class="button button-primary" href="#tai-apk">Tham gia tester <span aria-hidden="true">↗</span></a>
           <a class="button button-secondary" href="#tinh-nang">Khám phá tính năng <span aria-hidden="true">↓</span></a>
         </div>
         <p class="fine-print hero-note">Bản thử nghiệm đang được hoàn thiện. Trải nghiệm có thể khác nhau giữa các thiết bị. MeloVault là ứng dụng không chính thức, dùng Telegram API. Không liên kết với Telegram.</p>
@@ -71,7 +71,7 @@
         <article class="feature-card"><span class="card-number" aria-hidden="true">07</span><h3>Kênh video</h3><p>Tab Nguồn tự tìm mọi nhóm, kênh có video và ghi số video thật.</p></article>
         <article class="feature-card"><span class="card-number" aria-hidden="true">08</span><h3>Nhiều tài khoản Telegram</h3><p>Thêm số khác trong Cài đặt › Tài khoản; chạm vòng chữ cái ở đầu màn để chuyển.</p></article>
         <article class="feature-card"><span class="card-number" aria-hidden="true">09</span><h3>Liquid Glass và bộ chỉnh âm</h3><p>Giao diện kính đổi màu theo ảnh bìa (mặc định); EQ trên màn Đang phát; widget Đang phát ở màn hình chính.</p></article>
-        <article class="feature-card"><span class="card-number" aria-hidden="true">10</span><h3>Tự cập nhật</h3><p>App tự báo khi có bản mới, tối đa 1 lần mỗi ngày, chỉ tải khi bạn đồng ý.</p></article>
+        <article class="feature-card"><span class="card-number" aria-hidden="true">10</span><h3>Cập nhật ứng dụng</h3><p>Tester cài và nhận các bản thử nghiệm được phát hành qua Google Play; website công bố nhật ký thay đổi cho từng phiên bản.</p></article>
         <article class="feature-card"><span class="card-number" aria-hidden="true">11</span><h3>Bộ sưu tập TikTok</h3><p>Thử nghiệm: trong TikTok bấm Chia sẻ → MeloVault để nghe cả Bộ sưu tập công khai như một playlist, tắt màn vẫn nghe, tải về máy để nghe không cần mạng.</p></article>
       </div>
       <p class="fine-print section-note">Một số bố cục và thao tác vẫn cần được kiểm thử thêm trên thiết bị thực tế. <a href="#nhat-ky">Xem từng bản ở Nhật ký cập nhật ›</a></p>
@@ -98,25 +98,41 @@
       </div>
     </section>
 
+
     <section id="tai-apk" class="section container" aria-labelledby="download-title">
       <div class="download-panel">
-        <div class="download-intro"><p class="eyebrow">03 / BẢN THỬ NGHIỆM</p><h2 id="download-title">Tải bản thử nghiệm</h2><p>APK MeloVault cho Android, ai cũng có thể tải về dùng thử.</p><div id="download-action"><button class="button button-primary download-button" type="button" disabled>Bản test đang chờ phát hành</button></div><p id="download-status" class="fine-print" role="status">Liên kết và thông tin bản tải sẽ xuất hiện tại đây khi sẵn sàng.</p><p id="whats-new" class="whats-new fine-print" hidden></p><noscript><p class="notice">Thông tin bản tải cần JavaScript. Nội dung hướng dẫn vẫn có thể đọc bình thường.</p></noscript></div>
-        <div class="release-info">
-          <dl class="release-grid">
-            <div><dt>Phiên bản</dt><dd id="release-version">Chưa công bố</dd></div>
-            <div><dt>Mã phiên bản</dt><dd id="release-code">Chưa công bố</dd></div>
-            <div><dt>Dung lượng</dt><dd id="release-size">Chưa công bố</dd></div>
-            <div><dt>Ngày phát hành</dt><dd id="release-date">Chưa công bố</dd></div>
-            <div class="release-wide"><dt>SHA-256</dt><dd><code id="release-hash">Chưa công bố</code></dd></div>
-          </dl>
-          <div class="release-notes"><h3>Ghi chú bản tải</h3><div id="release-notes"><p>Chưa công bố</p></div></div>
+        <div class="download-intro">
+          <p class="eyebrow">03 / THỬ NGHIỆM KÍN TRÊN GOOGLE PLAY</p>
+          <h2 id="download-title">Tham gia nhóm tester MeloVault</h2>
+          <p>Giúp MeloVault hoàn tất giai đoạn thử nghiệm trước khi phát hành chính thức. Hãy dùng <strong>đúng tài khoản Google đang đăng nhập trên điện thoại Android</strong> để thực hiện hai bước dưới đây.</p>
+          <ol class="tester-steps">
+            <li>
+              <h3>Bước 1. Tham gia nhóm tester</h3>
+              <p>Đăng nhập đúng Gmail đang dùng trên điện thoại, mở Google Groups rồi bấm <strong>“Tham gia nhóm”</strong>. Nếu cần phê duyệt tư cách thành viên, hãy chờ được chấp nhận.</p>
+              <a class="button button-primary download-button" href="https://groups.google.com/g/melovault-testers" target="_blank" rel="noopener noreferrer">Tham gia nhóm MeloVault Testers ↗</a>
+            </li>
+            <li>
+              <h3>Bước 2. Đăng ký thử nghiệm và cài app</h3>
+              <p>Sau khi vào nhóm, <strong>mở liên kết sau trên điện thoại</strong> bằng cùng tài khoản Google, bấm <strong>“Trở thành người thử nghiệm”</strong> (nếu được yêu cầu), rồi chọn cài MeloVault từ Google Play.</p>
+              <a class="button button-secondary download-button" href="https://play.google.com/apps/testing/app.melovault.player.open" target="_blank" rel="noopener noreferrer">Đăng ký thử nghiệm &amp; cài trên Google Play ↗</a>
+            </li>
+          </ol>
+          <p class="tester-pledge"><strong>Nhờ bạn đồng hành ít nhất 14 ngày:</strong> đừng rời nhóm, đừng hủy tham gia chương trình thử nghiệm và vui lòng giữ ứng dụng trên điện thoại trong thời gian này. Nếu có thể, hãy mở và sử dụng app để phản hồi lỗi.</p>
+          <p class="fine-print">Google yêu cầu tối thiểu 12 người tham gia thử nghiệm kín liên tục đủ 14 ngày đối với tài khoản nhà phát triển thuộc diện áp dụng, trước khi có thể xin quyền phát hành chính thức. Đủ thời gian không đồng nghĩa được phê duyệt tự động.</p>
+          <p class="fine-print">APK riêng không được phát hành công khai trên website; chỉ chủ dự án mới có quyền cho phép phân phối ngoài Google Play. Nếu liên kết Play chưa mở, hãy kiểm tra tư cách thành viên và đúng tài khoản Google, hoặc thử lại khi bản thử nghiệm đã được Google phát hành.</p>
         </div>
-        <p class="download-disclaimer fine-print">Đây là bản thử nghiệm, chưa phải bản ổn định. Từ 0.6.98, MeloVault ký bằng khóa phát hành chính thức: <strong>nếu máy đang có bản 0.6.97, bạn phải gỡ bản đó rồi cài bản mới (chỉ một lần)</strong>; việc gỡ làm mất danh sách phát, yêu thích, cài đặt và phiên đăng nhập Telegram trong app. Các bản sau cài đè được. Liên kết tải mở GitHub.</p>
+        <aside class="release-info" aria-labelledby="latest-release-title">
+          <p class="eyebrow">THÔNG BÁO CẬP NHẬT</p>
+          <h3 id="latest-release-title">MeloVault có gì mới?</h3>
+          <p id="latest-announcement" role="status">Đang tải thông tin phiên bản mới nhất…</p>
+          <p class="fine-print">Đây là nhật ký phát triển. Phiên bản thực tế trên Google Play có thể được phát hành sau khi Google xem xét.</p>
+          <a href="#nhat-ky">Xem chi tiết từng phiên bản ›</a>
+        </aside>
       </div>
     </section>
 
     <section id="nhat-ky" class="section container" aria-labelledby="changelog-title">
-      <div class="section-heading"><p class="eyebrow">04 / NHẬT KÝ CẬP NHẬT</p><h2 id="changelog-title">Từ bản thử đầu tiên tới bản <span data-cl-latest>mới nhất</span></h2><p>Thay đổi của từng bản, mới nhất ở trên. Bản mới tự báo trong app (Cài đặt › Giới thiệu › Cập nhật ứng dụng).</p></div>
+      <div class="section-heading"><p class="eyebrow">04 / NHẬT KÝ CẬP NHẬT</p><h2 id="changelog-title">Từ bản thử đầu tiên tới bản <span data-cl-latest>mới nhất</span></h2><p>Thông báo tính năng mới, cải tiến và sửa lỗi theo từng phiên bản. Người tham gia thử nghiệm cập nhật qua Google Play khi bản mới được phát hành.</p></div>
       <div class="cl-toolbar" id="cl-toolbar" hidden>
         <div class="cl-filter" role="group" aria-label="Lọc nhật ký">
           <button type="button" id="cl-all" aria-pressed="true">Mọi phiên bản</button>
@@ -124,19 +140,19 @@
         </div>
         <ul class="cl-legend" aria-label="Chú giải nhãn"><li><span class="cl-k cl-new">Mới</span></li><li><span class="cl-k cl-improved">Cải tiến</span></li><li><span class="cl-k cl-fixed">Sửa lỗi</span></li><li><span class="cl-k cl-test">Cần thử giúp</span></li></ul>
       </div>
-      <p id="cl-state" class="fine-print" role="status">Nhật ký cập nhật cần JavaScript. Xem đầy đủ ở <a href="https://github.com/niquitin/melovault/releases" rel="noopener noreferrer">trang Releases trên GitHub</a>.</p>
+      <p id="cl-state" class="fine-print" role="status">Bật JavaScript để xem nhật ký cập nhật. Chỉ cài ứng dụng qua Google Play theo hướng dẫn trên.</p>
       <ol class="timeline" id="cl-list"></ol>
       <div class="cl-more-wrap"><button type="button" class="button button-secondary" id="cl-more" hidden></button></div>
     </section>
 
+
     <section id="cai-dat" class="section container install-layout" aria-labelledby="install-title">
-      <div class="section-heading"><p class="eyebrow">05 / BẮT ĐẦU</p><h2 id="install-title">Hướng dẫn cài đặt</h2></div>
+      <div class="section-heading"><p class="eyebrow">05 / BẮT ĐẦU</p><h2 id="install-title">Cài đặt an toàn từ Google Play</h2></div>
       <ol class="install-steps">
-        <li><p>Tải APK từ nút Tải APK trên trang này khi bản test đã được phát hành.</p></li>
-        <li><p>Mở tệp vừa tải. Nếu Android yêu cầu, bật ‘Cài từ nguồn không xác định’ hoặc ‘Cho phép từ nguồn này’ cho trình duyệt hay trình quản lý tệp đang mở APK. Tên mục có thể khác theo máy.</p></li>
-        <li><p><strong>Đang có bản 0.6.97:</strong> gỡ MeloVault trước rồi mới cài bản mới (chỉ lần này, vì đổi sang khóa ký chính thức). Gỡ app sẽ mất danh sách phát, yêu thích, cài đặt và phiên đăng nhập Telegram trong app; nhạc trên Telegram không bị ảnh hưởng.</p></li>
-        <li><p>Đang có bản 0.6.98 trở lên: chọn cài đè/cập nhật, không gỡ app và không xóa dữ liệu ứng dụng. Nếu máy báo xung đột chữ ký, không cài được hoặc bản cài cũ hơn, hãy dừng và báo người phụ trách test.</p></li>
-        <li><p>Mở MeloVault và làm theo hướng dẫn trong ứng dụng. Để nghe nhạc Telegram, đăng nhập tài khoản của bạn trong app. Có thể tắt lại quyền cài từ nguồn này sau khi cài xong. Khi app hỏi quyền cài bản cập nhật, cho phép MeloVault trong ‘Cài ứng dụng không rõ nguồn’.</p></li>
+        <li><p>Vào <a href="https://groups.google.com/g/melovault-testers" target="_blank" rel="noopener noreferrer">nhóm MeloVault Testers</a> và bấm “Tham gia nhóm” bằng tài khoản Google đang dùng trên điện thoại.</p></li>
+        <li><p>Trên điện thoại, mở <a href="https://play.google.com/apps/testing/app.melovault.player.open" target="_blank" rel="noopener noreferrer">liên kết đăng ký thử nghiệm</a>, xác nhận tham gia rồi chọn cài MeloVault trên Google Play.</p></li>
+        <li><p>Giữ tư cách tester liên tục ít nhất 14 ngày, không rời nhóm hoặc hủy đăng ký thử nghiệm. Vui lòng giữ ứng dụng để trải nghiệm và gửi góp ý.</p></li>
+        <li><p>Khi có bản thử nghiệm mới được phát hành trên Google Play, cập nhật trực tiếp trong cửa hàng. Không cần tải APK ngoài hoặc bật quyền cài ứng dụng không rõ nguồn gốc.</p></li>
       </ol>
     </section>
 
@@ -164,18 +180,18 @@ Lỗi có lặp lại không: …</textarea>
         <details><summary>MeloVault chạy trên thiết bị nào?</summary><p>Ứng dụng dành cho Android; tài liệu hiện ghi mức tối thiểu Android 8.0. Khả năng hoạt động của từng thiết bị cần được kiểm thử.</p></details>
         <details><summary>Tôi có cần tài khoản Telegram không?</summary><p>Có, nếu muốn nghe nhạc từ Telegram. Ứng dụng cũng có mục Nhạc trên máy và Mở tệp nhạc.</p></details>
         <details><summary>Có nghe khi không có mạng được không?</summary><p>Có với bài đã tải đủ và còn trên thiết bị. Bài chưa tải cần kết nối mạng; không phải mọi bài trong thư viện đều đã sẵn sàng nghe offline.</p></details>
-        <details><summary>Cập nhật có cần gỡ bản cũ không?</summary><p>Từ bản 0.6.98, MeloVault tự báo khi có bản mới (Cài đặt → Giới thiệu → Cập nhật ứng dụng). Bản 0.6.97 cần tải tay một lần: vì 0.6.98 ký bằng khóa phát hành chính thức, hãy gỡ 0.6.97 rồi cài 0.6.98 (mất dữ liệu trong app). Các bản sau 0.6.98 cài đè hoặc cập nhật ngay trong app, không cần gỡ.</p></details>
-        <details><summary>Vì sao chưa tải được APK?</summary><p>Bản test có thể đang chờ phát hành. Khi có bản tải hợp lệ, nút Tải APK sẽ được bật.</p></details>
+        <details><summary>Cập nhật có cần gỡ bản cũ không?</summary><p>Nếu bạn đã cài MeloVault từ Google Play, hãy cập nhật tại Google Play khi phiên bản mới được phát hành. Không tự gỡ ứng dụng hoặc cài đè APK bên ngoài trong đợt thử nghiệm; nếu máy đang có bản APK cũ và gặp xung đột chữ ký, hãy liên hệ người phụ trách trước khi thay đổi.</p></details>
+        <details><summary>Vì sao không thể cài từ Google Play?</summary><p>Kiểm tra đúng tài khoản Google dùng trên điện thoại, đã được tham gia nhóm MeloVault Testers và đã xác nhận tham gia thử nghiệm tại liên kết Google Play. Bản test phải ở trạng thái được phát hành thì trang đăng ký mới hoạt động. Website không có nút tải APK công khai.</p></details>
         <details><summary>Đã có EQ hoặc nhạc từ Drive/OneDrive chưa?</summary><p>Đã có bộ chỉnh âm (EQ) trên màn Đang phát. Nhạc từ Drive/OneDrive chưa có.</p></details>
         <details><summary>MeloVault có phải ứng dụng của Telegram không?</summary><p>Không. MeloVault là ứng dụng không chính thức, dùng Telegram API để đọc nhạc từ tài khoản của bạn. Không liên kết với Telegram.</p></details>
       </div>
     </section>
 
     <section id="quyen-rieng-tu" class="section container" aria-labelledby="privacy-title">
-      <div class="privacy-panel"><p class="eyebrow">THÔNG TIN CỦA BẠN</p><h2 id="privacy-title">Quyền riêng tư</h2><p>Trang giới thiệu này không yêu cầu đăng nhập Telegram, không thu thập báo cáo tự động và không dùng công cụ theo dõi.</p><p>Ứng dụng dùng tài khoản Telegram của bạn để truy cập nguồn nhạc; dữ liệu phiên, chỉ mục và tệp đã tải được xử lý trên thiết bị. Kết nối Telegram và dịch vụ lưu trữ APK chịu chính sách của các dịch vụ tương ứng.</p><p>Lời nhạc từ LRCLIB chỉ chạy khi bạn đồng ý (ở tab Lời nhạc hoặc trong Cài đặt). Khi đó app gửi tên bài, ca sĩ, album và thời lượng của bài đang nghe tới LRCLIB (lrclib.net) để tìm lời; có thể tắt lại trong Cài đặt.</p><p>Bản này tự kiểm tra bản mới, tối đa 1 lần mỗi ngày, và tải bản cập nhật khi bạn đồng ý. Yêu cầu không chứa thông tin tài khoản hay thư viện nhạc; máy chủ phát hành có thể ghi địa chỉ IP theo chính sách của họ. Tắt được trong Giới thiệu.</p><p>Trang được lưu trữ trên Cloudflare Pages (bản sao trên GitHub Pages); nhà cung cấp có thể ghi nhật ký truy cập kỹ thuật như địa chỉ IP theo chính sách của họ.</p><p>Không nhập mã đăng nhập hay mật khẩu Telegram trên trang web này. Chỉ chia sẻ thông tin lỗi đã loại bỏ dữ liệu riêng tư.</p><p><a href="privacy.html">Đọc Chính sách quyền riêng tư đầy đủ (Tiếng Việt · English)</a></p></div>
+      <div class="privacy-panel"><p class="eyebrow">THÔNG TIN CỦA BẠN</p><h2 id="privacy-title">Quyền riêng tư</h2><p>Trang giới thiệu này không yêu cầu đăng nhập Telegram, không thu thập báo cáo tự động và không dùng công cụ theo dõi.</p><p>Ứng dụng dùng tài khoản Telegram của bạn để truy cập nguồn nhạc; dữ liệu phiên, chỉ mục và tệp đã tải được xử lý trên thiết bị. Kết nối Telegram và Google Play chịu chính sách của các dịch vụ tương ứng.</p><p>Lời nhạc từ LRCLIB chỉ chạy khi bạn đồng ý (ở tab Lời nhạc hoặc trong Cài đặt). Khi đó app gửi tên bài, ca sĩ, album và thời lượng của bài đang nghe tới LRCLIB (lrclib.net) để tìm lời; có thể tắt lại trong Cài đặt.</p><p>Bản thử nghiệm phân phối qua Google Play được cập nhật tại Google Play. Website không công bố liên kết APK trực tiếp. Các bản cài đặt cũ ngoài Google Play có thể có cơ chế kiểm tra cập nhật riêng.</p><p>Trang được lưu trữ trên Cloudflare Pages (bản sao trên GitHub Pages); nhà cung cấp có thể ghi nhật ký truy cập kỹ thuật như địa chỉ IP theo chính sách của họ.</p><p>Không nhập mã đăng nhập hay mật khẩu Telegram trên trang web này. Chỉ chia sẻ thông tin lỗi đã loại bỏ dữ liệu riêng tư.</p><p><a href="privacy.html">Đọc Chính sách quyền riêng tư đầy đủ (Tiếng Việt · English)</a></p></div>
     </section>
   </main>
 
-  <footer class="site-footer"><div class="container footer-inner"><p>MeloVault · Ứng dụng nghe nhạc Android · Bản thử nghiệm · Không chính thức, không liên kết với Telegram</p><nav aria-label="Điều hướng cuối trang"><a href="#tai-apk">Tải APK</a><a href="#nhat-ky">Nhật ký</a><a href="#bao-loi">Báo lỗi</a><a href="#quyen-rieng-tu">Quyền riêng tư</a><a href="privacy.html">Chính sách quyền riêng tư</a><a href="terms.html">Điều khoản sử dụng</a><a href="#dau-trang">Về đầu trang ↑</a></nav></div></footer>
+  <footer class="site-footer"><div class="container footer-inner"><p>MeloVault · Ứng dụng nghe nhạc Android · Bản thử nghiệm · Không chính thức, không liên kết với Telegram</p><nav aria-label="Điều hướng cuối trang"><a href="#tai-apk">Tham gia tester</a><a href="#nhat-ky">Nhật ký</a><a href="#bao-loi">Báo lỗi</a><a href="#quyen-rieng-tu">Quyền riêng tư</a><a href="privacy.html">Chính sách quyền riêng tư</a><a href="terms.html">Điều khoản sử dụng</a><a href="#dau-trang">Về đầu trang ↑</a></nav></div></footer>
 </body>
 </html>

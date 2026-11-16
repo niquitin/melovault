@@ -1,0 +1,30 @@
+name: Website release and APK safety
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'main.js'
+      - 'config.js'
+      - 'changelog.js'
+      - 'update.json'
+      - 'site-release-policy.cjs'
+      - '.github/workflows/site-release-policy.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  check-public-site:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify website release and no public APK link
+        run: |
+          node --check main.js
+          node --check config.js
+          node site-release-policy.cjs
