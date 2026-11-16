@@ -9,6 +9,7 @@ on:
       - 'changelog.js'
       - 'update.json'
       - 'site-release-policy.cjs'
+      - 'site-changelog-render-test.cjs'
       - '.github/workflows/site-release-policy.yml'
   push:
     branches: [main]
@@ -28,3 +29,4 @@ jobs:
           node --check main.js
           node --check config.js
           node site-release-policy.cjs
+          node site-changelog-render-test.cjs
