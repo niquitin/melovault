@@ -202,3 +202,13 @@ details[open] summary::after { content: "−"; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
 }
+
+
+/* Tester onboarding: no public APK action. */
+.tester-steps { list-style: none; padding: 0; margin: 1.3rem 0; display: grid; gap: 1.1rem; }
+.tester-steps > li { border: 1px solid var(--border, rgba(128,128,128,.28)); border-radius: 16px; padding: 1rem 1.15rem; }
+.tester-steps h3 { font-size: 1.06rem; margin: 0 0 .5rem; }
+.tester-steps p { margin: .25rem 0 .85rem; }
+.tester-steps .button { white-space: normal; text-align: center; max-width: 100%; }
+.tester-pledge { padding: 1rem 1.15rem; border-left: 4px solid currentColor; border-radius: .4rem; background: rgba(128,128,128,.08); }
+#latest-announcement { line-height: 1.65; }
