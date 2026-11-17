@@ -4,6 +4,25 @@ window.MELOVAULT_CHANGELOG = {
   "schema": 1,
   "versions": [
     {
+      "version": "0.6.133",
+      "versionCode": 158,
+      "date": "2026-11-17",
+      "tag": "",
+      "title": "MeloVault Fusion V1.4 · Play Alpha",
+      "highlight": true,
+      "new": [
+        "Fusion V1.4 đã có trên Play Alpha: giữ giao diện hiện tại mặc định, tùy chọn P1 Balanced / P2 Immersive Hi-Fi trong Cài đặt → Giao diện & màu sắc.",
+        "Chọn Theo hệ thống, Sáng hoặc Tối; tùy chỉnh nền ảnh bìa cho P2. Lựa chọn Fusion được lưu riêng khi đổi về giao diện hiện tại."
+      ],
+      "improved": [
+        "Fusion áp dụng cho bố cục điện thoại dọc tương thích; các bố cục khác tiếp tục dùng giao diện hiện tại."
+      ],
+      "fixed": [],
+      "test": [
+        "Bản thử nghiệm được phân phối qua Google Play, kênh Alpha."
+      ]
+    },
+    {
       "version": "0.6.132",
       "versionCode": 157,
       "date": "2026-11-15",
