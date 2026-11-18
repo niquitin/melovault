@@ -4,6 +4,18 @@ window.MELOVAULT_CHANGELOG = {
   "schema": 1,
   "versions": [
     {
+      "version": "0.6.134",
+      "versionCode": 159,
+      "date": "2026-11-18",
+      "tag": "",
+      "title": "Liquid Glass Dark Aurora · Play Alpha",
+      "highlight": true,
+      "new": ["Fusion có phong cách Liquid Glass Dark Aurora. P2 Hi-Fi đưa thanh tua và cụm nút lên gần tên bài. Đã gửi lên kênh thử nghiệm Alpha để Google Play xem xét."],
+      "improved": ["P2 Hi-Fi tách thanh tua, các nút phát, nút tua nhanh và dock công cụ thành những hàng riêng."],
+      "fixed": ["P1 dành vùng cuộn riêng cho danh sách nhạc để mini-player không che các bài cuối."],
+      "test": []
+    },
+    {
       "version": "0.6.133",
       "versionCode": 158,
       "date": "2026-11-17",
