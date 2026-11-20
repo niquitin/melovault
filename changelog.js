@@ -4,6 +4,24 @@ window.MELOVAULT_CHANGELOG = {
   "schema": 1,
   "versions": [
     {
+      "version": "0.6.135",
+      "versionCode": 160,
+      "date": "2026-11-20",
+      "tag": "",
+      "title": "Xem tiếp TikTok trong khung · Play Alpha",
+      "highlight": true,
+      "new": [
+        "Khi đang xem trong khung, MeloVault tự mở video TikTok tiếp theo khi đổi bài hoặc khi bài hiện tại phát hết."
+      ],
+      "improved": [
+        "Khung hiện Đang tải video khi chuyển clip. Với bài ảnh hoặc clip lỗi, MeloVault phát tiếng và tự trở lại video ở bài phù hợp kế tiếp."
+      ],
+      "fixed": [],
+      "test": [
+        "Áp dụng cho điện thoại Android đủ điều kiện và Lenovo Y700 TB321FU. Bản cập nhật đang chờ Google Play duyệt cho nhóm thử nghiệm kín Alpha."
+      ]
+    },
+    {
       "version": "0.6.134",
       "versionCode": 159,
       "date": "2026-11-18",
