@@ -1,15 +1,15 @@
 {
   "schema": 1,
   "packageName": "app.melovault.player.open",
-  "versionCode": 160,
-  "versionName": "0.6.135-open",
+  "versionCode": 161,
+  "versionName": "0.6.136-open",
   "apkUrl": "",
   "sha256": "",
   "sizeBytes": 0,
   "minSdk": 26,
-  "releaseDate": "2026-11-20",
+  "releaseDate": "2026-11-21",
   "notes": [
-    "Xem tiếp video TikTok trong khung khi đổi bài. Bản cập nhật đang chờ Google Play duyệt cho nhóm thử nghiệm kín Alpha.",
+    "Giao diện thống nhất mới cho cả điện thoại và máy tính bảng (Liquid Glass & Tối giản Sáng/Tối, thanh 4 mục, Đang phát P1/P2 và Cài đặt gọn 5 nhóm). Đã phát hành trên kênh thử nghiệm kín Alpha của Google Play.",
     "Đang có bản 0.6.97: phải gỡ bản đó rồi cài bản này một lần (mất dữ liệu trong app).",
     "Ứng dụng không chính thức, dùng Telegram API; không liên kết với Telegram."
   ],

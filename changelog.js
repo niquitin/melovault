@@ -4,6 +4,27 @@ window.MELOVAULT_CHANGELOG = {
   "schema": 1,
   "versions": [
     {
+      "version": "0.6.136",
+      "versionCode": 161,
+      "date": "2026-11-21",
+      "tag": "",
+      "title": "Giao diện thống nhất Điện thoại & Tablet · Play Alpha",
+      "highlight": true,
+      "new": [
+        "Quy hoạch thống nhất 1 hệ thống giao diện cho cả điện thoại và máy tính bảng (dọc & hai khung ngang) với 2 phong cách Liquid Glass và Tối giản, đầy đủ chế độ Sáng, Tối và Theo máy."
+      ],
+      "improved": [
+        "Chuẩn hóa thanh điều hướng 4 mục (Thư viện, Nguồn, Playlist, Đã tải) và gom trang Cài đặt → Giao diện & màu sắc còn 5 nhóm gọn kèm thẻ xem trước sắc nét.",
+        "Làm gọn màn hình Đang phát (P1/P2) đầy đủ Hàng đợi, Lời nhạc, EQ, Hẹn giờ và đồng bộ điều khiển xem video TikTok trong khung."
+      ],
+      "fixed": [
+        "Xóa khoảng trống đen thừa và thanh cuộn dọc trên màn Đang phát dọc; khắc phục tràn chữ thẻ xem trước giao diện khi xoay ngang."
+      ],
+      "test": [
+        "Đã phát hành cho nhóm thử nghiệm kín Alpha trên Google Play (hỗ trợ điện thoại Android và máy tính bảng, gồm xem video TikTok trong khung trên điện thoại đủ điều kiện và Lenovo Y700 TB321FU)."
+      ]
+    },
+    {
       "version": "0.6.135",
       "versionCode": 160,
       "date": "2026-11-20",
